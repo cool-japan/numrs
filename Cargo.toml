@@ -1,0 +1,47 @@
+[package]
+name = "numrs2"
+version = "0.1.0-alpha.1"
+edition = "2021"
+authors = ["NumRS Contributors"]
+description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
+license = "Apache-2.0"
+repository = "https://github.com/cool-japan/numrs"
+readme = "README.md"
+keywords = ["numpy", "numerical", "array", "linear-algebra", "mathematics"]
+categories = ["science"]
+
+[features]
+default = ["matrix_decomp"]
+matrix_decomp = []
+validation = []
+
+[dependencies]
+ndarray = "0.16.1"  # Provides n-dimensional arrays
+ndarray-linalg = { version = "0.17.0", features = ["openblas-system"] }  # Linear algebra with BLAS/LAPACK
+blas = { version = "0.23.0" }  # BLAS bindings
+lapack = { version = "0.20.0" }  # LAPACK bindings
+num-traits = "0.2.19"  # Numeric traits for generic math
+num-complex = "0.4.6"  # Complex number implementation
+# Type conversions are handled by num-traits::NumCast
+rand = "0.9.0"      # Random number generation
+rand_distr = "0.5.0"  # Additional random distributions
+rayon = "1.10.0"     # Parallel computation
+simba = "0.9.0"     # SIMD abstraction
+paste = "1.0.15"    # For macro development
+thiserror = "2.0.12"  # Error handling
+lazy_static = "1.4.0" # For static initialization patterns
+serde = { version = "1.0.197", features = ["derive"] }  # Serialization/deserialization
+serde_json = "1.0.114"  # JSON support
+csv = "1.3.0"       # CSV file format support
+bincode = "1.3.3"   # Binary serialization support
+byteorder = "1.5.0"  # For NPY format byte order handling
+zip = "0.6.6"       # For NPZ file format support (zipped NPY files)
+nalgebra = "0.32.3" # Linear algebra library for interoperability
+memmap2 = "0.9.1"   # Memory-mapped file I/O
+num_cpus = "1.16.0"
+
+# Note: polars dependency has been removed to improve build speed
+
+[dev-dependencies]
+criterion = "0.5.1"  # Benchmarking library
+approx = "0.5.1"     # Approximate floating-point comparisons for tests

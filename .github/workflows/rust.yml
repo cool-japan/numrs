@@ -1,0 +1,49 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60 # Increase as needed
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install BLAS and LAPACK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapack-dev
+      
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose
+      
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose
+      
+      - name: Run examples
+        run: |
+          cargo run --example basic_usage
+          cargo run --example linalg_example
+          cargo run --example simd_example
+  
