@@ -105,6 +105,7 @@ mod tests {
     
     #[derive(Debug, Clone, Default)]
     struct TestType {
+        #[allow(dead_code)]
         value: i32,
     }
     

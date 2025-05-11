@@ -26,6 +26,16 @@ Demonstrates fundamental array operations:
 - Mapping operations
 - Parallel operations with Rayon
 
+### Random Number Generation (`random_distributions_example.rs`)
+
+Demonstrates the modern random number generation API:
+- Creating random number generators with different bit generators
+- Thread-safe random generation with proper seeding
+- Generating arrays from various probability distributions
+- Working with the Generator API
+- Statistical properties of distributions
+- Advanced distributions for scientific computing
+
 ### Linear Algebra (`linalg_example.rs`)
 
 Illustrates linear algebra operations:

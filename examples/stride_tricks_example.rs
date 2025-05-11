@@ -15,11 +15,14 @@ fn main() -> Result<()> {
 
     // Manipulate strides to select every other element in each dimension
     let strided = set_strides(&array, &[2, 2])?;
-    println!("\nStrided view with strides [2, 2] (shape {:?}):", strided.shape());
+    println!(
+        "\nStrided view with strides [2, 2] (shape {:?}):",
+        strided.shape()
+    );
     println!("{}", strided);
 
     // Create a reversed view (using a different approach since negative strides are tricky)
-    let _reversed = array.clone();  // Just use a clone for the demo
+    let _reversed = array.clone(); // Just use a clone for the demo
     println!("\nUsing a manual approach for reversed arrays (could use indexing):");
     println!("Original array:");
     println!("{}", array);
@@ -63,7 +66,10 @@ fn main() -> Result<()> {
 
     // Create a sliding window view with window size 3 and step size 2
     let windows_step2 = sliding_window_view(&data, &[3], Some(&[2]))?;
-    println!("\nSliding windows of size 3 with step 2 (shape {:?}):", windows_step2.shape());
+    println!(
+        "\nSliding windows of size 3 with step 2 (shape {:?}):",
+        windows_step2.shape()
+    );
     for i in 0..windows_step2.shape()[0] {
         let window = windows_step2.slice_view(0, i)?;
         println!("Window {}: {:?}", i, window.to_vec());
@@ -82,7 +88,7 @@ fn main() -> Result<()> {
     let windows2d = sliding_window_view(&array2d, &[2, 2], None)?;
     println!("\n2x2 sliding windows (shape {:?}):", windows2d.shape());
     println!("This is a 4D array with shape [rows, cols, window_rows, window_cols]");
-    
+
     // Print out each window
     for i in 0..windows2d.shape()[0] {
         for j in 0..windows2d.shape()[1] {
@@ -103,7 +109,7 @@ fn main() -> Result<()> {
     // Create arrays of different shapes for broadcasting
     let a = Array::from_vec(vec![1, 2, 3]);
     let b = Array::from_vec(vec![10, 20, 30]).reshape(&[3, 1]);
-    
+
     println!("Array a (shape {:?}):", a.shape());
     println!("{}", a);
     println!("\nArray b (shape {:?}):", b.shape());
@@ -122,7 +128,7 @@ fn main() -> Result<()> {
     // Use the Array's built-in broadcasting functionality instead
     let a_broadcast = a.broadcast_to(&[3, 3])?;
     let b_broadcast = b.broadcast_to(&[3, 3])?;
-    
+
     println!("\nBroadcast arrays result using built-in methods:");
     println!("Array 1 (shape {:?}):", a_broadcast.shape());
     println!("{}", a_broadcast);
@@ -143,17 +149,17 @@ fn main() -> Result<()> {
     let c_array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
     // Create a "column-major" like array by reshaping a clone
     let f_array = Array::from_vec(vec![1, 4, 2, 5, 3, 6]).reshape(&[2, 3]);
-    
+
     println!("C-order array (shape {:?}):", c_array.shape());
     println!("{}", c_array);
-    
+
     println!("\nColumn-major-like array (shape {:?}):", f_array.shape());
     println!("{}", f_array);
-    
+
     // Get byte strides for both arrays
     let c_strides = byte_strides(&c_array);
     let f_strides = byte_strides(&f_array);
-    
+
     println!("\nByte strides for C-order array: {:?}", c_strides);
     println!("Byte strides for column-major-like array: {:?}", f_strides);
     println!("The byte strides might be the same because we're using the same memory layout,");

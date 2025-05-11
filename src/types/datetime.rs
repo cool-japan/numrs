@@ -5,7 +5,7 @@
 
 use std::fmt;
 use std::ops::{Add, Sub};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 use serde::{Serialize, Deserialize};
 use crate::error::{NumRs2Error, Result};
 
@@ -84,6 +84,7 @@ impl DateTime64 {
     
     /// Create a DateTime64 from a SystemTime
     pub fn from_system_time(time: SystemTime, unit: DateTimeUnit) -> Result<Self> {
+        use std::time::UNIX_EPOCH;
         let duration = time.duration_since(UNIX_EPOCH)
             .map_err(|e| NumRs2Error::ValueError(format!("Error converting SystemTime: {}", e)))?;
         
@@ -182,6 +183,7 @@ impl DateTime64 {
     
     /// Convert to a SystemTime
     pub fn to_system_time(&self) -> SystemTime {
+        use std::time::UNIX_EPOCH;
         // Convert to seconds and nanoseconds
         let (secs, nanos) = match self.unit {
             DateTimeUnit::Year => {
@@ -480,7 +482,6 @@ impl Sub for TimeDelta64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::UNIX_EPOCH;
     
     #[test]
     fn test_datetime64_creation() {

@@ -7,7 +7,6 @@ use std::fmt::Debug;
 use num_complex::Complex;
 
 /// Enhanced eigenvalue and eigenvector computation using ndarray-linalg
-
 /// Compute eigenvalues and eigenvectors of a symmetric/Hermitian matrix
 pub fn eigh<T>(a: &Array<T>, uplo: &str) -> Result<(Array<<T as ndarray_linalg::Scalar>::Real>, Array<T>)>
 where

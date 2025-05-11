@@ -63,12 +63,12 @@ pub fn tile<T: Clone>(array: &Array<T>, reps: &[usize]) -> Result<Array<T>> {
     }
     
     // For each position in the output, copy the corresponding element from the input
-    for i in 0..result_vec.len() {
+    for (i, item) in result_vec.iter_mut().enumerate() {
         // Calculate corresponding index in the input array
         // This is a simplification - for a complete implementation, we would need
         // to carefully map N-dimensional indices
         let input_idx = i % input_size;
-        result_vec[i] = input_vec[input_idx].clone();
+        *item = input_vec[input_idx].clone();
     }
     
     Ok(result)
@@ -2022,7 +2022,7 @@ pub fn ravel<T: Clone>(array: &Array<T>, order: Option<char>) -> Result<Array<T>
         _ => {
             // This should never happen, but we need to handle the non-exhaustive enum
             return Err(NumRs2Error::InvalidOperation(
-                format!("Unsupported memory order")
+                "Unsupported memory order".to_string()
             ));
         }
     };
@@ -2223,9 +2223,7 @@ pub fn moveaxis<T: Clone>(array: &Array<T>, source: &[usize], destination: &[usi
 /// let b = atleast_1d(&[&a]).unwrap();
 /// assert_eq!(b[0].shape(), vec![3]);
 /// ```
-pub fn atleast_1d<T: Clone>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>> 
-where 
-    T: num_traits::Zero
+pub fn atleast_1d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>>
 {
     let mut result = Vec::with_capacity(arys.len());
     
@@ -2262,9 +2260,7 @@ where
 /// let b = atleast_2d(&[&a]).unwrap();
 /// assert_eq!(b[0].shape(), vec![1, 3]);
 /// ```
-pub fn atleast_2d<T: Clone>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>> 
-where 
-    T: num_traits::Zero
+pub fn atleast_2d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>>
 {
     let mut result = Vec::with_capacity(arys.len());
     
@@ -2306,9 +2302,7 @@ where
 /// let b = atleast_3d(&[&a]).unwrap();
 /// assert_eq!(b[0].shape(), vec![1, 3, 1]);
 /// ```
-pub fn atleast_3d<T: Clone>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>> 
-where 
-    T: num_traits::Zero
+pub fn atleast_3d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>>
 {
     let mut result = Vec::with_capacity(arys.len());
     

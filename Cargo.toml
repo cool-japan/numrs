@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2021"
 authors = ["NumRS Contributors"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -14,6 +14,8 @@ categories = ["science"]
 default = ["matrix_decomp"]
 matrix_decomp = []
 validation = []
+scirs = ["dep:scirs2-stats", "dep:scirs2-core"]
+gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
 
 [dependencies]
 ndarray = "0.16.1"  # Provides n-dimensional arrays
@@ -40,8 +42,30 @@ nalgebra = "0.32.3" # Linear algebra library for interoperability
 memmap2 = "0.9.1"   # Memory-mapped file I/O
 num_cpus = "1.16.0"
 
+# Optional SciRS2 dependencies
+scirs2-stats = { version = "0.1.0-alpha.2", optional = true }
+scirs2-core = { version = "0.1.0-alpha.2", optional = true }
+
+# Optional GPU acceleration dependencies
+wgpu = { version = "0.19.1", optional = true }
+bytemuck = { version = "1.15.0", features = ["derive"], optional = true }
+futures-intrusive = { version = "0.5.0", optional = true }
+tokio = { version = "1.36.0", features = ["sync", "rt"], optional = true }
+
 # Note: polars dependency has been removed to improve build speed
 
 [dev-dependencies]
 criterion = "0.5.1"  # Benchmarking library
 approx = "0.5.1"     # Approximate floating-point comparisons for tests
+# For performance benchmarks in bench.rs
+serde_json = "1.0.114"  # For loading NumPy benchmark results
+
+[[bench]]
+name = "numpy_comparison"
+path = "bench/bench.rs"
+harness = true
+
+[[bench]]
+name = "bench_distributions"
+path = "bench/bench_distributions.rs"
+harness = false

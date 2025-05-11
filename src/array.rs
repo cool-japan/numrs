@@ -307,10 +307,9 @@ impl<T: Clone> Array<T> {
         // Expand dimensions if needed (prepend dimensions of size 1)
         let mut expanded_array = self.clone();
         if n_dims_to_add > 0 {
+            // Create shape with leading 1s and then add original shape
             let mut new_shape = Vec::with_capacity(shape.len());
-            for _ in 0..n_dims_to_add {
-                new_shape.push(1);
-            }
+            new_shape.extend(std::iter::repeat_n(1, n_dims_to_add));
             new_shape.extend_from_slice(&orig_shape);
             expanded_array = self.reshape(&new_shape);
         }
@@ -331,12 +330,11 @@ impl<T: Clone> Array<T> {
             
             // Calculate the broadcasted indices (modulo the original shape)
             for (i, &dim) in idx.slice().iter().enumerate() {
-                let broadcast_dim = if i >= current_shape.len() { 
-                    0 
-                } else if current_shape[i] == 1 { 
-                    0 
-                } else { 
-                    dim % current_shape[i] 
+                // Get index; 0 if beyond array dims or if dim size is 1
+                let broadcast_dim = if i >= current_shape.len() || current_shape[i] == 1 {
+                    0
+                } else {
+                    dim % current_shape[i]
                 };
                 broadcast_idx.push(broadcast_dim);
             }
@@ -625,7 +623,7 @@ impl<T: Clone> Array<T> {
         }
         
         let diag_len = v.size();
-        let size = diag_len + k.unsigned_abs() as usize;
+        let size = diag_len + k.unsigned_abs();
         
         let mut result = Self::zeros(&[size, size]);
         
@@ -686,7 +684,7 @@ impl<T: Clone> Array<T> {
     {
         if v.ndim() == 1 {
             // Create a diagonal matrix
-            return Self::create_diagonal_matrix(v, k);
+            Self::create_diagonal_matrix(v, k)
         } else if v.ndim() == 2 {
             // Extract the diagonal
             let shape = v.shape();
@@ -969,9 +967,7 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(b.to_vec(), vec![1, 2, 3, 4, 5, 6]);
     /// ```
     // Implementation moved to the first flatten method above to avoid duplication
-    
     // Implementation of ravel moved to the first ravel method above to avoid duplication
-    
     /// Return the shape of the array
     pub fn shape(&self) -> Vec<usize> {
         self.data.shape().to_vec()
@@ -1154,11 +1150,11 @@ impl<T: Clone> Array<T> {
             
             // Copy the result indices to the array indices, accounting for the removed axis
             let mut result_idx = 0;
-            for j in 0..shape.len() {
+            for (j, idx) in indices.iter_mut().enumerate() {
                 if j == axis_val {
-                    indices[j] = 0;  // Start at 0 for the axis we're summing
+                    *idx = 0;  // Start at 0 for the axis we're summing
                 } else {
-                    indices[j] = result_indices[result_idx];
+                    *idx = result_indices[result_idx];
                     result_idx += 1;
                 }
             }
@@ -1197,8 +1193,8 @@ impl<T: Clone> Array<T> {
         }
         
         let shape = self.shape();
-        Ok(self.data.view().into_shape_with_order((shape[0], shape[1]))
-            .map_err(|_| NumRs2Error::DimensionMismatch("Failed to create 2D view".to_string()))?)
+        self.data.view().into_shape_with_order((shape[0], shape[1]))
+            .map_err(|_| NumRs2Error::DimensionMismatch("Failed to create 2D view".to_string()))
     }
     
     /// Get a slice along a particular axis
@@ -1578,7 +1574,7 @@ where
 /// Method to directly access the slice operation to get a view
 impl<T: Clone> Array<T> {
     /// Slice the array along a given axis, returning a view
-    pub fn slice_view<'a>(&'a self, axis: usize, index: usize) -> Result<crate::views::ArrayView<'a, T>> {
+    pub fn slice_view(&self, axis: usize, index: usize) -> Result<crate::views::ArrayView<'_, T>> {
         if axis >= self.ndim() {
             return Err(NumRs2Error::DimensionMismatch(
                 format!("Axis {} out of bounds for array of dimension {}", axis, self.ndim())
@@ -1667,32 +1663,28 @@ impl<T: Clone + Div<Output = T>> Array<T> {
 impl<T: Clone + Add<Output = T>> Array<T> {
     /// Add a scalar to the array (element-wise)
     pub fn add_scalar(&self, scalar: T) -> Self {
-        let result = self.map(|x| x + scalar.clone());
-        result
+        self.map(|x| x + scalar.clone())
     }
 }
 
 impl<T: Clone + Sub<Output = T>> Array<T> {
     /// Subtract a scalar from the array (element-wise)
     pub fn subtract_scalar(&self, scalar: T) -> Self {
-        let result = self.map(|x| x - scalar.clone());
-        result
+        self.map(|x| x - scalar.clone())
     }
 }
 
 impl<T: Clone + Mul<Output = T>> Array<T> {
     /// Multiply the array by a scalar (element-wise)
     pub fn multiply_scalar(&self, scalar: T) -> Self {
-        let result = self.map(|x| x * scalar.clone());
-        result
+        self.map(|x| x * scalar.clone())
     }
 }
 
 impl<T: Clone + Div<Output = T>> Array<T> {
     /// Divide the array by a scalar (element-wise)
     pub fn divide_scalar(&self, scalar: T) -> Self {
-        let result = self.map(|x| x / scalar.clone());
-        result
+        self.map(|x| x / scalar.clone())
     }
 }
 

@@ -4,7 +4,6 @@ use num_traits::Float;
 use std::fmt::Debug;
 
 /// Comparison utilities for NumRS Arrays
-
 /// Determine if two arrays are element-wise equal within a tolerance
 ///
 /// # Arguments

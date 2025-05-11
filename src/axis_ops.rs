@@ -613,11 +613,11 @@ where
                 mean_shape.remove(ax);
                 
                 // For each element in the array, find the corresponding mean
-                for i in 0..self.size() {
+                for (i, _) in self_data.iter().enumerate() {
                     // Calculate multi-dimensional index
                     let mut idx = Vec::with_capacity(self.ndim());
                     let mut tmp = i;
-                    
+
                     for dim in self.shape().iter().rev() {
                         idx.insert(0, tmp % dim);
                         tmp /= dim;
@@ -657,7 +657,7 @@ where
                 
                 // Calculate sum of squared differences
                 let squared_diff_sum = self.array().fold(T::zero(), |acc, x| {
-                    let val = x.clone();
+                    let val = *x;
                     let diff = val - mean_val;
                     acc + diff * diff
                 });
@@ -884,7 +884,7 @@ where
     move |array: &Array<T>| -> Array<U> {
         let data = array.to_vec();
         let func_clone = func.clone();
-        let results: Vec<U> = data.into_iter().map(move |x| func_clone(x)).collect();
+        let results: Vec<U> = data.into_iter().map(func_clone).collect();
         Array::from_vec(results).reshape(&array.shape())
     }
 }

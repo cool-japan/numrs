@@ -6,7 +6,6 @@ use std::fmt::Debug;
 use std::f64::consts::PI;
 
 /// Fast Fourier Transform (FFT) implementation for NumRS
-
 /// A wrapper for FFT functionality
 pub struct FFT;
 
@@ -115,65 +114,63 @@ impl FFT {
         T: Float + Clone + Debug + Into<f64> + From<f64>,
     {
         let shape = x.shape();
-        
+
         // Check that the input is 2D
         if shape.len() != 2 {
             return Err(NumRs2Error::DimensionMismatch(
                 "FFT2 expects a 2D array".to_string(),
             ));
         }
-        
+
         let n_rows = shape[0];
         let n_cols = shape[1];
-        
+
         // Check if dimensions are powers of 2
         if !is_power_of_two(n_rows) || !is_power_of_two(n_cols) {
             return Err(NumRs2Error::InvalidOperation(
                 "FFT2 requires input dimensions to be powers of 2".to_string(),
             ));
         }
-        
+
         // Convert to complex
         let data = x.to_vec();
         let complex_data: Vec<Complex<T>> = data.iter()
             .map(|&val| Complex::new(val, T::zero()))
             .collect();
-        
+
         // Reshape to 2D for algorithm
         let mut complex_2d: Vec<Vec<Complex<T>>> = Vec::with_capacity(n_rows);
         for i in 0..n_rows {
             let row: Vec<Complex<T>> = complex_data[(i * n_cols)..((i + 1) * n_cols)].to_vec();
             complex_2d.push(row);
         }
-        
+
         // Apply 1D FFT to each row
         for row in &mut complex_2d {
             fft_recursive(row);
         }
-        
+
         // Transpose the matrix
-        let mut transposed = Vec::with_capacity(n_cols);
-        for j in 0..n_cols {
-            let mut col = Vec::with_capacity(n_rows);
-            for i in 0..n_rows {
-                col.push(complex_2d[i][j]);
+        let mut transposed = vec![vec![Complex::new(T::zero(), T::zero()); n_rows]; n_cols];
+        for (i, row) in complex_2d.iter().enumerate().take(n_rows) {
+            for (j, val) in row.iter().enumerate().take(n_cols) {
+                transposed[j][i] = *val;
             }
-            transposed.push(col);
         }
-        
+
         // Apply 1D FFT to each column (now row after transposition)
         for row in &mut transposed {
             fft_recursive(row);
         }
-        
+
         // Transpose back and flatten
         let mut result = Vec::with_capacity(n_rows * n_cols);
-        for j in 0..n_cols {
-            for i in 0..n_rows {
+        for i in 0..n_rows {
+            for j in 0..n_cols {
                 result.push(transposed[j][i]);
             }
         }
-        
+
         Ok(Array::from_vec(result).reshape(&shape))
     }
     
@@ -183,68 +180,68 @@ impl FFT {
         T: Float + Clone + Debug + Into<f64> + From<f64>,
     {
         let shape = x.shape();
-        
+
         // Check that the input is 2D
         if shape.len() != 2 {
             return Err(NumRs2Error::DimensionMismatch(
                 "IFFT2 expects a 2D array".to_string(),
             ));
         }
-        
+
         let n_rows = shape[0];
         let n_cols = shape[1];
-        
+
         // Check if dimensions are powers of 2
         if !is_power_of_two(n_rows) || !is_power_of_two(n_cols) {
             return Err(NumRs2Error::InvalidOperation(
                 "IFFT2 requires input dimensions to be powers of 2".to_string(),
             ));
         }
-        
+
         // Get data
         let data = x.to_vec();
-        
+
         // Conjugate the input
         let complex_data: Vec<Complex<T>> = data.iter()
             .map(|val| val.conj())
             .collect();
-        
+
         // Reshape to 2D for algorithm
         let mut complex_2d: Vec<Vec<Complex<T>>> = Vec::with_capacity(n_rows);
         for i in 0..n_rows {
             let row: Vec<Complex<T>> = complex_data[(i * n_cols)..((i + 1) * n_cols)].to_vec();
             complex_2d.push(row);
         }
-        
+
         // Apply 1D FFT to each row
         for row in &mut complex_2d {
             fft_recursive(row);
         }
-        
+
         // Transpose the matrix
-        let mut transposed = Vec::with_capacity(n_cols);
-        for j in 0..n_cols {
-            let mut col = Vec::with_capacity(n_rows);
-            for i in 0..n_rows {
-                col.push(complex_2d[i][j]);
+        let mut transposed = vec![vec![Complex::new(T::zero(), T::zero()); n_rows]; n_cols];
+        for (i, row) in complex_2d.iter().enumerate().take(n_rows) {
+            for (j, val) in row.iter().enumerate().take(n_cols) {
+                transposed[j][i] = *val;
             }
-            transposed.push(col);
         }
-        
+
         // Apply 1D FFT to each column (now row after transposition)
         for row in &mut transposed {
             fft_recursive(row);
         }
-        
+
         // Transpose back, conjugate, scale and flatten
         let scale: T = <T as NumCast>::from(1.0 / (n_rows * n_cols) as f64).unwrap_or(T::zero());
         let mut result = Vec::with_capacity(n_rows * n_cols);
-        for j in 0..n_cols {
-            for i in 0..n_rows {
+
+        // Pre-compute the scaled and conjugated values for each row
+        for i in 0..n_rows {
+            for j in 0..n_cols {
                 result.push(transposed[j][i].conj() * scale);
             }
         }
-        
+
         Ok(Array::from_vec(result).reshape(&shape))
     }
     
@@ -365,7 +362,8 @@ impl FFT {
                 let data = x.to_vec();
                 
                 let mut result = Vec::with_capacity(n);
-                let half_n = (n + 1) / 2;  // This will handle both even and odd lengths
+                // Ceil division to handle odd-length arrays correctly
+                let half_n = (n + 1) / 2;
                 
                 // Rearrange the array
                 result.extend_from_slice(&data[n - half_n..]);
@@ -386,13 +384,13 @@ impl FFT {
                     data_2d.push(row);
                 }
                 
-                // Shift rows
+                // Shift rows - ceil division to handle odd dimensions correctly
                 let half_rows = (n_rows + 1) / 2;
                 let mut rows_shifted = Vec::with_capacity(n_rows);
                 rows_shifted.extend_from_slice(&data_2d[n_rows - half_rows..]);
                 rows_shifted.extend_from_slice(&data_2d[..n_rows - half_rows]);
                 
-                // Shift columns in each row
+                // Shift columns in each row - ceil division to handle odd dimensions correctly
                 let half_cols = (n_cols + 1) / 2;
                 let mut result = Vec::with_capacity(n_rows * n_cols);
                 
@@ -725,7 +723,7 @@ impl FFT {
         if n_rows != x_shape[0] || rfft_cols != n_cols / 2 + 1 {
             return Err(NumRs2Error::ShapeMismatch {
                 expected: vec![n_rows, n_cols / 2 + 1],
-                actual: x_shape,
+                actual: x_shape.clone(),
             });
         }
         

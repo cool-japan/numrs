@@ -265,7 +265,7 @@ impl<T> Array<T> {
         for value in data {
             let real = NumCast::from(value.clone())
                 .ok_or_else(|| NumRs2Error::TypeCastError(
-                    format!("Failed to convert real part to complex type")
+                    "Failed to convert real part to complex type".to_string()
                 ))?;
             converted.push(Complex::new(real, U::zero()));
         }

@@ -3,7 +3,6 @@ use crate::array::Array;
 use num_traits::Float;
 
 /// BLAS Level 1: Vector-Vector operations
-
 /// Compute the dot product of two vectors
 pub fn dot<T>(x: &Array<T>, y: &Array<T>) -> Result<T>
 where
@@ -41,7 +40,6 @@ where
 }
 
 /// BLAS Level 2: Matrix-Vector operations
-
 /// Compute the matrix-vector product y = alpha*A*x + beta*y
 pub fn gemv<T>(
     a: &Array<T>,
@@ -106,8 +104,8 @@ where
     let mut y_data = y.to_vec();
     
     // Scale y by beta
-    for i in 0..y_data.len() {
-        y_data[i] = beta * y_data[i];
+    for value in &mut y_data {
+        *value = beta * *value;
     }
     
     if trans {
@@ -133,7 +131,6 @@ where
 }
 
 /// BLAS Level 3: Matrix-Matrix operations
-
 /// Compute the matrix-matrix product C = alpha*A*B + beta*C
 pub fn gemm<T>(
     a: &Array<T>,
@@ -193,8 +190,8 @@ where
     let mut c_data = c.to_vec();
     
     // Scale C by beta
-    for i in 0..c_data.len() {
-        c_data[i] = beta * c_data[i];
+    for value in &mut c_data {
+        *value = beta * *value;
     }
     
     // These variable names align with typical matrix notation

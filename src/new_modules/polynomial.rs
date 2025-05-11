@@ -6,7 +6,6 @@ use std::fmt::Debug;
 use std::ops::{Add, Sub, Mul, Div};
 
 /// Polynomial functionality and interpolation for NumRS2
-
 /// Represents a polynomial with coefficients in descending order of degree
 /// e.g., p(x) = c\[0\] * x^n + c\[1\] * x^(n-1) + ... + c\[n-1\] * x + c\[n\]
 #[derive(Clone, Debug)]
@@ -236,7 +235,6 @@ where
 }
 
 /// General polynomial functions
-
 /// Fit a polynomial of specified degree to the data points
 pub fn polyfit<T>(x: &Array<T>, y: &Array<T>, degree: usize) -> Result<Polynomial<T>>
 where
@@ -661,13 +659,13 @@ where
         let mut coefficients = Vec::with_capacity(n-1);
         
         for i in 0..n-1 {
-            let h = x_data[i+1].clone() - x_data[i].clone();
-            let a = (second_derivs[i+1].clone() - second_derivs[i].clone()) / (T::from(6.0).unwrap() * h.clone());
-            let b = second_derivs[i].clone() / T::from(2.0).unwrap();
-            let c = (y_data[i+1].clone() - y_data[i].clone()) / h.clone() -
-                   (second_derivs[i+1].clone() + T::from(2.0).unwrap() * second_derivs[i].clone()) * h.clone() / T::from(6.0).unwrap();
-            let d = y_data[i].clone();
-            
+            let h = x_data[i+1] - x_data[i];
+            let a = (second_derivs[i+1] - second_derivs[i]) / (T::from(6.0).unwrap() * h);
+            let b = second_derivs[i] / T::from(2.0).unwrap();
+            let c = (y_data[i+1] - y_data[i]) / h -
+                   (second_derivs[i+1] + T::from(2.0).unwrap() * second_derivs[i]) * h / T::from(6.0).unwrap();
+            let d = y_data[i];
+
             coefficients.push([a, b, c, d]);
         }
         
@@ -695,10 +693,16 @@ where
             
             if x >= self.knots[mid] && x <= self.knots[mid + 1] {
                 // Found the segment
-                let t = x - self.knots[mid].clone();
+                let t = x - self.knots[mid];
                 let coeffs = &self.coefficients[mid];
                 
-                return Ok(((coeffs[0].clone() * t.clone() + coeffs[1].clone()) * t.clone() + coeffs[2].clone()) * t.clone() + coeffs[3].clone());
+                // Use Horner's method for polynomial evaluation
+                let c0 = coeffs[0];
+                let c1 = coeffs[1];
+                let c2 = coeffs[2];
+                let c3 = coeffs[3];
+
+                return Ok(((c0 * t + c1) * t + c2) * t + c3);
             }
             
             if x < self.knots[mid] {
@@ -710,10 +714,16 @@ where
         
         // If we get here, we're in the last segment
         let last_idx = self.coefficients.len() - 1;
-        let t = x - self.knots[last_idx].clone();
+        let t = x - self.knots[last_idx];
         let coeffs = &self.coefficients[last_idx];
         
-        Ok(((coeffs[0].clone() * t.clone() + coeffs[1].clone()) * t.clone() + coeffs[2].clone()) * t.clone() + coeffs[3].clone())
+        // Uses Horner's method for polynomial evaluation without unnecessary clones
+        let c0 = coeffs[0];
+        let c1 = coeffs[1];
+        let c2 = coeffs[2];
+        let c3 = coeffs[3];
+
+        Ok(((c0 * t + c1) * t + c2) * t + c3)
     }
     
     /// Evaluate the spline at multiple points

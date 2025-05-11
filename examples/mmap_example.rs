@@ -1,15 +1,17 @@
-use numrs2::prelude::*;
-use std::env::temp_dir;
-use std::fs::remove_file;
+// Note: The following imports are commented out as they're not used in this example
+// If you need to run actual mmap examples, uncomment these imports
+// use numrs2::prelude::*;
+// use std::env::temp_dir;
+// use std::fs::remove_file;
 
 fn main() {
     println!("Memory-Mapped Array Example");
     println!("=========================");
-    
+
     // Skip mmap example for now
     println!("Skipping mmap examples due to permission issues.");
     println!("To run these examples, ensure write permissions in the current directory.");
-    
+
     // Display features of memory-mapped arrays instead
     println!("\nMemory-Mapped Array Features:");
     println!("1. Efficient storage of large arrays");
@@ -17,7 +19,7 @@ fn main() {
     println!("3. Only loads data that is accessed, saving memory");
     println!("4. Automatic paging by the OS");
     println!("5. Can be shared between processes");
-    
+
     // Display a code snippet showing usage
     println!("\nUsage example:");
     println!("```rust");

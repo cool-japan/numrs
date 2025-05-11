@@ -6,7 +6,6 @@ use std::fmt::Debug;
 use std::ops::{Add, Sub, Mul, Div};
 
 /// Sparse array implementation for NumRS
-
 /// Coordinate (COO) format sparse array
 #[derive(Clone, Debug)]
 pub struct SparseArray<T> {
@@ -41,15 +40,15 @@ where
             size *= shape[i];
         }
         
-        for i in 0..size {
+        for (i, value) in dense_data.iter().enumerate().take(size) {
             // Calculate the multi-dimensional index
             let mut temp = i;
             for j in (0..shape.len()).rev() {
                 idx[j] = temp % shape[j];
                 temp /= shape[j];
             }
-            
-            let value = dense_data[i].clone();
+
+            let value = value.clone();
             if value != T::zero() {
                 data.insert(idx.clone(), value);
             }
@@ -427,9 +426,9 @@ where
         let n = diagonal.len();
         let mut matrix = SparseMatrix::new(&[n, n])?;
         
-        for i in 0..n {
-            if diagonal[i] != T::zero() {
-                matrix.array.set(&[i, i], diagonal[i].clone())?;
+        for (i, value) in diagonal.iter().enumerate().take(n) {
+            if *value != T::zero() {
+                matrix.array.set(&[i, i], value.clone())?;
             }
         }
         
@@ -706,20 +705,24 @@ where
                     let row_k = self_indices[row_idx];
                     let col_k = other_indices[col_idx];
                     
-                    if row_k == col_k {
-                        // Common index found, multiply and add
-                        let a_val = self_matrix.array.get(&[i, row_k])?;
-                        let b_val = other_matrix.array.get(&[col_k, j])?;
-                        
-                        sum = sum + a_val * b_val;
-                        added = true;
-                        
-                        row_idx += 1;
-                        col_idx += 1;
-                    } else if row_k < col_k {
-                        row_idx += 1;
-                    } else {
-                        col_idx += 1;
+                    match row_k.cmp(&col_k) {
+                        std::cmp::Ordering::Equal => {
+                            // Common index found, multiply and add
+                            let a_val = self_matrix.array.get(&[i, row_k])?;
+                            let b_val = other_matrix.array.get(&[col_k, j])?;
+
+                            sum = sum + a_val * b_val;
+                            added = true;
+
+                            row_idx += 1;
+                            col_idx += 1;
+                        },
+                        std::cmp::Ordering::Less => {
+                            row_idx += 1;
+                        },
+                        std::cmp::Ordering::Greater => {
+                            col_idx += 1;
+                        }
                     }
                 }
                 

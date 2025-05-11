@@ -16,3 +16,5 @@ Cargo.lock
 
 # Cargo config (local settings)
 .cargo/
+
+**/.claude/settings.local.json

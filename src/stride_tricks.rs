@@ -8,7 +8,6 @@ use std::fmt::Debug;
 /// This module provides advanced functions for manipulating array strides,
 /// enabling sophisticated and memory-efficient array operations similar to
 /// NumPy's `numpy.lib.stride_tricks` module.
-
 /// Create a view of the given array with the specified strides without copying.
 ///
 /// This is a lower-level function than `as_strided` as it directly manipulates

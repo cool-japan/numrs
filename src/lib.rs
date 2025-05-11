@@ -21,11 +21,15 @@ pub mod stats;
 pub mod stride_tricks;
 pub mod types;
 pub mod ufuncs;
+pub mod unique;
+pub mod unique_optimized;
 pub mod util;
 pub mod views;
 pub mod memory_optimize;
 pub mod parallel_optimize;
 pub mod memory_alloc;
+#[cfg(feature = "gpu")]
+pub mod gpu;
 
 // New modules
 pub mod new_modules {
@@ -49,6 +53,8 @@ pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
     pub use crate::array_ops::{ravel, flatten, swapaxes, moveaxis, atleast_1d, atleast_2d, atleast_3d};
+    pub use crate::unique::{unique, UniqueResult};
+    pub use crate::unique_optimized::{unique_optimized};
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
     pub use crate::conversions::*;
@@ -59,9 +65,10 @@ pub mod prelude {
     pub use crate::matrix::{Matrix, BandedMatrix};
     pub use crate::math::*;
     pub use crate::mmap::MmapArray;
-    pub use crate::random::*;
-    pub use crate::random::RandomState;
+    pub use crate::random::{self, RandomState};
     pub use crate::random::distributions;
+    pub use crate::random::generator::{default_rng, Generator, BitGenerator, StdBitGenerator};
+    pub use crate::random::advanced_distributions;
     pub use crate::stats::*;
     pub use crate::simd::*;
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
@@ -96,6 +103,10 @@ pub mod prelude {
     pub use crate::new_modules::eigenvalues::{eigh, eigvalsh, eig as eig_general, eigvals};
     pub use crate::new_modules::polynomial::{Polynomial, PolynomialInterpolation, CubicSpline};
     pub use crate::new_modules::fft::FFT;
+
+    // GPU acceleration
+    #[cfg(feature = "gpu")]
+    pub use crate::gpu::{GpuArray, GpuContext, add, subtract, multiply, divide, matmul, transpose};
     pub use crate::new_modules::sparse::{SparseArray, SparseMatrix, SparseMatrixFormat};
     pub use crate::new_modules::special::{erf, erfc, erfinv, erfcinv, gamma, gammaln, digamma, gammainc, 
                                          bessel_j, bessel_y, bessel_i, bessel_k, ellipk, ellipe};
