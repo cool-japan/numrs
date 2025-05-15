@@ -26,7 +26,7 @@ pub trait SimdOps<T> {
         F: Fn(T, T) -> T;
 }
 
-impl<T: Float + SimdValue> SimdOps<T> for Array<T> 
+impl<T: Float + SimdValue + 'static> SimdOps<T> for Array<T> 
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -137,7 +137,7 @@ where
 }
 
 // Implementation of specific SIMD operations for different architectures
-impl<T: Float + SimdValue> Array<T>
+impl<T: Float + SimdValue + 'static> Array<T>
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -292,9 +292,46 @@ where
     where
         F: Fn(T) -> T,
     {
-        // For now, just call the scalar implementation
-        // In a real implementation, you would use AVX2 intrinsics
-        self.simd_map_scalar(f)
+        // Using specialized AVX2 implementations for common operations
+        // Fall back to scalar for custom functions
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+            // Check if the function is a square root operation
+            let sqrt_test = f(T::one());
+            let sqrt_expected = T::one().sqrt();
+            if (sqrt_test - sqrt_expected).abs() < T::epsilon() {
+                // This is a square root function
+                let array_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(self) 
+                };
+                let result_f32 = crate::simd_optimize::avx2_optimized_sqrt_f32(array_f32);
+                return unsafe { 
+                    std::mem::transmute::<Array<f32>, Array<T>>(result_f32) 
+                };
+            }
+            
+            // Default to scalar implementation for other functions
+            return self.simd_map_scalar(f);
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            // Check if the function is a square root operation
+            let sqrt_test = f(T::one());
+            let sqrt_expected = T::one().sqrt();
+            if (sqrt_test - sqrt_expected).abs() < T::epsilon() {
+                // This is a square root function
+                let array_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(self) 
+                };
+                let result_f64 = crate::simd_optimize::avx2_optimized_sqrt_f64(array_f64);
+                return unsafe { 
+                    std::mem::transmute::<Array<f64>, Array<T>>(result_f64) 
+                };
+            }
+            
+            // Default to scalar implementation for other functions
+            return self.simd_map_scalar(f);
+        } else {
+            // Default to scalar implementation for other types
+            self.simd_map_scalar(f)
+        }
     }
     
     #[cfg(not(target_arch = "x86_64"))]
@@ -310,9 +347,142 @@ where
     where
         F: Fn(T, T) -> T,
     {
-        // For now, just call the scalar implementation
-        // In a real implementation, you would use AVX2 intrinsics
-        self.simd_zip_with_scalar(other, f)
+        // Using specialized AVX2 implementations for common operations
+        // Fall back to scalar for custom functions
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+            // Check if the function is an addition operation
+            let add_test = f(T::one(), T::one());
+            let add_expected = T::one() + T::one();
+            if (add_test - add_expected).abs() < T::epsilon() {
+                // This is an addition function
+                let self_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(self) 
+                };
+                let other_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(other) 
+                };
+                let result_f32 = crate::simd_optimize::avx2_optimized_add_f32(self_f32, other_f32)?;
+                return Ok(unsafe { 
+                    std::mem::transmute::<Array<f32>, Array<T>>(result_f32) 
+                });
+            }
+            
+            // Check if the function is a multiplication operation
+            let mul_test = f(T::from(2.0).unwrap(), T::from(3.0).unwrap());
+            let mul_expected = T::from(2.0).unwrap() * T::from(3.0).unwrap();
+            if (mul_test - mul_expected).abs() < T::epsilon() {
+                // This is a multiplication function
+                let self_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(self) 
+                };
+                let other_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(other) 
+                };
+                let result_f32 = crate::simd_optimize::avx2_optimized_mul_f32(self_f32, other_f32)?;
+                return Ok(unsafe { 
+                    std::mem::transmute::<Array<f32>, Array<T>>(result_f32) 
+                });
+            }
+            
+            // Check if the function is a division operation
+            let div_test = f(T::from(4.0).unwrap(), T::from(2.0).unwrap());
+            let div_expected = T::from(4.0).unwrap() / T::from(2.0).unwrap();
+            if (div_test - div_expected).abs() < T::epsilon() {
+                // This is a division function
+                let self_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(self) 
+                };
+                let other_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(other) 
+                };
+                // Use the AVX2 implementation but with div function
+                // We need to extract the slices and create a new array
+                let a_data = self_f32.to_vec();
+                let b_data = other_f32.to_vec();
+                let mut result_data = vec![0.0f32; a_data.len()];
+                
+                unsafe {
+                    // Use our AVX2 div implementation
+                    crate::simd_optimize::avx2_ops::avx2_div_f32(&a_data, &b_data, &mut result_data);
+                }
+                
+                let result_f32 = Array::from_vec(result_data).reshape(&self_f32.shape());
+                return Ok(unsafe { 
+                    std::mem::transmute::<Array<f32>, Array<T>>(result_f32) 
+                });
+            }
+            
+            // Default to scalar implementation for other functions
+            return self.simd_zip_with_scalar(other, f);
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            // Check if the function is an addition operation
+            let add_test = f(T::one(), T::one());
+            let add_expected = T::one() + T::one();
+            if (add_test - add_expected).abs() < T::epsilon() {
+                // This is an addition function
+                let self_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(self) 
+                };
+                let other_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(other) 
+                };
+                let result_f64 = crate::simd_optimize::avx2_optimized_add_f64(self_f64, other_f64)?;
+                return Ok(unsafe { 
+                    std::mem::transmute::<Array<f64>, Array<T>>(result_f64) 
+                });
+            }
+            
+            // Check if the function is a multiplication operation
+            let mul_test = f(T::from(2.0).unwrap(), T::from(3.0).unwrap());
+            let mul_expected = T::from(2.0).unwrap() * T::from(3.0).unwrap();
+            if (mul_test - mul_expected).abs() < T::epsilon() {
+                // This is a multiplication function
+                let self_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(self) 
+                };
+                let other_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(other) 
+                };
+                let result_f64 = crate::simd_optimize::avx2_optimized_mul_f64(self_f64, other_f64)?;
+                return Ok(unsafe { 
+                    std::mem::transmute::<Array<f64>, Array<T>>(result_f64) 
+                });
+            }
+            
+            // Check if the function is a division operation
+            let div_test = f(T::from(4.0).unwrap(), T::from(2.0).unwrap());
+            let div_expected = T::from(4.0).unwrap() / T::from(2.0).unwrap();
+            if (div_test - div_expected).abs() < T::epsilon() {
+                // This is a division function
+                let self_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(self) 
+                };
+                let other_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(other) 
+                };
+                // Use the AVX2 implementation but with div function
+                // We need to extract the slices and create a new array
+                let a_data = self_f64.to_vec();
+                let b_data = other_f64.to_vec();
+                let mut result_data = vec![0.0f64; a_data.len()];
+                
+                unsafe {
+                    // Use our AVX2 div implementation
+                    crate::simd_optimize::avx2_ops::avx2_div_f64(&a_data, &b_data, &mut result_data);
+                }
+                
+                let result_f64 = Array::from_vec(result_data).reshape(&self_f64.shape());
+                return Ok(unsafe { 
+                    std::mem::transmute::<Array<f64>, Array<T>>(result_f64) 
+                });
+            }
+            
+            // Default to scalar implementation for other functions
+            return self.simd_zip_with_scalar(other, f);
+        } else {
+            // Default to scalar implementation for other types
+            self.simd_zip_with_scalar(other, f)
+        }
     }
     
     #[cfg(not(target_arch = "x86_64"))]
@@ -328,9 +498,42 @@ where
     where
         F: Fn(T, T) -> T,
     {
-        // For now, just call the scalar implementation
-        // In a real implementation, you would use AVX2 intrinsics
-        self.simd_reduce_scalar(init, f)
+        // Using specialized AVX2 implementations for common operations
+        // Fall back to scalar for custom functions
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+            // Check if the function is a sum operation
+            let sum_test = f(T::one(), T::one());
+            let sum_expected = T::one() + T::one();
+            if (sum_test - sum_expected).abs() < T::epsilon() && init == T::zero() {
+                // This is a sum function with zero initialization
+                let self_f32 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(self) 
+                };
+                let result_f32 = crate::simd_optimize::avx2_optimized_sum_f32(self_f32);
+                return T::from(result_f32).unwrap();
+            }
+            
+            // Default to scalar implementation for other functions
+            return self.simd_reduce_scalar(init, f);
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            // Check if the function is a sum operation
+            let sum_test = f(T::one(), T::one());
+            let sum_expected = T::one() + T::one();
+            if (sum_test - sum_expected).abs() < T::epsilon() && init == T::zero() {
+                // This is a sum function with zero initialization
+                let self_f64 = unsafe { 
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(self) 
+                };
+                let result_f64 = crate::simd_optimize::avx2_optimized_sum_f64(self_f64);
+                return T::from(result_f64).unwrap();
+            }
+            
+            // Default to scalar implementation for other functions
+            return self.simd_reduce_scalar(init, f);
+        } else {
+            // Default to scalar implementation for other types
+            self.simd_reduce_scalar(init, f)
+        }
     }
     
     #[cfg(not(target_arch = "x86_64"))]
@@ -400,7 +603,7 @@ where
 // Efficient SIMD implementations for common operations
 
 /// SIMD-accelerated element-wise addition with automatic CPU feature detection
-pub fn simd_add<T: Float + SimdValue>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
+pub fn simd_add<T: Float + SimdValue + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -409,7 +612,7 @@ where
 }
 
 /// SIMD-accelerated element-wise multiplication with automatic CPU feature detection
-pub fn simd_mul<T: Float + SimdValue>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
+pub fn simd_mul<T: Float + SimdValue + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -418,7 +621,7 @@ where
 }
 
 /// SIMD-accelerated element-wise division with automatic CPU feature detection
-pub fn simd_div<T: Float + SimdValue>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
+pub fn simd_div<T: Float + SimdValue + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -427,7 +630,7 @@ where
 }
 
 /// SIMD-accelerated element-wise exponentiation with automatic CPU feature detection
-pub fn simd_exp<T: Float + SimdValue>(a: &Array<T>) -> Array<T>
+pub fn simd_exp<T: Float + SimdValue + 'static>(a: &Array<T>) -> Array<T>
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -436,7 +639,7 @@ where
 }
 
 /// SIMD-accelerated element-wise logarithm with automatic CPU feature detection
-pub fn simd_log<T: Float + SimdValue>(a: &Array<T>) -> Array<T>
+pub fn simd_log<T: Float + SimdValue + 'static>(a: &Array<T>) -> Array<T>
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -445,7 +648,7 @@ where
 }
 
 /// SIMD-accelerated element-wise square root with automatic CPU feature detection
-pub fn simd_sqrt<T: Float + SimdValue>(a: &Array<T>) -> Array<T>
+pub fn simd_sqrt<T: Float + SimdValue + 'static>(a: &Array<T>) -> Array<T>
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -454,7 +657,7 @@ where
 }
 
 /// SIMD-accelerated sum of all elements with automatic CPU feature detection
-pub fn simd_sum<T: Float + SimdValue>(a: &Array<T>) -> T
+pub fn simd_sum<T: Float + SimdValue + 'static>(a: &Array<T>) -> T
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,
@@ -463,7 +666,7 @@ where
 }
 
 /// SIMD-accelerated product of all elements with automatic CPU feature detection
-pub fn simd_prod<T: Float + SimdValue>(a: &Array<T>) -> T
+pub fn simd_prod<T: Float + SimdValue + 'static>(a: &Array<T>) -> T
 where
     T::SimdBool: SimdBool,
     <T as simba::simd::SimdValue>::Element: Float,

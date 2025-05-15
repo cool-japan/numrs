@@ -129,17 +129,307 @@ where
 /// assert!(array_equal(&a, &b));
 /// assert!(!array_equal(&a, &c));
 /// ```
-pub fn array_equal<T>(a: &Array<T>, b: &Array<T>) -> bool
+/// Check if two arrays are equal (element-wise)
+///
+/// # Parameters
+///
+/// * `a` - First array to compare
+/// * `b` - Second array to compare
+/// * `equal_nan` - If True, treat NaN elements as equal to each other (floating point arrays only)
+///
+/// # Returns
+///
+/// * `true` if arrays are equal, `false` otherwise
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create two arrays
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let b = Array::from_vec(vec![1, 2, 3]);
+/// let c = Array::from_vec(vec![1, 2, 4]);
+///
+/// // Compare arrays
+/// assert!(array_equal(&a, &b, None));
+/// assert!(!array_equal(&a, &c, None));
+///
+/// // Compare with NaN handling (floating point only)
+/// let d = Array::from_vec(vec![1.0, 2.0, f64::NAN]);
+/// let e = Array::from_vec(vec![1.0, 2.0, f64::NAN]);
+/// assert!(!array_equal(&d, &e, None)); // Default behavior: NaNs are not equal
+/// assert!(array_equal(&d, &e, Some(true))); // With equal_nan=true, NaNs are equal
+/// ```
+pub fn array_equal<T>(a: &Array<T>, b: &Array<T>, equal_nan: Option<bool>) -> bool
 where
-    T: Clone + PartialEq + Debug
+    T: Clone + PartialEq + Debug + 'static
 {
+    let equal_nan = equal_nan.unwrap_or(false);
+    
     // Check if shapes are the same
     if a.shape() != b.shape() {
         return false;
     }
     
-    // Convert arrays to vectors and compare elements
+    // For floating point types, handle NaN equality if requested
+    if equal_nan {
+        if let Some(result) = array_equal_with_nan_handling(a, b) {
+            return result;
+        }
+    }
+    
+    // Regular element-wise comparison (handled by PartialEq)
     a.to_vec() == b.to_vec()
+}
+
+/// Helper method specifically for arrays with floating point types to handle NaN equality
+fn array_equal_with_nan_handling<T>(a: &Array<T>, b: &Array<T>) -> Option<bool>
+where
+    T: Clone + PartialEq + Debug + 'static
+{
+    // Handle f32
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+        let a_f32 = unsafe { &*(a as *const Array<T> as *const Array<f32>) };
+        let b_f32 = unsafe { &*(b as *const Array<T> as *const Array<f32>) };
+        
+        let a_vec = a_f32.to_vec();
+        let b_vec = b_f32.to_vec();
+        
+        if a_vec.len() != b_vec.len() {
+            return Some(false);
+        }
+        
+        for i in 0..a_vec.len() {
+            if a_vec[i] != b_vec[i] {
+                // If both values are NaN, consider them equal
+                if a_vec[i].is_nan() && b_vec[i].is_nan() {
+                    continue;
+                }
+                return Some(false);
+            }
+        }
+        
+        return Some(true);
+    }
+    
+    // Handle f64
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+        let a_f64 = unsafe { &*(a as *const Array<T> as *const Array<f64>) };
+        let b_f64 = unsafe { &*(b as *const Array<T> as *const Array<f64>) };
+        
+        let a_vec = a_f64.to_vec();
+        let b_vec = b_f64.to_vec();
+        
+        if a_vec.len() != b_vec.len() {
+            return Some(false);
+        }
+        
+        for i in 0..a_vec.len() {
+            if a_vec[i] != b_vec[i] {
+                // If both values are NaN, consider them equal
+                if a_vec[i].is_nan() && b_vec[i].is_nan() {
+                    continue;
+                }
+                return Some(false);
+            }
+        }
+        
+        return Some(true);
+    }
+    
+    // Not a floating point type
+    None
+}
+
+/// Comprehensive array comparison that supports broadcasting and custom options
+///
+/// # Parameters
+///
+/// * `a` - First array to compare
+/// * `b` - Second array to compare
+/// * `options` - Comparison options
+///
+/// # Returns
+///
+/// * `true` if arrays satisfy the comparison criteria, `false` otherwise
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create some arrays
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let b = Array::from_vec(vec![1, 2, 3]);
+/// let c = Array::from_vec(vec![1, 2, 4]);
+///
+/// // Basic equality comparison
+/// let opts = ArrayCompareOptions::default();
+/// assert!(array_compare(&a, &b, &opts));
+/// assert!(!array_compare(&a, &c, &opts));
+///
+/// // Ignore a specific index
+/// let mut opts = ArrayCompareOptions::default();
+/// opts.ignore_indices = Some(vec![2]);
+/// assert!(array_compare(&a, &c, &opts)); // Ignores the difference at index 2
+///
+/// // Compare with broadcasting (1D to 2D)
+/// let d = Array::from_vec(vec![1, 2, 3]).reshape(&[3, 1]).unwrap();
+/// let e = Array::from_vec(vec![1, 1, 1, 2, 2, 2, 3, 3, 3]).reshape(&[3, 3]).unwrap();
+/// let mut opts = ArrayCompareOptions::default();
+/// opts.allow_broadcasting = true;
+/// assert!(array_compare(&d, &e, &opts)); // d is broadcast across columns
+/// ```
+pub fn array_compare<T>(a: &Array<T>, b: &Array<T>, options: &ArrayCompareOptions) -> bool
+where
+    T: Clone + PartialEq + Debug + 'static
+{
+    // If shapes are equal, we can do direct comparison
+    if a.shape() == b.shape() {
+        return array_compare_equal_shapes(a, b, options);
+    }
+    
+    // If broadcasting is allowed, try broadcasting before comparison
+    if options.allow_broadcasting {
+        if let Ok((a_broadcast, b_broadcast)) = crate::stride_tricks::broadcast_arrays(&[a, b]) {
+            return array_compare_equal_shapes(&a_broadcast[0], &a_broadcast[1], options);
+        }
+    }
+    
+    // Shapes are different and broadcasting failed or is not allowed
+    false
+}
+
+/// Helper function for comparing arrays of the same shape
+fn array_compare_equal_shapes<T>(a: &Array<T>, b: &Array<T>, options: &ArrayCompareOptions) -> bool
+where
+    T: Clone + PartialEq + Debug + 'static
+{
+    debug_assert_eq!(a.shape(), b.shape(), "Arrays must have the same shape");
+    
+    let a_vec = a.to_vec();
+    let b_vec = b.to_vec();
+    
+    // Prepare a mask of indices to ignore (if any)
+    let mut ignore_mask = vec![false; a_vec.len()];
+    if let Some(indices) = &options.ignore_indices {
+        for &idx in indices {
+            if idx < ignore_mask.len() {
+                ignore_mask[idx] = true;
+            }
+        }
+    }
+    
+    // For floating point types, handle NaN equality if requested
+    if options.equal_nan {
+        if let Some(result) = array_compare_with_nan_handling(a, b, &ignore_mask) {
+            return result;
+        }
+    }
+    
+    // Regular comparison with ignore mask
+    for i in 0..a_vec.len() {
+        if ignore_mask[i] {
+            continue; // Skip indices that should be ignored
+        }
+        
+        if a_vec[i] != b_vec[i] {
+            return false;
+        }
+    }
+    
+    true
+}
+
+/// Helper method for floating point comparisons with NaN handling
+fn array_compare_with_nan_handling<T>(a: &Array<T>, b: &Array<T>, ignore_mask: &[bool]) -> Option<bool>
+where
+    T: Clone + PartialEq + Debug + 'static
+{
+    // Handle f32
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+        let a_f32 = unsafe { &*(a as *const Array<T> as *const Array<f32>) };
+        let b_f32 = unsafe { &*(b as *const Array<T> as *const Array<f32>) };
+        
+        let a_vec = a_f32.to_vec();
+        let b_vec = b_f32.to_vec();
+        
+        for i in 0..a_vec.len() {
+            if ignore_mask[i] {
+                continue;
+            }
+            
+            if a_vec[i] != b_vec[i] {
+                // If both values are NaN, consider them equal
+                if a_vec[i].is_nan() && b_vec[i].is_nan() {
+                    continue;
+                }
+                return Some(false);
+            }
+        }
+        
+        return Some(true);
+    }
+    
+    // Handle f64
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+        let a_f64 = unsafe { &*(a as *const Array<T> as *const Array<f64>) };
+        let b_f64 = unsafe { &*(b as *const Array<T> as *const Array<f64>) };
+        
+        let a_vec = a_f64.to_vec();
+        let b_vec = b_f64.to_vec();
+        
+        for i in 0..a_vec.len() {
+            if ignore_mask[i] {
+                continue;
+            }
+            
+            if a_vec[i] != b_vec[i] {
+                // If both values are NaN, consider them equal
+                if a_vec[i].is_nan() && b_vec[i].is_nan() {
+                    continue;
+                }
+                return Some(false);
+            }
+        }
+        
+        return Some(true);
+    }
+    
+    // Not a floating point type
+    None
+}
+
+/// Options for controlling array comparisons
+#[derive(Debug, Clone)]
+pub struct ArrayCompareOptions {
+    /// Treat NaN values as equal
+    pub equal_nan: bool,
+    
+    /// Allow broadcasting of arrays to compatible shapes
+    pub allow_broadcasting: bool,
+    
+    /// Specific indices to ignore during comparison (flattened indices)
+    pub ignore_indices: Option<Vec<usize>>,
+    
+    /// For numerical types, tolerance for considering values equal
+    pub rtol: Option<f64>,
+    
+    /// For numerical types, absolute tolerance for considering values equal
+    pub atol: Option<f64>,
+}
+
+impl Default for ArrayCompareOptions {
+    fn default() -> Self {
+        Self {
+            equal_nan: false,
+            allow_broadcasting: false,
+            ignore_indices: None,
+            rtol: None,
+            atol: None,
+        }
+    }
 }
 
 /// Determine if all elements in an array evaluate to True

@@ -289,6 +289,1236 @@ impl From<Vec<usize>> for AxisArg {
     }
 }
 
+/// Roll array elements along a specified axis
+///
+/// # Parameters
+///
+/// * `array` - Array to roll
+/// * `shift` - The number of places by which elements are shifted
+/// * `axis` - The axis along which elements are shifted. If `None`, the array is flattened,
+///           then shifted, and finally reshaped to the original shape.
+///
+/// # Returns
+///
+/// * Array with the same shape as input, but with elements rolled along the specified axis
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Roll elements by 2 in 1D array
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5]);
+/// let rolled = roll(&a, 2, None).unwrap();
+/// assert_eq!(rolled.to_vec(), vec![4, 5, 1, 2, 3]);
+///
+/// // Roll elements by -1 along axis 0 in 2D array
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let rolled = roll(&b, -1, Some(0)).unwrap();
+/// assert_eq!(rolled.to_vec(), vec![4, 5, 6, 1, 2, 3]);
+/// ```
+pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Result<Array<T>> {
+    // If array is empty, return a copy
+    if array.size() == 0 {
+        return Ok(array.clone());
+    }
+    
+    let shape = array.shape();
+    
+    match axis {
+        Some(ax) => {
+            // Validate axis
+            if ax >= shape.len() {
+                return Err(NumRs2Error::DimensionMismatch(
+                    format!("Axis {} out of bounds for array of dimension {}", ax, shape.len())
+                ));
+            }
+            
+            // Get the size of the specified axis
+            let axis_size = shape[ax];
+            
+            // Handle case where axis size is 0 or 1 (no rolling needed)
+            if axis_size <= 1 {
+                return Ok(array.clone());
+            }
+            
+            // Convert shift to a positive value within range [0, axis_size)
+            let shift_mod = ((shift % axis_size as isize) + axis_size as isize) % axis_size as isize;
+            
+            // No need to roll if the shift is 0
+            if shift_mod == 0 {
+                return Ok(array.clone());
+            }
+            
+            // Create a result array filled with the first element as a placeholder
+            let first_elem = array.array().first().ok_or_else(|| {
+                NumRs2Error::InvalidOperation("Array is empty".into())
+            })?.clone();
+            
+            let mut result = Array::full(&shape, first_elem);
+            
+            // Calculate the sizes of the pre-axis, axis, and post-axis dimensions
+            let pre_axis_size: usize = shape.iter().take(ax).product();
+            let post_axis_size: usize = shape.iter().skip(ax + 1).product();
+            
+            // Create a flat copy of the array data
+            let array_vec = array.to_vec();
+            let result_vec = result.array_mut().as_slice_mut().ok_or_else(|| {
+                NumRs2Error::InvalidOperation("Failed to get mutable slice".into())
+            })?;
+            
+            // Roll the array elements along the specified axis
+            for i_pre in 0..pre_axis_size {
+                for i_axis in 0..axis_size {
+                    for i_post in 0..post_axis_size {
+                        // Calculate source index
+                        let src_axis_idx = i_axis;
+                        let src_idx = i_pre * (axis_size * post_axis_size)
+                                    + src_axis_idx * post_axis_size
+                                    + i_post;
+                        
+                        // Calculate destination index with roll
+                        let dst_axis_idx = (i_axis + shift_mod as usize) % axis_size;
+                        let dst_idx = i_pre * (axis_size * post_axis_size)
+                                    + dst_axis_idx * post_axis_size
+                                    + i_post;
+                        
+                        result_vec[dst_idx] = array_vec[src_idx].clone();
+                    }
+                }
+            }
+            
+            Ok(result)
+        },
+        None => {
+            // Flatten the array, roll, and then reshape back
+            let array_vec = array.to_vec();
+            let size = array_vec.len();
+            
+            // No need to roll if size is 0 or 1
+            if size <= 1 {
+                return Ok(array.clone());
+            }
+            
+            // Convert shift to a positive value within range [0, size)
+            let shift_mod = ((shift % size as isize) + size as isize) % size as isize;
+            
+            // No need to roll if the shift is 0
+            if shift_mod == 0 {
+                return Ok(array.clone());
+            }
+            
+            let mut result_vec = vec![array_vec[0].clone(); size];
+            
+            // Roll the entire flattened array
+            for i in 0..size {
+                let dst_idx = (i + shift_mod as usize) % size;
+                result_vec[dst_idx] = array_vec[i].clone();
+            }
+            
+            // Reshape the result back to the original shape
+            let result_array = Array::from_vec(result_vec);
+            result_array.reshape(&shape)
+        }
+    }
+}
+
+/// Reverse the order of elements in an array along the specified axis
+///
+/// # Parameters
+///
+/// * `array` - Array to flip
+/// * `axis` - The axis along which to flip. If `None`, all axes are flipped.
+///
+/// # Returns
+///
+/// * Array with the same shape as input, but with elements flipped along the specified axis
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Flip a 1D array
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5]);
+/// let flipped = flip(&a, None).unwrap();
+/// assert_eq!(flipped.to_vec(), vec![5, 4, 3, 2, 1]);
+///
+/// // Flip a 2D array along axis 0
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let flipped = flip(&b, Some(0)).unwrap();
+/// assert_eq!(flipped.to_vec(), vec![4, 5, 6, 1, 2, 3]);
+///
+/// // Flip a 2D array along axis 1
+/// let c = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let flipped = flip(&c, Some(1)).unwrap();
+/// assert_eq!(flipped.to_vec(), vec![3, 2, 1, 6, 5, 4]);
+/// ```
+pub fn flip<T: Clone>(array: &Array<T>, axis: Option<usize>) -> Result<Array<T>> {
+    // If array is empty, return a copy
+    if array.size() == 0 {
+        return Ok(array.clone());
+    }
+    
+    let shape = array.shape();
+    
+    match axis {
+        Some(ax) => {
+            // Validate axis
+            if ax >= shape.len() {
+                return Err(NumRs2Error::DimensionMismatch(
+                    format!("Axis {} out of bounds for array of dimension {}", ax, shape.len())
+                ));
+            }
+            
+            // Get the size of the specified axis
+            let axis_size = shape[ax];
+            
+            // Handle case where axis size is 0 or 1 (no flipping needed)
+            if axis_size <= 1 {
+                return Ok(array.clone());
+            }
+            
+            // Create a result array filled with the first element as a placeholder
+            let first_elem = array.array().first().ok_or_else(|| {
+                NumRs2Error::InvalidOperation("Array is empty".into())
+            })?.clone();
+            
+            let mut result = Array::full(&shape, first_elem);
+            
+            // Calculate the sizes of the pre-axis, axis, and post-axis dimensions
+            let pre_axis_size: usize = shape.iter().take(ax).product();
+            let post_axis_size: usize = shape.iter().skip(ax + 1).product();
+            
+            // Create a flat copy of the array data
+            let array_vec = array.to_vec();
+            let result_vec = result.array_mut().as_slice_mut().ok_or_else(|| {
+                NumRs2Error::InvalidOperation("Failed to get mutable slice".into())
+            })?;
+            
+            // Flip the array elements along the specified axis
+            for i_pre in 0..pre_axis_size {
+                for i_axis in 0..axis_size {
+                    for i_post in 0..post_axis_size {
+                        // Calculate source index
+                        let src_axis_idx = i_axis;
+                        let src_idx = i_pre * (axis_size * post_axis_size)
+                                    + src_axis_idx * post_axis_size
+                                    + i_post;
+                        
+                        // Calculate destination index with flip (reversing along the axis)
+                        let dst_axis_idx = axis_size - 1 - i_axis;
+                        let dst_idx = i_pre * (axis_size * post_axis_size)
+                                    + dst_axis_idx * post_axis_size
+                                    + i_post;
+                        
+                        result_vec[dst_idx] = array_vec[src_idx].clone();
+                    }
+                }
+            }
+            
+            Ok(result)
+        },
+        None => {
+            // Flip along all axes by recursively flipping along each axis
+            let mut result = array.clone();
+            
+            for ax in 0..shape.len() {
+                result = flip(&result, Some(ax))?;
+            }
+            
+            Ok(result)
+        }
+    }
+}
+
+/// Flip array in the up/down direction (along axis 0)
+///
+/// # Parameters
+///
+/// * `array` - Array to flip
+///
+/// # Returns
+///
+/// * Array with the same shape as input, but with elements flipped along axis 0
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Flip a 2D array in the up/down direction
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let flipped = flipud(&a).unwrap();
+/// assert_eq!(flipped.to_vec(), vec![4, 5, 6, 1, 2, 3]);
+/// ```
+pub fn flipud<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
+    // Ensure array is at least 1D
+    if array.ndim() == 0 {
+        return Err(NumRs2Error::InvalidOperation(
+            "Input must be at least 1-dimensional".into()
+        ));
+    }
+    
+    // Flip along axis 0
+    flip(array, Some(0))
+}
+
+/// Flip array in the left/right direction (along axis 1)
+///
+/// # Parameters
+///
+/// * `array` - Array to flip
+///
+/// # Returns
+///
+/// * Array with the same shape as input, but with elements flipped along axis 1
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Flip a 2D array in the left/right direction
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let flipped = fliplr(&a).unwrap();
+/// assert_eq!(flipped.to_vec(), vec![3, 2, 1, 6, 5, 4]);
+/// ```
+pub fn fliplr<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
+    // Ensure array is at least 2D
+    if array.ndim() < 2 {
+        return Err(NumRs2Error::InvalidOperation(
+            "Input must be at least 2-dimensional".into()
+        ));
+    }
+    
+    // Flip along axis 1
+    flip(array, Some(1))
+}
+
+/// Return an array with the specified requirements
+///
+/// # Parameters
+///
+/// * `array` - Input array
+/// * `requirements` - Requirements for the array, specified as a combination of flags
+///
+/// # Returns
+///
+/// * Array with the specified requirements. If the input array satisfies the requirements,
+///   it may be returned as-is.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create an array
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// 
+/// // Require a C-contiguous array (row-major order)
+/// let b = require(&a, Some(ArrayRequirements::CONTIGUOUS | ArrayRequirements::C_LAYOUT)).unwrap();
+/// assert!(b.is_c_contiguous());
+///
+/// // Require a Fortran-contiguous array (column-major order)
+/// let c = require(&a, Some(ArrayRequirements::CONTIGUOUS | ArrayRequirements::F_LAYOUT)).unwrap();
+/// assert!(c.is_f_contiguous());
+/// ```
+pub fn require<T: Clone>(array: &Array<T>, requirements: Option<ArrayRequirements>) -> Result<Array<T>> {
+    // If no requirements are specified, return a copy of the input array
+    let requirements = requirements.unwrap_or(ArrayRequirements::empty());
+    
+    // If no requirements are specified, return a copy of the input array
+    if requirements.is_empty() {
+        return Ok(array.clone());
+    }
+    
+    // Check if we need a specific layout
+    let need_c_layout = requirements.contains(ArrayRequirements::C_LAYOUT);
+    let need_f_layout = requirements.contains(ArrayRequirements::F_LAYOUT);
+    
+    // Check if we need a contiguous array
+    let need_contiguous = requirements.contains(ArrayRequirements::CONTIGUOUS);
+    
+    // Check if we need to own the data
+    let need_owner = requirements.contains(ArrayRequirements::OWNDATA);
+    
+    // Check if we need a writeable array
+    let need_writeable = requirements.contains(ArrayRequirements::WRITEABLE);
+    
+    // Check if the input array satisfies the requirements
+    let meets_c_layout = if need_c_layout { array.is_c_contiguous() } else { true };
+    let meets_f_layout = if need_f_layout { array.is_f_contiguous() } else { true };
+    let meets_contiguous = if need_contiguous { array.is_contiguous() } else { true };
+    
+    // NumRS arrays always own their data and are writeable, so these are always met
+    // If this changes in the future, we should check for these requirements
+    
+    // If all requirements are met, return the original array
+    if meets_c_layout && meets_f_layout && meets_contiguous {
+        return Ok(array.clone());
+    }
+    
+    // Otherwise, create a new array that meets the requirements
+    let mut result = array.clone();
+    
+    // If we need a C-contiguous array, convert to C layout
+    if need_c_layout && !meets_c_layout {
+        result = result.to_c_layout();
+    }
+    
+    // If we need a Fortran-contiguous array, convert to F layout
+    if need_f_layout && !meets_f_layout {
+        result = result.to_f_layout();
+    }
+    
+    // If we need a contiguous array but neither C nor F layout is specified,
+    // prefer C layout (row-major order)
+    if need_contiguous && !meets_contiguous && !need_c_layout && !need_f_layout {
+        result = result.to_c_layout();
+    }
+    
+    Ok(result)
+}
+
+/// Bitflags to specify requirements for arrays
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArrayRequirements(u32);
+
+impl ArrayRequirements {
+    // Flag values
+    /// Ensure array is contiguous in memory
+    pub const CONTIGUOUS: Self = Self(1 << 0);
+    /// Ensure array is in C layout (row-major order)
+    pub const C_LAYOUT: Self = Self(1 << 1);
+    /// Ensure array is in Fortran layout (column-major order)
+    pub const F_LAYOUT: Self = Self(1 << 2);
+    /// Ensure array owns its data (not a view)
+    pub const OWNDATA: Self = Self(1 << 3);
+    /// Ensure array is writeable
+    pub const WRITEABLE: Self = Self(1 << 4);
+    
+    /// Create an empty requirements set
+    pub fn empty() -> Self {
+        Self(0)
+    }
+    
+    /// Check if the requirements are empty
+    pub fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+    
+    /// Check if the requirements contain a specific flag
+    pub fn contains(&self, other: Self) -> bool {
+        (self.0 & other.0) == other.0
+    }
+}
+
+impl std::ops::BitOr for ArrayRequirements {
+    type Output = Self;
+    
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl std::ops::BitAnd for ArrayRequirements {
+    type Output = Self;
+    
+    fn bitand(self, rhs: Self) -> Self {
+        Self(self.0 & rhs.0)
+    }
+}
+
+/// Extract a diagonal or construct a diagonal array
+///
+/// # Parameters
+///
+/// * `array` - Input array
+/// * `k` - Offset of the diagonal from the main diagonal. 
+///       A positive value means the diagonal is above the main diagonal.
+///       A negative value means the diagonal is below the main diagonal.
+///       The default is 0 (the main diagonal).
+///
+/// # Returns
+///
+/// * If `array` is 1D, returns a 2D array with `array` on the `k`-th diagonal.
+/// * If `array` is 2D, returns a 1D array of the diagonal elements along the `k`-th diagonal.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create a diagonal matrix from a 1D array
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let diag_mat = diag(&a, Some(0)).unwrap();
+/// assert_eq!(diag_mat.shape(), vec![3, 3]);
+/// assert_eq!(diag_mat.to_vec(), vec![1, 0, 0, 0, 2, 0, 0, 0, 3]);
+///
+/// // Extract the main diagonal from a 2D array
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]).unwrap();
+/// let diag_vec = diag(&b, Some(0)).unwrap();
+/// assert_eq!(diag_vec.shape(), vec![3]);
+/// assert_eq!(diag_vec.to_vec(), vec![1, 5, 9]);
+///
+/// // Extract a super-diagonal (k=1)
+/// let super_diag = diag(&b, Some(1)).unwrap();
+/// assert_eq!(super_diag.shape(), vec![2]);
+/// assert_eq!(super_diag.to_vec(), vec![2, 6]);
+///
+/// // Extract a sub-diagonal (k=-1)
+/// let sub_diag = diag(&b, Some(-1)).unwrap();
+/// assert_eq!(sub_diag.shape(), vec![2]);
+/// assert_eq!(sub_diag.to_vec(), vec![4, 8]);
+/// ```
+pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> Result<Array<T>> {
+    let k = k.into().unwrap_or(0);
+    let ndim = array.ndim();
+    
+    match ndim {
+        1 => {
+            // Create a 2D array with the 1D array on the k-th diagonal
+            let size = array.size();
+            let diag_size = size + k.abs() as usize;
+            
+            // Create a square zero array
+            let result = Array::zeros(&[diag_size, diag_size]);
+            let mut result_vec = result.to_vec();
+            
+            // Place the 1D array on the k-th diagonal
+            let array_vec = array.to_vec();
+            
+            for i in 0..size {
+                let row: usize;
+                let col: usize;
+                
+                if k >= 0 {
+                    row = i;
+                    col = i + k as usize;
+                } else {
+                    row = i + (-k) as usize;
+                    col = i;
+                }
+                
+                if row < diag_size && col < diag_size {
+                    let idx = row * diag_size + col;
+                    result_vec[idx] = array_vec[i].clone();
+                }
+            }
+            
+            Ok(Array::from_vec(result_vec).reshape(&[diag_size, diag_size]))
+        },
+        2 => {
+            // Extract the k-th diagonal from a 2D array
+            let shape = array.shape();
+            
+            if shape.len() != 2 {
+                return Err(NumRs2Error::DimensionMismatch(
+                    format!("Expected a 2D array, got shape {:?}", shape)
+                ));
+            }
+            
+            let rows = shape[0];
+            let cols = shape[1];
+            
+            // Calculate the length of the resulting diagonal
+            let diag_len = if k >= 0 {
+                cmp::min(rows, cols.saturating_sub(k as usize))
+            } else {
+                cmp::min(rows.saturating_sub((-k) as usize), cols)
+            };
+            
+            if diag_len == 0 {
+                return Ok(Array::zeros(&[0]));
+            }
+            
+            let mut result = Vec::with_capacity(diag_len);
+            let array_vec = array.to_vec();
+            
+            for i in 0..diag_len {
+                let row: usize;
+                let col: usize;
+                
+                if k >= 0 {
+                    row = i;
+                    col = i + k as usize;
+                } else {
+                    row = i + (-k) as usize;
+                    col = i;
+                }
+                
+                if row < rows && col < cols {
+                    let idx = row * cols + col;
+                    result.push(array_vec[idx].clone());
+                }
+            }
+            
+            Ok(Array::from_vec(result))
+        },
+        _ => {
+            Err(NumRs2Error::InvalidOperation(
+                format!("Input must be 1D or 2D array, got {}D array", ndim)
+            ))
+        }
+    }
+}
+
+/// Return a specified diagonal of an array
+///
+/// # Parameters
+///
+/// * `array` - Input array
+/// * `offset` - Offset of the diagonal from the main diagonal. 
+///       A positive value means the diagonal is above the main diagonal.
+///       A negative value means the diagonal is below the main diagonal.
+///       The default is 0 (the main diagonal).
+/// * `axis1` - First axis of the 2D subarray from which the diagonal should be taken.
+///       Default is 0.
+/// * `axis2` - Second axis of the 2D subarray from which the diagonal should be taken.
+///       Default is 1.
+///
+/// # Returns
+///
+/// * A view of the specified diagonal.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Extract the main diagonal from a 2D array
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]).unwrap();
+/// let diag = diagonal(&a, Some(0), None, None).unwrap();
+/// assert_eq!(diag.shape(), vec![3]);
+/// assert_eq!(diag.to_vec(), vec![1, 5, 9]);
+///
+/// // Extract a super-diagonal (offset=1)
+/// let super_diag = diagonal(&a, Some(1), None, None).unwrap();
+/// assert_eq!(super_diag.shape(), vec![2]);
+/// assert_eq!(super_diag.to_vec(), vec![2, 6]);
+///
+/// // Extract a sub-diagonal (offset=-1)
+/// let sub_diag = diagonal(&a, Some(-1), None, None).unwrap();
+/// assert_eq!(sub_diag.shape(), vec![2]);
+/// assert_eq!(sub_diag.to_vec(), vec![4, 8]);
+///
+/// // Extract the diagonal from a 3D array
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).reshape(&[2, 2, 3]).unwrap();
+/// let diag = diagonal(&b, Some(0), Some(1), Some(2)).unwrap();
+/// assert_eq!(diag.shape(), vec![2, 2]);
+/// assert_eq!(diag.to_vec(), vec![1, 5, 7, 11]);
+/// ```
+pub fn diagonal<T: Clone>(
+    array: &Array<T>, 
+    offset: impl Into<Option<isize>>, 
+    axis1: impl Into<Option<usize>>, 
+    axis2: impl Into<Option<usize>>
+) -> Result<Array<T>> {
+    let offset = offset.into().unwrap_or(0);
+    let axis1 = axis1.into().unwrap_or(0);
+    let axis2 = axis2.into().unwrap_or(1);
+    
+    let ndim = array.ndim();
+    
+    if ndim < 2 {
+        return Err(NumRs2Error::InvalidOperation(
+            format!("Array must be at least 2D, got {}D array", ndim)
+        ));
+    }
+    
+    if axis1 == axis2 {
+        return Err(NumRs2Error::InvalidOperation(
+            format!("axis1 and axis2 cannot be the same: {}", axis1)
+        ));
+    }
+    
+    if axis1 >= ndim || axis2 >= ndim {
+        return Err(NumRs2Error::DimensionMismatch(
+            format!("Axes ({}, {}) out of bounds for array of dimension {}", axis1, axis2, ndim)
+        ));
+    }
+    
+    // Get the lengths of the two axes
+    let shape = array.shape();
+    let axis1_len = shape[axis1];
+    let axis2_len = shape[axis2];
+    
+    // Calculate the length of the resulting diagonal
+    let diag_len = if offset >= 0 {
+        cmp::min(axis1_len, axis2_len.saturating_sub(offset as usize))
+    } else {
+        cmp::min(axis1_len.saturating_sub((-offset) as usize), axis2_len)
+    };
+    
+    if diag_len == 0 {
+        // Create a result array with the same shape as the input array,
+        // but with the two specified axes replaced by a single dimension of length 0
+        let mut result_shape = Vec::with_capacity(ndim - 1);
+        for (i, &dim) in shape.iter().enumerate() {
+            if i != axis1 && i != axis2 {
+                result_shape.push(dim);
+            }
+        }
+        result_shape.push(0);
+        
+        return Ok(Array::zeros(&result_shape));
+    }
+    
+    // Prepare the result shape
+    let mut result_shape = Vec::with_capacity(ndim - 1);
+    for (i, &dim) in shape.iter().enumerate() {
+        if i != axis1 && i != axis2 {
+            result_shape.push(dim);
+        }
+    }
+    result_shape.push(diag_len);
+    
+    // Calculate the total size of the result array
+    let result_size: usize = result_shape.iter().product();
+    
+    // Create the result array
+    let mut result_vec = Vec::with_capacity(result_size);
+    
+    // Extract the diagonal values
+    let array_vec = array.to_vec();
+    
+    // Calculate the strides for each dimension
+    let mut strides = Vec::with_capacity(ndim);
+    let mut stride = 1;
+    for &dim in shape.iter().rev() {
+        strides.push(stride);
+        stride *= dim;
+    }
+    strides.reverse();
+    
+    // Extract the diagonal elements
+    let axis1_stride = strides[axis1];
+    let axis2_stride = strides[axis2];
+    
+    // Helper function to calculate index without axis1 and axis2
+    let calc_base_index = |indices: &[usize]| -> usize {
+        let mut base_idx = 0;
+        let mut dst_idx = 0;
+        
+        for (src_idx, &dim) in indices.iter().enumerate() {
+            if src_idx != axis1 && src_idx != axis2 {
+                base_idx += dim * strides[src_idx];
+                dst_idx += 1;
+            }
+        }
+        
+        base_idx
+    };
+    
+    // Pre-allocate indices array to avoid reallocating in each iteration
+    let mut indices = vec![0; ndim];
+    
+    // Helper function to increment indices
+    let increment_indices = |indices: &mut [usize], shape: &[usize], axis1, axis2| {
+        for i in (0..indices.len()).rev() {
+            if i != axis1 && i != axis2 {
+                indices[i] += 1;
+                if indices[i] < shape[i] {
+                    return true;
+                }
+                indices[i] = 0;
+            }
+        }
+        false
+    };
+    
+    // Number of elements to process (excluding the diagonal axes)
+    let mut outer_elements = 1;
+    for (i, &dim) in shape.iter().enumerate() {
+        if i != axis1 && i != axis2 {
+            outer_elements *= dim;
+        }
+    }
+    
+    // Process each combination of indices (except for axis1 and axis2)
+    for _ in 0..outer_elements {
+        let base_idx = calc_base_index(&indices);
+        
+        // Extract the diagonal at this position
+        for i in 0..diag_len {
+            let row: usize;
+            let col: usize;
+            
+            if offset >= 0 {
+                row = i;
+                col = i + offset as usize;
+            } else {
+                row = i + (-offset) as usize;
+                col = i;
+            }
+            
+            if row < axis1_len && col < axis2_len {
+                let idx = base_idx + row * axis1_stride + col * axis2_stride;
+                result_vec.push(array_vec[idx].clone());
+            }
+        }
+        
+        // Increment the indices (except for axis1 and axis2)
+        increment_indices(&mut indices, &shape, axis1, axis2);
+    }
+    
+    Ok(Array::from_vec(result_vec).reshape(&result_shape))
+}
+
+/// Return a partitioned copy of an array
+///
+/// Partitioning creates a partially sorted output where elements 
+/// smaller than the kth element are moved before it and larger elements
+/// are moved after it. The kth element will be in the position it would 
+/// be in a sorted array.
+///
+/// # Parameters
+///
+/// * `array` - Array to be partitioned
+/// * `kth` - Element index to partition by
+/// * `axis` - Axis along which to partition
+///           If None, array is flattened before partitioning
+///
+/// # Returns
+///
+/// * Copy of array with values arranged to ensure the kth element
+///   is in its sorted position
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Partition a 1D array
+/// let a = Array::from_vec(vec![9, 4, 1, 7, 5, 3, 8, 2, 6]);
+/// let partitioned = partition(&a, 3, None).unwrap();
+/// // The 4th element (index 3) is now 4, all elements before are <= 4,
+/// // and all elements after are >= 4
+/// assert_eq!(partitioned.get(&[3]).unwrap(), 4);
+/// for i in 0..3 {
+///     assert!(partitioned.get(&[i]).unwrap() <= 4);
+/// }
+/// for i in 4..9 {
+///     assert!(partitioned.get(&[i]).unwrap() >= 4);
+/// }
+/// ```
+pub fn partition<T: Clone + PartialOrd>(array: &Array<T>, kth: usize, axis: Option<usize>) -> Result<Array<T>> {
+    match axis {
+        None => {
+            // Flatten array and partition
+            let mut data = array.to_vec();
+            let n = data.len();
+            
+            if kth >= n {
+                return Err(NumRs2Error::DimensionMismatch(
+                    format!("kth ({}) is out of bounds for array of size {}", kth, n)
+                ));
+            }
+            
+            // Quick-select algorithm to efficiently find the kth element and partition the array
+            quick_select(&mut data, 0, n-1, kth);
+            
+            // Reshape back to original shape
+            Array::from_vec(data).reshape(&array.shape())
+        },
+        Some(axis_val) => {
+            let shape = array.shape();
+            
+            if axis_val >= shape.len() {
+                return Err(NumRs2Error::DimensionMismatch(
+                    format!("Axis {} out of bounds for array of dimension {}", axis_val, shape.len())
+                ));
+            }
+            
+            let axis_size = shape[axis_val];
+            
+            if kth >= axis_size {
+                return Err(NumRs2Error::DimensionMismatch(
+                    format!("kth ({}) is out of bounds for axis {} with size {}", kth, axis_val, axis_size)
+                ));
+            }
+            
+            // Create a new array with the same shape
+            let mut result = array.clone();
+            let result_vec = result.array_mut().as_slice_mut().ok_or_else(|| {
+                NumRs2Error::InvalidOperation("Failed to get mutable slice".into())
+            })?;
+            
+            // Calculate the sizes of the pre-axis, axis, and post-axis dimensions
+            let pre_axis_size: usize = shape.iter().take(axis_val).product();
+            let post_axis_size: usize = shape.iter().skip(axis_val + 1).product();
+            
+            // Partition each slice along the specified axis
+            for i_pre in 0..pre_axis_size {
+                for i_post in 0..post_axis_size {
+                    // Extract the slice along the axis
+                    let mut slice = Vec::with_capacity(axis_size);
+                    
+                    for i_axis in 0..axis_size {
+                        let idx = i_pre * (axis_size * post_axis_size)
+                                + i_axis * post_axis_size
+                                + i_post;
+                        slice.push(result_vec[idx].clone());
+                    }
+                    
+                    // Partition the slice
+                    quick_select(&mut slice, 0, axis_size-1, kth);
+                    
+                    // Write back the partitioned slice
+                    for i_axis in 0..axis_size {
+                        let idx = i_pre * (axis_size * post_axis_size)
+                                + i_axis * post_axis_size
+                                + i_post;
+                        result_vec[idx] = slice[i_axis].clone();
+                    }
+                }
+            }
+            
+            Ok(result)
+        }
+    }
+}
+
+/// Quick-select algorithm to partition an array and place the kth element
+/// in its sorted position. Elements smaller than the kth element will be
+/// before it, and elements larger than the kth element will be after it.
+///
+/// This is a helper function for the partition function.
+fn quick_select<T: Clone + PartialOrd>(arr: &mut [T], left: usize, right: usize, k: usize) {
+    if left == right {
+        return;
+    }
+    
+    // Choose a pivot index (using a simple median-of-three approach)
+    let pivot_idx = choose_pivot(arr, left, right);
+    
+    // Partition around the pivot
+    let pivot_idx = partition_around_pivot(arr, left, right, pivot_idx);
+    
+    match k.cmp(&pivot_idx) {
+        std::cmp::Ordering::Equal => {
+            // k is at its final position
+            return;
+        },
+        std::cmp::Ordering::Less => {
+            // k is in the left side
+            if pivot_idx > 0 {
+                quick_select(arr, left, pivot_idx - 1, k);
+            }
+        },
+        std::cmp::Ordering::Greater => {
+            // k is in the right side
+            quick_select(arr, pivot_idx + 1, right, k);
+        }
+    }
+}
+
+/// Choose a good pivot index using median-of-three strategy
+///
+/// This helper function helps improve the performance of quick-select
+/// by choosing a better pivot than just the first or last element.
+fn choose_pivot<T: PartialOrd>(arr: &[T], left: usize, right: usize) -> usize {
+    if right - left < 2 {
+        return left;
+    }
+    
+    let mid = left + (right - left) / 2;
+    
+    // Choose median of left, middle, and right elements
+    let mut indices = [left, mid, right];
+    
+    // Simple bubble sort of the three indices based on their values
+    if arr[indices[0]] > arr[indices[1]] {
+        indices.swap(0, 1);
+    }
+    if arr[indices[1]] > arr[indices[2]] {
+        indices.swap(1, 2);
+    }
+    if arr[indices[0]] > arr[indices[1]] {
+        indices.swap(0, 1);
+    }
+    
+    // Return the middle value
+    indices[1]
+}
+
+/// Partition the array around a pivot value
+///
+/// After partitioning, all elements less than the pivot value are on the left side,
+/// and all elements greater are on the right side. The pivot element is at the returned index.
+fn partition_around_pivot<T: Clone + PartialOrd>(
+    arr: &mut [T], 
+    left: usize, 
+    right: usize, 
+    pivot_idx: usize
+) -> usize {
+    let pivot_value = arr[pivot_idx].clone();
+    
+    // Move pivot to the end temporarily
+    arr.swap(pivot_idx, right);
+    
+    // Move all elements less than pivot to the left
+    let mut store_idx = left;
+    for i in left..right {
+        if arr[i] < pivot_value {
+            arr.swap(i, store_idx);
+            store_idx += 1;
+        }
+    }
+    
+    // Move pivot to its final place
+    arr.swap(store_idx, right);
+    
+    store_idx
+}
+
+/// Find indices where elements should be inserted to maintain order
+///
+/// Performs binary search to find the indices into a sorted array `a` such that,
+/// if the corresponding elements in `v` were inserted before the indices, the
+/// order of `a` would be preserved.
+///
+/// # Parameters
+///
+/// * `a` - Input array, must be sorted in ascending order
+/// * `v` - Values to insert into `a`
+/// * `side` - If 'left', return the first suitable location found.
+///          If 'right', return the last such index. Default is 'left'.
+/// * `sorter` - Optional array of integer indices that sorts `a` into ascending order.
+///             This is typically the result of `argsort`.
+///
+/// # Returns
+///
+/// * Array of insertion points with the same shape as `v`
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create a sorted array
+/// let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
+/// 
+/// // Find insertion points for values
+/// let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
+/// let indices = searchsorted(&a, &v, Some("left"), None).unwrap();
+/// assert_eq!(indices.to_vec(), vec![0, 0, 1, 2, 4, 5]);
+/// 
+/// // Use 'right' side
+/// let indices = searchsorted(&a, &v, Some("right"), None).unwrap();
+/// assert_eq!(indices.to_vec(), vec![0, 1, 1, 2, 4, 5]);
+/// ```
+pub fn searchsorted<T: Clone + PartialOrd>(
+    a: &Array<T>,
+    v: &Array<T>,
+    side: Option<&str>,
+    sorter: Option<&Array<usize>>
+) -> Result<Array<usize>> {
+    let side = side.unwrap_or("left");
+    if side != "left" && side != "right" {
+        return Err(NumRs2Error::InvalidOperation(
+            format!("Side '{}' is invalid, must be 'left' or 'right'", side)
+        ));
+    }
+    
+    // If a custom sorter is provided, rearrange the array
+    let a_sorted = if let Some(sorter_array) = sorter {
+        if sorter_array.ndim() != 1 {
+            return Err(NumRs2Error::InvalidOperation(
+                "Sorter array must be 1-dimensional".into()
+            ));
+        }
+        
+        if sorter_array.size() != a.size() {
+            return Err(NumRs2Error::InvalidOperation(
+                format!("Sorter size ({}) does not match array size ({})", 
+                        sorter_array.size(), a.size())
+            ));
+        }
+        
+        // Create a new array using the sorter indices
+        let mut sorted_data = Vec::with_capacity(a.size());
+        let a_vec = a.to_vec();
+        let sorter_vec = sorter_array.to_vec();
+        
+        for &idx in &sorter_vec {
+            if idx >= a_vec.len() {
+                return Err(NumRs2Error::InvalidOperation(
+                    format!("Sorter index {} out of range for array of size {}", 
+                            idx, a_vec.len())
+                ));
+            }
+            sorted_data.push(a_vec[idx].clone());
+        }
+        
+        Array::from_vec(sorted_data)
+    } else {
+        a.clone()
+    };
+    
+    // If a is not 1D, flatten it
+    let a_flat = if a_sorted.ndim() != 1 {
+        a_sorted.flatten()
+    } else {
+        a_sorted
+    };
+    
+    // Check if a_flat is sorted
+    let a_flat_vec = a_flat.to_vec();
+    for i in 1..a_flat_vec.len() {
+        if a_flat_vec[i] < a_flat_vec[i-1] {
+            return Err(NumRs2Error::InvalidOperation(
+                "The input array must be sorted in ascending order".into()
+            ));
+        }
+    }
+    
+    // Convert v to a flat array if needed
+    let v_vec = v.to_vec();
+    
+    // Perform binary search for each value in v
+    let mut result = Vec::with_capacity(v_vec.len());
+    
+    for val in &v_vec {
+        let idx = if side == "left" {
+            binary_search_left(&a_flat_vec, val)
+        } else {
+            binary_search_right(&a_flat_vec, val)
+        };
+        
+        result.push(idx);
+    }
+    
+    // Reshape result to match v's shape
+    Array::from_vec(result).reshape(&v.shape())
+}
+
+/// Binary search for the leftmost insertion point
+fn binary_search_left<T: PartialOrd>(arr: &[T], value: &T) -> usize {
+    let mut left = 0;
+    let mut right = arr.len();
+    
+    while left < right {
+        let mid = left + (right - left) / 2;
+        
+        if &arr[mid] < value {
+            left = mid + 1;
+        } else {
+            right = mid;
+        }
+    }
+    
+    left
+}
+
+/// Binary search for the rightmost insertion point
+fn binary_search_right<T: PartialOrd>(arr: &[T], value: &T) -> usize {
+    let mut left = 0;
+    let mut right = arr.len();
+    
+    while left < right {
+        let mid = left + (right - left) / 2;
+        
+        if value < &arr[mid] {
+            right = mid;
+        } else {
+            left = mid + 1;
+        }
+    }
+    
+    left
+}
+
+/// Rotate an array by 90 degrees in the plane specified by axes
+///
+/// # Parameters
+///
+/// * `array` - Array to rotate
+/// * `k` - Number of times to rotate by 90 degrees. Default is 1.
+/// * `axes` - The plane to rotate in. By default, the rotation is in the first two axes.
+///
+/// # Returns
+///
+/// * Rotated array with the same shape as input, with axes transposed and flipped appropriately
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create a 2x3 array
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// 
+/// // Rotate once by 90 degrees (counterclockwise)
+/// let rotated = rot90(&a, 1, None).unwrap();
+/// assert_eq!(rotated.shape(), vec![3, 2]);
+/// assert_eq!(rotated.to_vec(), vec![3, 6, 2, 5, 1, 4]);
+///
+/// // Rotate twice by 90 degrees (180 degrees)
+/// let rotated = rot90(&a, 2, None).unwrap();
+/// assert_eq!(rotated.shape(), vec![2, 3]);
+/// assert_eq!(rotated.to_vec(), vec![6, 5, 4, 3, 2, 1]);
+/// ```
+pub fn rot90<T: Clone>(array: &Array<T>, k: impl Into<Option<i32>>, axes: impl Into<Option<(usize, usize)>>) -> Result<Array<T>> {
+    // Get the number of rotations and the rotation plane
+    let k = k.into().unwrap_or(1);
+    let axes = axes.into().unwrap_or((0, 1));
+    
+    let ndim = array.ndim();
+    
+    // Validate axes
+    if axes.0 >= ndim || axes.1 >= ndim {
+        return Err(NumRs2Error::DimensionMismatch(
+            format!("Axes ({}, {}) out of bounds for array of dimension {}", axes.0, axes.1, ndim)
+        ));
+    }
+    
+    if axes.0 == axes.1 {
+        return Err(NumRs2Error::InvalidOperation(
+            format!("Axes ({}, {}) must be different", axes.0, axes.1)
+        ));
+    }
+    
+    // Normalize k to be in range [0, 3]
+    let k = ((k % 4) + 4) % 4;
+    
+    // If k is 0, return a copy of the input array
+    if k == 0 {
+        return Ok(array.clone());
+    }
+    
+    // Create a view of the array
+    let mut result = array.clone();
+    
+    // If k is 2, we can just flip along both axes
+    if k == 2 {
+        result = flip(&result, Some(axes.0))?;
+        result = flip(&result, Some(axes.1))?;
+        return Ok(result);
+    }
+    
+    // For k=1 or k=3, we need to transpose and flip
+    
+    // First, transpose the array axes
+    let mut perm = (0..ndim).collect::<Vec<_>>();
+    perm.swap(axes.0, axes.1);
+    
+    // Use the Array::transpose_axis implementation to transpose the array
+    result = result.transpose_axis(axes.0, axes.1);
+    
+    // Then flip along the appropriate axis
+    if k == 1 {
+        // For 90 degrees counterclockwise, flip along the second axis
+        result = flip(&result, Some(axes.0))?;
+    } else if k == 3 {
+        // For 270 degrees counterclockwise (90 clockwise), flip along the first axis
+        result = flip(&result, Some(axes.1))?;
+    }
+    
+    Ok(result)
+}
+
 /// Stack arrays along a new axis
 ///
 /// # Parameters
@@ -819,43 +2049,8 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
 /// let d = flip(&c, 0).unwrap();
 /// assert_eq!(d.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 /// ```
-pub fn flip<T: Clone + Zero>(array: &Array<T>, axis: usize) -> Result<Array<T>> {
-    let shape = array.shape();
-    
-    if axis >= shape.len() {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Axis {} out of bounds for array of dimension {}", axis, shape.len())
-        ));
-    }
-    
-    // Create a new array to hold the flipped data
-    let mut result = Array::zeros(&shape);
-    
-    // Process each position in the array
-    let total_size = array.size();
-    let ndim = shape.len();
-    
-    for i in 0..total_size {
-        // Calculate the indices for the current element
-        let mut indices = Vec::with_capacity(ndim);
-        let mut temp = i;
-        
-        for j in (0..ndim).rev() {
-            indices.insert(0, temp % shape[j]);
-            temp /= shape[j];
-        }
-        
-        // Calculate the flipped indices
-        let mut flipped_indices = indices.clone();
-        flipped_indices[axis] = shape[axis] - 1 - indices[axis];
-        
-        // Copy the element
-        let value = array.array().get(IxDyn(&indices)).unwrap().clone();
-        result.set(&flipped_indices, value).unwrap();
-    }
-    
-    Ok(result)
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The flip function with Option<usize> parameter is already implemented earlier in the file
 
 /// Flip array in the left/right direction (last axis)
 ///
@@ -877,18 +2072,8 @@ pub fn flip<T: Clone + Zero>(array: &Array<T>, axis: usize) -> Result<Array<T>> 
 /// let b = fliplr(&a).unwrap();
 /// assert_eq!(b.to_vec(), vec![3, 2, 1, 6, 5, 4]);
 /// ```
-pub fn fliplr<T: Clone + Zero>(array: &Array<T>) -> Result<Array<T>> {
-    let ndim = array.ndim();
-    
-    if ndim < 2 {
-        return Err(NumRs2Error::InvalidOperation(
-            "fliplr requires at least 2D array".to_string()
-        ));
-    }
-    
-    // Flip along the last axis (columns)
-    flip(array, ndim - 1)
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The fliplr function is already implemented earlier in the file
 
 /// Flip array in the up/down direction (first axis)
 ///
@@ -910,18 +2095,8 @@ pub fn fliplr<T: Clone + Zero>(array: &Array<T>) -> Result<Array<T>> {
 /// let b = flipud(&a).unwrap();
 /// assert_eq!(b.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 /// ```
-pub fn flipud<T: Clone + Zero>(array: &Array<T>) -> Result<Array<T>> {
-    let ndim = array.ndim();
-    
-    if ndim < 1 {
-        return Err(NumRs2Error::InvalidOperation(
-            "flipud requires at least 1D array".to_string()
-        ));
-    }
-    
-    // Flip along the first axis (rows)
-    flip(array, 0)
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The flipud function is already implemented earlier in the file
 
 /// Expand the shape of an array by inserting a new axis at the specified position
 pub fn expand_dims<T: Clone>(array: &Array<T>, axis: usize) -> Result<Array<T>> {
@@ -1066,96 +2241,8 @@ pub fn c_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// let d = roll(&c, 1, Some(0)).unwrap();
 /// assert_eq!(d.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 /// ```
-pub fn roll<T: Clone + Zero>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Result<Array<T>> {
-    if shift == 0 {
-        return Ok(array.clone());
-    }
-    
-    match axis {
-        None => {
-            // Roll the flattened array
-            let flat = array.flatten(None);
-            let size = flat.size();
-            
-            if size == 0 {
-                return Ok(array.clone());
-            }
-            
-            // Calculate the effective shift (handle negative shifts and wrapping)
-            let effective_shift = (((shift % size as isize) + size as isize) % size as isize) as usize;
-            
-            if effective_shift == 0 {
-                return Ok(array.clone());
-            }
-            
-            // Create the rolled array
-            let flat_data = flat.to_vec();
-            let mut rolled_data = Vec::with_capacity(size);
-            
-            // Copy the data with the roll
-            rolled_data.extend_from_slice(&flat_data[size - effective_shift..]);
-            rolled_data.extend_from_slice(&flat_data[..size - effective_shift]);
-            
-            // Reshape back to the original shape
-            Ok(Array::from_vec(rolled_data).reshape(&array.shape()))
-        },
-        Some(ax) => {
-            let shape = array.shape();
-            
-            if ax >= shape.len() {
-                return Err(NumRs2Error::DimensionMismatch(
-                    format!("Axis {} out of bounds for array of dimension {}", ax, shape.len())
-                ));
-            }
-            
-            let axis_size = shape[ax];
-            
-            if axis_size == 0 {
-                return Ok(array.clone());
-            }
-            
-            // Calculate the effective shift (handle negative shifts and wrapping)
-            let effective_shift = (((shift % axis_size as isize) + axis_size as isize) % axis_size as isize) as usize;
-            
-            if effective_shift == 0 {
-                return Ok(array.clone());
-            }
-            
-            // Create a new array to hold the result
-            let mut result = Array::zeros(&shape);
-            
-            // Total number of elements to process
-            let total_size = array.size();
-            let _axis_stride = total_size / axis_size;
-            
-            // Process each position in the array
-            for i in 0..total_size {
-                // Calculate the indices for the current element
-                let mut indices = Vec::with_capacity(shape.len());
-                let mut temp = i;
-                
-                for j in (0..shape.len()).rev() {
-                    indices.insert(0, temp % shape[j]);
-                    temp /= shape[j];
-                }
-                
-                // Calculate the rolled index for the axis
-                let original_axis_index = indices[ax];
-                let rolled_axis_index = (original_axis_index + effective_shift) % axis_size;
-                
-                // Create indices for the destination
-                let mut dest_indices = indices.clone();
-                dest_indices[ax] = rolled_axis_index;
-                
-                // Copy the element
-                let value = array.array().get(IxDyn(&indices)).unwrap().clone();
-                result.set(&dest_indices, value).unwrap();
-            }
-            
-            Ok(result)
-        }
-    }
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The roll function is already implemented earlier in the file
 
 /// Roll the specified axis to a new position
 ///
@@ -1257,9 +2344,9 @@ pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) ->
     }
     
     // Create the result array
-    let result = Array::from_vec(result_data).reshape(&target_shape);
-    
-    Ok(result)
+    match Array::from_vec(result_data).reshape(&target_shape) {
+        result => Ok(result)
+    }
 }
 
 /// Helper function to transpose two specific axes
@@ -1335,89 +2422,8 @@ fn array_transpose<T: Clone + Zero>(array: &Array<T>, axis1: usize, axis2: usize
 /// assert_eq!(b.shape(), vec![3, 2]);
 /// // Order will be different based on memory layout
 /// ```
-pub fn rot90<T: Clone + Zero>(array: &Array<T>, k: Option<isize>, axes: Option<(usize, usize)>) -> Result<Array<T>> {
-    let shape = array.shape();
-    let ndim = shape.len();
-    
-    if ndim < 2 {
-        return Err(NumRs2Error::InvalidOperation(
-            "rot90 requires at least 2D array".to_string()
-        ));
-    }
-    
-    let k_val = k.unwrap_or(1);
-    let (axis1, axis2) = axes.unwrap_or((0, 1));
-    
-    if axis1 >= ndim || axis2 >= ndim {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Axes ({}, {}) out of bounds for array of dimension {}", axis1, axis2, ndim)
-        ));
-    }
-    
-    if axis1 == axis2 {
-        return Err(NumRs2Error::InvalidOperation(
-            "Axes for rotation cannot be the same".to_string()
-        ));
-    }
-    
-    // Apply the rotation
-    let effective_k = ((k_val % 4) + 4) % 4;
-    
-    if effective_k == 0 {
-        return Ok(array.clone());
-    }
-    
-    // Create a new shape with the rotated axes
-    let mut new_shape = shape.clone();
-    if effective_k % 2 == 1 {
-        new_shape.swap(axis1, axis2);
-    }
-    
-    // Create a new array to hold the rotated data
-    let mut result = Array::zeros(&new_shape);
-    
-    // Process each position in the array
-    let total_size = array.size();
-    
-    for i in 0..total_size {
-        // Calculate the indices for the current element
-        let mut indices = Vec::with_capacity(ndim);
-        let mut temp = i;
-        
-        for j in (0..ndim).rev() {
-            indices.insert(0, temp % shape[j]);
-            temp /= shape[j];
-        }
-        
-        // Calculate the rotated indices
-        let mut rot_indices = indices.clone();
-        
-        match effective_k {
-            1 => {
-                // 90 degrees
-                rot_indices[axis1] = indices[axis2];
-                rot_indices[axis2] = shape[axis1] - 1 - indices[axis1];
-            },
-            2 => {
-                // 180 degrees
-                rot_indices[axis1] = shape[axis1] - 1 - indices[axis1];
-                rot_indices[axis2] = shape[axis2] - 1 - indices[axis2];
-            },
-            3 => {
-                // 270 degrees
-                rot_indices[axis1] = shape[axis2] - 1 - indices[axis2];
-                rot_indices[axis2] = indices[axis1];
-            },
-            _ => unreachable!(),
-        }
-        
-        // Copy the element
-        let value = array.array().get(IxDyn(&indices)).unwrap().clone();
-        result.set(&rot_indices, value).unwrap();
-    }
-    
-    Ok(result)
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The rot90 function is already implemented earlier in the file with a more comprehensive version
 
 /// Remove axes of length 1 from the array
 pub fn squeeze<T: Clone>(array: &Array<T>, axis: Option<usize>) -> Result<Array<T>> {
@@ -1531,93 +2537,9 @@ pub fn broadcast_to<T: Clone>(array: &Array<T>, shape: &[usize]) -> Result<Array
 // The roll function is already defined earlier in the file
 /*
 pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Result<Array<T>> {
-    if shift == 0 {
-        return Ok(array.clone());
-    }
-    
-    match axis {
-        None => {
-            // Roll the flattened array
-            let flat = array.reshape(&[array.size()]);
-            let size = flat.size();
-            
-            // Normalize the shift to be positive and within array bounds
-            let shift_normalized = ((shift % size as isize) + size as isize) as usize % size;
-            if shift_normalized == 0 {
-                return Ok(array.clone());
-            }
-            
-            // Extract the parts of the array to be rolled
-            let data = flat.to_vec();
-            let mut result = Vec::with_capacity(size);
-            
-            // Concatenate the parts in the new order
-            result.extend_from_slice(&data[size - shift_normalized..]);
-            result.extend_from_slice(&data[..size - shift_normalized]);
-            
-            // Reshape back to the original shape
-            Ok(Array::from_vec(result).reshape(&array.shape()))
-        },
-        Some(ax) => {
-            let shape = array.shape();
-            let ndim = shape.len();
-            
-            if ax >= ndim {
-                return Err(NumRs2Error::DimensionMismatch(
-                    format!("Axis {} out of bounds for array of dimension {}", ax, ndim)
-                ));
-            }
-            
-            // Size of the specified axis
-            let axis_size = shape[ax];
-            
-            // Normalize the shift to be positive and within axis bounds
-            let shift_normalized = ((shift % axis_size as isize) + axis_size as isize) as usize % axis_size;
-            if shift_normalized == 0 {
-                return Ok(array.clone());
-            }
-            
-            // Create a new array for the result
-            let mut result = Array::zeros(shape);
-            
-            // Process the array along the specified axis
-            // For efficiency, we should use ndarray's functionality directly
-            // This is a simplified implementation
-            
-            // Calculate the total size of the array
-            let total_size = array.size();
-            
-            // Calculate the stride for the axis we're rolling
-            let mut stride = 1;
-            for i in (ax + 1)..ndim {
-                stride *= shape[i];
-            }
-            
-            // Roll each sub-array along the specified axis
-            let chunk_size = stride * axis_size;
-            let num_chunks = total_size / chunk_size;
-            
-            let array_data = array.to_vec();
-            let mut result_data = vec![array_data[0].clone(); total_size];
-            
-            for chunk in 0..num_chunks {
-                let chunk_offset = chunk * chunk_size;
-                
-                for i in 0..axis_size {
-                    let src_offset = chunk_offset + i * stride;
-                    let dst_i = (i + axis_size - shift_normalized) % axis_size;
-                    let dst_offset = chunk_offset + dst_i * stride;
-                    
-                    for j in 0..stride {
-                        result_data[dst_offset + j] = array_data[src_offset + j].clone();
-                    }
-                }
-            }
-            
-            Ok(Array::from_vec(result_data).reshape(shape))
-        }
-    }
+    // Implementation commented out to avoid duplication
 }
+*/
 
 /// Rotate an array by 90 degrees around specified axes
 ///
@@ -1680,59 +2602,8 @@ pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Re
 /// let flipped_all = flip(&a, None).unwrap();
 /// assert_eq!(flipped_all.to_vec(), vec![6, 5, 4, 3, 2, 1]);
 /// ```
-pub fn flip<T: Clone>(array: &Array<T>, axis: Option<usize>) -> Result<Array<T>> {
-    match axis {
-        Some(ax) => {
-            let shape = array.shape();
-            if ax >= shape.len() {
-                return Err(NumRs2Error::DimensionMismatch(
-                    format!("Axis {} out of bounds for array of dimension {}", ax, shape.len())
-                ));
-            }
-            
-            // Create a new array for the result
-            let size = array.size();
-            let axis_size = shape[ax];
-            
-            // Use a negative shift to reverse the axis
-            // This essentially rotates each slice by 180 degrees along the specified axis
-            let mut result_data = array.to_vec();
-            let mut new_data = vec![result_data[0].clone(); size];
-            
-            // Calculate the stride for the axis we're flipping
-            let mut stride = 1;
-            for i in (ax + 1)..shape.len() {
-                stride *= shape[i];
-            }
-            
-            // Flip each sub-array along the specified axis
-            let chunk_size = stride * axis_size;
-            let num_chunks = size / chunk_size;
-            
-            for chunk in 0..num_chunks {
-                let chunk_offset = chunk * chunk_size;
-                
-                for i in 0..axis_size {
-                    let src_offset = chunk_offset + i * stride;
-                    let dst_i = axis_size - 1 - i;
-                    let dst_offset = chunk_offset + dst_i * stride;
-                    
-                    for j in 0..stride {
-                        new_data[dst_offset + j] = result_data[src_offset + j].clone();
-                    }
-                }
-            }
-            
-            Ok(Array::from_vec(new_data).reshape(shape))
-        },
-        None => {
-            // Flip all axes by reversing the entire data
-            let mut data = array.to_vec();
-            data.reverse();
-            Ok(Array::from_vec(data).reshape(&array.shape()))
-        }
-    }
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The flip function is already implemented earlier in the file with a more comprehensive version
 
 /// Flip array in the left/right direction (last axis)
 ///
@@ -1756,17 +2627,8 @@ pub fn flip<T: Clone>(array: &Array<T>, axis: Option<usize>) -> Result<Array<T>>
 /// let flipped = fliplr(&a).unwrap();
 /// assert_eq!(flipped.to_vec(), vec![3, 2, 1, 6, 5, 4]);
 /// ```
-pub fn fliplr<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
-    let ndim = array.ndim();
-    if ndim < 2 {
-        return Err(NumRs2Error::InvalidOperation(
-            "fliplr requires at least a 2D array".to_string()
-        ));
-    }
-    
-    // Flip along the last axis (columns)
-    flip(array, Some(ndim - 1))
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The fliplr function is already implemented earlier in the file
 
 /// Flip array in the up/down direction (first axis)
 ///
@@ -1790,177 +2652,14 @@ pub fn fliplr<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
 /// let flipped = flipud(&a).unwrap();
 /// assert_eq!(flipped.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 /// ```
-pub fn flipud<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
-    let ndim = array.ndim();
-    if ndim < 2 {
-        return Err(NumRs2Error::InvalidOperation(
-            "flipud requires at least a 2D array".to_string()
-        ));
-    }
-    
-    // Flip along the first axis (rows)
-    flip(array, Some(0))
-}
+// This implementation is commented out to avoid duplicate function definitions
+// The flipud function is already implemented earlier in the file
 
+/*
+// This implementation is commented out to avoid duplicate function definitions
+// The rot90 function is already implemented earlier in the file with a more flexible signature
 pub fn rot90<T: Clone>(array: &Array<T>, k: isize, axes: Option<(usize, usize)>) -> Result<Array<T>> {
-    let shape = array.shape();
-    let ndim = shape.len();
-    
-    if ndim < 2 {
-        return Err(NumRs2Error::InvalidOperation(
-            "rot90 requires at least a 2D array".to_string()
-        ));
-    }
-    
-    // Default rotation axes are the first two dimensions
-    let (axis1, axis2) = axes.unwrap_or((0, 1));
-    
-    if axis1 == axis2 || axis1 >= ndim || axis2 >= ndim {
-        return Err(NumRs2Error::InvalidOperation(
-            format!("Invalid rotation axes ({}, {}) for array of dimension {}", axis1, axis2, ndim)
-        ));
-    }
-    
-    // Normalize k to be in [0, 3] since rotation repeats every 4 times
-    let k_norm = ((k % 4) + 4) % 4;
-    if k_norm == 0 {
-        return Ok(array.clone());
-    }
-    
-    // Get the shape of the axes we're rotating
-    let axis1_size = shape[axis1];
-    let axis2_size = shape[axis2];
-    
-    // Create a new shape with the rotated dimensions
-    let mut new_shape = shape.clone();
-    
-    // Depending on the rotation amount, swap and/or reverse dimensions
-    match k_norm {
-        1 => {
-            // 90 degrees: swap dimensions and reverse rows
-            new_shape[axis1] = axis2_size;
-            new_shape[axis2] = axis1_size;
-            
-            // Create result array
-            let mut result = Array::zeros(&new_shape);
-            
-            // Fill the rotated array - this is a simplified approach
-            // For large arrays, we'd use more efficient methods
-            
-            // Iterate through the source array
-            let src_data = array.to_vec();
-            let size = array.size();
-            
-            // Map each multidimensional index from source to rotated destination
-            for flat_idx in 0..size {
-                // Convert flat index to multidimensional indices
-                let mut indices = vec![0; ndim];
-                let mut temp = flat_idx;
-                
-                for i in (0..ndim).rev() {
-                    indices[i] = temp % shape[i];
-                    temp /= shape[i];
-                }
-                
-                // Apply rotation: (i, j) -> (j, n-1-i) for 90° counterclockwise
-                let i = indices[axis1];
-                let j = indices[axis2];
-                
-                let new_i = j;
-                let new_j = axis1_size - 1 - i;
-                
-                // Update the rotated indices
-                let mut rotated_indices = indices.clone();
-                rotated_indices[axis1] = new_i;
-                rotated_indices[axis2] = new_j;
-                
-                // Set the value in the rotated array
-                result.set(&rotated_indices, src_data[flat_idx].clone()).unwrap();
-            }
-            
-            Ok(result)
-        },
-        2 => {
-            // 180 degrees: keep dimensions but reverse both axes
-            // Create result array with same shape
-            let mut result = Array::zeros(&new_shape);
-            
-            // Iterate through the source array
-            let src_data = array.to_vec();
-            let size = array.size();
-            
-            // Map each multidimensional index from source to rotated destination
-            for flat_idx in 0..size {
-                // Convert flat index to multidimensional indices
-                let mut indices = vec![0; ndim];
-                let mut temp = flat_idx;
-                
-                for i in (0..ndim).rev() {
-                    indices[i] = temp % shape[i];
-                    temp /= shape[i];
-                }
-                
-                // Apply rotation: (i, j) -> (n-1-i, m-1-j) for 180°
-                let i = indices[axis1];
-                let j = indices[axis2];
-                
-                let new_i = axis1_size - 1 - i;
-                let new_j = axis2_size - 1 - j;
-                
-                // Update the rotated indices
-                let mut rotated_indices = indices.clone();
-                rotated_indices[axis1] = new_i;
-                rotated_indices[axis2] = new_j;
-                
-                // Set the value in the rotated array
-                result.set(&rotated_indices, src_data[flat_idx].clone()).unwrap();
-            }
-            
-            Ok(result)
-        },
-        3 => {
-            // 270 degrees (or -90): swap dimensions and reverse columns
-            new_shape[axis1] = axis2_size;
-            new_shape[axis2] = axis1_size;
-            
-            // Create result array
-            let mut result = Array::zeros(&new_shape);
-            
-            // Iterate through the source array
-            let src_data = array.to_vec();
-            let size = array.size();
-            
-            // Map each multidimensional index from source to rotated destination
-            for flat_idx in 0..size {
-                // Convert flat index to multidimensional indices
-                let mut indices = vec![0; ndim];
-                let mut temp = flat_idx;
-                
-                for i in (0..ndim).rev() {
-                    indices[i] = temp % shape[i];
-                    temp /= shape[i];
-                }
-                
-                // Apply rotation: (i, j) -> (m-1-j, i) for 270° counterclockwise
-                let i = indices[axis1];
-                let j = indices[axis2];
-                
-                let new_i = axis2_size - 1 - j;
-                let new_j = i;
-                
-                // Update the rotated indices
-                let mut rotated_indices = indices.clone();
-                rotated_indices[axis1] = new_i;
-                rotated_indices[axis2] = new_j;
-                
-                // Set the value in the rotated array
-                result.set(&rotated_indices, src_data[flat_idx].clone()).unwrap();
-            }
-            
-            Ok(result)
-        },
-        _ => unreachable!(),  // k_norm is already normalized to [0, 3]
-    }
+    // Implementation commented out to avoid duplication
 }
 */
 
@@ -2331,3 +3030,141 @@ pub fn atleast_3d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
     Ok(result)
 }
 
+
+
+/// One-dimensional linear interpolation.
+///
+/// Returns the one-dimensional piecewise linear interpolant to a function
+/// with given discrete data points (xp, fp), evaluated at x.
+///
+/// # Parameters
+///
+/// * `x` - The x-coordinates at which to evaluate the interpolated values.
+/// * `xp` - The x-coordinates of the data points, must be increasing.
+/// * `fp` - The y-coordinates of the data points, same length as `xp`.
+/// * `left` - Value to return for `x < xp[0]`. If not provided, defaults to `fp[0]`.
+/// * `right` - Value to return for `x > xp[last]`. If not provided, defaults to `fp[last]`.
+/// * `period` - A period for the x-coordinates. This parameter allows making the interpolation periodic in the specified period.
+///
+/// # Returns
+///
+/// The interpolated values, same shape as `x`.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let xp = Array::from_vec(vec\![1.0, 2.0, 3.0]);
+/// let fp = Array::from_vec(vec\![3.0, 2.0, 0.0]);
+/// let x = Array::from_vec(vec\![0.0, 1.5, 2.0, 2.5, 3.0, 4.0]);
+/// 
+/// // Without explicitly specifying `left` and `right`
+/// let y = interp(&x, &xp, &fp, None, None, None).unwrap();
+/// assert_eq\!(y.to_vec(), vec\![3.0, 2.5, 2.0, 1.0, 0.0, 0.0]);
+///
+/// // With explicit `left` and `right` values
+/// let y = interp(&x, &xp, &fp, Some(-5.0), Some(-1.0), None).unwrap();
+/// assert_eq\!(y.to_vec(), vec\![-5.0, 2.5, 2.0, 1.0, 0.0, -1.0]);
+/// ```
+pub fn interp<T>(
+    x: &Array<T>,
+    xp: &Array<T>,
+    fp: &Array<T>,
+    left: Option<T>,
+    right: Option<T>,
+    period: Option<T>
+) -> Result<Array<T>>
+where
+    T: Clone + PartialOrd + std::ops::Sub<Output = T> + std::ops::Mul<Output = T> +
+       std::ops::Add<Output = T> + std::ops::Div<Output = T> + num_traits::Float
+{
+    // Validate inputs
+    if xp.ndim() != 1 {
+        return Err(NumRs2Error::ShapeError("xp must be 1-dimensional".into()));
+    }
+    if fp.ndim() != 1 {
+        return Err(NumRs2Error::ShapeError("fp must be 1-dimensional".into()));
+    }
+    if xp.len() != fp.len() {
+        return Err(NumRs2Error::ShapeError("xp and fp must have the same length".into()));
+    }
+    if xp.len() < 2 {
+        return Err(NumRs2Error::ValueError("xp and fp must have at least 2 elements".into()));
+    }
+
+    // Check if xp is strictly increasing
+    for i in 1..xp.len() {
+        if xp.get(&[i])? <= xp.get(&[i-1])? {
+            return Err(NumRs2Error::ValueError("xp must be strictly increasing".into()));
+        }
+    }
+
+    // Save original shape of x for reshaping result later
+    let x_shape = x.shape().clone();
+    
+    // Flatten x for processing
+    let x_flat = x.ravel()?;
+    let mut result = Array::zeros(x_flat.shape());
+    
+    // Get default left and right values
+    let left_val = left.unwrap_or_else(|| fp.get(&[0]).unwrap().clone());
+    let right_val = right.unwrap_or_else(|| fp.get(&[fp.len() - 1]).unwrap().clone());
+    
+    // Process each element in x
+    for i in 0..x_flat.len() {
+        let mut x_val = x_flat.get(&[i])?;
+        
+        // Handle periodicity if specified
+        if let Some(ref p) = period {
+            let p_val = p.clone();
+            let xp_min = xp.get(&[0])?;
+            let xp_max = xp.get(&[xp.len() - 1])?;
+            let period_width = xp_max.clone() - xp_min.clone();
+            
+            // Normalize x_val to be within [xp_min, xp_min + period)
+            let mut x_norm = x_val.clone();
+            if x_norm >= xp_min.clone() + period_width.clone() || x_norm < xp_min.clone() {
+                x_norm = xp_min.clone() + ((x_norm - xp_min.clone()) % p_val + p_val) % p_val;
+            }
+            x_val = x_norm;
+        }
+        
+        // Out of bounds handling
+        if x_val < xp.get(&[0])? {
+            result.set(&[i], left_val.clone())?;
+            continue;
+        }
+        if x_val > xp.get(&[xp.len() - 1])? {
+            result.set(&[i], right_val.clone())?;
+            continue;
+        }
+        
+        // Binary search to find the interval containing x_val
+        let mut low = 0;
+        let mut high = xp.len() - 1;
+        
+        while low < high - 1 {
+            let mid = (low + high) / 2;
+            if x_val < xp.get(&[mid])? {
+                high = mid;
+            } else {
+                low = mid;
+            }
+        }
+        
+        // Linear interpolation within the interval
+        let x0 = xp.get(&[low])?;
+        let x1 = xp.get(&[high])?;
+        let y0 = fp.get(&[low])?;
+        let y1 = fp.get(&[high])?;
+        
+        let t = (x_val.clone() - x0.clone()) / (x1.clone() - x0.clone());
+        let interpolated = y0.clone() * (T::one() - t.clone()) + y1.clone() * t;
+        
+        result.set(&[i], interpolated)?;
+    }
+    
+    // Reshape result back to original shape of x
+    result.reshape(&x_shape)
+}
