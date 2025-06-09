@@ -292,8 +292,8 @@ where
     
     // If broadcasting is allowed, try broadcasting before comparison
     if options.allow_broadcasting {
-        if let Ok((a_broadcast, b_broadcast)) = crate::stride_tricks::broadcast_arrays(&[a, b]) {
-            return array_compare_equal_shapes(&a_broadcast[0], &a_broadcast[1], options);
+        if let Ok(broadcast_arrays) = crate::stride_tricks::broadcast_arrays(&[a, b]) {
+            return array_compare_equal_shapes(&broadcast_arrays[0], &broadcast_arrays[1], options);
         }
     }
     
@@ -859,12 +859,12 @@ mod tests {
         let b = Array::from_vec(vec![1, 2, 3]);
         let c = Array::from_vec(vec![1, 2, 4]);
         
-        assert!(array_equal(&a, &b));
-        assert!(!array_equal(&a, &c));
+        assert!(array_equal(&a, &b, None));
+        assert!(!array_equal(&a, &c, None));
         
         // Different shapes
         let d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-        assert!(!array_equal(&a, &d));
+        assert!(!array_equal(&a, &d, None));
     }
     
     #[test]

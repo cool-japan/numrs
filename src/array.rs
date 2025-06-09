@@ -1659,6 +1659,73 @@ impl<T: Clone + Div<Output = T>> Array<T> {
     }
 }
 
+impl<T: Clone> Array<T> {
+    /// Return the total number of elements (alias for size)
+    pub fn len(&self) -> usize {
+        self.size()
+    }
+    
+    /// Check if the array is empty
+    pub fn is_empty(&self) -> bool {
+        self.size() == 0
+    }
+    
+    /// Check if the array is C-contiguous (row-major)
+    pub fn is_c_contiguous(&self) -> bool {
+        self.data.is_standard_layout()
+    }
+    
+    /// Check if the array is Fortran-contiguous (column-major)  
+    pub fn is_f_contiguous(&self) -> bool {
+        // ndarray doesn't have a direct is_fortran_layout, but we can check
+        // if the array has the expected strides for Fortran layout
+        let shape = self.data.shape();
+        let strides = self.data.strides();
+        
+        if shape.is_empty() {
+            return true;
+        }
+        
+        // For Fortran layout, stride should increase with dimension
+        let mut expected_stride = 1;
+        for i in 0..shape.len() {
+            if strides[i] != expected_stride as isize {
+                return false;
+            }
+            expected_stride *= shape[i];
+        }
+        true
+    }
+    
+    /// Check if the array is contiguous (either C or Fortran)
+    pub fn is_contiguous(&self) -> bool {
+        self.is_c_contiguous() || self.is_f_contiguous()
+    }
+    
+    /// Convert array to C layout (row-major)
+    pub fn to_c_layout(&self) -> Self {
+        if self.is_c_contiguous() {
+            self.clone()
+        } else {
+            // Convert to standard layout
+            let standard = self.data.as_standard_layout();
+            Self { data: standard.into_owned() }
+        }
+    }
+    
+    /// Convert array to Fortran layout (column-major)
+    pub fn to_f_layout(&self) -> Self {
+        if self.is_f_contiguous() {
+            self.clone()
+        } else {
+            // For Fortran layout, we need to transpose all dimensions
+            // This is a simplified implementation
+            let transposed = self.data.clone().reversed_axes();
+            Self { data: transposed }
+        }
+    }
+}
+
 // Implement scalar operations
 impl<T: Clone + Add<Output = T>> Array<T> {
     /// Add a scalar to the array (element-wise)

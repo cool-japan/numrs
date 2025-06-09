@@ -418,7 +418,7 @@ pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Re
             
             // Reshape the result back to the original shape
             let result_array = Array::from_vec(result_vec);
-            result_array.reshape(&shape)
+            Ok(result_array.reshape(&shape))
         }
     }
 }
@@ -909,7 +909,7 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
 /// assert_eq!(diag.shape(), vec![2, 2]);
 /// assert_eq!(diag.to_vec(), vec![1, 5, 7, 11]);
 /// ```
-pub fn diagonal<T: Clone>(
+pub fn diagonal<T: Clone + num_traits::Zero>(
     array: &Array<T>, 
     offset: impl Into<Option<isize>>, 
     axis1: impl Into<Option<usize>>, 
@@ -1120,7 +1120,7 @@ pub fn partition<T: Clone + PartialOrd>(array: &Array<T>, kth: usize, axis: Opti
             quick_select(&mut data, 0, n-1, kth);
             
             // Reshape back to original shape
-            Array::from_vec(data).reshape(&array.shape())
+            Ok(Array::from_vec(data).reshape(&array.shape()))
         },
         Some(axis_val) => {
             let shape = array.shape();
@@ -1359,7 +1359,7 @@ pub fn searchsorted<T: Clone + PartialOrd>(
     
     // If a is not 1D, flatten it
     let a_flat = if a_sorted.ndim() != 1 {
-        a_sorted.flatten()
+        a_sorted.flatten(None)
     } else {
         a_sorted
     };
@@ -1391,7 +1391,7 @@ pub fn searchsorted<T: Clone + PartialOrd>(
     }
     
     // Reshape result to match v's shape
-    Array::from_vec(result).reshape(&v.shape())
+    Ok(Array::from_vec(result).reshape(&v.shape()))
 }
 
 /// Binary search for the leftmost insertion point
@@ -3081,13 +3081,13 @@ where
 {
     // Validate inputs
     if xp.ndim() != 1 {
-        return Err(NumRs2Error::ShapeError("xp must be 1-dimensional".into()));
+        return Err(NumRs2Error::DimensionMismatch("xp must be 1-dimensional".into()));
     }
     if fp.ndim() != 1 {
-        return Err(NumRs2Error::ShapeError("fp must be 1-dimensional".into()));
+        return Err(NumRs2Error::DimensionMismatch("fp must be 1-dimensional".into()));
     }
     if xp.len() != fp.len() {
-        return Err(NumRs2Error::ShapeError("xp and fp must have the same length".into()));
+        return Err(NumRs2Error::DimensionMismatch("xp and fp must have the same length".into()));
     }
     if xp.len() < 2 {
         return Err(NumRs2Error::ValueError("xp and fp must have at least 2 elements".into()));
@@ -3104,8 +3104,8 @@ where
     let x_shape = x.shape().clone();
     
     // Flatten x for processing
-    let x_flat = x.ravel()?;
-    let mut result = Array::zeros(x_flat.shape());
+    let x_flat = ravel(x, None)?;
+    let mut result = Array::zeros(&x_flat.shape());
     
     // Get default left and right values
     let left_val = left.unwrap_or_else(|| fp.get(&[0]).unwrap().clone());
@@ -3141,8 +3141,8 @@ where
         }
         
         // Binary search to find the interval containing x_val
-        let mut low = 0;
-        let mut high = xp.len() - 1;
+        let mut low: usize = 0;
+        let mut high: usize = xp.len() - 1;
         
         while low < high - 1 {
             let mid = (low + high) / 2;
@@ -3166,5 +3166,5 @@ where
     }
     
     // Reshape result back to original shape of x
-    result.reshape(&x_shape)
+    Ok(result.reshape(&x_shape))
 }

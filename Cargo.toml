@@ -69,3 +69,11 @@ harness = true
 name = "bench_distributions"
 path = "bench/bench_distributions.rs"
 harness = false
+
+[[bench]]
+name = "numpy_comparison_benchmark"
+harness = false
+
+[[bench]]
+name = "core_operations_benchmark"
+harness = false

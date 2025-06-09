@@ -3,6 +3,10 @@ use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use simba::simd::*;
 use crate::simd_optimize::{detect_cpu_features, SimdImplementation, select_simd_implementation};
+use crate::memory_optimize::alignment::{create_aligned_vec, get_optimal_alignment_for_type};
+use std::arch::x86_64::*;
+#[allow(unused_imports)]
+use rayon::prelude::*;
 
 // Note: This module uses the simba crate for SIMD abstractions
 // For a real implementation, you might want to use the std::simd or packed_simd crates
@@ -24,6 +28,31 @@ pub trait SimdOps<T> {
     fn simd_reduce<F>(&self, init: T, f: F) -> T
     where
         F: Fn(T, T) -> T;
+    
+    /// SIMD-accelerated element-wise addition
+    fn simd_add(&self, other: &Array<T>) -> Result<Array<T>>
+    where
+        T: std::ops::Add<Output = T> + Copy;
+    
+    /// SIMD-accelerated element-wise multiplication
+    fn simd_mul(&self, other: &Array<T>) -> Result<Array<T>>
+    where
+        T: std::ops::Mul<Output = T> + Copy;
+    
+    /// SIMD-accelerated dot product
+    fn simd_dot(&self, other: &Array<T>) -> Result<T>
+    where
+        T: std::ops::Add<Output = T> + std::ops::Mul<Output = T> + Copy + num_traits::Zero;
+    
+    /// SIMD-accelerated sum reduction
+    fn simd_sum(&self) -> T
+    where
+        T: std::ops::Add<Output = T> + Copy + num_traits::Zero;
+    
+    /// SIMD-accelerated fused multiply-add
+    fn simd_fma(&self, mul: &Array<T>, add: &Array<T>) -> Result<Array<T>>
+    where
+        T: Float + Copy;
 }
 
 impl<T: Float + SimdValue + 'static> SimdOps<T> for Array<T> 
@@ -133,6 +162,144 @@ where
                 self.simd_reduce_scalar(init, &f)
             }
         }
+    }
+    
+    fn simd_add(&self, other: &Array<T>) -> Result<Array<T>>
+    where
+        T: std::ops::Add<Output = T> + Copy,
+    {
+        self.simd_zip_with(other, |x, y| x + y)
+    }
+    
+    fn simd_mul(&self, other: &Array<T>) -> Result<Array<T>>
+    where
+        T: std::ops::Mul<Output = T> + Copy,
+    {
+        self.simd_zip_with(other, |x, y| x * y)
+    }
+    
+    fn simd_dot(&self, other: &Array<T>) -> Result<T>
+    where
+        T: std::ops::Add<Output = T> + std::ops::Mul<Output = T> + Copy + num_traits::Zero,
+    {
+        if self.shape() != other.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: self.shape(),
+                actual: other.shape(),
+            });
+        }
+        
+        // Detect CPU features and select implementation
+        let features = detect_cpu_features();
+        let implementation = select_simd_implementation(&features);
+        
+        // For dot product, we use optimized implementations when available
+        match implementation {
+            SimdImplementation::AVX2 | SimdImplementation::AVX512 if cfg!(target_arch = "x86_64") => {
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                    let self_f32 = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
+                    let other_f32 = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(other) };
+                    let self_data = self_f32.to_vec();
+                    let other_data = other_f32.to_vec();
+                    let result = unsafe { crate::simd_optimize::avx2_ops::avx2_dot_f32(&self_data, &other_data) };
+                    return Ok(T::from(result).unwrap());
+                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                    let self_f64 = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
+                    let other_f64 = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(other) };
+                    let self_data = self_f64.to_vec();
+                    let other_data = other_f64.to_vec();
+                    let result = unsafe { crate::simd_optimize::avx2_ops::avx2_dot_f64(&self_data, &other_data) };
+                    return Ok(T::from(result).unwrap());
+                }
+            },
+            _ => {}
+        }
+        
+        // Fall back to scalar dot product
+        let self_data = self.to_vec();
+        let other_data = other.to_vec();
+        let mut result = T::zero();
+        for (a, b) in self_data.iter().zip(other_data.iter()) {
+            result = result + (*a * *b);
+        }
+        Ok(result)
+    }
+    
+    fn simd_sum(&self) -> T
+    where
+        T: std::ops::Add<Output = T> + Copy + num_traits::Zero,
+    {
+        self.simd_reduce(T::zero(), |acc, x| acc + x)
+    }
+    
+    fn simd_fma(&self, mul: &Array<T>, add: &Array<T>) -> Result<Array<T>>
+    where
+        T: Float + Copy,
+    {
+        if self.shape() != mul.shape() || self.shape() != add.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: self.shape(),
+                actual: if self.shape() != mul.shape() { mul.shape() } else { add.shape() },
+            });
+        }
+        
+        // Detect CPU features and select implementation
+        let features = detect_cpu_features();
+        let implementation = select_simd_implementation(&features);
+        
+        // Use FMA instructions when available
+        match implementation {
+            SimdImplementation::AVX2 | SimdImplementation::AVX512 if cfg!(target_arch = "x86_64") && features.fma => {
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                    let self_f32 = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
+                    let mul_f32 = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(mul) };
+                    let add_f32 = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(add) };
+                    
+                    let self_data = self_f32.to_vec();
+                    let mul_data = mul_f32.to_vec();
+                    let add_data = add_f32.to_vec();
+                    let mut result_data = vec![0.0f32; self_data.len()];
+                    
+                    unsafe {
+                        crate::simd_optimize::avx2_ops::avx2_fma_f32(&self_data, &mul_data, &add_data, &mut result_data);
+                    }
+                    
+                    let result_f32 = Array::from_vec(result_data).reshape(&self_f32.shape());
+                    return Ok(unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result_f32) });
+                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                    let self_f64 = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
+                    let mul_f64 = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(mul) };
+                    let add_f64 = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(add) };
+                    
+                    let self_data = self_f64.to_vec();
+                    let mul_data = mul_f64.to_vec();
+                    let add_data = add_f64.to_vec();
+                    let mut result_data = vec![0.0f64; self_data.len()];
+                    
+                    unsafe {
+                        crate::simd_optimize::avx2_ops::avx2_fma_f64(&self_data, &mul_data, &add_data, &mut result_data);
+                    }
+                    
+                    let result_f64 = Array::from_vec(result_data).reshape(&self_f64.shape());
+                    return Ok(unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result_f64) });
+                }
+            },
+            _ => {}
+        }
+        
+        // Fall back to scalar FMA: self * mul + add
+        let self_data = self.to_vec();
+        let mul_data = mul.to_vec();
+        let add_data = add.to_vec();
+        
+        let result: Vec<T> = self_data
+            .iter()
+            .zip(mul_data.iter())
+            .zip(add_data.iter())
+            .map(|((&a, &b), &c)| a * b + c)
+            .collect();
+        
+        Ok(Array::from_vec(result).reshape(&self.shape()))
     }
 }
 
