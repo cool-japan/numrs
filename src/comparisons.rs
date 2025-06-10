@@ -126,8 +126,8 @@ where
 /// let b = Array::from_vec(vec![1, 2, 3]);
 /// let c = Array::from_vec(vec![1, 2, 4]);
 ///
-/// assert!(array_equal(&a, &b));
-/// assert!(!array_equal(&a, &c));
+/// assert!(array_equal(&a, &b, None));
+/// assert!(!array_equal(&a, &c, None));
 /// ```
 /// Check if two arrays are equal (element-wise)
 ///
@@ -258,6 +258,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::comparisons::{array_compare, ArrayCompareOptions};
 ///
 /// // Create some arrays
 /// let a = Array::from_vec(vec![1, 2, 3]);
@@ -275,8 +276,8 @@ where
 /// assert!(array_compare(&a, &c, &opts)); // Ignores the difference at index 2
 ///
 /// // Compare with broadcasting (1D to 2D)
-/// let d = Array::from_vec(vec![1, 2, 3]).reshape(&[3, 1]).unwrap();
-/// let e = Array::from_vec(vec![1, 1, 1, 2, 2, 2, 3, 3, 3]).reshape(&[3, 3]).unwrap();
+/// let d = Array::from_vec(vec![1, 2, 3]).reshape(&[3, 1]);
+/// let e = Array::from_vec(vec![1, 1, 1, 2, 2, 2, 3, 3, 3]).reshape(&[3, 3]);
 /// let mut opts = ArrayCompareOptions::default();
 /// opts.allow_broadcasting = true;
 /// assert!(array_compare(&d, &e, &opts)); // d is broadcast across columns
@@ -402,7 +403,7 @@ where
 }
 
 /// Options for controlling array comparisons
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ArrayCompareOptions {
     /// Treat NaN values as equal
     pub equal_nan: bool,
@@ -420,17 +421,6 @@ pub struct ArrayCompareOptions {
     pub atol: Option<f64>,
 }
 
-impl Default for ArrayCompareOptions {
-    fn default() -> Self {
-        Self {
-            equal_nan: false,
-            allow_broadcasting: false,
-            ignore_indices: None,
-            rtol: None,
-            atol: None,
-        }
-    }
-}
 
 /// Determine if all elements in an array evaluate to True
 ///

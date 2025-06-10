@@ -244,6 +244,7 @@ where
             
             // Step 3.1: Apply permutation to b (Pb)
             let mut pb = vec![T::zero(); n];
+            #[allow(clippy::needless_range_loop)]
             for i in 0..n {
                 let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
                 pb[i] = b[p_idx];
@@ -253,6 +254,7 @@ where
             let mut y = vec![T::zero(); n];
             for i in 0..n {
                 let mut sum = pb[i];
+                #[allow(clippy::needless_range_loop)]
                 for k in 0..i {
                     sum -= l.get(&[i, k])? * y[k];
                 }
@@ -263,6 +265,7 @@ where
             let mut x = vec![T::zero(); n];
             for i in (0..n).rev() {
                 let mut sum = y[i];
+                #[allow(clippy::needless_range_loop)]
                 for k in (i+1)..n {
                     sum -= u.get(&[i, k])? * x[k];
                 }
@@ -270,6 +273,7 @@ where
             }
             
             // Step 3.4: Store the solution in the j-th column of the result
+            #[allow(clippy::needless_range_loop)]
             for i in 0..n {
                 result.set(&[i, j], x[i])?;
             }
@@ -499,6 +503,7 @@ where
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
             pb[i] = b.get(&[p_idx])?;
@@ -508,6 +513,7 @@ where
         let mut y = vec![T::zero(); n];
         for i in 0..n {
             let mut sum = pb[i];
+            #[allow(clippy::needless_range_loop)]
             for k in 0..i {
                 sum -= l.get(&[i, k])? * y[k];
             }
@@ -518,6 +524,7 @@ where
         let mut x = vec![T::zero(); n];
         for i in (0..n).rev() {
             let mut sum = y[i];
+            #[allow(clippy::needless_range_loop)]
             for k in (i+1)..n {
                 sum -= u.get(&[i, k])? * x[k];
             }
@@ -1321,6 +1328,7 @@ where
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
             pb[i] = b.get(&[p_idx])?;
@@ -1330,6 +1338,7 @@ where
         let mut y = vec![T::zero(); n];
         for i in 0..n {
             let mut sum = pb[i];
+            #[allow(clippy::needless_range_loop)]
             for k in 0..i {
                 sum -= l.get(&[i, k])? * y[k];
             }
@@ -1340,6 +1349,7 @@ where
         let mut x = vec![T::zero(); n];
         for i in (0..n).rev() {
             let mut sum = y[i];
+            #[allow(clippy::needless_range_loop)]
             for k in (i+1)..n {
                 sum -= u.get(&[i, k])? * x[k];
             }
@@ -1731,14 +1741,14 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign>(a: &Arra
 
             // Use the preferred non-deprecated functions
             let mut rng = rand::rng();
-            for i in 0..x_data.len() {
-                x_data[i] = T::from(rng.random_range(0.0..1.0)).unwrap();
+            for item in &mut x_data {
+                *item = T::from(rng.random_range(0.0..1.0)).unwrap();
             }
 
             // Normalize x
             let norm_x = x_data.iter().fold(T::zero(), |acc, &val| acc + val * val).sqrt();
-            for i in 0..x_data.len() {
-                x_data[i] = x_data[i] / norm_x;
+            for item in &mut x_data {
+                *item = *item / norm_x;
             }
 
             // Create 1D Array for vector
@@ -1765,6 +1775,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign>(a: &Arra
                 // Handle the indices correctly based on array dimensionality
                 let ndim = y.ndim();
                 if ndim == 1 {
+                    #[allow(clippy::needless_range_loop)]
                     for i in 0..y_data.len() {
                         y_normalized.set(&[i], y_data[i] / max_abs)?;
                     }
@@ -1773,11 +1784,13 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign>(a: &Arra
                     let shape = y.shape();
                     if shape[0] == 1 {
                         // Shape (1, n) - row vector
+                        #[allow(clippy::needless_range_loop)]
                         for i in 0..y_data.len() {
                             y_normalized.set(&[0, i], y_data[i] / max_abs)?;
                         }
                     } else if shape[1] == 1 {
                         // Shape (n, 1) - column vector
+                        #[allow(clippy::needless_range_loop)]
                         for i in 0..y_data.len() {
                             y_normalized.set(&[i, 0], y_data[i] / max_abs)?;
                         }
@@ -1899,7 +1912,7 @@ pub fn cholesky<T: Float + Clone + Debug>(a: &Array<T>) -> Result<Array<T>> {
 ///
 /// * `a` - The input matrix
 /// * `sort` - Sort eigenvalues and eigenvectors by eigenvalue magnitude.
-///           Options: "asc" (ascending), "desc" (descending), or None (no sorting)
+///   Options: "asc" (ascending), "desc" (descending), or None (no sorting)
 ///
 /// # Returns
 ///
@@ -1959,7 +1972,7 @@ pub fn eig<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>, sort
         // Extract the eigenvector column
         for i in 0..eigvec_size {
             let evec_idx = i * n + idx;
-            sorted_evecs.push(evecs_data[evec_idx].clone());
+            sorted_evecs.push(evecs_data[evec_idx]);
         }
     }
 
@@ -1976,7 +1989,7 @@ pub fn eig<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>, sort
 ///
 /// * `a` - The input matrix
 /// * `sort` - Sort eigenvalues and eigenvectors by eigenvalue magnitude.
-///           Options: "asc" (ascending), "desc" (descending), or None (no sorting)
+///   Options: "asc" (ascending), "desc" (descending), or None (no sorting)
 ///
 /// # Returns
 ///
@@ -2036,7 +2049,7 @@ pub fn eig<T: Float + Clone + Debug>(a: &Array<T>, sort: Option<&str>) -> Result
         // Extract the eigenvector column
         for i in 0..eigvec_size {
             let evec_idx = i * n + idx;
-            sorted_evecs.push(evecs_data[evec_idx].clone());
+            sorted_evecs.push(evecs_data[evec_idx]);
         }
     }
 
@@ -2115,8 +2128,8 @@ pub fn inv<T: Float + Clone + Debug>(a: &Array<T>) -> Result<Array<T>> {
 ///
 /// * `a` - The input matrix
 /// * `rcond` - Cutoff for small singular values. Singular values smaller
-///             than rcond * largest_singular_value are set to zero.
-///             Default is 1e-15.
+///   than rcond * largest_singular_value are set to zero.
+///   Default is 1e-15.
 ///
 /// # Returns
 ///
@@ -2167,6 +2180,7 @@ pub fn pinv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>, rco
     
     // 1. Create a diagonal matrix from s_inv
     let mut s_inv_diag = Array::zeros(&[k, k]);
+    #[allow(clippy::needless_range_loop)]
     for i in 0..k {
         s_inv_diag.set(&[i, i], s_inv_vec[i])?;
     }

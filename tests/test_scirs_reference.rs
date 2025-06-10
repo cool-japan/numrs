@@ -90,8 +90,8 @@ fn test_vonmises_concentration() {
     set_seed(12345);
 
     // Generate samples with different concentration parameters
-    let mu = 0.0;
-    let kappas = [0.5, 2.0, 5.0, 10.0];
+    let mu: f64 = 0.0;
+    let kappas: [f64; 4] = [0.5, 2.0, 5.0, 10.0];
     let sample_count = 2000;
 
     for &kappa in &kappas {
@@ -99,7 +99,7 @@ fn test_vonmises_concentration() {
         let data = samples.to_vec();
 
         // Count samples within PI/6 of the mean (30 degrees)
-        let within_range = data.iter().filter(|&&x| (x - mu).abs() <= PI / 6.0).count();
+        let within_range = data.iter().filter(|&&x| (x - mu).abs() <= (PI / 6.0)).count();
         let proportion = within_range as f64 / sample_count as f64;
 
         // Calculate theoretical proportion using the cumulative distribution function
@@ -250,8 +250,8 @@ fn test_multivariate_normal_rotation() {
     let mean_x = sum_x / n;
     let mean_y = sum_y / n;
     let cov_xy = (sum_xy - n * mean_x * mean_y) / (n - 1.0);
-    let var_x = (sum_x2 - n * mean_x * mean_x) / (n - 1.0);
-    let var_y = (sum_y2 - n * mean_y * mean_y) / (n - 1.0);
+    let var_x: f64 = (sum_x2 - n * mean_x * mean_x) / (n - 1.0);
+    let var_y: f64 = (sum_y2 - n * mean_y * mean_y) / (n - 1.0);
 
     let corr_xy = cov_xy / (var_x.sqrt() * var_y.sqrt());
 
@@ -286,8 +286,8 @@ fn test_multivariate_normal_rotation() {
     let mean_x = sum_x / n;
     let mean_y = sum_y / n;
     let cov_xy = (sum_xy - n * mean_x * mean_y) / (n - 1.0);
-    let var_x = (sum_x2 - n * mean_x * mean_x) / (n - 1.0);
-    let var_y = (sum_y2 - n * mean_y * mean_y) / (n - 1.0);
+    let var_x: f64 = (sum_x2 - n * mean_x * mean_x) / (n - 1.0);
+    let var_y: f64 = (sum_y2 - n * mean_y * mean_y) / (n - 1.0);
 
     let corr_xy_rotated = cov_xy / (var_x.sqrt() * var_y.sqrt());
 

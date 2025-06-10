@@ -271,7 +271,7 @@ where T: Clone + Default + Zero + PartialEq + Add<Output = T> + Mul<Output = T>
     /// # Errors
     ///
     /// Returns an error if the vector length doesn't match the number of columns
-    pub fn matvec(&self, vec: &Vec<T>) -> Result<Vec<T>> {
+    pub fn matvec(&self, vec: &[T]) -> Result<Vec<T>> {
         if vec.len() != self.cols {
             return Err(NumRs2Error::ShapeMismatch {
                 expected: vec![self.cols],
@@ -288,6 +288,7 @@ where T: Clone + Default + Zero + PartialEq + Add<Output = T> + Mul<Output = T>
             let j_start = i.saturating_sub(self.sub_diagonals);
             let j_end = std::cmp::min(i + self.super_diagonals + 1, self.cols);
             
+            #[allow(clippy::needless_range_loop)]
             for j in j_start..j_end {
                 let a_ij = self.get(i, j).unwrap();
                 let x_j = vec[j].clone();

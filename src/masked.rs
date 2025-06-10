@@ -67,7 +67,7 @@ impl<T: Clone> MaskedArray<T> {
             None => Array::from_vec(vec![false; data.size()]).reshape(&shape),
         };
         
-        let fill_val = fill_value.unwrap_or_else(T::default);
+        let fill_val = fill_value.unwrap_or_default();
         
         Ok(Self {
             data,
@@ -112,7 +112,7 @@ impl<T: Clone> MaskedArray<T> {
         }
         
         let mask_array = Array::from_vec(mask_vec).reshape(&shape);
-        let fill_val = fill_value.unwrap_or_else(T::default);
+        let fill_val = fill_value.unwrap_or_default();
         
         Ok(Self {
             data: data.clone(),
@@ -190,7 +190,7 @@ impl<T: Clone> MaskedArray<T> {
             });
         }
         
-        let fill_val = fill_value.unwrap_or_else(T::default);
+        let fill_val = fill_value.unwrap_or_default();
         
         Ok(Self {
             data: data.clone(),
@@ -214,7 +214,7 @@ impl<T: Clone> MaskedArray<T> {
     {
         let shape = data.shape();
         let mask_array = Array::from_vec(vec![true; data.size()]).reshape(&shape);
-        let fill_val = fill_value.unwrap_or_else(T::default);
+        let fill_val = fill_value.unwrap_or_default();
         
         Ok(Self {
             data: data.clone(),

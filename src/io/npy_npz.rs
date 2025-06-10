@@ -535,7 +535,7 @@ pub fn deserialize_from_file<T: Clone, R: Read + Seek>(reader: R, format: Serial
             
             // We need to reinterpret the Result<Array<f32>> as Result<Array<T>>
             // This is safe because we've verified that T is f32
-            std::mem::transmute(result)
+            std::mem::transmute::<Result<Array<f32>>, Result<Array<T>>>(result)
         }
     } else if type_name == "f64" {
         // Safe because we've checked that T is f64
@@ -548,7 +548,7 @@ pub fn deserialize_from_file<T: Clone, R: Read + Seek>(reader: R, format: Serial
             
             // We need to reinterpret the Result<Array<f64>> as Result<Array<T>>
             // This is safe because we've verified that T is f64
-            std::mem::transmute(result)
+            std::mem::transmute::<Result<Array<f64>>, Result<Array<T>>>(result)
         }
     } else if type_name == "i32" {
         // Safe because we've checked that T is i32
@@ -561,7 +561,7 @@ pub fn deserialize_from_file<T: Clone, R: Read + Seek>(reader: R, format: Serial
             
             // We need to reinterpret the Result<Array<i32>> as Result<Array<T>>
             // This is safe because we've verified that T is i32
-            std::mem::transmute(result)
+            std::mem::transmute::<Result<Array<i32>>, Result<Array<T>>>(result)
         }
     } else {
         // For simplicity, we're only supporting f32, f64, and i32 in this initial implementation

@@ -248,7 +248,7 @@ mod tests {
         
         // The eigenvalues should be sorted in ascending order
         // For this matrix, they should be approximately: 2 - sqrt(2), 2, 2 + sqrt(2)
-        let expected = vec![2.0 - 2.0_f64.sqrt(), 2.0, 2.0 + 2.0_f64.sqrt()];
+        let expected = [2.0 - 2.0_f64.sqrt(), 2.0, 2.0 + 2.0_f64.sqrt()];
         
         for i in 0..3 {
             assert!(num_traits::Float::abs(eig_data[i] - expected[i]) < 1e-10);

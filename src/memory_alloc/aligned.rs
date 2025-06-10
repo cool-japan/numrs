@@ -224,7 +224,7 @@ impl AlignedAllocator {
     /// - The pointer must have been allocated by this allocator
     /// - The count must match the original allocation
     /// - The memory must be properly initialized
-    pub unsafe fn as_mut_slice<T>(&self, ptr: NonNull<T>, count: usize) -> &mut [T] {
+    pub unsafe fn as_mut_slice<T>(&mut self, ptr: NonNull<T>, count: usize) -> &mut [T] {
         std::slice::from_raw_parts_mut(ptr.as_ptr(), count)
     }
 }

@@ -166,8 +166,8 @@ impl FFT {
         // Transpose back and flatten
         let mut result = Vec::with_capacity(n_rows * n_cols);
         for i in 0..n_rows {
-            for j in 0..n_cols {
-                result.push(transposed[j][i]);
+            for row in &transposed {
+                result.push(row[i]);
             }
         }
 
@@ -237,8 +237,8 @@ impl FFT {
 
         // Pre-compute the scaled and conjugated values for each row
         for i in 0..n_rows {
-            for j in 0..n_cols {
-                result.push(transposed[j][i].conj() * scale);
+            for row in &transposed {
+                result.push(row[i].conj() * scale);
             }
         }
 
@@ -363,7 +363,7 @@ impl FFT {
                 
                 let mut result = Vec::with_capacity(n);
                 // Ceil division to handle odd-length arrays correctly
-                let half_n = (n + 1) / 2;
+                let half_n = n.div_ceil(2);
                 
                 // Rearrange the array
                 result.extend_from_slice(&data[n - half_n..]);
@@ -385,13 +385,13 @@ impl FFT {
                 }
                 
                 // Shift rows - ceil division to handle odd dimensions correctly
-                let half_rows = (n_rows + 1) / 2;
+                let half_rows = n_rows.div_ceil(2);
                 let mut rows_shifted = Vec::with_capacity(n_rows);
                 rows_shifted.extend_from_slice(&data_2d[n_rows - half_rows..]);
                 rows_shifted.extend_from_slice(&data_2d[..n_rows - half_rows]);
                 
                 // Shift columns in each row - ceil division to handle odd dimensions correctly
-                let half_cols = (n_cols + 1) / 2;
+                let half_cols = n_cols.div_ceil(2);
                 let mut result = Vec::with_capacity(n_rows * n_cols);
                 
                 for row in rows_shifted {

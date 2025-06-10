@@ -45,6 +45,7 @@ pub fn vandermonde(x: Vec<f64>, n: Option<usize>) -> Matrix<f64> {
     
     let mut data = Vec::with_capacity(rows * cols);
     
+    #[allow(clippy::needless_range_loop)]
     for i in 0..rows {
         for j in 0..cols {
             data.push(x[i].powi(j as i32));

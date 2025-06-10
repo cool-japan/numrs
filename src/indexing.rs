@@ -165,7 +165,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
                     
                     // Calculate the size of this dimension in the result
                     let slice_size = if end_idx > *start {
-                        (end_idx - *start + step_size - 1) / step_size
+                        (end_idx - *start).div_ceil(step_size)
                     } else {
                         0
                     };
@@ -202,11 +202,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             // Calculate how many dimensions need to be filled
             let num_dims_provided = index_specs.len() - 1; // -1 for the ellipsis
             let num_dims_needed = self.ndim();
-            let additional_dims = if num_dims_needed > num_dims_provided {
-                num_dims_needed - num_dims_provided
-            } else {
-                0
-            };
+            let additional_dims = num_dims_needed.saturating_sub(num_dims_provided);
             
             let mut expanded_indices = Vec::with_capacity(self.ndim());
             
@@ -373,6 +369,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
                 }
                 
                 // Compute corresponding index in the result array
+                #[allow(clippy::needless_range_loop)]
                 for dim in 0..self.ndim() {
                     if dim == fancy_dim {
                         target_idx[dim] = new_idx;

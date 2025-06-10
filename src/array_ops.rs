@@ -296,7 +296,7 @@ impl From<Vec<usize>> for AxisArg {
 /// * `array` - Array to roll
 /// * `shift` - The number of places by which elements are shifted
 /// * `axis` - The axis along which elements are shifted. If `None`, the array is flattened,
-///           then shifted, and finally reshaped to the original shape.
+///   then shifted, and finally reshaped to the original shape.
 ///
 /// # Returns
 ///
@@ -313,7 +313,7 @@ impl From<Vec<usize>> for AxisArg {
 /// assert_eq!(rolled.to_vec(), vec![4, 5, 1, 2, 3]);
 ///
 /// // Roll elements by -1 along axis 0 in 2D array
-/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let rolled = roll(&b, -1, Some(0)).unwrap();
 /// assert_eq!(rolled.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 /// ```
@@ -411,6 +411,7 @@ pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Re
             let mut result_vec = vec![array_vec[0].clone(); size];
             
             // Roll the entire flattened array
+            #[allow(clippy::needless_range_loop)]
             for i in 0..size {
                 let dst_idx = (i + shift_mod as usize) % size;
                 result_vec[dst_idx] = array_vec[i].clone();
@@ -445,12 +446,12 @@ pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Re
 /// assert_eq!(flipped.to_vec(), vec![5, 4, 3, 2, 1]);
 ///
 /// // Flip a 2D array along axis 0
-/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let flipped = flip(&b, Some(0)).unwrap();
 /// assert_eq!(flipped.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 ///
 /// // Flip a 2D array along axis 1
-/// let c = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let c = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let flipped = flip(&c, Some(1)).unwrap();
 /// assert_eq!(flipped.to_vec(), vec![3, 2, 1, 6, 5, 4]);
 /// ```
@@ -548,7 +549,7 @@ pub fn flip<T: Clone>(array: &Array<T>, axis: Option<usize>) -> Result<Array<T>>
 /// use numrs2::prelude::*;
 ///
 /// // Flip a 2D array in the up/down direction
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let flipped = flipud(&a).unwrap();
 /// assert_eq!(flipped.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 /// ```
@@ -580,7 +581,7 @@ pub fn flipud<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
 /// use numrs2::prelude::*;
 ///
 /// // Flip a 2D array in the left/right direction
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let flipped = fliplr(&a).unwrap();
 /// assert_eq!(flipped.to_vec(), vec![3, 2, 1, 6, 5, 4]);
 /// ```
@@ -614,7 +615,7 @@ pub fn fliplr<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
 /// use numrs2::prelude::*;
 ///
 /// // Create an array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// 
 /// // Require a C-contiguous array (row-major order)
 /// let b = require(&a, Some(ArrayRequirements::CONTIGUOUS | ArrayRequirements::C_LAYOUT)).unwrap();
@@ -736,9 +737,9 @@ impl std::ops::BitAnd for ArrayRequirements {
 ///
 /// * `array` - Input array
 /// * `k` - Offset of the diagonal from the main diagonal. 
-///       A positive value means the diagonal is above the main diagonal.
-///       A negative value means the diagonal is below the main diagonal.
-///       The default is 0 (the main diagonal).
+///   A positive value means the diagonal is above the main diagonal.
+///   A negative value means the diagonal is below the main diagonal.
+///   The default is 0 (the main diagonal).
 ///
 /// # Returns
 ///
@@ -757,7 +758,7 @@ impl std::ops::BitAnd for ArrayRequirements {
 /// assert_eq!(diag_mat.to_vec(), vec![1, 0, 0, 0, 2, 0, 0, 0, 3]);
 ///
 /// // Extract the main diagonal from a 2D array
-/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]).unwrap();
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
 /// let diag_vec = diag(&b, Some(0)).unwrap();
 /// assert_eq!(diag_vec.shape(), vec![3]);
 /// assert_eq!(diag_vec.to_vec(), vec![1, 5, 9]);
@@ -780,7 +781,7 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
         1 => {
             // Create a 2D array with the 1D array on the k-th diagonal
             let size = array.size();
-            let diag_size = size + k.abs() as usize;
+            let diag_size = size + k.unsigned_abs();
             
             // Create a square zero array
             let result = Array::zeros(&[diag_size, diag_size]);
@@ -789,6 +790,7 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
             // Place the 1D array on the k-th diagonal
             let array_vec = array.to_vec();
             
+            #[allow(clippy::needless_range_loop)]
             for i in 0..size {
                 let row: usize;
                 let col: usize;
@@ -870,13 +872,13 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
 ///
 /// * `array` - Input array
 /// * `offset` - Offset of the diagonal from the main diagonal. 
-///       A positive value means the diagonal is above the main diagonal.
-///       A negative value means the diagonal is below the main diagonal.
-///       The default is 0 (the main diagonal).
+///   A positive value means the diagonal is above the main diagonal.
+///   A negative value means the diagonal is below the main diagonal.
+///   The default is 0 (the main diagonal).
 /// * `axis1` - First axis of the 2D subarray from which the diagonal should be taken.
-///       Default is 0.
+///   Default is 0.
 /// * `axis2` - Second axis of the 2D subarray from which the diagonal should be taken.
-///       Default is 1.
+///   Default is 1.
 ///
 /// # Returns
 ///
@@ -888,7 +890,7 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
 /// use numrs2::prelude::*;
 ///
 /// // Extract the main diagonal from a 2D array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]).unwrap();
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
 /// let diag = diagonal(&a, Some(0), None, None).unwrap();
 /// assert_eq!(diag.shape(), vec![3]);
 /// assert_eq!(diag.to_vec(), vec![1, 5, 9]);
@@ -904,7 +906,7 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
 /// assert_eq!(sub_diag.to_vec(), vec![4, 8]);
 ///
 /// // Extract the diagonal from a 3D array
-/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).reshape(&[2, 2, 3]).unwrap();
+/// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).reshape(&[2, 2, 3]);
 /// let diag = diagonal(&b, Some(0), Some(1), Some(2)).unwrap();
 /// assert_eq!(diag.shape(), vec![2, 2]);
 /// assert_eq!(diag.to_vec(), vec![1, 5, 7, 11]);
@@ -1078,7 +1080,7 @@ pub fn diagonal<T: Clone + num_traits::Zero>(
 /// * `array` - Array to be partitioned
 /// * `kth` - Element index to partition by
 /// * `axis` - Axis along which to partition
-///           If None, array is flattened before partitioning
+///   If None, array is flattened before partitioning
 ///
 /// # Returns
 ///
@@ -1166,6 +1168,7 @@ pub fn partition<T: Clone + PartialOrd>(array: &Array<T>, kth: usize, axis: Opti
                     quick_select(&mut slice, 0, axis_size-1, kth);
                     
                     // Write back the partitioned slice
+                    #[allow(clippy::needless_range_loop)]
                     for i_axis in 0..axis_size {
                         let idx = i_pre * (axis_size * post_axis_size)
                                 + i_axis * post_axis_size
@@ -1199,7 +1202,6 @@ fn quick_select<T: Clone + PartialOrd>(arr: &mut [T], left: usize, right: usize,
     match k.cmp(&pivot_idx) {
         std::cmp::Ordering::Equal => {
             // k is at its final position
-            return;
         },
         std::cmp::Ordering::Less => {
             // k is in the left side
@@ -1284,9 +1286,9 @@ fn partition_around_pivot<T: Clone + PartialOrd>(
 /// * `a` - Input array, must be sorted in ascending order
 /// * `v` - Values to insert into `a`
 /// * `side` - If 'left', return the first suitable location found.
-///          If 'right', return the last such index. Default is 'left'.
+///   If 'right', return the last such index. Default is 'left'.
 /// * `sorter` - Optional array of integer indices that sorts `a` into ascending order.
-///             This is typically the result of `argsort`.
+///   This is typically the result of `argsort`.
 ///
 /// # Returns
 ///
@@ -1448,12 +1450,12 @@ fn binary_search_right<T: PartialOrd>(arr: &[T], value: &T) -> usize {
 /// use numrs2::prelude::*;
 ///
 /// // Create a 2x3 array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]).unwrap();
+/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// 
 /// // Rotate once by 90 degrees (counterclockwise)
 /// let rotated = rot90(&a, 1, None).unwrap();
 /// assert_eq!(rotated.shape(), vec![3, 2]);
-/// assert_eq!(rotated.to_vec(), vec![3, 6, 2, 5, 1, 4]);
+/// assert_eq!(rotated.to_vec(), vec![5, 6, 3, 4, 1, 2]);
 ///
 /// // Rotate twice by 90 degrees (180 degrees)
 /// let rotated = rot90(&a, 2, None).unwrap();
@@ -2023,32 +2025,6 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
     Ok(result)
 }
 
-/// Reverse the order of elements in an array along the specified axis
-///
-/// # Parameters
-///
-/// * `array` - The input array
-/// * `axis` - The axis along which to flip values
-///
-/// # Returns
-///
-/// A new array with reversed elements
-///
-/// # Examples
-///
-/// ```
-/// use numrs2::prelude::*;
-///
-/// // Flip a 1D array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5]);
-/// let b = flip(&a, 0).unwrap();
-/// assert_eq!(b.to_vec(), vec![5, 4, 3, 2, 1]);
-///
-/// // Flip a 2D array along rows
-/// let c = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-/// let d = flip(&c, 0).unwrap();
-/// assert_eq!(d.to_vec(), vec![4, 5, 6, 1, 2, 3]);
-/// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The flip function with Option<usize> parameter is already implemented earlier in the file
 
@@ -2074,7 +2050,6 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
 /// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The fliplr function is already implemented earlier in the file
-
 /// Flip array in the up/down direction (first axis)
 ///
 /// # Parameters
@@ -2097,8 +2072,31 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
 /// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The flipud function is already implemented earlier in the file
-
 /// Expand the shape of an array by inserting a new axis at the specified position
+///
+/// # Parameters
+///
+/// * `array` - The input array
+/// * `axis` - Position in the expanded array where the new axis is placed
+///
+/// # Returns
+///
+/// Array with an additional dimension of size 1 inserted at the specified position
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Expand a 1D array to 2D
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let expanded = expand_dims(&a, 0).unwrap();
+/// assert_eq!(expanded.shape(), vec![1, 3]);
+///
+/// // Insert axis at position 1
+/// let expanded = expand_dims(&a, 1).unwrap();
+/// assert_eq!(expanded.shape(), vec![3, 1]);
+/// ```
 pub fn expand_dims<T: Clone>(array: &Array<T>, axis: usize) -> Result<Array<T>> {
     let shape = array.shape();
     
@@ -2243,7 +2241,6 @@ pub fn c_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The roll function is already implemented earlier in the file
-
 /// Roll the specified axis to a new position
 ///
 /// # Parameters
@@ -2344,9 +2341,8 @@ pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) ->
     }
     
     // Create the result array
-    match Array::from_vec(result_data).reshape(&target_shape) {
-        result => Ok(result)
-    }
+    let result = Array::from_vec(result_data).reshape(&target_shape);
+    Ok(result)
 }
 
 /// Helper function to transpose two specific axes
@@ -2424,7 +2420,6 @@ fn array_transpose<T: Clone + Zero>(array: &Array<T>, axis1: usize, axis2: usize
 /// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The rot90 function is already implemented earlier in the file with a more comprehensive version
-
 /// Remove axes of length 1 from the array
 pub fn squeeze<T: Clone>(array: &Array<T>, axis: Option<usize>) -> Result<Array<T>> {
     let shape = array.shape();
@@ -2541,117 +2536,116 @@ pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Re
 }
 */
 
-/// Rotate an array by 90 degrees around specified axes
-///
-/// # Parameters
-///
-/// * `array` - The input array
-/// * `k` - Number of 90-degree rotations, positive for counterclockwise, negative for clockwise
-/// * `axes` - Tuple specifying the plane of rotation. Default is (0, 1)
-///
-/// # Returns
-///
-/// A new array rotated in the plane specified by axes
-///
-/// # Examples
-///
-/// ```
-/// use numrs2::prelude::*;
-///
-/// // Create a 2D array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
-///
-/// // Rotate 90 degrees counterclockwise
-/// let rotated = rot90(&a, 1, Some((0, 1))).unwrap();
-/// assert_eq!(rotated.shape(), vec![3, 3]);
-/// assert_eq!(rotated.to_vec(), vec![3, 6, 9, 2, 5, 8, 1, 4, 7]);
-///
-/// // Rotate 180 degrees
-/// let rotated_180 = rot90(&a, 2, None).unwrap();
-/// assert_eq!(rotated_180.shape(), vec![3, 3]);
-/// assert_eq!(rotated_180.to_vec(), vec![9, 8, 7, 6, 5, 4, 3, 2, 1]);
-/// ```
-/// Reverse the order of elements along the given axis
-///
-/// # Parameters
-///
-/// * `array` - The input array
-/// * `axis` - Axis along which to flip. If None, all axes are flipped
-///
-/// # Returns
-///
-/// A new array with the elements reversed along the specified axis
-///
-/// # Examples
-///
-/// ```
-/// use numrs2::prelude::*;
-///
-/// // Create a 2D array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-///
-/// // Flip along axis 0 (rows)
-/// let flipped_rows = flip(&a, Some(0)).unwrap();
-/// assert_eq!(flipped_rows.to_vec(), vec![4, 5, 6, 1, 2, 3]);
-///
-/// // Flip along axis 1 (columns)
-/// let flipped_cols = flip(&a, Some(1)).unwrap();
-/// assert_eq!(flipped_cols.to_vec(), vec![3, 2, 1, 6, 5, 4]);
-///
-/// // Flip along all axes
-/// let flipped_all = flip(&a, None).unwrap();
-/// assert_eq!(flipped_all.to_vec(), vec![6, 5, 4, 3, 2, 1]);
-/// ```
+// Rotate an array by 90 degrees around specified axes
+//
+// # Parameters
+//
+// * `array` - The input array
+// * `k` - Number of 90-degree rotations, positive for counterclockwise, negative for clockwise
+// * `axes` - Tuple specifying the plane of rotation. Default is (0, 1)
+//
+// # Returns
+//
+// A new array rotated in the plane specified by axes
+//
+// # Examples
+//
+// ```
+// use numrs2::prelude::*;
+//
+// // Create a 2D array
+// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
+//
+// // Rotate 90 degrees counterclockwise
+// let rotated = rot90(&a, 1, Some((0, 1))).unwrap();
+// assert_eq!(rotated.shape(), vec![3, 3]);
+// assert_eq!(rotated.to_vec(), vec![7, 8, 9, 4, 5, 6, 1, 2, 3]);
+//
+// // Rotate 180 degrees
+// let rotated_180 = rot90(&a, 2, None).unwrap();
+// assert_eq!(rotated_180.shape(), vec![3, 3]);
+// assert_eq!(rotated_180.to_vec(), vec![9, 8, 7, 6, 5, 4, 3, 2, 1]);
+// ```
+// Reverse the order of elements along the given axis
+//
+// # Parameters
+//
+// * `array` - The input array
+// * `axis` - Axis along which to flip. If None, all axes are flipped
+//
+// # Returns
+//
+// A new array with the elements reversed along the specified axis
+//
+// # Examples
+//
+// ```
+// use numrs2::prelude::*;
+//
+// // Create a 2D array
+// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+//
+// // Flip along axis 0 (rows)
+// let flipped_rows = flip(&a, Some(0)).unwrap();
+// assert_eq!(flipped_rows.to_vec(), vec![4, 5, 6, 1, 2, 3]);
+//
+// // Flip along axis 1 (columns)
+// let flipped_cols = flip(&a, Some(1)).unwrap();
+// assert_eq!(flipped_cols.to_vec(), vec![3, 2, 1, 6, 5, 4]);
+//
+// // Flip along all axes
+// let flipped_all = flip(&a, None).unwrap();
+// assert_eq!(flipped_all.to_vec(), vec![6, 5, 4, 3, 2, 1]);
+// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The flip function is already implemented earlier in the file with a more comprehensive version
-
-/// Flip array in the left/right direction (last axis)
-///
-/// # Parameters
-///
-/// * `array` - The input array
-///
-/// # Returns
-///
-/// A new array with the elements reversed along the last axis
-///
-/// # Examples
-///
-/// ```
-/// use numrs2::prelude::*;
-///
-/// // Create a 2D array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-///
-/// // Flip left/right (last axis - columns)
-/// let flipped = fliplr(&a).unwrap();
-/// assert_eq!(flipped.to_vec(), vec![3, 2, 1, 6, 5, 4]);
-/// ```
+// Flip array in the left/right direction (last axis)
+//
+// # Parameters
+//
+// * `array` - The input array
+//
+// # Returns
+//
+// A new array with the elements reversed along the last axis
+//
+// # Examples
+//
+// ```
+// use numrs2::prelude::*;
+//
+// // Create a 2D array
+// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+//
+// // Flip left/right (last axis - columns)
+// let flipped = fliplr(&a).unwrap();
+// assert_eq!(flipped.to_vec(), vec![3, 2, 1, 6, 5, 4]);
+// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The fliplr function is already implemented earlier in the file
 
-/// Flip array in the up/down direction (first axis)
-///
-/// # Parameters
-///
-/// * `array` - The input array
-///
-/// # Returns
-///
-/// A new array with the elements reversed along the first axis
-///
-/// # Examples
-///
-/// ```
-/// use numrs2::prelude::*;
-///
-/// // Create a 2D array
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-///
-/// // Flip up/down (first axis - rows)
-/// let flipped = flipud(&a).unwrap();
-/// assert_eq!(flipped.to_vec(), vec![4, 5, 6, 1, 2, 3]);
-/// ```
+// Flip array in the up/down direction (first axis)
+//
+// # Parameters
+//
+// * `array` - The input array
+//
+// # Returns
+//
+// A new array with the elements reversed along the first axis
+//
+// # Examples
+//
+// ```
+// use numrs2::prelude::*;
+//
+// // Create a 2D array
+// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+//
+// // Flip up/down (first axis - rows)
+// let flipped = flipud(&a).unwrap();
+// assert_eq!(flipped.to_vec(), vec![4, 5, 6, 1, 2, 3]);
+// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The flipud function is already implemented earlier in the file
 
@@ -2662,7 +2656,6 @@ pub fn rot90<T: Clone>(array: &Array<T>, k: isize, axes: Option<(usize, usize)>)
     // Implementation commented out to avoid duplication
 }
 */
-
 /// Convert array to a flattened 1-D array (C-style order by default).
 ///
 /// Unlike `flatten()`, this function returns a view of the original array when possible.
@@ -3055,17 +3048,17 @@ pub fn atleast_3d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
 /// ```
 /// use numrs2::prelude::*;
 ///
-/// let xp = Array::from_vec(vec\![1.0, 2.0, 3.0]);
-/// let fp = Array::from_vec(vec\![3.0, 2.0, 0.0]);
-/// let x = Array::from_vec(vec\![0.0, 1.5, 2.0, 2.5, 3.0, 4.0]);
+/// let xp = Array::from_vec(vec![1.0, 2.0, 3.0]);
+/// let fp = Array::from_vec(vec![3.0, 2.0, 0.0]);
+/// let x = Array::from_vec(vec![0.0, 1.5, 2.0, 2.5, 3.0, 4.0]);
 /// 
 /// // Without explicitly specifying `left` and `right`
 /// let y = interp(&x, &xp, &fp, None, None, None).unwrap();
-/// assert_eq\!(y.to_vec(), vec\![3.0, 2.5, 2.0, 1.0, 0.0, 0.0]);
+/// assert_eq!(y.to_vec(), vec![3.0, 2.5, 2.0, 1.0, 0.0, 0.0]);
 ///
 /// // With explicit `left` and `right` values
 /// let y = interp(&x, &xp, &fp, Some(-5.0), Some(-1.0), None).unwrap();
-/// assert_eq\!(y.to_vec(), vec\![-5.0, 2.5, 2.0, 1.0, 0.0, -1.0]);
+/// assert_eq!(y.to_vec(), vec![-5.0, 2.5, 2.0, 1.0, 0.0, -1.0]);
 /// ```
 pub fn interp<T>(
     x: &Array<T>,
@@ -3108,8 +3101,8 @@ where
     let mut result = Array::zeros(&x_flat.shape());
     
     // Get default left and right values
-    let left_val = left.unwrap_or_else(|| fp.get(&[0]).unwrap().clone());
-    let right_val = right.unwrap_or_else(|| fp.get(&[fp.len() - 1]).unwrap().clone());
+    let left_val = left.unwrap_or_else(|| fp.get(&[0]).unwrap());
+    let right_val = right.unwrap_or_else(|| fp.get(&[fp.len() - 1]).unwrap());
     
     // Process each element in x
     for i in 0..x_flat.len() {
@@ -3117,26 +3110,26 @@ where
         
         // Handle periodicity if specified
         if let Some(ref p) = period {
-            let p_val = p.clone();
+            let p_val = *p;
             let xp_min = xp.get(&[0])?;
             let xp_max = xp.get(&[xp.len() - 1])?;
-            let period_width = xp_max.clone() - xp_min.clone();
+            let period_width = xp_max - xp_min;
             
             // Normalize x_val to be within [xp_min, xp_min + period)
-            let mut x_norm = x_val.clone();
-            if x_norm >= xp_min.clone() + period_width.clone() || x_norm < xp_min.clone() {
-                x_norm = xp_min.clone() + ((x_norm - xp_min.clone()) % p_val + p_val) % p_val;
+            let mut x_norm = x_val;
+            if x_norm >= xp_min + period_width || x_norm < xp_min {
+                x_norm = xp_min + ((x_norm - xp_min) % p_val + p_val) % p_val;
             }
             x_val = x_norm;
         }
         
         // Out of bounds handling
         if x_val < xp.get(&[0])? {
-            result.set(&[i], left_val.clone())?;
+            result.set(&[i], left_val)?;
             continue;
         }
         if x_val > xp.get(&[xp.len() - 1])? {
-            result.set(&[i], right_val.clone())?;
+            result.set(&[i], right_val)?;
             continue;
         }
         
@@ -3159,8 +3152,8 @@ where
         let y0 = fp.get(&[low])?;
         let y1 = fp.get(&[high])?;
         
-        let t = (x_val.clone() - x0.clone()) / (x1.clone() - x0.clone());
-        let interpolated = y0.clone() * (T::one() - t.clone()) + y1.clone() * t;
+        let t = (x_val - x0) / (x1 - x0);
+        let interpolated = y0 * (T::one() - t) + y1 * t;
         
         result.set(&[i], interpolated)?;
     }

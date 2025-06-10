@@ -4,7 +4,7 @@
 
 use crate::error::Result;
 use crate::gpu::context::{GpuContext, GpuContextRef};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 
 // Global context for GPU operations
 static DEFAULT_CONTEXT: OnceLock<Mutex<Option<GpuContextRef>>> = OnceLock::new();
@@ -22,6 +22,7 @@ pub fn get_default_context() -> Result<GpuContextRef> {
 }
 
 /// Checks if the hardware supports GPU acceleration
+#[allow(dead_code)]
 pub fn is_gpu_available() -> bool {
     // Try to create a context and return true if it succeeds
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -39,6 +40,7 @@ pub fn is_gpu_available() -> bool {
 }
 
 /// Returns the name of the GPU if available
+#[allow(dead_code)]
 pub fn get_gpu_info() -> Option<String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()

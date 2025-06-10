@@ -739,10 +739,10 @@ fn apply_memory_advice(_mmap: &mut MmapMut, _config: &MmapConfig) {
 }
 
 /// Get or create access pattern tracking for a file
-fn get_or_create_access_pattern(path: &PathBuf) -> Arc<Mutex<AccessPattern>> {
+fn get_or_create_access_pattern(path: &Path) -> Arc<Mutex<AccessPattern>> {
     let mut cache = GLOBAL_MMAP_CACHE.lock().unwrap();
     
-    cache.entry(path.clone())
+    cache.entry(path.to_path_buf())
         .or_insert_with(|| Arc::new(Mutex::new(AccessPattern::default())))
         .clone()
 }

@@ -362,7 +362,7 @@ impl RandomState {
     
     /// Generate random values from a Binomial distribution
     pub fn binomial<T: NumCast + Clone + Debug>(&self, n: u64, p: f64, shape: &[usize]) -> Result<Array<T>> {
-        if p < 0.0 || p > 1.0 {
+        if !(0.0..=1.0).contains(&p) {
             return Err(NumRs2Error::InvalidOperation(
                 format!("Probability must be in [0, 1], got {}", p)
             ));
@@ -1180,7 +1180,7 @@ impl RandomState {
             // Calculate intermediate values
             let y = z * z;
             let x1 = mean_f64 + (mean_f64 * mean_f64 * y) / (2.0 * scale_f64)
-                - (mean_f64 / (2.0 * scale_f64)) * ((4.0 * mean_f64 * scale_f64 * y) + (mean_f64 * mean_f64 * y * y) as f64).sqrt();
+                - (mean_f64 / (2.0 * scale_f64)) * ((4.0 * mean_f64 * scale_f64 * y) + (mean_f64 * mean_f64 * y * y)).sqrt();
 
             // Generate a uniform random variable
             let u = rng.random::<f64>();

@@ -15,6 +15,7 @@ pub use npy_npz::*;
 /// 1. Serializing/deserializing arrays to/from various formats
 /// 2. Reading and writing arrays from/to files
 /// 3. Converting between arrays and other data formats
+///    
 /// Internal representation of an Array for serialization
 #[derive(Serialize, Deserialize)]
 struct SerializedArray<T> {

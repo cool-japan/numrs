@@ -274,7 +274,7 @@ mod tests {
         
         // Test matrix inverse
         let inv_a = inv(&a).unwrap();
-        let expected_inv = vec![0.6, -0.7, -0.2, 0.4];
+        let expected_inv = [0.6, -0.7, -0.2, 0.4];
         for (actual, expected) in inv_a.to_vec().iter().zip(expected_inv.iter()) {
             assert_relative_eq!(*actual, *expected, epsilon = 1e-10);
         }
@@ -672,8 +672,8 @@ mod tests {
             .reshape(&[3, 3]);
         
         // Create masks for slicing (unused but kept for reference)
-        let _row_indices = vec![0]; // First row
-        let _col_indices = vec![0]; // First column
+        let _row_indices = [0]; // First row
+        let _col_indices = [0]; // First column
         
         // Select using standard indexing instead (until boolean indexing is fixed)
         let row_result = a_2d.index(&[IndexSpec::Index(0), IndexSpec::All]).unwrap();
@@ -705,7 +705,7 @@ mod tests {
         
         // Skip fancy indexing tests for now as they need deeper fixes
         // We'll implement a more complete solution later
-        let _indices = vec![0, 1, 2];
+        let _indices = [0, 1, 2];
         // let result = a.index(&[IndexSpec::Indices(indices)]).unwrap();
         
         // Define a_2d for the single element access test

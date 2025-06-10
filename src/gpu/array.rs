@@ -6,11 +6,9 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::gpu::context::{GpuContext, GpuContextRef};
+use crate::gpu::context::GpuContextRef;
 use std::fmt;
 use std::marker::PhantomData;
-use std::sync::Arc;
-use wgpu::util::DeviceExt;
 
 /// A multi-dimensional array stored on the GPU
 pub struct GpuArray<T> {
@@ -42,7 +40,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
     pub fn from_array_with_context(array: &Array<T>, context: GpuContextRef) -> Result<Self> {
         let data = array.to_vec();
         let shape = array.shape().to_vec();
-        let strides = array.strides().to_vec();
+        let strides = array.byte_strides();
         let size = array.size();
         let element_size = std::mem::size_of::<T>();
 

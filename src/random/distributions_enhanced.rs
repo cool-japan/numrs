@@ -589,11 +589,15 @@ impl RandomState {
         let mut sym_matrix = vec![T::zero(); n * n];
         for i in 0..n {
             for j in 0..n {
-                if i == j {
-                    sym_matrix[i * n + j] = <T as NumCast>::from(1.0).unwrap_or(T::zero());
-                } else if i < j {
-                    sym_matrix[i * n + j] = uniform_data[i * n + j];
-                    sym_matrix[j * n + i] = uniform_data[i * n + j];
+                match i.cmp(&j) {
+                    std::cmp::Ordering::Equal => {
+                        sym_matrix[i * n + j] = <T as NumCast>::from(1.0).unwrap_or(T::zero());
+                    }
+                    std::cmp::Ordering::Less => {
+                        sym_matrix[i * n + j] = uniform_data[i * n + j];
+                        sym_matrix[j * n + i] = uniform_data[i * n + j];
+                    }
+                    std::cmp::Ordering::Greater => {}
                 }
             }
         }
@@ -762,7 +766,7 @@ impl RandomState {
     where 
         T: Float + NumCast + Clone + Debug + Display
     {
-        if dim < 1 || dim > 40 {
+        if !(1..=40).contains(&dim) {
             return Err(crate::error::NumRs2Error::InvalidOperation(
                 format!("Dimension must be between 1 and 40, got {}", dim)
             ));
@@ -922,7 +926,7 @@ impl RandomState {
 
 /// Normal cumulative distribution function
 fn normal_cdf(x: f64) -> f64 {
-    0.5 * (1.0 + erf(x / 1.414213562))
+    0.5 * (1.0 + erf(x / std::f64::consts::SQRT_2))
 }
 
 /// Inverse normal cumulative distribution function
@@ -940,20 +944,20 @@ fn normal_inv_cdf(p: f64) -> f64 {
     if q.abs() <= 0.425 {
         // Central region
         let r = 0.180625 - q * q;
-        return q * (((((((2.5090809287301226727e+0 * r +
-                       3.3430575583588128105e+1) * r +
-                       6.7265770927008700853e+1) * r +
-                       4.5921953931549871457e+1) * r +
-                       1.3731693765509461125e+1) * r +
-                       1.4214137640131556806e+0) * r +
-                       2.2989799909147866329e-1) /
-                    (((((((4.3743170296678226892e-2 * r +
-                       3.7397168693661933950e+0) * r +
-                       4.6921631453041438422e+1) * r +
-                       2.2668631815464546058e+2) * r +
-                       5.3961737028920641200e+2) * r +
-                       6.5731911719723021183e+2) * r +
-                       3.7342377154071370216e+2) * r +
+        return q * (((((((2.509_080_928_730_122_6 * r +
+                       3.343_057_558_358_813e1) * r +
+                       6.726_577_092_700_87e1) * r +
+                       4.592_195_393_154_987e1) * r +
+                       1.373_169_376_550_946_2e1) * r +
+                       1.421_413_764_013_155_7) * r +
+                       2.298_979_990_914_786_5e-1) /
+                    (((((((4.374_317_029_667_823e-2 * r +
+                       3.739_716_869_366_193_3) * r +
+                       4.692_163_145_304_143_5e1) * r +
+                       2.266_863_181_546_454_5e2) * r +
+                       5.396_173_702_892_064e2) * r +
+                       6.573_191_171_972_302e2) * r +
+                       3.734_237_715_407_137e2) * r +
                        1.0));
     }
     

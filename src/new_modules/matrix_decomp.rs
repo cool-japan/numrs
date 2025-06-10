@@ -1126,7 +1126,7 @@ where
     }
     
     // Convert permutation to array
-    let piv_array = Array::from_vec(p);
+    let piv_array = Array::from_vec(p.clone());
     
     // Verify the decomposition P*A ≈ L*U to check numerical stability
     // This is useful for diagnostic purposes
@@ -1862,7 +1862,7 @@ mod tests {
         
         // For a diagonal matrix with positive entries:
         // The Cholesky factor should be a diagonal matrix with the square roots of a's diagonal
-        let expected_diag = vec![2.0, 3.0, 4.0]; // sqrt of 4, 9, 16
+        let expected_diag = [2.0, 3.0, 4.0]; // sqrt of 4, 9, 16
         
         for i in 0..3 {
             for j in 0..3 {

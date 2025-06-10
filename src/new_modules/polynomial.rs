@@ -618,15 +618,15 @@ where
         
         // Set up the tridiagonal system
         for i in 1..n-1 {
-            let h_prev = x_data[i].clone() - x_data[i-1].clone();
-            let h_next = x_data[i+1].clone() - x_data[i].clone();
+            let h_prev = x_data[i] - x_data[i-1];
+            let h_next = x_data[i+1] - x_data[i];
             
             a[i-1] = h_prev;
-            b[i] = T::from(2.0).unwrap() * (h_prev.clone() + h_next.clone());
+            b[i] = T::from(2.0).unwrap() * (h_prev + h_next);
             c[i] = h_next;
             
-            let dy_prev = y_data[i].clone() - y_data[i-1].clone();
-            let dy_next = y_data[i+1].clone() - y_data[i].clone();
+            let dy_prev = y_data[i] - y_data[i-1];
+            let dy_next = y_data[i+1] - y_data[i];
             
             d[i] = T::from(6.0).unwrap() * (dy_next / h_next - dy_prev / h_prev);
         }
@@ -642,17 +642,17 @@ where
         // Solve the tridiagonal system using Thomas algorithm
         // Forward elimination
         for i in 1..n {
-            let m = a[i-1].clone() / b[i-1].clone();
-            b[i] = b[i].clone() - m.clone() * c[i-1].clone();
-            d[i] = d[i].clone() - m.clone() * d[i-1].clone();
+            let m = a[i-1] / b[i-1];
+            b[i] = b[i] - m * c[i-1];
+            d[i] = d[i] - m * d[i-1];
         }
         
         // Back substitution
         let mut second_derivs = vec![T::zero(); n];
-        second_derivs[n-1] = d[n-1].clone() / b[n-1].clone();
+        second_derivs[n-1] = d[n-1] / b[n-1];
         
         for i in (0..n-1).rev() {
-            second_derivs[i] = (d[i].clone() - c[i].clone() * second_derivs[i+1].clone()) / b[i].clone();
+            second_derivs[i] = (d[i] - c[i] * second_derivs[i+1]) / b[i];
         }
         
         // Compute the coefficients for each segment

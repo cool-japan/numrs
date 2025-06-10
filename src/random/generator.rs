@@ -598,7 +598,7 @@ impl<B: BitGenerator> Generator<B> {
 
     /// Generate random values from a binomial distribution
     pub fn binomial<T: NumCast + Clone + Debug>(&self, n: u64, p: f64, shape: &[usize]) -> Result<Array<T>> {
-        if p < 0.0 || p > 1.0 {
+        if !(0.0..=1.0).contains(&p) {
             return Err(NumRs2Error::InvalidOperation(
                 format!("Probability must be in [0, 1], got {}", p)
             ));
