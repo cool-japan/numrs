@@ -47,7 +47,9 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         // Create the GPU buffer
         let buffer = context.create_buffer(
             &data,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
         );
 
         Ok(Self {
@@ -76,7 +78,9 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         // Create an empty buffer
         let buffer = context.create_empty_buffer(
             buffer_size,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
         );
 
         Ok(Self {
@@ -93,17 +97,23 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
     /// Converts the GPU array back to a CPU array
     pub fn to_array(&self) -> Result<Array<T>> {
         // Create a staging buffer to read data from the GPU
-        let staging_buffer = self.context.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("NumRS2 GPU Staging Buffer"),
-            size: (self.size * self.element_size) as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let staging_buffer = self
+            .context
+            .device()
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("NumRS2 GPU Staging Buffer"),
+                size: (self.size * self.element_size) as u64,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
 
         // Copy data from the GPU buffer to the staging buffer
-        let mut encoder = self.context.device().create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("NumRS2 Copy Encoder"),
-        });
+        let mut encoder =
+            self.context
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("NumRS2 Copy Encoder"),
+                });
 
         encoder.copy_buffer_to_buffer(
             &self.buffer,
@@ -113,42 +123,44 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
             (self.size * self.element_size) as u64,
         );
 
-        self.context.queue().submit(std::iter::once(encoder.finish()));
+        self.context
+            .queue()
+            .submit(std::iter::once(encoder.finish()));
 
         // Map the staging buffer and read the data
         let buffer_slice = staging_buffer.slice(..);
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| NumRs2Error::RuntimeError(
-                format!("Failed to create async runtime: {}", e)
-            ))?;
-            
+            .map_err(|e| {
+                NumRs2Error::RuntimeError(format!("Failed to create async runtime: {}", e))
+            })?;
+
         // Create a temporary buffer to store the data from the staging buffer
         let mut data = vec![0; self.size * self.element_size];
-        
+
         rt.block_on(async {
             let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
             buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
                 tx.send(result).unwrap();
             });
-            
+
             self.context.device().poll(wgpu::Maintain::Wait);
-            
+
             rx.receive().await.unwrap().unwrap();
-            
+
             // Copy the data from the staging buffer
             let mapped_data = buffer_slice.get_mapped_range();
             data.copy_from_slice(&mapped_data);
         });
-        
+
         // Unmap the buffer
         staging_buffer.unmap();
-        
+
         // Convert the raw bytes to the actual type and create a CPU array
         let typed_data: Vec<T> = bytemuck::cast_slice(&data).to_vec();
         let array = Array::from_vec(typed_data).reshape(&self.shape);
-        
+
         Ok(array)
     }
 
@@ -185,6 +197,10 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
 
 impl<T> fmt::Debug for GpuArray<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "GpuArray {{ shape: {:?}, size: {} }}", self.shape, self.size)
+        write!(
+            f,
+            "GpuArray {{ shape: {:?}, size: {} }}",
+            self.shape, self.size
+        )
     }
 }

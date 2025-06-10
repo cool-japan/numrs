@@ -1,4 +1,9 @@
-use numrs2::prelude::*;
+use numrs2::array::Array;
+use numrs2::error::Result;
+use numrs2::ufuncs::{
+    add, subtract, multiply, divide, power, maximum, minimum,
+    square, sqrt, exp, log, sin, cos, abs
+};
 
 fn main() -> Result<()> {
     println!("NumRS Universal Functions (ufuncs) Examples");

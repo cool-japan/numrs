@@ -1,15 +1,15 @@
 //! Enhanced random distributions
 //!
-//! This module expands the random functionality by providing additional 
+//! This module expands the random functionality by providing additional
 //! distributions and utility functions for more specialized statistical applications.
 
 use crate::array::Array;
 use crate::error::Result;
 use crate::random::state::RandomState;
 use num_traits::{Float, NumCast};
+use rand::Rng;
 use std::f64::consts::PI;
 use std::fmt::{Debug, Display};
-use rand::Rng;
 
 /// Get a reference to the global random state
 fn get_global_random_state() -> Result<std::sync::MutexGuard<'static, RandomState>> {
@@ -31,7 +31,7 @@ fn get_global_random_state() -> Result<std::sync::MutexGuard<'static, RandomStat
 /// An array of random values from the truncated normal distribution
 pub fn truncated_normal<T>(mean: T, std: T, low: T, high: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform
+    T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform,
 {
     let rng = get_global_random_state()?;
     rng.truncated_normal(mean, std, low, high, shape)
@@ -48,9 +48,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the von Mises distribution
-pub fn vonmises<T>(mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn vonmises<T>(mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.vonmises(mu, kappa, shape)
@@ -67,9 +67,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the non-central chi-square distribution
-pub fn noncentral_chisquare<T>(df: T, nonc: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn noncentral_chisquare<T>(df: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.noncentral_chisquare(df, nonc, shape)
@@ -87,9 +87,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the non-central F distribution
-pub fn noncentral_f<T>(dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn noncentral_f<T>(dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.noncentral_f(dfnum, dfden, nonc, shape)
@@ -105,9 +105,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the Maxwell distribution
-pub fn maxwell<T>(scale: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn maxwell<T>(scale: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.maxwell(scale, shape)
@@ -123,9 +123,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the power distribution
-pub fn power<T>(a: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn power<T>(a: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.power(a, shape)
@@ -142,9 +142,9 @@ where
 /// # Returns
 ///
 /// An array of correlated random samples with shape [size, n]
-pub fn multivariate_normal_cholesky<T>(means: &[T], cov: &Array<T>, size: usize) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn multivariate_normal_cholesky<T>(means: &[T], cov: &Array<T>, size: usize) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.multivariate_normal_cholesky(means, cov, size)
@@ -161,7 +161,7 @@ where
 /// A random correlation matrix of shape [n, n]
 pub fn random_correlation_matrix<T>(n: usize) -> Result<Array<T>>
 where
-    T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform
+    T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform,
 {
     let rng = get_global_random_state()?;
     rng.random_correlation_matrix(n)
@@ -179,9 +179,14 @@ where
 /// # Returns
 ///
 /// An array of random values from the mixture distribution
-pub fn mixture_of_normals<T>(weights: &[T], means: &[T], stds: &[T], shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn mixture_of_normals<T>(
+    weights: &[T],
+    means: &[T],
+    stds: &[T],
+    shape: &[usize],
+) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.mixture_of_normals(weights, means, stds, shape)
@@ -197,9 +202,9 @@ where
 /// # Returns
 ///
 /// An array of shape [n, dim] with Sobol sequence points
-pub fn sobol_sequence<T>(dim: usize, n: usize) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn sobol_sequence<T>(dim: usize, n: usize) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.sobol_sequence(dim, n)
@@ -215,9 +220,9 @@ where
 /// # Returns
 ///
 /// An array of shape [n, dim] with Latin Hypercube samples
-pub fn latin_hypercube<T>(dim: usize, n: usize) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn latin_hypercube<T>(dim: usize, n: usize) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.latin_hypercube(dim, n)
@@ -234,9 +239,9 @@ where
 /// # Returns
 ///
 /// An array of shape [n, dim] with correlated uniform samples
-pub fn copula<T>(corr: &Array<T>, n: usize, copula_type: &str) -> Result<Array<T>> 
-where 
-    T: Float + NumCast + Clone + Debug + Display
+pub fn copula<T>(corr: &Array<T>, n: usize, copula_type: &str) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
 {
     let rng = get_global_random_state()?;
     rng.copula(corr, n, copula_type)
@@ -245,74 +250,84 @@ where
 /// Extend RandomState with enhanced distribution methods
 impl RandomState {
     /// Generate random values from a truncated normal distribution
-    pub fn truncated_normal<T>(&self, mean: T, std: T, low: T, high: T, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn truncated_normal<T>(
+        &self,
+        mean: T,
+        std: T,
+        low: T,
+        high: T,
+        shape: &[usize],
+    ) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if low >= high {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Lower bound must be less than upper bound, got low={}, high={}", low, high)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Lower bound must be less than upper bound, got low={}, high={}",
+                low, high
+            )));
         }
-        
+
         if std <= T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Standard deviation must be positive, got {}", std)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Standard deviation must be positive, got {}",
+                std
+            )));
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
         let mut rng = self.get_rng()?;
-        
+
         // Calculate standardized bounds
         let low_std = (low - mean) / std;
         let high_std = (high - mean) / std;
-        
+
         let low_std_f64 = low_std.to_f64().unwrap_or(0.0);
         let high_std_f64 = high_std.to_f64().unwrap_or(0.0);
-        
+
         // Reference implementation of the inverse CDF method for truncated normal
         for _ in 0..size {
             // Generate a uniform random number between 0 and 1
             let u = rng.random::<f64>();
-            
+
             // Calculate the CDF at the bounds
             let cdf_low = normal_cdf(low_std_f64);
             let cdf_high = normal_cdf(high_std_f64);
-            
+
             // Scale the uniform random number to the truncated range
             let scaled_u = cdf_low + u * (cdf_high - cdf_low);
-            
+
             // Apply the inverse CDF to get a truncated normal sample
             let z = normal_inv_cdf(scaled_u);
-            
+
             // Transform back to the original scale
             let val = mean + std * <T as NumCast>::from(z).unwrap_or(T::zero());
             vec.push(val);
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate random values from a von Mises distribution
-    pub fn vonmises<T>(&self, mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn vonmises<T>(&self, mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if kappa < T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Concentration parameter must be non-negative, got {}", kappa)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Concentration parameter must be non-negative, got {}",
+                kappa
+            )));
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
         let mut rng = self.get_rng()?;
-        
+
         let kappa_f64 = kappa.to_f64().unwrap_or(0.0);
         let mu_f64 = mu.to_f64().unwrap_or(0.0);
-        
+
         // Algorithm from Best & Fisher, 1979
         if kappa_f64 < 1e-8 {
             // For small kappa, approximate with uniform distribution
@@ -324,14 +339,14 @@ impl RandomState {
             let r = 1.0 + (1.0 + 4.0 * kappa_f64 * kappa_f64).sqrt();
             let rho = (r - (2.0 * r).sqrt()) / (2.0 * kappa_f64);
             let s = (1.0 + rho * rho) / (2.0 * rho);
-            
+
             for _ in 0..size {
                 loop {
                     let u1 = rng.random::<f64>();
                     let z = (s * (2.0 * u1 - 1.0)).cos();
                     let f = (1.0 + s * z) / (s + z);
                     let c = kappa_f64 * (s - f);
-                    
+
                     let u2 = rng.random::<f64>();
                     if u2 < c * (2.0 - c) || u2 <= c * (1.0 / c).exp() {
                         let u3 = rng.random::<f64>();
@@ -349,75 +364,79 @@ impl RandomState {
                 }
             }
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate random values from a non-central chi-square distribution
-    pub fn noncentral_chisquare<T>(&self, df: T, nonc: T, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn noncentral_chisquare<T>(&self, df: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if df <= T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Degrees of freedom must be positive, got {}", df)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Degrees of freedom must be positive, got {}",
+                df
+            )));
         }
-        
+
         if nonc < T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Non-centrality parameter must be non-negative, got {}", nonc)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Non-centrality parameter must be non-negative, got {}",
+                nonc
+            )));
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        
+
         let df_f64 = df.to_f64().unwrap_or(0.0);
         let nonc_f64 = nonc.to_f64().unwrap_or(0.0);
-        
+
         // Algorithm: non-central chi-square can be generated as a Poisson mixture of central chi-squares
         for _ in 0..size {
             // Generate Poisson random variable with mean nonc/2
             let pois: Array<u64> = self.poisson(nonc_f64 / 2.0, &[1])?;
             let n = <usize as NumCast>::from(pois.to_vec()[0]).unwrap_or(0);
-            
+
             // Generate chi-square with df + 2*n degrees of freedom
             let chi2 = self.chisquare(
                 <T as NumCast>::from(df_f64 + 2.0 * n as f64).unwrap_or(T::zero()),
-                &[1]
+                &[1],
             )?;
-            
+
             vec.push(chi2.to_vec()[0]);
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate random values from a non-central F distribution
-    pub fn noncentral_f<T>(&self, dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn noncentral_f<T>(&self, dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if dfnum <= T::zero() || dfden <= T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Degrees of freedom must be positive, got dfnum={}, dfden={}", dfnum, dfden)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Degrees of freedom must be positive, got dfnum={}, dfden={}",
+                dfnum, dfden
+            )));
         }
-        
+
         if nonc < T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Non-centrality parameter must be non-negative, got {}", nonc)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Non-centrality parameter must be non-negative, got {}",
+                nonc
+            )));
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        
+
         let dfnum_f64 = dfnum.to_f64().unwrap_or(0.0);
         let dfden_f64 = dfden.to_f64().unwrap_or(0.0);
         let nonc_f64 = nonc.to_f64().unwrap_or(0.0);
-        
+
         // Non-central F is the ratio of a non-central chi-square and a central chi-square,
         // each divided by their degrees of freedom
         for _ in 0..size {
@@ -425,73 +444,68 @@ impl RandomState {
             let nc_chi2 = self.noncentral_chisquare(
                 <T as NumCast>::from(dfnum_f64).unwrap_or(T::zero()),
                 <T as NumCast>::from(nonc_f64).unwrap_or(T::zero()),
-                &[1]
+                &[1],
             )?;
-            
+
             // Generate central chi-square with dfden degrees of freedom
-            let chi2 = self.chisquare(
-                <T as NumCast>::from(dfden_f64).unwrap_or(T::zero()),
-                &[1]
-            )?;
-            
+            let chi2 =
+                self.chisquare(<T as NumCast>::from(dfden_f64).unwrap_or(T::zero()), &[1])?;
+
             // Compute the ratio (non-central F)
             let f_val = (nc_chi2.to_vec()[0] / dfnum) / (chi2.to_vec()[0] / dfden);
             vec.push(f_val);
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate random values from a Maxwell distribution
-    pub fn maxwell<T>(&self, scale: T, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn maxwell<T>(&self, scale: T, shape: &[usize]) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if scale <= T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Scale parameter must be positive, got {}", scale)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Scale parameter must be positive, got {}",
+                scale
+            )));
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        
-        // Maxwell distribution is the distribution of the magnitude of a 
+
+        // Maxwell distribution is the distribution of the magnitude of a
         // 3D vector with independent normal components
         for _ in 0..size {
             // Generate 3 independent normal random variables
-            let x = self.normal(
-                T::zero(),
-                scale,
-                &[3]
-            )?;
-            
+            let x = self.normal(T::zero(), scale, &[3])?;
+
             // Compute the magnitude
-            let magnitude = (x.to_vec()[0].powi(2) + 
-                             x.to_vec()[1].powi(2) + 
-                             x.to_vec()[2].powi(2)).sqrt();
-            
+            let magnitude =
+                (x.to_vec()[0].powi(2) + x.to_vec()[1].powi(2) + x.to_vec()[2].powi(2)).sqrt();
+
             vec.push(magnitude);
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate random values from a power distribution
-    pub fn power<T>(&self, a: T, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn power<T>(&self, a: T, shape: &[usize]) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if a <= T::zero() {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Power parameter must be positive, got {}", a)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Power parameter must be positive, got {}",
+                a
+            )));
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
         let mut rng = self.get_rng()?;
-        
+
         // Power distribution with parameter a has PDF: a*x^(a-1) on [0, 1]
         // and can be generated by transforming uniform random variables
         for _ in 0..size {
@@ -499,41 +513,46 @@ impl RandomState {
             let val = u.powf(1.0 / a.to_f64().unwrap_or(1.0));
             vec.push(<T as NumCast>::from(val).unwrap_or(T::zero()));
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate correlated random variables using the Cholesky decomposition
-    pub fn multivariate_normal_cholesky<T>(&self, means: &[T], cov: &Array<T>, size: usize) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn multivariate_normal_cholesky<T>(
+        &self,
+        means: &[T],
+        cov: &Array<T>,
+        size: usize,
+    ) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         let n = means.len();
         let cov_shape = cov.shape();
-        
+
         // Validate inputs
         if cov_shape.len() != 2 || cov_shape[0] != n || cov_shape[1] != n {
             return Err(crate::error::NumRs2Error::InvalidOperation(
                 format!("Covariance matrix must be square with dimensions matching mean vector length ({}), got shape {:?}", n, cov_shape)
             ));
         }
-        
+
         // Perform Cholesky decomposition
         let cov_data = cov.to_vec();
         let mut chol = vec![T::zero(); n * n];
-        
+
         for i in 0..n {
             for j in 0..=i {
                 let mut s = T::zero();
                 for k in 0..j {
                     s = s + chol[i * n + k] * chol[j * n + k];
                 }
-                
+
                 if i == j {
                     let val = cov_data[i * n + i] - s;
                     if val <= T::zero() {
                         return Err(crate::error::NumRs2Error::InvalidOperation(
-                            "Covariance matrix is not positive definite".to_string()
+                            "Covariance matrix is not positive definite".to_string(),
                         ));
                     }
                     chol[i * n + j] = val.sqrt();
@@ -542,49 +561,50 @@ impl RandomState {
                 }
             }
         }
-        
+
         // Generate standard normal samples
         let std_normal = self.standard_normal::<T>(&[size, n])?;
         let std_normal_data = std_normal.to_vec();
-        
+
         // Transform samples using Cholesky factor
         let mut result = vec![T::zero(); size * n];
-        
+
         for i in 0..size {
             for j in 0..n {
                 let mut sum = T::zero();
                 for k in 0..n {
-                    if j >= k { // Cholesky factor is lower triangular
+                    if j >= k {
+                        // Cholesky factor is lower triangular
                         sum = sum + chol[j * n + k] * std_normal_data[i * n + k];
                     }
                 }
                 result[i * n + j] = means[j] + sum;
             }
         }
-        
+
         Ok(Array::from_vec(result).reshape(&[size, n]))
     }
-    
+
     /// Generate a random correlation matrix
     pub fn random_correlation_matrix<T>(&self, n: usize) -> Result<Array<T>>
     where
-        T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform
+        T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform,
     {
         if n < 2 {
             return Err(crate::error::NumRs2Error::InvalidOperation(
-                "Correlation matrix dimension must be at least 2".to_string()
+                "Correlation matrix dimension must be at least 2".to_string(),
             ));
         }
-        
+
         // Generate random matrix with values from a uniform distribution
         let uniform = self.uniform::<T>(
             <T as NumCast>::from(-1.0).unwrap_or(T::zero()),
             <T as NumCast>::from(1.0).unwrap_or(T::zero()),
-            &[n, n]
+            &[n, n],
         )?;
-        
+
         let uniform_data = uniform.to_vec();
-        
+
         // Make the matrix symmetric
         let mut sym_matrix = vec![T::zero(); n * n];
         for i in 0..n {
@@ -601,32 +621,32 @@ impl RandomState {
                 }
             }
         }
-        
+
         // Convert to nearest correlation matrix using projection
         // This is a simplified approximation - in practice, more sophisticated
         // algorithms like the alternating projections method would be used.
-        
+
         // 1. Set all diagonal elements to 1
         for i in 0..n {
             sym_matrix[i * n + i] = <T as NumCast>::from(1.0).unwrap_or(T::zero());
         }
-        
+
         // 2. Iteratively adjust non-diagonal elements to ensure positive-definiteness
         let mut corr_matrix = sym_matrix.clone();
         let max_iter = 10;
-        
+
         for _ in 0..max_iter {
             // Check if matrix is positive definite via Cholesky decomposition
             let mut is_pd = true;
             let mut chol = vec![T::zero(); n * n];
-            
+
             'decomp: for i in 0..n {
                 for j in 0..=i {
                     let mut s = T::zero();
                     for k in 0..j {
                         s = s + chol[i * n + k] * chol[j * n + k];
                     }
-                    
+
                     if i == j {
                         let val = corr_matrix[i * n + i] - s;
                         if val <= T::zero() {
@@ -639,11 +659,11 @@ impl RandomState {
                     }
                 }
             }
-            
+
             if is_pd {
                 break;
             }
-            
+
             // If not positive definite, adjust non-diagonal elements
             let factor = <T as NumCast>::from(0.9).unwrap_or(T::zero());
             for i in 0..n {
@@ -654,7 +674,7 @@ impl RandomState {
                 }
             }
         }
-        
+
         // Normalize to ensure diagonal is exactly 1.0
         for i in 0..n {
             let diag_val = corr_matrix[i * n + i].sqrt();
@@ -663,70 +683,79 @@ impl RandomState {
                 corr_matrix[j * n + i] = corr_matrix[j * n + i] / diag_val;
             }
         }
-        
+
         // Final normalization pass
         for i in 0..n {
             for j in 0..n {
-                corr_matrix[i * n + j] = corr_matrix[i * n + j] / 
-                    (corr_matrix[i * n + i].sqrt() * corr_matrix[j * n + j].sqrt());
+                corr_matrix[i * n + j] = corr_matrix[i * n + j]
+                    / (corr_matrix[i * n + i].sqrt() * corr_matrix[j * n + j].sqrt());
             }
         }
-        
+
         // Set diagonal to exactly 1.0
         for i in 0..n {
             corr_matrix[i * n + i] = <T as NumCast>::from(1.0).unwrap_or(T::zero());
         }
-        
+
         Ok(Array::from_vec(corr_matrix).reshape(&[n, n]))
     }
-    
+
     /// Generate random samples from a mixture of distributions
-    pub fn mixture_of_normals<T>(&self, weights: &[T], means: &[T], stds: &[T], shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn mixture_of_normals<T>(
+        &self,
+        weights: &[T],
+        means: &[T],
+        stds: &[T],
+        shape: &[usize],
+    ) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         let n_components = weights.len();
-        
+
         // Validate inputs
         if n_components < 1 {
             return Err(crate::error::NumRs2Error::InvalidOperation(
-                "Mixture must have at least one component".to_string()
+                "Mixture must have at least one component".to_string(),
             ));
         }
-        
+
         if means.len() != n_components || stds.len() != n_components {
             return Err(crate::error::NumRs2Error::InvalidOperation(
-                "Weights, means, and stds must have the same length".to_string()
+                "Weights, means, and stds must have the same length".to_string(),
             ));
         }
-        
+
         // Check if weights sum to 1
         let sum_weights: T = weights.iter().fold(T::zero(), |acc, w| acc + *w);
-        if (sum_weights - <T as NumCast>::from(1.0).unwrap_or(T::zero())).abs() > <T as NumCast>::from(1e-6).unwrap_or(T::zero()) {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Weights must sum to 1, got sum={}", sum_weights)
-            ));
+        if (sum_weights - <T as NumCast>::from(1.0).unwrap_or(T::zero())).abs()
+            > <T as NumCast>::from(1e-6).unwrap_or(T::zero())
+        {
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Weights must sum to 1, got sum={}",
+                sum_weights
+            )));
         }
-        
+
         // Check if stds are positive
         for &std in stds {
             if std <= T::zero() {
                 return Err(crate::error::NumRs2Error::InvalidOperation(
-                    "Standard deviations must be positive".to_string()
+                    "Standard deviations must be positive".to_string(),
                 ));
             }
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
         let mut rng = self.get_rng()?;
-        
+
         // Normalize weights to ensure they sum to 1.0
         let mut norm_weights = Vec::with_capacity(n_components);
         for &w in weights {
             norm_weights.push(w / sum_weights);
         }
-        
+
         // Compute cumulative weights for component selection
         let mut cumulative_weights = Vec::with_capacity(n_components);
         let mut sum = T::zero();
@@ -734,190 +763,191 @@ impl RandomState {
             sum = sum + w;
             cumulative_weights.push(sum);
         }
-        
+
         // Generate samples
         for _ in 0..size {
             // Select component based on weights
             let u = <T as NumCast>::from(rng.random::<f64>()).unwrap_or(T::zero());
             let mut selected_component = 0;
-            
+
             for (i, &cw) in cumulative_weights.iter().enumerate() {
                 if u <= cw {
                     selected_component = i;
                     break;
                 }
             }
-            
+
             // Generate normal sample from selected component
-            let normal_samples = self.normal(
-                means[selected_component],
-                stds[selected_component],
-                &[1]
-            )?;
-            
+            let normal_samples =
+                self.normal(means[selected_component], stds[selected_component], &[1])?;
+
             vec.push(normal_samples.to_vec()[0]);
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate Sobol sequence for quasi-Monte Carlo methods
-    pub fn sobol_sequence<T>(&self, dim: usize, n: usize) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn sobol_sequence<T>(&self, dim: usize, n: usize) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if !(1..=40).contains(&dim) {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Dimension must be between 1 and 40, got {}", dim)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Dimension must be between 1 and 40, got {}",
+                dim
+            )));
         }
-        
+
         if n < 1 {
             return Err(crate::error::NumRs2Error::InvalidOperation(
-                "Number of points must be at least 1".to_string()
+                "Number of points must be at least 1".to_string(),
             ));
         }
-        
+
         // Direction numbers (first few values for each dimension)
         // These are based on Joe & Kuo's direction numbers
         let direction_numbers: Vec<Vec<u32>> = vec![
-            vec![1], // First dimension trivial sequence
-            vec![1, 3], // Second dimension
-            vec![1, 3, 5], // Third dimension
-            vec![1, 3, 5, 15], // Fourth dimension
-            vec![1, 3, 5, 15, 17], // Fifth dimension
-            vec![1, 3, 5, 15, 17, 51], // Sixth dimension
+            vec![1],                       // First dimension trivial sequence
+            vec![1, 3],                    // Second dimension
+            vec![1, 3, 5],                 // Third dimension
+            vec![1, 3, 5, 15],             // Fourth dimension
+            vec![1, 3, 5, 15, 17],         // Fifth dimension
+            vec![1, 3, 5, 15, 17, 51],     // Sixth dimension
             vec![1, 3, 5, 15, 17, 51, 85], // Seventh dimension
             vec![1, 3, 5, 15, 17, 51, 85, 255], // Eighth dimension
-            // Additional dimensions would be added here in a complete implementation
+                                           // Additional dimensions would be added here in a complete implementation
         ];
-        
+
         let mut result = vec![T::zero(); n * dim];
-        
+
         // Generate Sobol sequence
         for i in 0..n {
             // Convert i to gray code
             let g = i ^ (i >> 1);
-            
+
             for d in 0..std::cmp::min(dim, direction_numbers.len()) {
                 let mut x = 0u32;
                 let mut mask = 1u32;
-                
+
                 for j in 0..32 {
                     if j < direction_numbers[d].len() && (g & (mask as usize)) != 0 {
                         x ^= direction_numbers[d][j];
                     }
                     mask <<= 1;
                 }
-                
+
                 // Convert to [0,1) range
                 let val = <T as NumCast>::from(x as f64 / 2f64.powi(32)).unwrap_or(T::zero());
                 result[i * dim + d] = val;
             }
-            
+
             // For dimensions beyond the provided direction numbers, use random values
             // This is a fallback - a proper implementation would have all direction numbers
             let mut rng = self.get_rng()?;
             for d in direction_numbers.len()..dim {
-                result[i * dim + d] = <T as NumCast>::from(rng.random::<f64>()).unwrap_or(T::zero());
+                result[i * dim + d] =
+                    <T as NumCast>::from(rng.random::<f64>()).unwrap_or(T::zero());
             }
         }
-        
+
         Ok(Array::from_vec(result).reshape(&[n, dim]))
     }
-    
+
     /// Generate Latin Hypercube samples
-    pub fn latin_hypercube<T>(&self, dim: usize, n: usize) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn latin_hypercube<T>(&self, dim: usize, n: usize) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         if dim < 1 {
             return Err(crate::error::NumRs2Error::InvalidOperation(
-                "Dimension must be at least 1".to_string()
+                "Dimension must be at least 1".to_string(),
             ));
         }
-        
+
         if n < 2 {
             return Err(crate::error::NumRs2Error::InvalidOperation(
-                "Number of samples must be at least 2".to_string()
+                "Number of samples must be at least 2".to_string(),
             ));
         }
-        
+
         let mut result = vec![T::zero(); n * dim];
-        
+
         // For each dimension, create a permutation of the integers 0 to n-1
         for d in 0..dim {
             // Create vector of integers 0 to n-1
             let mut perm: Vec<usize> = (0..n).collect();
-            
+
             // Shuffle the vector
             let mut rng = self.get_rng()?;
             for i in (1..n).rev() {
                 let j = (rng.random::<f64>() * (i + 1) as f64) as usize;
                 perm.swap(i, j);
             }
-            
+
             // Generate uniform random values within each stratum
             for i in 0..n {
                 let u = rng.random::<f64>();
-                let val = <T as NumCast>::from((perm[i] as f64 + u) / n as f64).unwrap_or(T::zero());
+                let val =
+                    <T as NumCast>::from((perm[i] as f64 + u) / n as f64).unwrap_or(T::zero());
                 result[i * dim + d] = val;
             }
         }
-        
+
         Ok(Array::from_vec(result).reshape(&[n, dim]))
     }
-    
+
     /// Generate copula samples with a specified correlation structure
-    pub fn copula<T>(&self, corr: &Array<T>, n: usize, copula_type: &str) -> Result<Array<T>> 
-    where 
-        T: Float + NumCast + Clone + Debug + Display
+    pub fn copula<T>(&self, corr: &Array<T>, n: usize, copula_type: &str) -> Result<Array<T>>
+    where
+        T: Float + NumCast + Clone + Debug + Display,
     {
         let corr_shape = corr.shape();
-        
+
         // Validate correlation matrix
         if corr_shape.len() != 2 || corr_shape[0] != corr_shape[1] {
             return Err(crate::error::NumRs2Error::InvalidOperation(
-                "Correlation matrix must be square".to_string()
+                "Correlation matrix must be square".to_string(),
             ));
         }
-        
+
         let dim = corr_shape[0];
-        
+
         // Check if copula_type is supported
         let valid_types = ["gaussian", "t"];
         if !valid_types.contains(&copula_type) {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
-                format!("Unsupported copula type: {}. Supported types: {:?}", copula_type, valid_types)
-            ));
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "Unsupported copula type: {}. Supported types: {:?}",
+                copula_type, valid_types
+            )));
         }
-        
+
         // Generate correlated normal samples using Cholesky decomposition
         let means = vec![T::zero(); dim];
         let mvn_samples = self.multivariate_normal_cholesky(&means, corr, n)?;
         let mvn_data = mvn_samples.to_vec();
-        
+
         // Transform to uniform using the CDF
         let mut result = vec![T::zero(); n * dim];
-        
+
         for i in 0..n {
             for d in 0..dim {
                 let z = mvn_data[i * dim + d].to_f64().unwrap_or(0.0);
-                
+
                 // Apply appropriate CDF based on copula type
                 let u = match copula_type {
                     "gaussian" => normal_cdf(z),
                     "t" => {
                         // T-copula with 4 degrees of freedom
                         student_t_cdf(z, 4)
-                    },
+                    }
                     _ => normal_cdf(z), // Default to Gaussian
                 };
-                
+
                 result[i * dim + d] = <T as NumCast>::from(u).unwrap_or(T::zero());
             }
         }
-        
+
         Ok(Array::from_vec(result).reshape(&[n, dim]))
     }
 }
@@ -937,55 +967,74 @@ fn normal_inv_cdf(p: f64) -> f64 {
     if p >= 1.0 {
         return f64::INFINITY;
     }
-    
+
     // Approximate the inverse CDF using the Beasley-Springer-Moro algorithm
     let q = p - 0.5;
-    
+
     if q.abs() <= 0.425 {
         // Central region
         let r = 0.180625 - q * q;
-        return q * (((((((2.509_080_928_730_122_6 * r +
-                       3.343_057_558_358_813e1) * r +
-                       6.726_577_092_700_87e1) * r +
-                       4.592_195_393_154_987e1) * r +
-                       1.373_169_376_550_946_2e1) * r +
-                       1.421_413_764_013_155_7) * r +
-                       2.298_979_990_914_786_5e-1) /
-                    (((((((4.374_317_029_667_823e-2 * r +
-                       3.739_716_869_366_193_3) * r +
-                       4.692_163_145_304_143_5e1) * r +
-                       2.266_863_181_546_454_5e2) * r +
-                       5.396_173_702_892_064e2) * r +
-                       6.573_191_171_972_302e2) * r +
-                       3.734_237_715_407_137e2) * r +
-                       1.0));
+        return q
+            * (((((((2.509_080_928_730_122_6 * r + 3.343_057_558_358_813e1) * r
+                + 6.726_577_092_700_87e1)
+                * r
+                + 4.592_195_393_154_987e1)
+                * r
+                + 1.373_169_376_550_946_2e1)
+                * r
+                + 1.421_413_764_013_155_7)
+                * r
+                + 2.298_979_990_914_786_5e-1)
+                / (((((((4.374_317_029_667_823e-2 * r + 3.739_716_869_366_193_3) * r
+                    + 4.692_163_145_304_143_5e1)
+                    * r
+                    + 2.266_863_181_546_454_5e2)
+                    * r
+                    + 5.396_173_702_892_064e2)
+                    * r
+                    + 6.573_191_171_972_302e2)
+                    * r
+                    + 3.734_237_715_407_137e2)
+                    * r
+                    + 1.0));
     }
-    
+
     // Tail regions
     let r = if q > 0.0 { 1.0 - p } else { p };
-    
+
     if r <= 0.0 {
-        return if q > 0.0 { f64::INFINITY } else { f64::NEG_INFINITY };
+        return if q > 0.0 {
+            f64::INFINITY
+        } else {
+            f64::NEG_INFINITY
+        };
     }
-    
+
     let r = (-r.ln()).sqrt();
-    
-    let mut ret = ((((((1.8116250797637367694e+1 * r +
-                      7.9281728193742220035e+1) * r +
-                      1.3731693765509461125e+2) * r +
-                      1.1931479122646168974e+2) * r +
-                      4.9268458240981050400e+1) * r +
-                      8.4005475149102448100e+0) * r +
-                      3.0507898887298178806e-1) /
-                   ((((((3.0206370251219396670e-1 * r +
-                      5.5953035791201968022e+0) * r +
-                      3.0429751730145949765e+1) * r +
-                      6.4937634199919913340e+1) * r +
-                      5.7862930562619843313e+1) * r +
-                      2.1213794301586598811e+1) * r +
-                      2.6591352019416751499e+0) * r +
-                      1.0;
-    
+
+    let mut ret = ((((((1.811_625_079_763_736_7e1 * r + 7.928_172_819_374_223e1) * r
+        + 1.373_169_376_550_946_2e2)
+        * r
+        + 1.193_147_912_264_617e2)
+        * r
+        + 4.926_845_824_098_105e1)
+        * r
+        + 8.400_547_514_910_246)
+        * r
+        + 3.050_789_888_729_818e-1)
+        / ((((((3.020_637_025_121_939_4e-1 * r + 5.595_303_579_120_197) * r
+            + 3.042_975_173_014_595e1)
+            * r
+            + 6.493_763_419_991_991e1)
+            * r
+            + 5.786_293_056_261_984e1)
+            * r
+            + 2.121_379_430_158_66e1)
+            * r
+            + 2.659_135_201_941_675)
+        * r
+        + 1.0;
+
     ret = if q < 0.0 { -ret } else { ret };
     ret
 }
@@ -999,13 +1048,13 @@ fn erf(x: f64) -> f64 {
     let a4 = -1.453152027;
     let a5 = 1.061405429;
     let p = 0.3275911;
-    
+
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let x = x.abs();
-    
+
     let t = 1.0 / (1.0 + p * x);
     let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
-    
+
     sign * y
 }
 
@@ -1015,19 +1064,19 @@ fn student_t_cdf(x: f64, df: usize) -> f64 {
     if x == 0.0 {
         return 0.5;
     }
-    
+
     // For large df, t-distribution approaches normal distribution
     if df > 100 {
         return normal_cdf(x);
     }
-    
+
     // Simple approximation using the regularized incomplete beta function
     let df_f64 = df as f64;
     let t = x / (df_f64 + x * x).sqrt();
     let u = 0.5 + 0.5 * t * (1.0 - t * t / (df_f64 + 2.0)).sqrt();
-    
+
     // Clamp to valid probability range
-    u.max(0.0).min(1.0)
+    u.clamp(0.0, 1.0)
 }
 
 // Enhanced distributions directly exported by the parent module, no need to re-export here
@@ -1036,7 +1085,7 @@ fn student_t_cdf(x: f64, df: usize) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     #[ignore = "Test takes too long to run"]
     fn test_truncated_normal() {
@@ -1048,69 +1097,81 @@ mod tests {
         // Generate truncated normal samples
         let samples = truncated_normal(mean, std, low, high, &[1000]).unwrap();
         let data = samples.to_vec();
-        
+
         // Check bounds
         for &val in &data {
             assert!(val >= low && val <= high, "Value outside bounds: {}", val);
         }
-        
+
         // Check statistics (should be approximately normal within bounds)
         let mean_val: f64 = data.iter().sum::<f64>() / data.len() as f64;
-        assert!((mean_val - mean).abs() < 0.2, "Mean too far from expected: {}", mean_val);
+        assert!(
+            (mean_val - mean).abs() < 0.2,
+            "Mean too far from expected: {}",
+            mean_val
+        );
     }
-    
+
     #[test]
     fn test_vonmises() {
         let mu = 0.0;
         let kappa = 2.0;
-        
+
         // Generate von Mises samples
         let samples = vonmises(mu, kappa, &[1000]).unwrap();
         let data = samples.to_vec();
-        
+
         // Check bounds (should be in [-π, π))
         for &val in &data {
-            assert!(val >= -std::f64::consts::PI && val < std::f64::consts::PI,
-                    "Value outside bounds: {}", val);
+            assert!(
+                val >= -std::f64::consts::PI && val < std::f64::consts::PI,
+                "Value outside bounds: {}",
+                val
+            );
         }
-        
+
         // Calculate circular mean
         let sum_sin: f64 = data.iter().map(|&x| x.sin()).sum();
         let sum_cos: f64 = data.iter().map(|&x| x.cos()).sum();
         let mean_angle = sum_sin.atan2(sum_cos);
-        
+
         // For von Mises, mean direction should be close to mu
-        let angle_diff = (mean_angle - mu + std::f64::consts::PI) % (2.0 * std::f64::consts::PI) - std::f64::consts::PI;
-        assert!(angle_diff.abs() < 0.5, "Mean direction too far from expected: {}", mean_angle);
+        let angle_diff = (mean_angle - mu + std::f64::consts::PI) % (2.0 * std::f64::consts::PI)
+            - std::f64::consts::PI;
+        assert!(
+            angle_diff.abs() < 0.5,
+            "Mean direction too far from expected: {}",
+            mean_angle
+        );
     }
-    
+
     #[test]
     fn test_latin_hypercube() {
         let dim = 2;
         let n = 10;
-        
+
         // Generate Latin Hypercube samples
         let samples = latin_hypercube::<f64>(dim, n).unwrap();
         let data = samples.to_vec();
-        
+
         // Check that each dimension has one sample in each stratum
         for d in 0..dim {
             let mut counts = vec![0; n];
-            
+
             for i in 0..n {
                 let val = data[i * dim + d];
                 let stratum = (val * n as f64).floor() as usize;
                 let stratum = std::cmp::min(stratum, n - 1); // Handle edge case for val=1.0
                 counts[stratum] += 1;
             }
-            
+
             // Each stratum should have exactly one sample
             for (s, &count) in counts.iter().enumerate() {
                 assert_eq!(count, 1, "Stratum {} has {} samples, expected 1", s, count);
             }
         }
     }
-    
+
     #[test]
     #[ignore = "Test takes too long to run"]
     fn test_mixture_of_normals() {
@@ -1119,23 +1180,21 @@ mod tests {
         let stds = vec![1.0, 1.0];
 
         // Generate mixture samples
-        let samples = mixture_of_normals(
-            &weights, &means, &stds, &[10000]
-        ).unwrap();
-        
+        let samples = mixture_of_normals(&weights, &means, &stds, &[10000]).unwrap();
+
         let data = samples.to_vec();
-        
+
         // Check that distribution is bimodal
         // Sort the data for percentile calculation
         let mut sorted_data = data.clone();
         sorted_data.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
+
         // Calculate 25th and 75th percentiles
         let p25 = sorted_data[(0.25 * sorted_data.len() as f64) as usize];
         let p75 = sorted_data[(0.75 * sorted_data.len() as f64) as usize];
-        
-        // For a bimodal distribution with these parameters, 
-        // we expect the 25th percentile to be negative and 
+
+        // For a bimodal distribution with these parameters,
+        // we expect the 25th percentile to be negative and
         // the 75th percentile to be positive
         assert!(p25 < 0.0, "25th percentile should be negative, got {}", p25);
         assert!(p75 > 0.0, "75th percentile should be positive, got {}", p75);

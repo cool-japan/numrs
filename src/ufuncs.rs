@@ -46,18 +46,18 @@ where
     pub fn new(func: F, name: &'static str) -> Self {
         Self { func, name }
     }
-    
+
     /// Apply the function to two arrays with broadcasting
     pub fn call(&self, a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
         // Use the broadcasting operation we implemented earlier
         a.zip_with(b, |x, y| (self.func)(x, y))
     }
-    
+
     /// Apply the function to an array and a scalar with broadcasting
     pub fn call_scalar_right(&self, a: &Array<f64>, b: f64) -> Array<f64> {
         a.map(|x| (self.func)(x, b))
     }
-    
+
     /// Apply the function to a scalar and an array with broadcasting
     pub fn call_scalar_left(&self, a: f64, b: &Array<f64>) -> Array<f64> {
         b.map(|x| (self.func)(a, x))
@@ -72,7 +72,7 @@ where
     pub fn new(func: F, name: &'static str) -> Self {
         Self { func, name }
     }
-    
+
     /// Apply the function to an array with broadcasting
     pub fn call(&self, a: &Array<f64>) -> Array<f64> {
         a.map(|x| (self.func)(x))
@@ -230,7 +230,7 @@ pub fn tan(a: &Array<f64>) -> Array<f64> {
     get_tan_ufunc().call(a)
 }
 
-// We'll limit the implementation for simplicity 
+// We'll limit the implementation for simplicity
 pub fn arcsin(a: &Array<f64>) -> Array<f64> {
     a.map(|x| x.asin())
 }
@@ -280,7 +280,15 @@ pub fn round(a: &Array<f64>) -> Array<f64> {
 }
 
 pub fn sign(a: &Array<f64>) -> Array<f64> {
-    a.map(|x| if x == 0.0 { 0.0 } else if x > 0.0 { 1.0 } else { -1.0 })
+    a.map(|x| {
+        if x == 0.0 {
+            0.0
+        } else if x > 0.0 {
+            1.0
+        } else {
+            -1.0
+        }
+    })
 }
 
 // Add function to wrap the Result to handle the unwrap in the test

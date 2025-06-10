@@ -99,7 +99,10 @@ fn test_vonmises_concentration() {
         let data = samples.to_vec();
 
         // Count samples within PI/6 of the mean (30 degrees)
-        let within_range = data.iter().filter(|&&x| (x - mu).abs() <= (PI / 6.0)).count();
+        let within_range = data
+            .iter()
+            .filter(|&&x| (x - mu).abs() <= (PI / 6.0))
+            .count();
         let proportion = within_range as f64 / sample_count as f64;
 
         // Calculate theoretical proportion using the cumulative distribution function

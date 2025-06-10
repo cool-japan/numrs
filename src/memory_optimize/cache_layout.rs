@@ -3,10 +3,10 @@
 //! This module provides functions for reorganizing data in memory to improve
 //! cache efficiency, taking advantage of both spatial and temporal locality.
 
-use std::mem;
-use std::ptr;
 use std::arch::x86_64::__cpuid;
 use std::cmp;
+use std::mem;
+use std::ptr;
 
 /// Cache information for optimal layout decisions
 #[derive(Debug, Clone)]
@@ -55,29 +55,29 @@ pub fn optimize_layout<T: Copy>(data: &mut [T], strategy: LayoutStrategy) {
             // Data is already in row-major order in most cases
             // But we can ensure optimal alignment
             align_for_cache_line(data);
-        },
+        }
         LayoutStrategy::ColumnMajor => {
             // For 1D data, no transpose needed. For actual multidimensional data,
             // this would require shape information
             // This optimization assumes data will be accessed column-wise
             optimize_for_column_access(data);
-        },
+        }
         LayoutStrategy::Morton => {
             // Reorder data along a Z-order curve for 2D locality
             apply_morton_order(data);
-        },
+        }
         LayoutStrategy::Hilbert => {
             // Reorder data along a Hilbert curve for better 2D locality than Morton
             apply_hilbert_order(data);
-        },
+        }
         LayoutStrategy::CacheOblivious => {
             // Use recursive layout that works well regardless of cache size
             apply_cache_oblivious_layout(data);
-        },
+        }
         LayoutStrategy::Blocked(block_size) => {
             // Reorganize data into blocks for better cache usage in matrix operations
             apply_blocked_layout(data, block_size);
-        },
+        }
     }
 }
 
@@ -88,21 +88,21 @@ pub fn optimize_layout<T: Copy>(data: &mut [T], strategy: LayoutStrategy) {
 fn align_for_cache_line<T: Copy>(data: &mut [T]) {
     // Get the cache line size (typical values are 64 or 128 bytes)
     let cache_line_size = get_cache_line_size();
-    
+
     // Calculate the current alignment
     let data_ptr = data.as_ptr() as usize;
     let misalignment = data_ptr % cache_line_size;
-    
+
     if misalignment == 0 {
         // Already aligned
         return;
     }
-    
+
     // Realign by shifting data
     // This is a simplification; real implementation would be more sophisticated
     // and would handle edge cases better
     let shift = cache_line_size - misalignment;
-    if shift < mem::size_of::<T>() * data.len() {
+    if shift < std::mem::size_of_val(data) {
         unsafe {
             let src = data.as_ptr();
             let dst = (data.as_mut_ptr() as *mut u8).add(shift) as *mut T;
@@ -128,9 +128,9 @@ fn get_cache_info() -> &'static CacheInfo {
 fn detect_cache_info() -> CacheInfo {
     #[cfg(target_arch = "x86_64")]
     {
-        return detect_x86_cache_info();
+        detect_x86_cache_info()
     }
-    
+
     #[cfg(not(target_arch = "x86_64"))]
     {
         // Default values for non-x86_64 architectures
@@ -147,7 +147,7 @@ fn detect_cache_info() -> CacheInfo {
 #[cfg(target_arch = "x86_64")]
 fn detect_x86_cache_info() -> CacheInfo {
     use std::arch::x86_64::__cpuid;
-    
+
     let mut info = CacheInfo {
         line_size: 64,
         l1_size: 32 * 1024,
@@ -155,41 +155,45 @@ fn detect_x86_cache_info() -> CacheInfo {
         l3_size: 8 * 1024 * 1024,
         associativity: 8,
     };
-    
+
     unsafe {
         // Check if CPUID leaf 0x80000006 is available (cache info)
         let cpuid_result = __cpuid(0x80000000);
         if cpuid_result.eax >= 0x80000006 {
             let cache_result = __cpuid(0x80000006);
-            
+
             // L1 data cache info from ECX register
             info.l1_size = ((cache_result.ecx >> 24) & 0xFF) as usize * 1024;
             info.line_size = (cache_result.ecx & 0xFF) as usize;
             info.associativity = ((cache_result.ecx >> 16) & 0xFF) as usize;
-            
-            // L2 cache info from ECX register  
+
+            // L2 cache info from ECX register
             info.l2_size = ((cache_result.ecx >> 16) & 0xFFFF) as usize * 1024;
-            
+
             // L3 cache info from EDX register
             info.l3_size = ((cache_result.edx >> 18) & 0x3FFF) as usize * 512 * 1024;
         }
-        
+
         // Intel-specific cache detection
         let vendor_result = __cpuid(0);
         if vendor_result.ebx == 0x756e6547 && // "Genu"
            vendor_result.edx == 0x49656e69 && // "ineI"
-           vendor_result.ecx == 0x6c65746e {  // "ntel"
+           vendor_result.ecx == 0x6c65746e
+        {
+            // "ntel"
             detect_intel_cache_info(&mut info);
         }
-        
+
         // AMD-specific cache detection
         if vendor_result.ebx == 0x68747541 && // "Auth"
            vendor_result.edx == 0x69746e65 && // "enti"
-           vendor_result.ecx == 0x444d4163 {  // "cAMD"
+           vendor_result.ecx == 0x444d4163
+        {
+            // "cAMD"
             detect_amd_cache_info(&mut info);
         }
     }
-    
+
     info
 }
 
@@ -200,21 +204,21 @@ fn detect_intel_cache_info(info: &mut CacheInfo) {
         let mut cache_level = 0;
         loop {
             let cache_info = __cpuid_count(4, cache_level);
-            
+
             // No more cache levels
             if cache_info.eax & 0x1F == 0 {
                 break;
             }
-            
+
             let cache_type = cache_info.eax & 0x1F;
             let level = (cache_info.eax >> 5) & 0x7;
             let line_size = ((cache_info.ebx & 0xFFF) + 1) as usize;
             let partitions = (((cache_info.ebx >> 12) & 0x3FF) + 1) as usize;
             let ways = (((cache_info.ebx >> 22) & 0x3FF) + 1) as usize;
             let sets = (cache_info.ecx + 1) as usize;
-            
+
             let size = line_size * partitions * ways * sets;
-            
+
             // Data cache or unified cache
             if cache_type == 1 || cache_type == 3 {
                 match level {
@@ -222,15 +226,16 @@ fn detect_intel_cache_info(info: &mut CacheInfo) {
                         info.l1_size = size;
                         info.line_size = line_size;
                         info.associativity = ways;
-                    },
+                    }
                     2 => info.l2_size = size,
                     3 => info.l3_size = size,
                     _ => {}
                 }
             }
-            
+
             cache_level += 1;
-            if cache_level > 10 { // Safety check
+            if cache_level > 10 {
+                // Safety check
                 break;
             }
         }
@@ -246,7 +251,7 @@ fn detect_amd_cache_info(info: &mut CacheInfo) {
         info.l1_size = ((l1_info.ecx >> 24) & 0xFF) as usize * 1024;
         info.line_size = (l1_info.ecx & 0xFF) as usize;
         info.associativity = ((l1_info.ecx >> 16) & 0xFF) as usize;
-        
+
         // L2/L3 cache info
         let l23_info = __cpuid(0x80000006);
         info.l2_size = ((l23_info.ecx >> 16) & 0xFFFF) as usize * 1024;
@@ -259,7 +264,7 @@ unsafe fn __cpuid_count(leaf: u32, sub_leaf: u32) -> std::arch::x86_64::CpuidRes
     let mut eax = leaf;
     let mut ecx = sub_leaf;
     let mut edx = 0;
-    
+
     // Use a workaround for rbx register constraint issue
     let ebx: u32;
     std::arch::asm!(
@@ -272,7 +277,7 @@ unsafe fn __cpuid_count(leaf: u32, sub_leaf: u32) -> std::arch::x86_64::CpuidRes
         inout("ecx") ecx,
         inout("edx") edx,
     );
-    
+
     std::arch::x86_64::CpuidResult { eax, ebx, ecx, edx }
 }
 
@@ -284,14 +289,14 @@ pub fn calculate_optimal_block_size<T>() -> usize {
     // Get the L1 data cache size
     let l1_cache_size = get_l1_cache_size();
     let type_size = mem::size_of::<T>();
-    
+
     // A simple heuristic: we want the block to fit in L1 cache
     // Square root because we're typically dealing with 2D blocks
     let elements_per_cache = l1_cache_size / type_size;
     let block_size = (elements_per_cache as f64).sqrt() as usize;
-    
+
     // Ensure the block size is at least 1 and reasonable
-    block_size.max(1).min(1024)
+    block_size.clamp(1, 1024)
 }
 
 /// Optimize data layout for column-wise access patterns
@@ -308,7 +313,7 @@ fn apply_morton_order<T: Copy>(data: &mut [T]) {
     if len < 4 {
         return; // Too small to benefit from reordering
     }
-    
+
     // For simplicity, assume we're working with a power-of-2 sized array
     // that represents a 2D grid
     let side = (len as f64).sqrt() as usize;
@@ -317,21 +322,21 @@ fn apply_morton_order<T: Copy>(data: &mut [T]) {
         apply_blocked_layout(data, calculate_optimal_block_size::<T>());
         return;
     }
-    
+
     // Create a temporary buffer for reordered data
     let mut temp = vec![data[0]; len];
-    
+
     // Reorder according to Morton curve
-    for i in 0..len {
+    for (i, temp_item) in temp.iter_mut().enumerate().take(len) {
         let (x, y) = morton_decode(i, side);
         if x < side && y < side {
             let linear_index = y * side + x;
             if linear_index < len {
-                temp[i] = data[linear_index];
+                *temp_item = data[linear_index];
             }
         }
     }
-    
+
     // Copy back to original array
     data.copy_from_slice(&temp);
 }
@@ -342,7 +347,7 @@ fn apply_hilbert_order<T: Copy>(data: &mut [T]) {
     if len < 4 {
         return; // Too small to benefit from reordering
     }
-    
+
     // For simplicity, assume we're working with a power-of-2 sized array
     let side = (len as f64).sqrt() as usize;
     if side * side != len || !side.is_power_of_two() {
@@ -350,21 +355,21 @@ fn apply_hilbert_order<T: Copy>(data: &mut [T]) {
         apply_morton_order(data);
         return;
     }
-    
+
     // Create a temporary buffer for reordered data
     let mut temp = vec![data[0]; len];
-    
+
     // Reorder according to Hilbert curve
-    for i in 0..len {
+    for (i, temp_item) in temp.iter_mut().enumerate().take(len) {
         let (x, y) = hilbert_decode(i, side);
         if x < side && y < side {
             let linear_index = y * side + x;
             if linear_index < len {
-                temp[i] = data[linear_index];
+                *temp_item = data[linear_index];
             }
         }
     }
-    
+
     // Copy back to original array
     data.copy_from_slice(&temp);
 }
@@ -374,7 +379,7 @@ fn apply_cache_oblivious_layout<T: Copy>(data: &mut [T]) {
     if data.len() <= get_cache_line_size() / mem::size_of::<T>() {
         return; // Small enough to fit in cache line
     }
-    
+
     // Divide and conquer approach
     cache_oblivious_recursive(data, 0, data.len());
 }
@@ -385,17 +390,17 @@ fn cache_oblivious_recursive<T: Copy>(data: &mut [T], start: usize, end: usize) 
     if len <= 1 {
         return;
     }
-    
+
     let cache_size = get_cache_info().l1_size / mem::size_of::<T>();
     if len <= cache_size {
         return; // Fits in cache
     }
-    
+
     // Split in half and recursively optimize
     let mid = start + len / 2;
     cache_oblivious_recursive(data, start, mid);
     cache_oblivious_recursive(data, mid, end);
-    
+
     // Interleave the two halves for better locality
     interleave_data(&mut data[start..end]);
 }
@@ -406,23 +411,23 @@ fn apply_blocked_layout<T: Copy>(data: &mut [T], block_size: usize) {
     if len < block_size * block_size {
         return; // Too small to benefit from blocking
     }
-    
+
     // Assume square matrix layout
     let side = (len as f64).sqrt() as usize;
     if side * side != len {
         return; // Not a square matrix
     }
-    
+
     // Create temporary buffer for blocked data
     let mut temp = vec![data[0]; len];
     let mut temp_idx = 0;
-    
+
     // Copy data in blocks
     for block_row in (0..side).step_by(block_size) {
         for block_col in (0..side).step_by(block_size) {
             let max_row = cmp::min(block_row + block_size, side);
             let max_col = cmp::min(block_col + block_size, side);
-            
+
             for row in block_row..max_row {
                 for col in block_col..max_col {
                     let linear_idx = row * side + col;
@@ -434,7 +439,7 @@ fn apply_blocked_layout<T: Copy>(data: &mut [T], block_size: usize) {
             }
         }
     }
-    
+
     // Copy back to original array
     data.copy_from_slice(&temp);
 }
@@ -442,7 +447,7 @@ fn apply_blocked_layout<T: Copy>(data: &mut [T], block_size: usize) {
 /// Prefetch data in a cache-friendly pattern
 fn prefetch_data_pattern<T: Copy>(data: &mut [T], cache_line_size: usize) {
     let elements_per_line = cache_line_size / mem::size_of::<T>();
-    
+
     // Touch every cache line to ensure it's loaded
     for i in (0..data.len()).step_by(elements_per_line) {
         // Prefetch hint for the next cache line
@@ -453,7 +458,7 @@ fn prefetch_data_pattern<T: Copy>(data: &mut [T], cache_line_size: usize) {
                     let ptr = data.as_ptr().add(i + elements_per_line);
                     std::arch::x86_64::_mm_prefetch(
                         ptr as *const i8,
-                        std::arch::x86_64::_MM_HINT_T0
+                        std::arch::x86_64::_MM_HINT_T0,
                     );
                 }
             }
@@ -467,21 +472,21 @@ fn morton_decode(morton: usize, side: usize) -> (usize, usize) {
     let mut y = 0;
     let mut bit = 0;
     let mut m = morton;
-    
+
     while m > 0 && bit < 32 {
         if (m & 1) != 0 {
             x |= 1 << (bit / 2);
         }
         m >>= 1;
-        
+
         if (m & 1) != 0 {
             y |= 1 << (bit / 2);
         }
         m >>= 1;
-        
+
         bit += 2;
     }
-    
+
     (x % side, y % side)
 }
 
@@ -491,29 +496,27 @@ fn hilbert_decode(h: usize, n: usize) -> (usize, usize) {
     let mut x = 0;
     let mut y = 0;
     let mut s = 1;
-    
+
     while s < n {
         let rx = 1 & (t / 2);
         let ry = 1 & (t ^ rx);
-        
+
         if ry == 0 {
             if rx == 1 {
                 x = s - 1 - x;
                 y = s - 1 - y;
             }
-            
+
             // Swap x and y
-            let temp = x;
-            x = y;
-            y = temp;
+            std::mem::swap(&mut x, &mut y);
         }
-        
+
         x += s * rx;
         y += s * ry;
         t /= 4;
         s *= 2;
     }
-    
+
     (x % n, y % n)
 }
 
@@ -523,10 +526,10 @@ fn interleave_data<T: Copy>(data: &mut [T]) {
     if len < 2 {
         return;
     }
-    
+
     let mid = len / 2;
     let mut temp = vec![data[0]; len];
-    
+
     // Interleave first and second half
     for i in 0..mid {
         temp[2 * i] = data[i];
@@ -534,12 +537,12 @@ fn interleave_data<T: Copy>(data: &mut [T]) {
             temp[2 * i + 1] = data[i + mid];
         }
     }
-    
+
     // Handle odd lengths
     if len % 2 == 1 {
         temp[len - 1] = data[len - 1];
     }
-    
+
     data.copy_from_slice(&temp);
 }
 

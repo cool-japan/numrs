@@ -62,21 +62,23 @@
 //! - Performance benefits are most noticeable for large arrays
 
 // Re-export public types
-pub use context::GpuContext;
 pub use array::GpuArray;
+pub use context::GpuContext;
 pub use ops::*;
+#[cfg(feature = "gpu")]
+pub use util::get_gpu_info;
 
 // Conditionally include GPU modules when the feature is enabled
 #[cfg(feature = "gpu")]
-mod context;
-#[cfg(feature = "gpu")]
 mod array;
+#[cfg(feature = "gpu")]
+mod context;
 #[cfg(feature = "gpu")]
 mod ops;
 #[cfg(feature = "gpu")]
 mod shaders;
 #[cfg(feature = "gpu")]
-mod util;
+pub mod util;
 
 // Placeholder for non-GPU builds
 #[cfg(not(feature = "gpu"))]

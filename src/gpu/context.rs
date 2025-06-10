@@ -38,9 +38,9 @@ impl GpuContext {
                 compatible_surface: None,
             })
             .await
-            .ok_or_else(|| NumRs2Error::RuntimeError(
-                "Failed to find an appropriate GPU adapter".to_string()
-            ))?;
+            .ok_or_else(|| {
+                NumRs2Error::RuntimeError("Failed to find an appropriate GPU adapter".to_string())
+            })?;
 
         // Get information about the adapter
         let info = adapter.get_info();
@@ -57,9 +57,9 @@ impl GpuContext {
                 None,
             )
             .await
-            .map_err(|e| NumRs2Error::RuntimeError(
-                format!("Failed to create GPU device: {}", e)
-            ))?;
+            .map_err(|e| {
+                NumRs2Error::RuntimeError(format!("Failed to create GPU device: {}", e))
+            })?;
 
         // Load all the shader modules
         let shader_modules = Self::create_shader_modules(&device)?;
@@ -78,29 +78,29 @@ impl GpuContext {
             label: Some("Element-wise F32 Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/element_wise_f32.wgsl").into()),
         });
-        
+
         let element_wise_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Element-wise F64 Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/element_wise_f64.wgsl").into()),
         });
-        
+
         // Load reduction operation shaders
         let reduction_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Reduction F32 Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f32.wgsl").into()),
         });
-        
+
         let reduction_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Reduction F64 Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f64.wgsl").into()),
         });
-        
+
         // Load matrix multiplication shaders
         let matmul_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Matrix Multiplication F32 Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/matmul_f32.wgsl").into()),
         });
-        
+
         let matmul_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Matrix Multiplication F64 Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/matmul_f64.wgsl").into()),
@@ -162,19 +162,16 @@ impl GpuContext {
         data: &[T],
         usage: wgpu::BufferUsages,
     ) -> wgpu::Buffer {
-        self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("NumRS2 GPU Buffer"),
-            contents: bytemuck::cast_slice(data),
-            usage,
-        })
+        self.device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("NumRS2 GPU Buffer"),
+                contents: bytemuck::cast_slice(data),
+                usage,
+            })
     }
 
     /// Creates an empty GPU buffer with the given size
-    pub fn create_empty_buffer(
-        &self,
-        size: u64,
-        usage: wgpu::BufferUsages,
-    ) -> wgpu::Buffer {
+    pub fn create_empty_buffer(&self, size: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
         self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("NumRS2 GPU Buffer"),
             size,
@@ -190,9 +187,11 @@ impl GpuContext {
         bind_groups: &[&wgpu::BindGroup],
         workgroup_count: (u32, u32, u32),
     ) {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("NumRS2 Compute Encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("NumRS2 Compute Encoder"),
+            });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -201,7 +200,7 @@ impl GpuContext {
             });
 
             compute_pass.set_pipeline(compute_pipeline);
-            
+
             for (i, bind_group) in bind_groups.iter().enumerate() {
                 compute_pass.set_bind_group(i as u32, bind_group, &[]);
             }
@@ -222,10 +221,8 @@ pub fn new_context() -> Result<GpuContextRef> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|e| NumRs2Error::RuntimeError(
-            format!("Failed to create async runtime: {}", e)
-        ))?;
-    
+        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to create async runtime: {}", e)))?;
+
     let context = rt.block_on(GpuContext::new())?;
     Ok(Arc::new(context))
 }

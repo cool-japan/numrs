@@ -1,7 +1,10 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::{ArrayView as NdArrayView, ArrayViewMut as NdArrayViewMut, Axis, IxDyn, SliceInfo, SliceInfoElem, Slice};
-use std::ops::{Add, Sub, Mul, Div};
+use ndarray::{
+    ArrayView as NdArrayView, ArrayViewMut as NdArrayViewMut, Axis, IxDyn, Slice, SliceInfo,
+    SliceInfoElem,
+};
+use std::ops::{Add, Div, Mul, Sub};
 
 /// Specifies an indexing operation for array slicing.
 ///
@@ -31,7 +34,7 @@ use std::ops::{Add, Sub, Mul, Div};
 pub enum SliceOrIndex {
     /// Represents a single index access (e.g., array\[5\])
     Index(usize),
-    
+
     /// Represents a slice with optional start, end, and step (e.g., array\[2:10:2\])
     /// Parameters are (start, end, step).
     /// - `start` is inclusive
@@ -52,9 +55,9 @@ impl SliceOrIndex {
     /// * `Slice` - An ndarray slice object equivalent to this SliceOrIndex
     pub fn to_ndarray_slice(&self) -> Slice {
         match self {
-            SliceOrIndex::Index(idx) => Slice::from(*idx..*idx+1),
+            SliceOrIndex::Index(idx) => Slice::from(*idx..*idx + 1),
             SliceOrIndex::Slice(start, end, step) => {
-                let end_val = end.unwrap_or_else(|| std::usize::MAX);
+                let end_val = end.unwrap_or_else(|| usize::MAX);
                 let step_val = step.unwrap_or(1) as isize;
                 Slice::new(*start as isize, Some(end_val as isize), step_val)
             }
@@ -142,7 +145,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     pub fn from_ndarray_view(view: NdArrayView<'a, T, IxDyn>) -> Self {
         Self { data: view }
     }
-    
+
     /// Gets a reference to the underlying ndarray view.
     ///
     /// This method is primarily used internally to access the underlying ndarray
@@ -155,7 +158,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     pub fn view(&self) -> &NdArrayView<'a, T, IxDyn> {
         &self.data
     }
-    
+
     /// Returns the shape of the array view as a vector of dimension sizes.
     ///
     /// The shape represents the size of each dimension in the array.
@@ -177,7 +180,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     pub fn shape(&self) -> Vec<usize> {
         self.data.shape().to_vec()
     }
-    
+
     /// Returns the number of dimensions in the array view.
     ///
     /// For example, a vector has 1 dimension, a matrix has 2 dimensions,
@@ -199,7 +202,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     pub fn ndim(&self) -> usize {
         self.data.ndim()
     }
-    
+
     /// Returns the total number of elements in the array view.
     ///
     /// This is the product of all dimension sizes in the shape.
@@ -220,7 +223,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     pub fn size(&self) -> usize {
         self.data.len()
     }
-    
+
     /// Converts the view to an owned array by cloning the data.
     ///
     /// This creates a new array with an independent copy of the data from the view.
@@ -248,7 +251,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     {
         Array::from_ndarray(self.data.to_owned())
     }
-    
+
     /// Creates a new view by slicing the current view along a specified axis.
     ///
     /// This method returns a new view that shares data with the original view,
@@ -272,7 +275,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     ///
     /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
     /// let view = array.view();
-    /// 
+    ///
     /// // Get the first row (axis 0, index slice 0..1)
     /// let row_view = view.slice_axis(Axis(0), Slice::from(0..1));
     /// // Actual shape depends on implementation details
@@ -282,7 +285,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
         let sliced = self.data.slice_axis(axis, indices);
         ArrayView::from_ndarray_view(sliced)
     }
-    
+
     /// Creates a transposed view of the array view.
     ///
     /// This method returns a new view with the dimensions reversed.
@@ -314,7 +317,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
         let transposed = self.data.t();
         ArrayView::from_ndarray_view(transposed.into_dyn())
     }
-    
+
     /// Converts the array view to a flattened vector.
     ///
     /// This method creates a new vector containing copies of all elements
@@ -339,7 +342,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     {
         self.data.iter().cloned().collect()
     }
-    
+
     /// Retrieves a single element from the array view at the specified indices.
     ///
     /// # Parameters
@@ -373,19 +376,23 @@ impl<'a, T: 'a> ArrayView<'a, T> {
         T: Clone,
     {
         if indices.len() != self.ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Expected {} indices, got {}", self.ndim(), indices.len())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Expected {} indices, got {}",
+                self.ndim(),
+                indices.len()
+            )));
         }
-        
+
         match self.data.get(indices) {
             Some(value) => Ok(value.clone()),
-            None => Err(NumRs2Error::IndexOutOfBounds(
-                format!("Indices {:?} out of bounds for shape {:?}", indices, self.shape())
-            )),
+            None => Err(NumRs2Error::IndexOutOfBounds(format!(
+                "Indices {:?} out of bounds for shape {:?}",
+                indices,
+                self.shape()
+            ))),
         }
     }
-    
+
     /// Maps a function over all elements of the view, returning a new view.
     ///
     /// This method applies a function to each element in the array view and
@@ -424,10 +431,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     {
         // In a real implementation, we'd use ndarray's map functionality
         // For this example, we create a new owned array with the mapped values
-        let result = Array::from_ndarray(
-            self.data.map(f).into_dyn()
-        );
-        result
+        Array::from_ndarray(self.data.map(f).into_dyn())
     }
 }
 
@@ -461,7 +465,7 @@ where
     T: 'a + Clone + Add<Output = T>,
 {
     type Output = Array<T>;
-    
+
     fn add(self, rhs: &ArrayView<'a, T>) -> Self::Output {
         let result = &self.data + &rhs.data;
         Array::from_ndarray(result.into_dyn())
@@ -498,7 +502,7 @@ where
     T: 'a + Clone + Sub<Output = T>,
 {
     type Output = Array<T>;
-    
+
     fn sub(self, rhs: &ArrayView<'a, T>) -> Self::Output {
         let result = &self.data - &rhs.data;
         Array::from_ndarray(result.into_dyn())
@@ -536,7 +540,7 @@ where
     T: 'a + Clone + Mul<Output = T>,
 {
     type Output = Array<T>;
-    
+
     fn mul(self, rhs: &ArrayView<'a, T>) -> Self::Output {
         let result = &self.data * &rhs.data;
         Array::from_ndarray(result.into_dyn())
@@ -574,7 +578,7 @@ where
     T: 'a + Clone + Div<Output = T>,
 {
     type Output = Array<T>;
-    
+
     fn div(self, rhs: &ArrayView<'a, T>) -> Self::Output {
         let result = &self.data / &rhs.data;
         Array::from_ndarray(result.into_dyn())
@@ -598,7 +602,7 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     pub fn from_ndarray_view_mut(view: NdArrayViewMut<'a, T, IxDyn>) -> Self {
         Self { data: view }
     }
-    
+
     /// Gets a reference to the underlying ndarray mutable view.
     ///
     /// This method is primarily used internally to access the underlying ndarray
@@ -611,7 +615,7 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     pub fn view_mut(&self) -> &NdArrayViewMut<'a, T, IxDyn> {
         &self.data
     }
-    
+
     /// Returns the shape of the mutable array view as a vector of dimension sizes.
     ///
     /// The shape represents the size of each dimension in the array.
@@ -633,7 +637,7 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     pub fn shape(&self) -> Vec<usize> {
         self.data.shape().to_vec()
     }
-    
+
     /// Returns the number of dimensions in the mutable array view.
     ///
     /// For example, a vector has 1 dimension, a matrix has 2 dimensions,
@@ -655,7 +659,7 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     pub fn ndim(&self) -> usize {
         self.data.ndim()
     }
-    
+
     /// Returns the total number of elements in the mutable array view.
     ///
     /// This is the product of all dimension sizes in the shape.
@@ -676,7 +680,7 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     pub fn size(&self) -> usize {
         self.data.len()
     }
-    
+
     /// Converts the mutable view to an owned array by cloning the data.
     ///
     /// This creates a new array with an independent copy of the data from the view.
@@ -703,7 +707,7 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     {
         Array::from_ndarray(self.data.to_owned())
     }
-    
+
     /// Gets a mutable reference to an element at the specified indices.
     ///
     /// This method allows direct mutation of array elements through the view.
@@ -734,22 +738,25 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     /// ```
     pub fn get_mut(&mut self, indices: &[usize]) -> Result<&mut T> {
         if indices.len() != self.ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Expected {} indices, got {}", self.ndim(), indices.len())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Expected {} indices, got {}",
+                self.ndim(),
+                indices.len()
+            )));
         }
-        
+
         // Store shape in local variable to avoid borrowing self
         let shape = self.shape();
-        
+
         match self.data.get_mut(indices) {
             Some(value) => Ok(value),
-            None => Err(NumRs2Error::IndexOutOfBounds(
-                format!("Indices {:?} out of bounds for shape {:?}", indices, shape)
-            )),
+            None => Err(NumRs2Error::IndexOutOfBounds(format!(
+                "Indices {:?} out of bounds for shape {:?}",
+                indices, shape
+            ))),
         }
     }
-    
+
     /// Sets the value at the specified indices.
     ///
     /// This method allows setting a specific element in the array through the view.
@@ -786,12 +793,13 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
             *elem = value;
             Ok(())
         } else {
-            Err(NumRs2Error::IndexOutOfBounds(
-                format!("Failed to set element at indices {:?}", indices)
-            ))
+            Err(NumRs2Error::IndexOutOfBounds(format!(
+                "Failed to set element at indices {:?}",
+                indices
+            )))
         }
     }
-    
+
     /// Creates a new mutable view by slicing the current view along a specified axis.
     ///
     /// This method returns a new mutable view that shares data with the original view,
@@ -858,7 +866,7 @@ impl<T: Clone> Array<T> {
     pub fn view(&self) -> ArrayView<T> {
         ArrayView::from_ndarray_view(self.array().view())
     }
-    
+
     /// Creates a mutable view of the array.
     ///
     /// This method returns a lightweight, zero-copy mutable view into the array's data.
@@ -886,7 +894,7 @@ impl<T: Clone> Array<T> {
     pub fn view_mut(&mut self) -> ArrayViewMut<T> {
         ArrayViewMut::from_ndarray_view_mut(self.array_mut().view_mut())
     }
-    
+
     /// Creates a non-contiguous view with custom strides.
     ///
     /// This method returns a view that accesses elements with the specified strides
@@ -921,51 +929,55 @@ impl<T: Clone> Array<T> {
     /// ```
     pub fn strided_view(&self, strides: &[isize]) -> Result<Array<T>>
     where
-        T: Clone
+        T: Clone,
     {
         if strides.len() != self.ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Expected {} strides, got {}", self.ndim(), strides.len())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Expected {} strides, got {}",
+                self.ndim(),
+                strides.len()
+            )));
         }
-        
+
         let view = self.array().view();
         let shape = self.shape();
-        
+
         // Create stride information for each dimension
         let mut slice_info = Vec::with_capacity(self.ndim());
-        
+
         for (i, &stride) in strides.iter().enumerate() {
             let dim_size = shape[i];
-            
+
             if stride == 0 {
-                return Err(NumRs2Error::InvalidOperation(
-                    format!("Stride for dimension {} cannot be zero", i)
-                ));
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Stride for dimension {} cannot be zero",
+                    i
+                )));
             }
-            
+
             // If stride is positive, create a slice from 0 to dim_size with step stride
             let start = if stride > 0 { 0 } else { dim_size as isize - 1 };
             let end = if stride > 0 { dim_size as isize } else { -1 };
-            
+
             slice_info.push(SliceInfoElem::Slice {
                 start,
                 end: Some(end),
                 step: stride,
             });
         }
-        
+
         // Create the slice information
-        let slice_info = SliceInfo::<_, IxDyn, IxDyn>::try_from(slice_info)
-            .map_err(|_| NumRs2Error::InvalidOperation("Failed to create slice info".to_string()))?;
-        
+        let slice_info = SliceInfo::<_, IxDyn, IxDyn>::try_from(slice_info).map_err(|_| {
+            NumRs2Error::InvalidOperation("Failed to create slice info".to_string())
+        })?;
+
         // Slice the array and return the view
         // Clone the strided view to create an owned array
         let strided = view.slice(slice_info);
         let result = Array::from_ndarray(strided.to_owned());
         Ok(result)
     }
-    
+
     /// Creates a view with custom slices for each dimension.
     ///
     /// This method allows creating a view that accesses specific portions of the array
@@ -997,28 +1009,30 @@ impl<T: Clone> Array<T> {
     /// let sliced = array.sliced_view(&slices).unwrap();
     /// // Shape and element order depend on implementation details
     /// ```
-    pub fn sliced_view(&self, slices: &[SliceOrIndex]) -> Result<Array<T>> 
-    where 
-        T: Clone 
+    pub fn sliced_view(&self, slices: &[SliceOrIndex]) -> Result<Array<T>>
+    where
+        T: Clone,
     {
         if slices.len() != self.ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Expected {} slices, got {}", self.ndim(), slices.len())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Expected {} slices, got {}",
+                self.ndim(),
+                slices.len()
+            )));
         }
-        
+
         let ndarray_view = self.array().view();
         let mut result_view = ndarray_view.to_owned();
-        
+
         // Apply slices one by one to create a new owned array
         for (i, slice) in slices.iter().enumerate() {
             let slice_op = slice.to_ndarray_slice();
             result_view = result_view.slice_axis(Axis(i), slice_op).to_owned();
         }
-        
+
         Ok(Array::from_ndarray(result_view))
     }
-    
+
     /// Creates a transposed view of the array.
     ///
     /// This method returns a view with the dimensions reversed. For a 2D array (matrix),
@@ -1041,11 +1055,11 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(transposed.get(&[0, 1]).unwrap(), 3);
     /// assert_eq!(transposed.get(&[1, 0]).unwrap(), 2);
     /// ```
-    pub fn transposed_view<'a>(&'a self) -> ArrayView<'a, T> {
+    pub fn transposed_view(&self) -> ArrayView<'_, T> {
         let transposed = self.array().view().reversed_axes();
         ArrayView::from_ndarray_view(transposed)
     }
-    
+
     /// Creates a broadcasted view of the array to a new shape.
     ///
     /// Broadcasting allows a smaller array to be "stretched" to match the shape of a
@@ -1080,9 +1094,9 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(broadcasted.get(&[1, 0]).unwrap(), 1); // Same as row 0
     /// assert_eq!(broadcasted.get(&[2, 2]).unwrap(), 3); // Last element
     /// ```
-    pub fn broadcast_view(&self, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        T: Clone 
+    pub fn broadcast_view(&self, shape: &[usize]) -> Result<Array<T>>
+    where
+        T: Clone,
     {
         // Create an owned copy to avoid lifetime issues
         let broadcasted = self.broadcast_to(shape)?;

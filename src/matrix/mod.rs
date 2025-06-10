@@ -1,10 +1,10 @@
 // Matrix module for NumRS2
 // Provides matrix-specific functionality and operations
 
-mod matrix_class;
 mod banded;
+mod matrix_class;
 pub mod special;
 
-pub use matrix_class::Matrix;
 pub use banded::BandedMatrix;
+pub use matrix_class::Matrix;
 pub use special::*;

@@ -1,11 +1,14 @@
-use thiserror::Error;
 use std::io;
+use thiserror::Error;
 
 /// NumRS2 error types
 #[derive(Error, Debug)]
 pub enum NumRs2Error {
     #[error("Shape mismatch: expected {expected:?}, got {actual:?}")]
-    ShapeMismatch { expected: Vec<usize>, actual: Vec<usize> },
+    ShapeMismatch {
+        expected: Vec<usize>,
+        actual: Vec<usize>,
+    },
 
     #[error("Dimension mismatch: {0}")]
     DimensionMismatch(String),

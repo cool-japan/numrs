@@ -13,11 +13,11 @@ static DEFAULT_CONTEXT: OnceLock<Mutex<Option<GpuContextRef>>> = OnceLock::new()
 pub fn get_default_context() -> Result<GpuContextRef> {
     let context_mutex = DEFAULT_CONTEXT.get_or_init(|| Mutex::new(None));
     let mut context_guard = context_mutex.lock().unwrap();
-    
+
     if context_guard.is_none() {
         *context_guard = Some(crate::gpu::context::new_context()?);
     }
-    
+
     Ok(context_guard.as_ref().unwrap().clone())
 }
 
@@ -28,14 +28,14 @@ pub fn is_gpu_available() -> bool {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build();
-        
+
     if let Err(_) = rt {
         return false;
     }
-    
+
     let rt = rt.unwrap();
     let context_result = rt.block_on(GpuContext::new());
-    
+
     context_result.is_ok()
 }
 
@@ -46,19 +46,19 @@ pub fn get_gpu_info() -> Option<String> {
         .enable_all()
         .build()
         .ok()?;
-        
+
     // Create a new instance
     let instance = wgpu::Instance::default();
-    
+
     // Request an adapter
     let adapter_future = instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
         force_fallback_adapter: false,
         compatible_surface: None,
     });
-    
+
     let adapter = rt.block_on(adapter_future)?;
     let info = adapter.get_info();
-    
+
     Some(format!("{} ({:?})", info.name, info.backend))
 }

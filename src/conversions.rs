@@ -1,9 +1,9 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::views::ArrayView;
-use num_traits::{NumCast, Zero, AsPrimitive}; // One removed
-use std::ops::{Add, Sub, Mul, Div};
 use num_complex::Complex;
+use num_traits::{AsPrimitive, NumCast, Zero}; // One removed
+use std::ops::{Add, Div, Mul, Sub};
 
 /// Core trait for type conversions between numeric types.
 ///
@@ -75,12 +75,13 @@ where
     T: Clone + NumCast,
 {
     fn convert_to(&self) -> Result<T> {
-        NumCast::from(self.clone())
-            .ok_or_else(|| NumRs2Error::TypeCastError(
-                format!("Failed to convert from type {} to type {}", 
-                        std::any::type_name::<S>(),
-                        std::any::type_name::<T>())
+        NumCast::from(self.clone()).ok_or_else(|| {
+            NumRs2Error::TypeCastError(format!(
+                "Failed to convert from type {} to type {}",
+                std::any::type_name::<S>(),
+                std::any::type_name::<T>()
             ))
+        })
     }
 }
 
@@ -123,14 +124,14 @@ impl<T> Array<T> {
     {
         let data = self.to_vec();
         let mut converted = Vec::with_capacity(data.len());
-        
+
         for value in data {
-            converted.push(value.convert_to()?); 
+            converted.push(value.convert_to()?);
         }
-        
+
         Ok(Array::from_vec(converted).reshape(&self.shape()))
     }
-    
+
     /// Safely upcasts the array to a wider type that can represent all values without loss of precision.
     ///
     /// This method is designed for safely widening numeric types (e.g., u8 → u16, i16 → i32, f32 → f64)
@@ -167,13 +168,11 @@ impl<T> Array<T> {
         U: Clone + 'static + Copy,
     {
         let data = self.to_vec();
-        let converted: Vec<U> = data.into_iter()
-            .map(|x| x.as_())
-            .collect();
-        
+        let converted: Vec<U> = data.into_iter().map(|x| x.as_()).collect();
+
         Ok(Array::from_vec(converted).reshape(&self.shape()))
     }
-    
+
     /// Attempts to downcast the array to a smaller type, returning an error if any values cannot be represented.
     ///
     /// This method tries to convert elements to a potentially smaller numeric type (e.g., i32 → i16).
@@ -211,18 +210,20 @@ impl<T> Array<T> {
     {
         let data = self.to_vec();
         let mut converted = Vec::with_capacity(data.len());
-        
+
         for value in data {
-            let converted_value = NumCast::from(value.clone())
-                .ok_or_else(|| NumRs2Error::TypeCastError(
-                    format!("Value {:?} cannot be represented in target type", value)
-                ))?;
+            let converted_value = NumCast::from(value.clone()).ok_or_else(|| {
+                NumRs2Error::TypeCastError(format!(
+                    "Value {:?} cannot be represented in target type",
+                    value
+                ))
+            })?;
             converted.push(converted_value);
         }
-        
+
         Ok(Array::from_vec(converted).reshape(&self.shape()))
     }
-    
+
     /// Converts the array to a complex number array with zero imaginary parts.
     ///
     /// This method creates a new array of complex numbers where each element's real part
@@ -261,15 +262,16 @@ impl<T> Array<T> {
     {
         let data = self.to_vec();
         let mut converted = Vec::with_capacity(data.len());
-        
+
         for value in data {
-            let real = NumCast::from(value.clone())
-                .ok_or_else(|| NumRs2Error::TypeCastError(
-                    "Failed to convert real part to complex type".to_string()
-                ))?;
+            let real = NumCast::from(value.clone()).ok_or_else(|| {
+                NumRs2Error::TypeCastError(
+                    "Failed to convert real part to complex type".to_string(),
+                )
+            })?;
             converted.push(Complex::new(real, U::zero()));
         }
-        
+
         Ok(Array::from_vec(converted).reshape(&self.shape()))
     }
 }
@@ -342,11 +344,11 @@ where
         // First convert both arrays to the target type
         let self_converted = self.astype::<V>()?;
         let other_converted = other.astype::<V>()?;
-        
+
         // Then perform the operation
         self_converted.add_broadcast(&other_converted)
     }
-    
+
     /// Subtracts arrays of different types, automatically converting to a common target type.
     ///
     /// This method subtracts one array from another with potentially different element types by
@@ -387,11 +389,11 @@ where
         // First convert both arrays to the target type
         let self_converted = self.astype::<V>()?;
         let other_converted = other.astype::<V>()?;
-        
+
         // Then perform the operation
         self_converted.subtract_broadcast(&other_converted)
     }
-    
+
     /// Multiplies arrays of different types, automatically converting to a common target type.
     ///
     /// This method multiplies two arrays with potentially different element types by
@@ -432,11 +434,11 @@ where
         // First convert both arrays to the target type
         let self_converted = self.astype::<V>()?;
         let other_converted = other.astype::<V>()?;
-        
+
         // Then perform the operation
         self_converted.multiply_broadcast(&other_converted)
     }
-    
+
     /// Divides arrays of different types, automatically converting to a common target type.
     ///
     /// This method divides one array by another with potentially different element types by
@@ -478,7 +480,7 @@ where
         // First convert both arrays to the target type
         let self_converted = self.astype::<V>()?;
         let other_converted = other.astype::<V>()?;
-        
+
         // Then perform the operation
         self_converted.divide_broadcast(&other_converted)
     }
@@ -530,7 +532,7 @@ where
     {
         self.to_owned().astype::<U>()
     }
-    
+
     /// Converts a view to a complex number array with zero imaginary parts.
     ///
     /// This method creates a new array of complex numbers where each element's real part
@@ -605,7 +607,7 @@ where
 {
     let t_id = std::any::TypeId::of::<T>();
     let u_id = std::any::TypeId::of::<U>();
-    
+
     // Compare type precedence and return the "larger" type
     if type_precedence::<T>() >= type_precedence::<U>() {
         t_id
@@ -635,20 +637,35 @@ where
 /// * `u8` - The precedence value (higher means higher precedence)
 fn type_precedence<T: 'static>() -> u8 {
     let t_id = std::any::TypeId::of::<T>();
-    
+
     // Define precedence, highest value has highest precedence
-    if t_id == std::any::TypeId::of::<bool>() { 0 }
-    else if t_id == std::any::TypeId::of::<u8>() { 1 }
-    else if t_id == std::any::TypeId::of::<i8>() { 2 }
-    else if t_id == std::any::TypeId::of::<u16>() { 3 }
-    else if t_id == std::any::TypeId::of::<i16>() { 4 }
-    else if t_id == std::any::TypeId::of::<u32>() { 5 }
-    else if t_id == std::any::TypeId::of::<i32>() { 6 }
-    else if t_id == std::any::TypeId::of::<u64>() { 7 }
-    else if t_id == std::any::TypeId::of::<i64>() { 8 }
-    else if t_id == std::any::TypeId::of::<f32>() { 9 }
-    else if t_id == std::any::TypeId::of::<f64>() { 10 }
-    else if t_id == std::any::TypeId::of::<Complex<f32>>() { 11 }
-    else if t_id == std::any::TypeId::of::<Complex<f64>>() { 12 }
-    else { 0 } // Default for unknown types
+    if t_id == std::any::TypeId::of::<bool>() {
+        0
+    } else if t_id == std::any::TypeId::of::<u8>() {
+        1
+    } else if t_id == std::any::TypeId::of::<i8>() {
+        2
+    } else if t_id == std::any::TypeId::of::<u16>() {
+        3
+    } else if t_id == std::any::TypeId::of::<i16>() {
+        4
+    } else if t_id == std::any::TypeId::of::<u32>() {
+        5
+    } else if t_id == std::any::TypeId::of::<i32>() {
+        6
+    } else if t_id == std::any::TypeId::of::<u64>() {
+        7
+    } else if t_id == std::any::TypeId::of::<i64>() {
+        8
+    } else if t_id == std::any::TypeId::of::<f32>() {
+        9
+    } else if t_id == std::any::TypeId::of::<f64>() {
+        10
+    } else if t_id == std::any::TypeId::of::<Complex<f32>>() {
+        11
+    } else if t_id == std::any::TypeId::of::<Complex<f64>>() {
+        12
+    } else {
+        0
+    } // Default for unknown types
 }

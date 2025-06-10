@@ -3,9 +3,9 @@
 //! This module provides functionality for detecting available CPU features
 //! and selecting the most efficient SIMD implementation for the current hardware.
 
+pub mod avx2_ops;
 pub mod feature_detect;
 pub mod simd_select;
-pub mod avx2_ops;
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
@@ -32,15 +32,15 @@ pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
             actual: b.shape(),
         });
     }
-    
+
     let a_data = a.to_vec();
     let b_data = b.to_vec();
     let mut result_data = vec![0.0f32; a_data.len()];
-    
+
     unsafe {
         avx2_ops::avx2_add_f32(&a_data, &b_data, &mut result_data);
     }
-    
+
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 
@@ -52,15 +52,15 @@ pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
             actual: b.shape(),
         });
     }
-    
+
     let a_data = a.to_vec();
     let b_data = b.to_vec();
     let mut result_data = vec![0.0f64; a_data.len()];
-    
+
     unsafe {
         avx2_ops::avx2_add_f64(&a_data, &b_data, &mut result_data);
     }
-    
+
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 
@@ -72,15 +72,15 @@ pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
             actual: b.shape(),
         });
     }
-    
+
     let a_data = a.to_vec();
     let b_data = b.to_vec();
     let mut result_data = vec![0.0f32; a_data.len()];
-    
+
     unsafe {
         avx2_ops::avx2_mul_f32(&a_data, &b_data, &mut result_data);
     }
-    
+
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 
@@ -92,15 +92,15 @@ pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
             actual: b.shape(),
         });
     }
-    
+
     let a_data = a.to_vec();
     let b_data = b.to_vec();
     let mut result_data = vec![0.0f64; a_data.len()];
-    
+
     unsafe {
         avx2_ops::avx2_mul_f64(&a_data, &b_data, &mut result_data);
     }
-    
+
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 
@@ -108,11 +108,11 @@ pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
 pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
     let a_data = a.to_vec();
     let mut result_data = vec![0.0f32; a_data.len()];
-    
+
     unsafe {
         avx2_ops::avx2_sqrt_f32(&a_data, &mut result_data);
     }
-    
+
     Array::from_vec(result_data).reshape(&a.shape())
 }
 
@@ -120,28 +120,24 @@ pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
 pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
     let a_data = a.to_vec();
     let mut result_data = vec![0.0f64; a_data.len()];
-    
+
     unsafe {
         avx2_ops::avx2_sqrt_f64(&a_data, &mut result_data);
     }
-    
+
     Array::from_vec(result_data).reshape(&a.shape())
 }
 
 /// AVX2-optimized sum for f32
 pub fn avx2_optimized_sum_f32(a: &Array<f32>) -> f32 {
     let a_data = a.to_vec();
-    
-    unsafe {
-        avx2_ops::avx2_sum_f32(&a_data)
-    }
+
+    unsafe { avx2_ops::avx2_sum_f32(&a_data) }
 }
 
 /// AVX2-optimized sum for f64
 pub fn avx2_optimized_sum_f64(a: &Array<f64>) -> f64 {
     let a_data = a.to_vec();
-    
-    unsafe {
-        avx2_ops::avx2_sum_f64(&a_data)
-    }
+
+    unsafe { avx2_ops::avx2_sum_f64(&a_data) }
 }

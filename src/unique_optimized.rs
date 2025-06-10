@@ -1,11 +1,11 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::fmt::Debug;
-use std::collections::HashSet;
 use num_traits::Zero;
 use rayon::prelude::*;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Optimized version of the unique function to find unique elements of an array.
@@ -42,7 +42,7 @@ where
     T: Clone + Hash + Eq + Debug + Zero + Send + Sync,
 {
     // Helper functions
-    fn estimate_capacity<T>(array_size: usize) -> usize {
+    fn estimate_capacity(array_size: usize) -> usize {
         // Heuristic: for random data, expect about 90% of elements to be unique
         // for small arrays, just use the full size
         if array_size < 1000 {
@@ -56,15 +56,21 @@ where
     if axis.is_none() {
         let flat_data = a.to_vec();
         let array_size = flat_data.len();
-        
+
         // Optimize for large arrays by using parallel processing
         if array_size > 10000 {
-            return unique_optimized_large(&flat_data, array_size, return_index, return_inverse, return_counts);
+            return unique_optimized_large(
+                &flat_data,
+                array_size,
+                return_index,
+                return_inverse,
+                return_counts,
+            );
         }
-        
+
         // For smaller arrays, use a more efficient sequential approach with pre-allocation
-        let estimated_capacity = estimate_capacity::<T>(array_size);
-        
+        let estimated_capacity = estimate_capacity(array_size);
+
         // Pre-allocate with estimated capacity
         let mut unique_elements = Vec::with_capacity(estimated_capacity);
         let mut first_indices = if return_index.unwrap_or(false) {
@@ -78,10 +84,10 @@ where
             Vec::new()
         };
         let need_inverse = return_inverse.unwrap_or(false);
-        
+
         // Use HashMap with capacity hint
         let mut value_to_index = HashMap::with_capacity(estimated_capacity);
-        
+
         // Process each element
         for (i, value) in flat_data.iter().enumerate() {
             if let Some(&idx) = value_to_index.get(value) {
@@ -102,7 +108,7 @@ where
                 }
             }
         }
-        
+
         // Calculate counts if needed
         let counts = if return_counts.unwrap_or(false) {
             let mut counts_vec = vec![0; unique_elements.len()];
@@ -122,58 +128,68 @@ where
         } else {
             None
         };
-        
+
         // Construct the result
         let unique_array = Array::from_vec(unique_elements);
-        
+
         return Ok(UniqueResult {
             values: unique_array,
-            indices: if return_index.unwrap_or(false) { Some(Array::from_vec(first_indices)) } else { None },
-            inverse: if return_inverse.unwrap_or(false) { Some(Array::from_vec(inverse_indices)) } else { None },
+            indices: if return_index.unwrap_or(false) {
+                Some(Array::from_vec(first_indices))
+            } else {
+                None
+            },
+            inverse: if return_inverse.unwrap_or(false) {
+                Some(Array::from_vec(inverse_indices))
+            } else {
+                None
+            },
             counts,
         });
     }
-    
+
     // Process along a specific axis
     let axis_val = axis.unwrap();
     if axis_val >= a.ndim() {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Axis {} out of bounds for array of dimension {}", axis_val, a.ndim())
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Axis {} out of bounds for array of dimension {}",
+            axis_val,
+            a.ndim()
+        )));
     }
-    
+
     // Get the shape
     let shape = a.shape();
-    
+
     // For 1D arrays, axis=0 is the same as no axis
     if shape.len() == 1 && axis_val == 0 {
         return unique_optimized(a, None, return_index, return_inverse, return_counts);
     }
-    
+
     // For higher dimensions, we need to find unique subarrays along the specified axis
-    
+
     // Get the size of the axis and calculate the shape of each subarray
     let axis_len = shape[axis_val];
-    
+
     // Optimize memory allocation for subarrays
     let mut subarrays = Vec::with_capacity(axis_len);
     let mut subarray_hashes = Vec::with_capacity(axis_len);
-    
+
     // Extract subarrays along the specified axis
     for i in 0..axis_len {
         // Get the subarray
         let subarray = a.slice(axis_val, i)?;
-        
+
         // Convert to a hashable representation
         let hash_rep = subarray.to_vec();
-        
+
         subarrays.push(subarray);
         subarray_hashes.push(hash_rep);
     }
-    
+
     // Estimate capacity for unique subarrays
-    let estimated_capacity = estimate_capacity::<Vec<T>>(axis_len);
-    
+    let estimated_capacity = estimate_capacity(axis_len);
+
     // Find unique subarrays with pre-allocation
     let mut unique_indices = Vec::with_capacity(estimated_capacity);
     let mut index_map = HashMap::with_capacity(estimated_capacity);
@@ -184,10 +200,10 @@ where
     };
     let need_inverse = return_inverse.unwrap_or(false);
     let mut seen = HashSet::with_capacity(estimated_capacity);
-    
+
     for i in 0..axis_len {
         let hash_rep = &subarray_hashes[i];
-        
+
         if !seen.contains(hash_rep) {
             // This is a new unique subarray
             let idx = unique_indices.len();
@@ -205,7 +221,7 @@ where
             }
         }
     }
-    
+
     // Calculate counts if needed
     let counts = if return_counts.unwrap_or(false) {
         let mut counts_vec = vec![0; unique_indices.len()];
@@ -224,19 +240,19 @@ where
     } else {
         None
     };
-    
+
     // Create the output arrays
-    
+
     // Create a new shape for the output with the axis dimension set to the number of unique subarrays
     let mut output_shape = shape.clone();
     output_shape[axis_val] = unique_indices.len();
-    
+
     // Create the result array by concatenating the unique subarrays along the axis
     let mut unique_subarrays = Vec::with_capacity(unique_indices.len());
     for &idx in &unique_indices {
         unique_subarrays.push(&subarrays[idx]);
     }
-    
+
     // Use the concatenate function to join the unique subarrays
     let values = if !unique_subarrays.is_empty() {
         // For now, convert the subarrays to a 1D array for each unique subarray
@@ -250,22 +266,30 @@ where
         // Empty result
         Array::zeros(&output_shape)
     };
-    
+
     Ok(UniqueResult {
         values,
-        indices: if return_index.unwrap_or(false) { Some(Array::from_vec(unique_indices)) } else { None },
-        inverse: if return_inverse.unwrap_or(false) { Some(Array::from_vec(inverse)) } else { None },
+        indices: if return_index.unwrap_or(false) {
+            Some(Array::from_vec(unique_indices))
+        } else {
+            None
+        },
+        inverse: if return_inverse.unwrap_or(false) {
+            Some(Array::from_vec(inverse))
+        } else {
+            None
+        },
         counts,
     })
 }
 
 // Special optimized implementation for large arrays using parallel processing
 fn unique_optimized_large<T>(
-    flat_data: &[T], 
+    flat_data: &[T],
     array_size: usize,
     return_index: Option<bool>,
     return_inverse: Option<bool>,
-    return_counts: Option<bool>
+    return_counts: Option<bool>,
 ) -> Result<UniqueResult<T>>
 where
     T: Clone + Hash + Eq + Debug + Send + Sync,
@@ -273,28 +297,32 @@ where
     let need_index = return_index.unwrap_or(false);
     let need_inverse = return_inverse.unwrap_or(false);
     let need_counts = return_counts.unwrap_or(false);
-    
+
     // Use atomic counter for thread-safe indexing
     let unique_counter = AtomicUsize::new(0);
-    
+
     // Create a shared HashMap for value-to-index mapping
     // Using estimated capacity heuristic
     let estimated_capacity = (array_size as f64 * 0.9) as usize;
     let value_to_index = std::sync::RwLock::new(HashMap::with_capacity(estimated_capacity));
-    
+
     // First pass: identify unique elements and assign indices
     let mut unique_elements = Vec::with_capacity(estimated_capacity);
-    let mut first_indices = if need_index { Vec::with_capacity(estimated_capacity) } else { Vec::new() };
-    
+    let mut first_indices = if need_index {
+        Vec::with_capacity(estimated_capacity)
+    } else {
+        Vec::new()
+    };
+
     // Using batched processing for better performance
     let batch_size = std::cmp::max(1, array_size / rayon::current_num_threads());
     let batches = flat_data.chunks(batch_size);
-    
+
     // Process each batch for unique values
     batches.enumerate().for_each(|(batch_idx, batch)| {
         let mut local_uniques = HashMap::new();
         let base_index = batch_idx * batch_size;
-        
+
         // First pass within batch to find local unique elements
         for (local_idx, value) in batch.iter().enumerate() {
             let global_idx = base_index + local_idx;
@@ -302,14 +330,14 @@ where
                 local_uniques.insert(value.clone(), global_idx);
             }
         }
-        
+
         // Second pass: merge with global unique set
         let mut value_map = value_to_index.write().unwrap();
         for (value, local_first_idx) in local_uniques {
             if !value_map.contains_key(&value) {
                 let new_idx = unique_counter.fetch_add(1, Ordering::SeqCst);
                 value_map.insert(value.clone(), new_idx);
-                
+
                 // This is thread-safe because each value is processed only by the thread that first discovers it
                 synchronized_push(&mut unique_elements, value);
                 if need_index {
@@ -318,21 +346,22 @@ where
             }
         }
     });
-    
+
     // Create inverse indices if needed
     let inverse_indices = if need_inverse {
         let value_map = value_to_index.read().unwrap();
-        flat_data.par_iter().map(|value| {
-            *value_map.get(value).unwrap()
-        }).collect()
+        flat_data
+            .par_iter()
+            .map(|value| *value_map.get(value).unwrap())
+            .collect()
     } else {
         Vec::new()
     };
-    
+
     // Calculate counts if needed
     let counts = if need_counts {
         let mut counts_vec = vec![0; unique_elements.len()];
-        
+
         if need_inverse {
             // If we already have inverse indices, use them
             for &idx in &inverse_indices {
@@ -343,29 +372,40 @@ where
             let value_map = value_to_index.read().unwrap();
 
             // Use thread-local counters and then merge
-            let local_counts = flat_data.par_iter().map(|value| {
-                let idx = *value_map.get(value).unwrap();
-                (idx, 1)
-            }).collect::<Vec<(usize, usize)>>();
+            let local_counts = flat_data
+                .par_iter()
+                .map(|value| {
+                    let idx = *value_map.get(value).unwrap();
+                    (idx, 1)
+                })
+                .collect::<Vec<(usize, usize)>>();
 
             // Aggregate counts
             for (idx, count) in local_counts {
                 counts_vec[idx] += count;
             }
         }
-        
+
         Some(Array::from_vec(counts_vec))
     } else {
         None
     };
-    
+
     // Construct the result
     let unique_array = Array::from_vec(unique_elements);
-    
+
     Ok(UniqueResult {
         values: unique_array,
-        indices: if need_index { Some(Array::from_vec(first_indices)) } else { None },
-        inverse: if need_inverse { Some(Array::from_vec(inverse_indices)) } else { None },
+        indices: if need_index {
+            Some(Array::from_vec(first_indices))
+        } else {
+            None
+        },
+        inverse: if need_inverse {
+            Some(Array::from_vec(inverse_indices))
+        } else {
+            None
+        },
         counts,
     })
 }
@@ -404,75 +444,76 @@ impl<T: Clone> UniqueResult<T> {
     pub fn values(self) -> Array<T> {
         self.values
     }
-    
+
     /// Get a tuple of (values, indices) if indices were requested
     pub fn values_indices(self) -> Result<(Array<T>, Array<usize>)> {
         match self.indices {
             Some(indices) => Ok((self.values, indices)),
             None => Err(NumRs2Error::InvalidOperation(
-                "indices were not requested in the unique call".to_string()
+                "indices were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, inverse) if inverse was requested
     pub fn values_inverse(self) -> Result<(Array<T>, Array<usize>)> {
         match self.inverse {
             Some(inverse) => Ok((self.values, inverse)),
             None => Err(NumRs2Error::InvalidOperation(
-                "inverse was not requested in the unique call".to_string()
+                "inverse was not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, counts) if counts were requested
     pub fn values_counts(self) -> Result<(Array<T>, Array<usize>)> {
         match self.counts {
             Some(counts) => Ok((self.values, counts)),
             None => Err(NumRs2Error::InvalidOperation(
-                "counts were not requested in the unique call".to_string()
+                "counts were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, indices, inverse) if both were requested
     pub fn values_indices_inverse(self) -> Result<(Array<T>, Array<usize>, Array<usize>)> {
         match (self.indices, self.inverse) {
             (Some(indices), Some(inverse)) => Ok((self.values, indices, inverse)),
             _ => Err(NumRs2Error::InvalidOperation(
-                "either indices or inverse were not requested in the unique call".to_string()
+                "either indices or inverse were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, indices, counts) if both were requested
     pub fn values_indices_counts(self) -> Result<(Array<T>, Array<usize>, Array<usize>)> {
         match (self.indices, self.counts) {
             (Some(indices), Some(counts)) => Ok((self.values, indices, counts)),
             _ => Err(NumRs2Error::InvalidOperation(
-                "either indices or counts were not requested in the unique call".to_string()
+                "either indices or counts were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, inverse, counts) if both were requested
     pub fn values_inverse_counts(self) -> Result<(Array<T>, Array<usize>, Array<usize>)> {
         match (self.inverse, self.counts) {
             (Some(inverse), Some(counts)) => Ok((self.values, inverse, counts)),
             _ => Err(NumRs2Error::InvalidOperation(
-                "either inverse or counts were not requested in the unique call".to_string()
+                "either inverse or counts were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, indices, inverse, counts) if all were requested
-    pub fn values_indices_inverse_counts(self) -> Result<(Array<T>, Array<usize>, Array<usize>, Array<usize>)> {
+    pub fn values_indices_inverse_counts(self) -> Result<crate::unique::UniqueTuple<T>> {
         match (self.indices, self.inverse, self.counts) {
             (Some(indices), Some(inverse), Some(counts)) => {
                 Ok((self.values, indices, inverse, counts))
-            },
+            }
             _ => Err(NumRs2Error::InvalidOperation(
-                "not all of indices, inverse, and counts were requested in the unique call".to_string()
+                "not all of indices, inverse, and counts were requested in the unique call"
+                    .to_string(),
             )),
         }
     }

@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::Result;
-use num_traits::{Float, Zero, One, NumCast};
 use num_complex::Complex;
+use num_traits::{Float, NumCast, One, Zero};
 use std::ops::Add;
 
 // Basic element-wise math operations
@@ -17,11 +17,11 @@ pub trait ElementWiseMath<T> {
     fn sqrt(&self) -> Array<T>;
     fn cbrt(&self) -> Array<T>;
     fn pow(&self, n: T) -> Array<T>;
-    
+
     // Log-domain functions
     fn logaddexp(&self, other: &Array<T>) -> Array<T>;
     fn logaddexp2(&self, other: &Array<T>) -> Array<T>;
-    
+
     // Trigonometric functions
     fn sin(&self) -> Array<T>;
     fn cos(&self) -> Array<T>;
@@ -33,7 +33,7 @@ pub trait ElementWiseMath<T> {
     fn hypot(&self, other: &Array<T>) -> Array<T>;
     fn degrees(&self) -> Array<T>;
     fn radians(&self) -> Array<T>;
-    
+
     // Hyperbolic functions
     fn sinh(&self) -> Array<T>;
     fn cosh(&self) -> Array<T>;
@@ -41,13 +41,13 @@ pub trait ElementWiseMath<T> {
     fn asinh(&self) -> Array<T>;
     fn acosh(&self) -> Array<T>;
     fn atanh(&self) -> Array<T>;
-    
+
     // Rounding functions
     fn floor(&self) -> Array<T>;
     fn ceil(&self) -> Array<T>;
     fn round(&self) -> Array<T>;
     fn trunc(&self) -> Array<T>;
-    
+
     // Utility functions
     fn clip(&self, min: T, max: T) -> Array<T>;
     fn sign(&self) -> Array<T>;
@@ -58,43 +58,43 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
     fn abs(&self) -> Array<T> {
         self.map(|x| x.abs())
     }
-    
+
     fn exp(&self) -> Array<T> {
         self.map(|x| x.exp())
     }
-    
+
     fn log(&self) -> Array<T> {
         self.map(|x| x.ln())
     }
-    
+
     fn log10(&self) -> Array<T> {
         self.map(|x| x.log10())
     }
-    
+
     fn log2(&self) -> Array<T> {
         self.map(|x| x.log2())
     }
-    
+
     fn log1p(&self) -> Array<T> {
         self.map(|x| (x + T::one()).ln())
     }
-    
+
     fn expm1(&self) -> Array<T> {
         self.map(|x| x.exp() - T::one())
     }
-    
+
     fn sqrt(&self) -> Array<T> {
         self.map(|x| x.sqrt())
     }
-    
+
     fn cbrt(&self) -> Array<T> {
         self.map(|x| x.powf(T::from(1.0 / 3.0).unwrap()))
     }
-    
+
     fn pow(&self, n: T) -> Array<T> {
         self.map(|x| x.powf(n))
     }
-    
+
     // Log-domain functions
     fn logaddexp(&self, other: &Array<T>) -> Array<T> {
         // Implementing log(exp(x) + exp(y)) in a numerically stable way
@@ -105,19 +105,20 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
             if b == T::neg_infinity() {
                 return a;
             }
-            
+
             let max_val = if a > b { a } else { b };
             let sum = (a - max_val).exp() + (b - max_val).exp();
             max_val + sum.ln()
-        }).unwrap_or_else(|_| panic!("Failed to broadcast in logaddexp"))
+        })
+        .unwrap_or_else(|_| panic!("Failed to broadcast in logaddexp"))
     }
-    
+
     fn logaddexp2(&self, other: &Array<T>) -> Array<T> {
         // Implementing log2(2^x + 2^y) in a numerically stable way
         // log2(2^x + 2^y) = log2(e) * ln(2^x + 2^y) = log2(e) * ln(e^(x*ln(2)) + e^(y*ln(2)))
         let ln2 = T::from(std::f64::consts::LN_2).unwrap();
         let log2_e = T::from(std::f64::consts::LOG2_E).unwrap();
-        
+
         self.zip_with(other, |a, b| {
             if a == T::neg_infinity() {
                 return b;
@@ -125,107 +126,118 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
             if b == T::neg_infinity() {
                 return a;
             }
-            
+
             // Convert log2 values to natural log
             let ln_a = a * ln2;
             let ln_b = b * ln2;
-            
+
             let max_val = if ln_a > ln_b { ln_a } else { ln_b };
             let sum = (ln_a - max_val).exp() + (ln_b - max_val).exp();
             (max_val + sum.ln()) * log2_e
-        }).unwrap_or_else(|_| panic!("Failed to broadcast in logaddexp2"))
+        })
+        .unwrap_or_else(|_| panic!("Failed to broadcast in logaddexp2"))
     }
-    
+
     // Trigonometric functions
     fn sin(&self) -> Array<T> {
         self.map(|x| x.sin())
     }
-    
+
     fn cos(&self) -> Array<T> {
         self.map(|x| x.cos())
     }
-    
+
     fn tan(&self) -> Array<T> {
         self.map(|x| x.tan())
     }
-    
+
     fn asin(&self) -> Array<T> {
         self.map(|x| x.asin())
     }
-    
+
     fn acos(&self) -> Array<T> {
         self.map(|x| x.acos())
     }
-    
+
     fn atan(&self) -> Array<T> {
         self.map(|x| x.atan())
     }
-    
+
     fn atan2(&self, other: &Array<T>) -> Array<T> {
-        self.zip_with(other, |a, b| a.atan2(b)).unwrap_or_else(|_| panic!("Failed to broadcast in atan2"))
+        self.zip_with(other, |a, b| a.atan2(b))
+            .unwrap_or_else(|_| panic!("Failed to broadcast in atan2"))
     }
-    
+
     fn hypot(&self, other: &Array<T>) -> Array<T> {
-        self.zip_with(other, |a, b| (a * a + b * b).sqrt()).unwrap_or_else(|_| panic!("Failed to broadcast in hypot"))
+        self.zip_with(other, |a, b| (a * a + b * b).sqrt())
+            .unwrap_or_else(|_| panic!("Failed to broadcast in hypot"))
     }
-    
+
     fn degrees(&self) -> Array<T> {
         let rad_to_deg = T::from(180.0).unwrap() / T::from(std::f64::consts::PI).unwrap();
         self.map(|x| x * rad_to_deg)
     }
-    
+
     fn radians(&self) -> Array<T> {
         let deg_to_rad = T::from(std::f64::consts::PI).unwrap() / T::from(180.0).unwrap();
         self.map(|x| x * deg_to_rad)
     }
-    
+
     // Hyperbolic functions
     fn sinh(&self) -> Array<T> {
         self.map(|x| x.sinh())
     }
-    
+
     fn cosh(&self) -> Array<T> {
         self.map(|x| x.cosh())
     }
-    
+
     fn tanh(&self) -> Array<T> {
         self.map(|x| x.tanh())
     }
-    
+
     fn asinh(&self) -> Array<T> {
         self.map(|x| x.asinh())
     }
-    
+
     fn acosh(&self) -> Array<T> {
         self.map(|x| x.acosh())
     }
-    
+
     fn atanh(&self) -> Array<T> {
         self.map(|x| x.atanh())
     }
-    
+
     // Rounding functions
     fn floor(&self) -> Array<T> {
         self.map(|x| x.floor())
     }
-    
+
     fn ceil(&self) -> Array<T> {
         self.map(|x| x.ceil())
     }
-    
+
     fn round(&self) -> Array<T> {
         self.map(|x| x.round())
     }
-    
+
     fn trunc(&self) -> Array<T> {
         self.map(|x| x.trunc())
     }
-    
+
     // Utility functions
     fn clip(&self, min: T, max: T) -> Array<T> {
-        self.map(|x| if x < min { min } else if x > max { max } else { x })
+        self.map(|x| {
+            if x < min {
+                min
+            } else if x > max {
+                max
+            } else {
+                x
+            }
+        })
     }
-    
+
     fn sign(&self) -> Array<T> {
         self.map(|x| {
             if x == T::zero() {
@@ -263,21 +275,21 @@ pub fn linspace<T: Float + Clone>(start: T, stop: T, num: usize) -> Array<T> {
     if num < 2 {
         return Array::from_vec(vec![start]);
     }
-    
+
     let mut vec = Vec::with_capacity(num);
     let step = (stop - start) / T::from(num - 1).unwrap();
-    
+
     for i in 0..num {
         vec.push(start + step * T::from(i).unwrap());
     }
-    
+
     Array::from_vec(vec)
 }
 
 /// Create a sequence of numbers with a specified step
-pub fn arange<T>(start: T, stop: T, step: T) -> Array<T> 
-where 
-    T: Clone + PartialOrd + NumCast + Add<Output = T> + Zero
+pub fn arange<T>(start: T, stop: T, step: T) -> Array<T>
+where
+    T: Clone + PartialOrd + NumCast + Add<Output = T> + Zero,
 {
     if step > T::zero() && start >= stop {
         return Array::from_vec(vec![]);
@@ -285,10 +297,10 @@ where
     if step < T::zero() && start <= stop {
         return Array::from_vec(vec![]);
     }
-    
+
     let mut vec = Vec::new();
     let mut current = start;
-    
+
     if step > T::zero() {
         while current < stop {
             vec.push(current.clone());
@@ -300,17 +312,17 @@ where
             current = current + step.clone();
         }
     }
-    
+
     Array::from_vec(vec)
 }
 
 /// Create evenly spaced numbers on a logarithmic scale
 pub fn logspace<T: Float + Clone>(start: T, stop: T, num: usize, base: Option<T>) -> Array<T> {
     let base_val = base.unwrap_or_else(|| T::from(10.0).unwrap());
-    
+
     // Generate powers as a linear space
     let powers = linspace(start, stop, num);
-    
+
     // Apply base^power to each element
     powers.map(move |x| base_val.powf(x))
 }
@@ -387,30 +399,31 @@ pub fn meshgrid<T: Clone>(arrays: &[&Array<T>], indexing: Option<&str>) -> Resul
     if arrays.is_empty() {
         return Ok(vec![]);
     }
-    
+
     let indexing_mode = indexing.unwrap_or("xy");
-    
+
     if indexing_mode != "xy" && indexing_mode != "ij" {
-        return Err(crate::error::NumRs2Error::InvalidOperation(
-            format!("Indexing mode '{}' not supported, must be 'xy' or 'ij'", indexing_mode)
-        ));
+        return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+            "Indexing mode '{}' not supported, must be 'xy' or 'ij'",
+            indexing_mode
+        )));
     }
-    
+
     let n = arrays.len();
     let mut shape = vec![0; n];
-    
+
     // Determine the shape of the output arrays
     for (i, arr) in arrays.iter().enumerate() {
         shape[i] = arr.size();
     }
-    
+
     // Prepare output arrays
     let mut output = Vec::with_capacity(n);
-    
+
     for i in 0..n {
         // Create a shape with all 1s
         let mut out_shape = vec![1; n];
-        
+
         // For each output array, we insert the size of the source array
         // in the dimension corresponding to the coordinate
         if indexing_mode == "xy" && n >= 2 && (i == 0 || i == 1) {
@@ -421,10 +434,10 @@ pub fn meshgrid<T: Clone>(arrays: &[&Array<T>], indexing: Option<&str>) -> Resul
             // For ij indexing or dimensions beyond the first two
             out_shape[i] = arrays[i].size();
         }
-        
+
         // Reshape the source array
         let reshaped = Array::from_vec(arrays[i].to_vec()).reshape(&out_shape);
-        
+
         // Determine the target broadcast shape
         let target_shape = if indexing_mode == "xy" && n >= 2 {
             // For xy indexing, the first two dimensions are swapped
@@ -443,12 +456,12 @@ pub fn meshgrid<T: Clone>(arrays: &[&Array<T>], indexing: Option<&str>) -> Resul
             // For ij indexing, use the shape directly
             shape.clone()
         };
-        
+
         // Broadcast to the target shape
         let broadcast_result = reshaped.broadcast_to(&target_shape)?;
         output.push(broadcast_result);
     }
-    
+
     Ok(output)
 }
 
@@ -480,7 +493,7 @@ pub fn meshgrid2d<T: Clone>(x: &Array<T>, y: &Array<T>) -> Result<(Array<T>, Arr
 /// ]).unwrap();
 /// let xx = &grids[0];
 /// let yy = &grids[1];
-/// 
+///
 /// assert_eq!(xx.shape(), vec![3, 3]);
 /// assert_eq!(yy.shape(), vec![3, 3]);
 ///
@@ -492,7 +505,7 @@ pub fn meshgrid2d<T: Clone>(x: &Array<T>, y: &Array<T>) -> Result<(Array<T>, Arr
 /// assert_eq!(xx.get(&[1, 1]).unwrap(), 1.0);
 /// assert_eq!(xx.get(&[1, 2]).unwrap(), 1.0);
 /// assert_eq!(xx.get(&[2, 0]).unwrap(), 2.0);
-/// 
+///
 /// assert_eq!(yy.get(&[0, 0]).unwrap(), 0.0);
 /// assert_eq!(yy.get(&[1, 0]).unwrap(), 0.0);
 /// assert_eq!(yy.get(&[2, 0]).unwrap(), 0.0);
@@ -505,57 +518,57 @@ pub fn mgrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
     if ranges.is_empty() {
         return Ok(vec![]);
     }
-    
+
     // Calculate the output shape
     let mut shape = Vec::with_capacity(ranges.len());
     for range in ranges {
         shape.push(range.size());
     }
-    
+
     // Create the output arrays
     let mut output = Vec::with_capacity(ranges.len());
     for _ in 0..ranges.len() {
         output.push(Array::zeros(&shape));
     }
-    
+
     // Fill the output arrays
     // This is a simplified implementation, a more efficient one would use
     // broadcasting and reshaping operations
     let total_size: usize = shape.iter().product();
-    
+
     for i in 0..total_size {
         let mut indices = Vec::with_capacity(shape.len());
         let mut temp = i;
-        
+
         for j in (1..shape.len()).rev() {
             let prod: usize = shape[j..].iter().product();
             indices.insert(0, temp / prod);
             temp %= prod;
         }
         indices.insert(0, temp);
-        
+
         for dim in 0..ranges.len() {
             // Get the flat index for the current output array
             let mut flat_idx = 0;
             let mut stride = 1;
-            
+
             for j in (0..shape.len()).rev() {
                 flat_idx += indices[j] * stride;
                 stride *= shape[j];
             }
-            
+
             // Set the value from the corresponding range
             let range_val = ranges[dim].to_vec()[indices[dim]].clone();
             let output_array = &mut output[dim];
             let mut_data = output_array.array_mut();
-            
+
             // This is a simplification; in a real implementation we'd use
             // ndarray's mutable indexing
             let flat_data = mut_data.as_slice_mut().unwrap();
             flat_data[flat_idx] = range_val;
         }
     }
-    
+
     Ok(output)
 }
 
@@ -585,7 +598,7 @@ pub fn mgrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
 /// ]).unwrap();
 /// let xx = &grids[0];
 /// let yy = &grids[1];
-/// 
+///
 /// assert_eq!(xx.shape(), vec![3, 1]);
 /// assert_eq!(yy.shape(), vec![1, 3]);
 ///
@@ -607,7 +620,7 @@ pub fn mgrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
 /// let x_squared_vec = x_squared.to_vec();
 /// let y_squared_vec = y_squared.to_vec();
 /// let mut r_squared_vec = Vec::new();
-/// 
+///
 /// // Manual broadcasting - for each x value, add all y values
 /// for i in 0..3 {
 ///     for j in 0..3 {
@@ -615,7 +628,7 @@ pub fn mgrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
 ///     }
 /// }
 /// let r_squared = Array::from_vec(r_squared_vec).reshape(&[3, 3]);
-/// 
+///
 /// assert_eq!(r_squared.shape(), vec![3, 3]);
 /// assert_eq!(r_squared.get(&[0, 0]).unwrap(), 0.0);
 /// assert_eq!(r_squared.get(&[1, 1]).unwrap(), 2.0);
@@ -625,20 +638,20 @@ pub fn ogrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
     if ranges.is_empty() {
         return Ok(vec![]);
     }
-    
+
     let n = ranges.len();
     let mut output = Vec::with_capacity(n);
-    
+
     for (i, range) in ranges.iter().enumerate() {
         // Create a shape with 1s except at the ith position
         let mut shape = vec![1; n];
         shape[i] = range.size();
-        
+
         // Reshape the range to this shape
         let reshaped = Array::from_vec(range.to_vec()).reshape(&shape);
         output.push(reshaped);
     }
-    
+
     Ok(output)
 }
 
@@ -647,10 +660,10 @@ pub fn geomspace<T: Float + Clone>(start: T, stop: T, num: usize) -> Array<T> {
     if start <= T::zero() || stop <= T::zero() {
         panic!("geomspace requires positive start and stop values");
     }
-    
+
     let log_start = start.ln();
     let log_stop = stop.ln();
-    
+
     linspace(log_start, log_stop, num).map(|x| x.exp())
 }
 
@@ -686,20 +699,20 @@ pub fn unwrap<T: Float + Clone>(phase_array: &Array<T>) -> Array<T> {
     if phase_array.size() <= 1 {
         return phase_array.clone();
     }
-    
+
     let data = phase_array.to_vec();
     let mut result = Vec::with_capacity(data.len());
-    
+
     // Start with the first phase value
     result.push(data[0]);
-    
+
     // The 2π value
     let two_pi = T::from(2.0 * std::f64::consts::PI).unwrap();
-    
+
     // Process the rest of the array
     for i in 1..data.len() {
-        let mut delta = data[i] - data[i-1];
-        
+        let mut delta = data[i] - data[i - 1];
+
         // Adjust for jumps larger than π
         while delta > T::from(std::f64::consts::PI).unwrap() {
             delta = delta - two_pi;
@@ -707,10 +720,10 @@ pub fn unwrap<T: Float + Clone>(phase_array: &Array<T>) -> Array<T> {
         while delta < -T::from(std::f64::consts::PI).unwrap() {
             delta = delta + two_pi;
         }
-        
-        result.push(result[i-1] + delta);
+
+        result.push(result[i - 1] + delta);
     }
-    
+
     Array::from_vec(result)
 }
 
@@ -721,56 +734,56 @@ fn mgrid_owned<T: Clone + NumCast + Zero>(ranges: &[Array<T>]) -> Result<Vec<Arr
     if ranges.is_empty() {
         return Ok(vec![]);
     }
-    
+
     // Calculate the output shape
     let mut shape = Vec::with_capacity(ranges.len());
     for range in ranges {
         shape.push(range.size());
     }
-    
+
     // Create the output arrays
     let mut output = Vec::with_capacity(ranges.len());
     for _ in 0..ranges.len() {
         output.push(Array::zeros(&shape));
     }
-    
+
     // Fill the output arrays
     // This is a simplified implementation, a more efficient one would use
     // broadcasting and reshaping operations
     let total_size: usize = shape.iter().product();
-    
+
     for i in 0..total_size {
         let mut indices = Vec::with_capacity(shape.len());
         let mut temp = i;
-        
+
         for j in (1..shape.len()).rev() {
             let prod: usize = shape[j..].iter().product();
             indices.insert(0, temp / prod);
             temp %= prod;
         }
         indices.insert(0, temp);
-        
+
         for dim in 0..ranges.len() {
             // Get the flat index for the current output array
             let mut flat_idx = 0;
             let mut stride = 1;
-            
+
             for j in (0..shape.len()).rev() {
                 flat_idx += indices[j] * stride;
                 stride *= shape[j];
             }
-            
+
             // Set the value from the corresponding range
             let range_val = ranges[dim].to_vec()[indices[dim]].clone();
             let output_array = &mut output[dim];
             let mut_data = output_array.array_mut();
-            
+
             // This is a simplification; in a real implementation we'd use
             // ndarray's mutable indexing
             let flat_data = mut_data.as_slice_mut().unwrap();
             flat_data[flat_idx] = range_val;
         }
     }
-    
+
     Ok(output)
 }

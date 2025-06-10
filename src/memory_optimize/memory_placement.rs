@@ -34,25 +34,25 @@ pub fn optimize_placement<T: Copy>(data: &mut [T], strategy: PlacementStrategy) 
         PlacementStrategy::Default => {
             // Use default memory placement
             // No action needed
-        },
+        }
         PlacementStrategy::Packed => {
             // Pack data tightly to minimize padding
             pack_data(data);
-        },
+        }
         PlacementStrategy::Aligned(alignment) => {
             // Ensure data is aligned for SIMD operations
             align_data(data, alignment);
-        },
+        }
         PlacementStrategy::NumaAware => {
             // Place data with NUMA awareness
             // This is a simplification; real implementation would be more sophisticated
             // NUMA support is not yet implemented
             // Just use default placement for now
-        },
+        }
         PlacementStrategy::CacheAware => {
             // Optimize placement for cache utilization
             cache_aware_placement(data);
-        },
+        }
     }
 }
 
@@ -63,21 +63,21 @@ pub fn optimize_placement<T: Copy>(data: &mut [T], strategy: PlacementStrategy) 
 fn pack_data<T: Copy>(data: &mut [T]) {
     // For basic types, packing involves ensuring data is tightly packed in memory
     // We can achieve this by copying data to a new, tightly packed allocation
-    let size = data.len() * mem::size_of::<T>();
-    
+    let size = std::mem::size_of_val(data);
+
     // Allocate tightly packed memory
     unsafe {
         let layout = std::alloc::Layout::from_size_align(size, mem::align_of::<T>())
             .unwrap_or_else(|_| std::alloc::Layout::new::<T>());
-        
+
         let new_ptr = std::alloc::alloc(layout) as *mut T;
         if !new_ptr.is_null() {
             // Copy data with tight packing
             std::ptr::copy_nonoverlapping(data.as_ptr(), new_ptr, data.len());
-            
+
             // Copy back to original location
             std::ptr::copy_nonoverlapping(new_ptr, data.as_mut_ptr(), data.len());
-            
+
             // Free temporary allocation
             std::alloc::dealloc(new_ptr as *mut u8, layout);
         }
@@ -92,26 +92,26 @@ fn align_data<T: Copy>(data: &mut [T], alignment: usize) {
     // Get the current alignment
     let data_ptr = data.as_ptr() as usize;
     let misalignment = data_ptr % alignment;
-    
+
     if misalignment == 0 {
         // Already aligned
         return;
     }
-    
+
     // Create properly aligned allocation
-    let size = data.len() * mem::size_of::<T>();
+    let size = std::mem::size_of_val(data);
     unsafe {
         let layout = std::alloc::Layout::from_size_align(size, alignment)
             .unwrap_or_else(|_| std::alloc::Layout::new::<T>());
-        
+
         let aligned_ptr = std::alloc::alloc(layout) as *mut T;
         if !aligned_ptr.is_null() {
             // Copy data to aligned memory
             std::ptr::copy_nonoverlapping(data.as_ptr(), aligned_ptr, data.len());
-            
+
             // Copy aligned data back
             std::ptr::copy_nonoverlapping(aligned_ptr, data.as_mut_ptr(), data.len());
-            
+
             // Free the aligned allocation
             std::alloc::dealloc(aligned_ptr as *mut u8, layout);
         }
@@ -128,13 +128,13 @@ fn align_data<T: Copy>(data: &mut [T], alignment: usize) {
 fn cache_aware_placement<T: Copy>(data: &mut [T]) {
     let cache_line_size = get_cache_line_size();
     let elements_per_line = cache_line_size / mem::size_of::<T>();
-    
+
     if data.len() <= elements_per_line {
         // Data fits in one cache line, ensure it's properly aligned
         align_data(data, cache_line_size);
         return;
     }
-    
+
     // For larger data, use blocking to improve cache utilization
     cache_blocked_placement(data, elements_per_line);
 }
@@ -144,23 +144,22 @@ fn cache_blocked_placement<T: Copy>(data: &mut [T], block_size: usize) {
     if data.len() <= block_size {
         return;
     }
-    
+
     // Reorganize data into cache-friendly blocks
     let mut temp = vec![data[0]; data.len()];
     let mut temp_idx = 0;
-    
+
     // Copy data in cache-line sized blocks
     for chunk_start in (0..data.len()).step_by(block_size) {
         let chunk_end = (chunk_start + block_size).min(data.len());
         let chunk_size = chunk_end - chunk_start;
-        
+
         if temp_idx + chunk_size <= temp.len() {
-            temp[temp_idx..temp_idx + chunk_size]
-                .copy_from_slice(&data[chunk_start..chunk_end]);
+            temp[temp_idx..temp_idx + chunk_size].copy_from_slice(&data[chunk_start..chunk_end]);
             temp_idx += chunk_size;
         }
     }
-    
+
     // Copy back the reorganized data
     data.copy_from_slice(&temp);
 }
@@ -178,7 +177,7 @@ fn get_cache_line_size() -> usize {
 /// and the size of the data type.
 pub fn optimal_alignment<T>() -> usize {
     let type_size = mem::size_of::<T>();
-    
+
     // A simple heuristic based on common SIMD register sizes
     if cfg!(target_arch = "x86_64") {
         // For x86_64, common alignments are 16 (SSE), 32 (AVX), or 64 (AVX-512)
@@ -193,7 +192,7 @@ pub fn optimal_alignment<T>() -> usize {
         // For aarch64, NEON requires 16-byte alignment
         return 16.max(type_size);
     }
-    
+
     // For other architectures, use a reasonable default
     8.max(type_size)
 }
@@ -237,23 +236,23 @@ fn is_avx2_available() -> bool {
 /// Get optimal SIMD register size based on available CPU features
 pub fn get_optimal_simd_width<T>() -> usize {
     let type_size = mem::size_of::<T>();
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         if is_avx512_available() {
-            return 64 / type_size; // 512-bit registers
+            64 / type_size // 512-bit registers
         } else if is_avx2_available() || is_avx_available() {
             return 32 / type_size; // 256-bit registers
         } else {
             return 16 / type_size; // 128-bit SSE registers
         }
     }
-    
+
     #[cfg(target_arch = "aarch64")]
     {
         return 16 / type_size; // 128-bit NEON registers
     }
-    
+
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
         return 4 / type_size; // Conservative default

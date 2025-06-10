@@ -3,9 +3,9 @@
 //! This test suite provides extensive coverage of all fundamental array operations
 //! to ensure correctness, performance, and NumPy compatibility.
 
-use numrs2::prelude::*;
-use numrs2::array::Array;
 use approx::assert_relative_eq;
+use numrs2::array::Array;
+use numrs2::prelude::*;
 
 /// Test array creation operations
 #[cfg(test)]
@@ -175,7 +175,11 @@ mod array_manipulation_tests {
         let orig_vec = arr.to_vec();
         let trans_vec = transposed.to_vec();
         for &val in &orig_vec {
-            assert!(trans_vec.contains(&val), "Missing value {} after transpose", val);
+            assert!(
+                trans_vec.contains(&val),
+                "Missing value {} after transpose",
+                val
+            );
         }
 
         // 1D transpose (should remain 1D)
@@ -188,17 +192,21 @@ mod array_manipulation_tests {
     fn test_flatten_operations() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let arr = Array::from_vec(data.clone()).reshape(&[2, 3]);
-        
+
         // Flatten to 1D
         let flattened = arr.flatten(None);
         assert_eq!(flattened.shape(), vec![6]);
         assert_eq!(flattened.size(), 6);
-        
+
         // Check all elements are preserved
         let flat_vec = flattened.to_vec();
         assert_eq!(flat_vec.len(), 6);
         for &val in &data {
-            assert!(flat_vec.contains(&val), "Missing value {} after flatten", val);
+            assert!(
+                flat_vec.contains(&val),
+                "Missing value {} after flatten",
+                val
+            );
         }
     }
 
@@ -244,11 +252,11 @@ mod array_manipulation_tests {
     fn test_swapaxes_operations() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let arr = Array::from_vec(data).reshape(&[2, 3]);
-        
+
         // Swap axes 0 and 1
         let swapped = swapaxes(&arr, 0, 1).unwrap();
         assert_eq!(swapped.shape(), vec![3, 2]);
-        
+
         // Check that swapping back gives original shape
         let swapped_back = swapaxes(&swapped, 0, 1).unwrap();
         assert_eq!(swapped_back.shape(), arr.shape());
@@ -257,15 +265,15 @@ mod array_manipulation_tests {
     #[test]
     fn test_moveaxis_operations() {
         let arr = Array::from_vec(vec![1.0; 24]).reshape(&[2, 3, 4]);
-        
+
         // Move axis 0 to position 2 - actual result is [4, 2, 3]
         let moved = moveaxis(&arr, &[0], &[2]).unwrap();
         assert_eq!(moved.shape(), vec![4, 2, 3]); // Fixed expected shape
-        
+
         // Move axis 2 to position 0 - verify this works
         let moved2 = moveaxis(&arr, &[2], &[0]).unwrap();
         assert_eq!(moved2.shape(), vec![3, 4, 2]); // Corrected based on actual result
-        
+
         // Check that original shape is preserved
         assert_eq!(arr.shape(), vec![2, 3, 4]);
         assert_eq!(moved.size(), arr.size()); // Same number of elements
@@ -297,8 +305,8 @@ mod arithmetic_operations_tests {
         // Division
         let f = a.divide(&b);
         assert_relative_eq!(f.to_vec()[0], 0.2, epsilon = 1e-10);
-        assert_relative_eq!(f.to_vec()[1], 1.0/3.0, epsilon = 1e-10);
-        assert_relative_eq!(f.to_vec()[2], 3.0/7.0, epsilon = 1e-10);
+        assert_relative_eq!(f.to_vec()[1], 1.0 / 3.0, epsilon = 1e-10);
+        assert_relative_eq!(f.to_vec()[2], 3.0 / 7.0, epsilon = 1e-10);
         assert_relative_eq!(f.to_vec()[3], 0.5, epsilon = 1e-10);
     }
 
@@ -332,7 +340,7 @@ mod arithmetic_operations_tests {
         // Test broadcasting with explicit function
         let result = a.add_broadcast(&b.reshape(&[1, 2])).unwrap();
         assert_eq!(result.shape(), vec![2, 2]);
-        
+
         // Check some specific values
         let result_vec = result.to_vec();
         assert_eq!(result_vec.len(), 4);
@@ -374,7 +382,7 @@ mod arithmetic_operations_tests {
     #[test]
     fn test_negative_operations() {
         let a = Array::from_vec(vec![1.0, -2.0, 3.0, -4.0]);
-        
+
         let negated = a.map(|x| -x);
         assert_eq!(negated.to_vec(), vec![-1.0, 2.0, -3.0, 4.0]);
     }
@@ -443,18 +451,23 @@ mod indexing_operations_tests {
 
         // Set values using boolean mask
         let mut arr_copy = arr.clone();
-        arr_copy.set_mask(&mask, &Array::from_vec(vec![10.0, 30.0, 50.0])).unwrap();
-        
+        arr_copy
+            .set_mask(&mask, &Array::from_vec(vec![10.0, 30.0, 50.0]))
+            .unwrap();
+
         // Check that masked positions were updated
         assert_eq!(arr_copy.to_vec(), vec![10.0, 2.0, 30.0, 4.0, 50.0]);
     }
 
     #[test]
     fn test_advanced_indexing() {
-        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]).reshape(&[3, 3]);
+        let arr =
+            Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]).reshape(&[3, 3]);
 
         // Test using IndexSpec for more complex indexing
-        let single_element = arr.index(&[IndexSpec::Index(1), IndexSpec::Index(1)]).unwrap();
+        let single_element = arr
+            .index(&[IndexSpec::Index(1), IndexSpec::Index(1)])
+            .unwrap();
         assert_eq!(single_element.to_vec(), vec![5.0]);
 
         let row_slice = arr.index(&[IndexSpec::Index(0), IndexSpec::All]).unwrap();
@@ -496,7 +509,10 @@ mod concatenation_stacking_tests {
         // Concatenate multiple 1D arrays
         let result = concatenate(&[&a, &b, &c], 0).unwrap();
         assert_eq!(result.shape(), vec![9]);
-        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+        assert_eq!(
+            result.to_vec(),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
     }
 
     #[test]
@@ -508,7 +524,7 @@ mod concatenation_stacking_tests {
         let result = concatenate(&[&a, &b], 0).unwrap();
         assert_eq!(result.shape(), vec![4, 2]);
         assert_eq!(result.size(), 8);
-        
+
         // Check that all original elements are present
         let result_vec = result.to_vec();
         for i in 1..=8 {
@@ -525,7 +541,7 @@ mod concatenation_stacking_tests {
         let result = concatenate(&[&a, &b], 1).unwrap();
         assert_eq!(result.shape(), vec![2, 4]);
         assert_eq!(result.size(), 8);
-        
+
         // All original elements should be present
         let result_vec = result.to_vec();
         for i in 1..=8 {
@@ -541,7 +557,7 @@ mod concatenation_stacking_tests {
         // Stack along new axis 0
         let stacked0 = stack(&[&a, &b], 0).unwrap();
         assert_eq!(stacked0.shape(), vec![2, 3]);
-        
+
         // Check specific positions
         assert_eq!(stacked0.get(&[0, 0]).unwrap(), 1.0);
         assert_eq!(stacked0.get(&[0, 1]).unwrap(), 2.0);
@@ -551,7 +567,7 @@ mod concatenation_stacking_tests {
         // Stack along new axis 1
         let stacked1 = stack(&[&a, &b], 1).unwrap();
         assert_eq!(stacked1.shape(), vec![3, 2]);
-        
+
         assert_eq!(stacked1.get(&[0, 0]).unwrap(), 1.0);
         assert_eq!(stacked1.get(&[0, 1]).unwrap(), 4.0);
         assert_eq!(stacked1.get(&[1, 0]).unwrap(), 2.0);
@@ -609,7 +625,7 @@ mod concatenation_stacking_tests {
         // Column concatenation (c_)
         let c_result = c_(&[&a, &b]).unwrap();
         assert_eq!(c_result.shape(), vec![3, 2]);
-        
+
         // Check positions
         assert_eq!(c_result.get(&[0, 0]).unwrap(), 1.0);
         assert_eq!(c_result.get(&[0, 1]).unwrap(), 4.0);
@@ -676,7 +692,7 @@ mod comparison_tests {
 
         // Should be close with default tolerance
         assert!(allclose(&a, &b));
-        
+
         // Should not be close with default tolerance
         assert!(!allclose(&a, &c));
 
@@ -747,21 +763,38 @@ mod mathematical_operations_tests {
 
     #[test]
     fn test_trigonometric_functions() {
-        let angles = Array::from_vec(vec![0.0, std::f64::consts::PI/6.0, std::f64::consts::PI/4.0, std::f64::consts::PI/3.0]);
+        let angles = Array::from_vec(vec![
+            0.0,
+            std::f64::consts::PI / 6.0,
+            std::f64::consts::PI / 4.0,
+            std::f64::consts::PI / 3.0,
+        ]);
 
         // Sine
         let sin_result = sin(&angles);
         assert_relative_eq!(sin_result.to_vec()[0], 0.0, epsilon = 1e-10);
         assert_relative_eq!(sin_result.to_vec()[1], 0.5, epsilon = 1e-10);
-        assert_relative_eq!(sin_result.to_vec()[2], 1.0/std::f64::consts::SQRT_2, epsilon = 1e-10);
+        assert_relative_eq!(
+            sin_result.to_vec()[2],
+            1.0 / std::f64::consts::SQRT_2,
+            epsilon = 1e-10
+        );
 
         // Cosine
         let cos_result = cos(&angles);
         assert_relative_eq!(cos_result.to_vec()[0], 1.0, epsilon = 1e-10);
-        assert_relative_eq!(cos_result.to_vec()[1], (3.0_f64).sqrt()/2.0, epsilon = 1e-10);
-        assert_relative_eq!(cos_result.to_vec()[2], 1.0/std::f64::consts::SQRT_2, epsilon = 1e-10);
+        assert_relative_eq!(
+            cos_result.to_vec()[1],
+            (3.0_f64).sqrt() / 2.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            cos_result.to_vec()[2],
+            1.0 / std::f64::consts::SQRT_2,
+            epsilon = 1e-10
+        );
 
-        // Tangent (basic test) 
+        // Tangent (basic test)
         let tan_result = tan(&angles);
         assert_relative_eq!(tan_result.to_vec()[0], 0.0, epsilon = 1e-10);
     }
@@ -769,7 +802,7 @@ mod mathematical_operations_tests {
     #[test]
     fn test_power_operations() {
         let a = Array::from_vec(vec![2.0, 3.0, 4.0]);
-        
+
         // Power with scalar
         let squared = a.pow(2.0);
         assert_eq!(squared.to_vec(), vec![4.0, 9.0, 16.0]);
@@ -792,7 +825,7 @@ mod mathematical_operations_tests {
     #[test]
     fn test_rounding_operations() {
         let a = Array::from_vec(vec![1.2, 2.7, -1.5, -2.3]);
-        
+
         // Floor
         let floor_result = floor(&a);
         assert_eq!(floor_result.to_vec(), vec![1.0, 2.0, -2.0, -3.0]);
@@ -937,10 +970,10 @@ mod sorting_searching_tests {
         let data_vec = unsorted.to_vec();
         let min_val = *data_vec.iter().min().unwrap();
         let max_val = *data_vec.iter().max().unwrap();
-        
+
         assert_eq!(min_val, 1);
         assert_eq!(max_val, 9);
-        
+
         // Verify all elements are present
         assert_eq!(data_vec.len(), 8);
         assert!(data_vec.contains(&3));
@@ -955,7 +988,7 @@ mod sorting_searching_tests {
         // Test unique with correct signature (axis, return_counts, return_indices, return_inverse)
         let unique_result = unique(&arr, None, Some(true), None, None).unwrap();
         let unique_values = unique_result.values.to_vec();
-        
+
         // Should contain each unique value exactly once
         assert!(unique_values.contains(&1));
         assert!(unique_values.contains(&2));
@@ -973,7 +1006,7 @@ mod sorting_searching_tests {
             // If counts weren't returned, that's also okay - just verify unique values
             println!("Counts not returned, which is acceptable for this implementation");
         }
-        
+
         // Test basic unique functionality without counts requirement
         let basic_unique = unique(&arr, None, None, None, None).unwrap();
         assert_eq!(basic_unique.values.size(), 4); // Should have 4 unique values
@@ -986,11 +1019,11 @@ mod sorting_searching_tests {
 
         // searchsorted signature: (a, v, side, sorter) where sorter is optional
         let indices = searchsorted(&sorted_arr, &values, None, None).unwrap();
-        
+
         // Check that indices are reasonable
         assert_eq!(indices.size(), 6);
         let idx_vec = indices.to_vec();
-        
+
         // 0 should be inserted at position 0 (before 1)
         assert_eq!(idx_vec[0], 0);
         // 2 should be inserted at position 1 (between 1 and 3)
@@ -1006,14 +1039,14 @@ mod sorting_searching_tests {
         // Use array methods for min/max
         let min_val = arr.min();
         let max_val = arr.max();
-        
+
         assert_eq!(min_val, 1.0);
         assert_eq!(max_val, 5.0);
-        
+
         // Test with 2D array
         let arr2d = Array::from_vec(vec![3, 1, 4, 2, 6, 5]).reshape(&[2, 3]);
         let data_vec = arr2d.to_vec();
-        
+
         // Check that all elements are present
         assert_eq!(data_vec.len(), 6);
         assert!(data_vec.contains(&1));
@@ -1038,7 +1071,7 @@ mod repeat_tile_tests {
         let arr2d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
         let repeated_axis0 = repeat(&arr2d, 2, Some(0)).unwrap();
         assert_eq!(repeated_axis0.shape(), vec![4, 2]);
-        
+
         // Each row should be repeated
         assert_eq!(repeated_axis0.to_vec(), vec![1, 2, 1, 2, 3, 4, 3, 4]);
     }
@@ -1055,7 +1088,7 @@ mod repeat_tile_tests {
         let arr2d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
         let tiled2d = tile(&arr2d, &[2, 1]).unwrap();
         assert_eq!(tiled2d.shape(), vec![4, 2]);
-        
+
         // Original array should be repeated twice along axis 0
         assert_eq!(tiled2d.to_vec(), vec![1, 2, 3, 4, 1, 2, 3, 4]);
     }
@@ -1068,7 +1101,7 @@ mod repeat_tile_tests {
         let tiled = tile(&arr, &[3, 2]).unwrap();
         assert_eq!(tiled.shape(), vec![3, 6]); // Fixed: 3 rows, actual columns from implementation
         assert_eq!(tiled.size(), 18); // Updated size
-        
+
         // Check that the pattern repeats correctly
         let tiled_vec = tiled.to_vec();
         assert_eq!(tiled_vec.len(), 18);
@@ -1103,7 +1136,7 @@ fn test_comprehensive_operations_integration() {
     // Test comparison operations
     let comparison = greater(&data1, &data2).unwrap();
     assert_eq!(comparison.shape(), vec![2, 3]);
-    
+
     // Test SIMD operations if available
     let simd_result = simd_add(&data1, &data2).unwrap();
     assert_eq!(simd_result.shape(), vec![2, 3]);

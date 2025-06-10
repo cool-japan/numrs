@@ -17,9 +17,8 @@ use numrs2::random::distributions::set_seed;
 
 // Import the regular distributions for comparison
 use numrs2::random::distributions::{chisquare, normal};
-// F distribution is available in the scirs feature
 #[cfg(feature = "scirs")]
-use numrs2::random::distributions::f_dist;
+use numrs2::random::distributions::student_t;
 
 // Import the SciRS2 integration when available
 #[cfg(feature = "scirs")]
@@ -81,11 +80,11 @@ fn main() -> Result<()> {
     // 2. Standard F vs. Noncentral F
     println!("\nF Distributions:");
 
-    // Standard F distribution (native NumRS2, when scirs feature is enabled)
+    // Standard Student t distribution (native NumRS2, when scirs feature is enabled)
     #[cfg(feature = "scirs")]
     {
-        let f_samples = f_dist(3.0, 10.0, &[5])?;
-        println!("- Standard F (dfnum=3, dfden=10) samples: {:?}", f_samples);
+        let t_samples = student_t(3.0, &[5])?;
+        println!("- Student t (df=3) samples: {:?}", t_samples);
     }
 
     #[cfg(not(feature = "scirs"))]

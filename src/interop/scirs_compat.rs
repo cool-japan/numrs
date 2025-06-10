@@ -17,9 +17,10 @@ use std::fmt::{Debug, Display};
 // Note: Currently disabled while updating for SciRS2 v0.1.0-alpha.4 API changes
 #[cfg(feature = "__never")]
 use {
-    // Import distributions from SciRS2
-    scirs2_stats::distributions::continuous::*,
-
+    rand::rngs::StdRng,
+    // Import random number generation
+    rand::Rng,
+    rand::SeedableRng,
     // Import array and generator types
     scirs2_core::ndarray_ext::Array as SciArray,
     scirs2_core::random::Generator as SciGenerator,
@@ -27,10 +28,8 @@ use {
     // Import SCIRS linalg for linear equation solving
     scirs2_linalg::decomposition::lu_solve,
 
-    // Import random number generation
-    rand::Rng,
-    rand::SeedableRng,
-    rand::rngs::StdRng,
+    // Import distributions from SciRS2
+    scirs2_stats::distributions::continuous::*,
 };
 
 // Conversion helpers between NumRS2 and SciRS2 arrays
@@ -44,7 +43,9 @@ where
 
     for &val in &data {
         let converted = T::from(val).ok_or_else(|| {
-            NumRs2Error::InvalidOperation("Failed to convert SciRS2 array to NumRS2 array type".to_string())
+            NumRs2Error::InvalidOperation(
+                "Failed to convert SciRS2 array to NumRS2 array type".to_string(),
+            )
         })?;
         result.push(converted);
     }
@@ -77,9 +78,9 @@ where
     T: Float + NumCast + Clone + Debug + Display,
 {
     // Convert parameters to f64 for SciRS2
-    let df_f64 = df.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert df to f64".to_string())
-    })?;
+    let df_f64 = df
+        .to_f64()
+        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to convert df to f64".to_string()))?;
 
     let nonc_f64 = nonc.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert nonc to f64".to_string())
@@ -87,17 +88,21 @@ where
 
     // Check parameter validity
     if df_f64 <= 0.0 || nonc_f64 < 0.0 {
-        return Err(NumRs2Error::InvalidOperation(
-            format!("Parameters must satisfy df > 0 and nonc >= 0, got df = {}, nonc = {}", df, nonc)
-        ));
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Parameters must satisfy df > 0 and nonc >= 0, got df = {}, nonc = {}",
+            df, nonc
+        )));
     }
 
     // Create the noncentral chi-square distribution using SciRS2
     let dist = match NoncentralChiSquared::new(df_f64, nonc_f64) {
         Ok(d) => d,
-        Err(e) => return Err(NumRs2Error::InvalidOperation(
-            format!("Failed to create noncentral chi-square distribution: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Failed to create noncentral chi-square distribution: {}",
+                e
+            )))
+        }
     };
 
     // Create a generator with SciRS2 (using a random seed)
@@ -110,9 +115,12 @@ where
     // Generate samples using SciRS2
     let samples = match dist.sample_array(&gen, size) {
         Ok(arr) => arr,
-        Err(e) => return Err(NumRs2Error::RuntimeError(
-            format!("Error generating noncentral chi-square samples: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::RuntimeError(format!(
+                "Error generating noncentral chi-square samples: {}",
+                e
+            )))
+        }
     };
 
     // Convert SciRS2 array to NumRS2 array
@@ -179,9 +187,12 @@ where
     // Create the noncentral F distribution using SciRS2
     let dist = match FNoncentral::new(dfnum_f64, dfden_f64, nonc_f64) {
         Ok(d) => d,
-        Err(e) => return Err(NumRs2Error::InvalidOperation(
-            format!("Failed to create noncentral F distribution: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Failed to create noncentral F distribution: {}",
+                e
+            )))
+        }
     };
 
     // Create a generator with SciRS2 (using a random seed)
@@ -194,9 +205,12 @@ where
     // Generate samples using SciRS2
     let samples = match dist.sample_array(&gen, size) {
         Ok(arr) => arr,
-        Err(e) => return Err(NumRs2Error::RuntimeError(
-            format!("Error generating noncentral F samples: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::RuntimeError(format!(
+                "Error generating noncentral F samples: {}",
+                e
+            )))
+        }
     };
 
     // Convert SciRS2 array to NumRS2 array
@@ -239,9 +253,9 @@ where
     T: Float + NumCast + Clone + Debug + Display,
 {
     // Convert parameters to f64 for SciRS2
-    let mu_f64 = mu.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert mu to f64".to_string())
-    })?;
+    let mu_f64 = mu
+        .to_f64()
+        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to convert mu to f64".to_string()))?;
 
     let kappa_f64 = kappa.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert kappa to f64".to_string())
@@ -249,17 +263,21 @@ where
 
     // Check parameter validity
     if kappa_f64 < 0.0 {
-        return Err(NumRs2Error::InvalidOperation(
-            format!("Concentration parameter kappa must be >= 0, got kappa = {}", kappa)
-        ));
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Concentration parameter kappa must be >= 0, got kappa = {}",
+            kappa
+        )));
     }
 
     // Create the von Mises distribution using SciRS2
     let dist = match VonMises::new(mu_f64, kappa_f64) {
         Ok(d) => d,
-        Err(e) => return Err(NumRs2Error::InvalidOperation(
-            format!("Failed to create von Mises distribution: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Failed to create von Mises distribution: {}",
+                e
+            )))
+        }
     };
 
     // Create a generator with SciRS2 (using a random seed)
@@ -272,9 +290,12 @@ where
     // Generate samples using SciRS2
     let samples = match dist.sample_array(&gen, size) {
         Ok(arr) => arr,
-        Err(e) => return Err(NumRs2Error::RuntimeError(
-            format!("Error generating von Mises samples: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::RuntimeError(format!(
+                "Error generating von Mises samples: {}",
+                e
+            )))
+        }
     };
 
     // Convert SciRS2 array to NumRS2 array
@@ -322,17 +343,21 @@ where
 
     // Check parameter validity
     if scale_f64 <= 0.0 {
-        return Err(NumRs2Error::InvalidOperation(
-            format!("Scale parameter must be > 0, got scale = {}", scale)
-        ));
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Scale parameter must be > 0, got scale = {}",
+            scale
+        )));
     }
 
     // Create the Maxwell distribution using SciRS2
     let dist = match MaxwellBoltzmann::new(scale_f64) {
         Ok(d) => d,
-        Err(e) => return Err(NumRs2Error::InvalidOperation(
-            format!("Failed to create Maxwell distribution: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Failed to create Maxwell distribution: {}",
+                e
+            )))
+        }
     };
 
     // Create a generator with SciRS2 (using a random seed)
@@ -345,9 +370,12 @@ where
     // Generate samples using SciRS2
     let samples = match dist.sample_array(&gen, size) {
         Ok(arr) => arr,
-        Err(e) => return Err(NumRs2Error::RuntimeError(
-            format!("Error generating Maxwell samples: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::RuntimeError(format!(
+                "Error generating Maxwell samples: {}",
+                e
+            )))
+        }
     };
 
     // Convert SciRS2 array to NumRS2 array
@@ -397,7 +425,7 @@ where
 {
     if means.is_empty() {
         return Err(NumRs2Error::InvalidOperation(
-            "Mean vector cannot be empty".to_string()
+            "Mean vector cannot be empty".to_string(),
         ));
     }
 
@@ -411,18 +439,24 @@ where
     }
 
     // Convert parameters to f64 for SciRS2
-    let means_f64: Vec<f64> = means.iter().map(|&m| {
-        m.to_f64().ok_or_else(|| {
-            NumRs2Error::InvalidOperation("Failed to convert mean to f64".to_string())
+    let means_f64: Vec<f64> = means
+        .iter()
+        .map(|&m| {
+            m.to_f64().ok_or_else(|| {
+                NumRs2Error::InvalidOperation("Failed to convert mean to f64".to_string())
+            })
         })
-    }).collect::<Result<Vec<f64>>>()?;
+        .collect::<Result<Vec<f64>>>()?;
 
     let cov_data = cov.to_vec();
-    let cov_data_f64: Vec<f64> = cov_data.iter().map(|&c| {
-        c.to_f64().ok_or_else(|| {
-            NumRs2Error::InvalidOperation("Failed to convert covariance to f64".to_string())
+    let cov_data_f64: Vec<f64> = cov_data
+        .iter()
+        .map(|&c| {
+            c.to_f64().ok_or_else(|| {
+                NumRs2Error::InvalidOperation("Failed to convert covariance to f64".to_string())
+            })
         })
-    }).collect::<Result<Vec<f64>>>()?;
+        .collect::<Result<Vec<f64>>>()?;
 
     // Build SciRS2 arrays
     let means_sci = SciArray::from_vec(means_f64);
@@ -432,11 +466,16 @@ where
         let rot_shape = rot.shape();
         let rot_data = rot.to_vec();
 
-        let rot_data_f64: Vec<f64> = rot_data.iter().map(|&r| {
-            r.to_f64().ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert rotation matrix to f64".to_string())
+        let rot_data_f64: Vec<f64> = rot_data
+            .iter()
+            .map(|&r| {
+                r.to_f64().ok_or_else(|| {
+                    NumRs2Error::InvalidOperation(
+                        "Failed to convert rotation matrix to f64".to_string(),
+                    )
+                })
             })
-        }).collect::<Result<Vec<f64>>>()?;
+            .collect::<Result<Vec<f64>>>()?;
 
         Some(SciArray::from_vec(rot_data_f64).reshape(&rot_shape))
     } else {
@@ -446,9 +485,12 @@ where
     // Create the multivariate normal distribution using SciRS2
     let dist = match MultivariateNormal::new(&means_sci, &cov_sci, rotation_sci.as_ref()) {
         Ok(d) => d,
-        Err(e) => return Err(NumRs2Error::InvalidOperation(
-            format!("Failed to create multivariate normal distribution: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Failed to create multivariate normal distribution: {}",
+                e
+            )))
+        }
     };
 
     // Create a generator with SciRS2 (using a random seed)
@@ -468,9 +510,12 @@ where
     // Generate samples using SciRS2
     let samples = match dist.sample_array(&gen, num_samples) {
         Ok(arr) => arr,
-        Err(e) => return Err(NumRs2Error::RuntimeError(
-            format!("Error generating multivariate normal samples: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::RuntimeError(format!(
+                "Error generating multivariate normal samples: {}",
+                e
+            )))
+        }
     };
 
     // Convert SciRS2 array to NumRS2 array
@@ -524,13 +569,13 @@ where
         NumRs2Error::InvalidOperation("Failed to convert mean to f64".to_string())
     })?;
 
-    let std_f64 = std.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert std to f64".to_string())
-    })?;
+    let std_f64 = std
+        .to_f64()
+        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to convert std to f64".to_string()))?;
 
-    let low_f64 = low.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert low to f64".to_string())
-    })?;
+    let low_f64 = low
+        .to_f64()
+        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to convert low to f64".to_string()))?;
 
     let high_f64 = high.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert high to f64".to_string())
@@ -538,23 +583,28 @@ where
 
     // Check parameter validity
     if std_f64 <= 0.0 {
-        return Err(NumRs2Error::InvalidOperation(
-            format!("Standard deviation must be > 0, got std = {}", std)
-        ));
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Standard deviation must be > 0, got std = {}",
+            std
+        )));
     }
 
     if low_f64 >= high_f64 {
-        return Err(NumRs2Error::InvalidOperation(
-            format!("Lower bound must be < upper bound, got low = {}, high = {}", low, high)
-        ));
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Lower bound must be < upper bound, got low = {}, high = {}",
+            low, high
+        )));
     }
 
     // Create the truncated normal distribution using SciRS2
     let dist = match TruncatedNormal::new(mean_f64, std_f64, low_f64, high_f64) {
         Ok(d) => d,
-        Err(e) => return Err(NumRs2Error::InvalidOperation(
-            format!("Failed to create truncated normal distribution: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Failed to create truncated normal distribution: {}",
+                e
+            )))
+        }
     };
 
     // Create a generator with SciRS2 (using a random seed)
@@ -567,9 +617,12 @@ where
     // Generate samples using SciRS2
     let samples = match dist.sample_array(&gen, size) {
         Ok(arr) => arr,
-        Err(e) => return Err(NumRs2Error::RuntimeError(
-            format!("Error generating truncated normal samples: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::RuntimeError(format!(
+                "Error generating truncated normal samples: {}",
+                e
+            )))
+        }
     };
 
     // Convert SciRS2 array to NumRS2 array
@@ -578,7 +631,13 @@ where
 
 /// Placeholder for non-SciRS2 build
 #[cfg(not(feature = "__never"))]
-pub fn truncated_normal<T>(_mean: T, _std: T, _low: T, _high: T, _shape: &[usize]) -> Result<Array<T>>
+pub fn truncated_normal<T>(
+    _mean: T,
+    _std: T,
+    _low: T,
+    _high: T,
+    _shape: &[usize],
+) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
 {
@@ -616,7 +675,7 @@ where
 
     if a_shape.len() != 2 || a_shape[0] != a_shape[1] {
         return Err(NumRs2Error::DimensionMismatch(
-            "solve_linear_system requires a square coefficient matrix".to_string()
+            "solve_linear_system requires a square coefficient matrix".to_string(),
         ));
     }
 
@@ -629,19 +688,29 @@ where
 
     // Convert a to SCIRS array
     let a_data = a.to_vec();
-    let a_data_f64: Vec<f64> = a_data.iter().map(|&c| {
-        c.to_f64().ok_or_else(|| {
-            NumRs2Error::InvalidOperation("Failed to convert matrix elements to f64".to_string())
+    let a_data_f64: Vec<f64> = a_data
+        .iter()
+        .map(|&c| {
+            c.to_f64().ok_or_else(|| {
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert matrix elements to f64".to_string(),
+                )
+            })
         })
-    }).collect::<Result<Vec<f64>>>()?;
+        .collect::<Result<Vec<f64>>>()?;
 
     // Convert b to SCIRS array
     let b_data = b.to_vec();
-    let b_data_f64: Vec<f64> = b_data.iter().map(|&c| {
-        c.to_f64().ok_or_else(|| {
-            NumRs2Error::InvalidOperation("Failed to convert vector elements to f64".to_string())
+    let b_data_f64: Vec<f64> = b_data
+        .iter()
+        .map(|&c| {
+            c.to_f64().ok_or_else(|| {
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert vector elements to f64".to_string(),
+                )
+            })
         })
-    }).collect::<Result<Vec<f64>>>()?;
+        .collect::<Result<Vec<f64>>>()?;
 
     // Create SCIRS arrays
     let a_sci = SciArray::from_vec(a_data_f64).reshape(&a_shape);
@@ -650,9 +719,12 @@ where
     // Solve the system using SCIRS
     let x_sci = match lu_solve(&a_sci, &b_sci) {
         Ok(x) => x,
-        Err(e) => return Err(NumRs2Error::InvalidOperation(
-            format!("Failed to solve linear system with SCIRS: {}", e)
-        )),
+        Err(e) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Failed to solve linear system with SCIRS: {}",
+                e
+            )))
+        }
     };
 
     // Convert SCIRS result back to NumRS array
@@ -740,12 +812,13 @@ mod tests {
 
         // Create a rotation matrix for 45 degrees
         let rotation_data = vec![
-            0.7071f64, 0.7071f64,  // cos(45°), sin(45°)
-            -0.7071f64, 0.7071f64  // -sin(45°), cos(45°)
+            0.7071f64, 0.7071f64, // cos(45°), sin(45°)
+            -0.7071f64, 0.7071f64, // -sin(45°), cos(45°)
         ];
         let rotation = Array::from_vec(rotation_data).reshape(&[2, 2]);
 
-        let samples = multivariate_normal_with_rotation(&mean, &cov, Some(&[3]), Some(&rotation)).unwrap();
+        let samples =
+            multivariate_normal_with_rotation(&mean, &cov, Some(&[3]), Some(&rotation)).unwrap();
         assert_eq!(samples.shape(), vec![3, 2]);
     }
 
@@ -781,9 +854,7 @@ mod tests {
         // Solution: x = 1, y = 1, z = 2
 
         let a_data = vec![
-            3.0f64, 2.0f64, 1.0f64,
-            2.0f64, 5.0f64, 3.0f64,
-            1.0f64, 1.0f64, 4.0f64
+            3.0f64, 2.0f64, 1.0f64, 2.0f64, 5.0f64, 3.0f64, 1.0f64, 1.0f64, 4.0f64,
         ];
         let a = Array::from_vec(a_data).reshape(&[3, 3]);
 
