@@ -7,8 +7,6 @@ use std::mem;
 use std::ptr;
 use std::arch::x86_64::__cpuid;
 use std::cmp;
-use std::collections::HashMap;
-use std::sync::Once;
 
 /// Cache information for optimal layout decisions
 #[derive(Debug, Clone)]
@@ -20,8 +18,9 @@ struct CacheInfo {
     associativity: usize,
 }
 
-static CACHE_INFO: Once = Once::new();
-static mut CACHE_DATA: Option<CacheInfo> = None;
+lazy_static::lazy_static! {
+    static ref CACHE_DATA: CacheInfo = detect_cache_info();
+}
 
 /// Strategy for optimizing memory layout
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -122,12 +121,7 @@ fn get_cache_line_size() -> usize {
 
 /// Get comprehensive CPU cache information
 fn get_cache_info() -> &'static CacheInfo {
-    unsafe {
-        CACHE_INFO.call_once(|| {
-            CACHE_DATA = Some(detect_cache_info());
-        });
-        CACHE_DATA.as_ref().unwrap()
-    }
+    &CACHE_DATA
 }
 
 /// Detect CPU cache information using CPUID
@@ -555,11 +549,13 @@ fn get_l1_cache_size() -> usize {
 }
 
 /// Get the CPU's L2 cache size
+#[allow(dead_code)]
 fn get_l2_cache_size() -> usize {
     get_cache_info().l2_size
 }
 
 /// Get the CPU's L3 cache size
+#[allow(dead_code)]
 fn get_l3_cache_size() -> usize {
     get_cache_info().l3_size
 }

@@ -7,10 +7,12 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock, Mutex};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
+#[allow(unused_imports)]
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+#[allow(unused_imports)]
 use super::large_scale::{LargeScaleManager, LargeScaleConfig, MemoryTracker};
 
 /// Configuration for out-of-core arrays
@@ -85,6 +87,7 @@ struct DataChunk<T: Copy> {
     metadata: ChunkMetadata,
 }
 
+#[allow(dead_code)]
 impl<T: Copy> DataChunk<T> {
     /// Create a new in-memory chunk
     fn new_in_memory(chunk_index: usize, data: Vec<T>) -> Self {
@@ -98,7 +101,7 @@ impl<T: Copy> DataChunk<T> {
                 in_memory: true,
                 access_count: 0,
                 last_access: current_timestamp(),
-                dirty: false,
+                dirty: true,
             },
         }
     }
@@ -236,6 +239,7 @@ pub struct OutOfCoreArray<T: Copy + Send + Sync + Default + 'static> {
     /// Memory tracker for monitoring usage
     memory_tracker: Arc<MemoryTracker>,
     /// Unique identifier for this array
+    #[allow(dead_code)]
     array_id: String,
     /// Phantom data for T
     _phantom: PhantomData<T>,
@@ -302,8 +306,27 @@ impl CacheManager {
     }
     
     /// Record that a chunk is now in memory
-    fn chunk_loaded(&mut self, chunk_index: usize) {
+    fn chunk_loaded(&mut self, chunk_index: usize, strategy: CacheStrategy) {
         self.chunks_in_memory += 1;
+        
+        // Track the chunk for eviction according to the cache strategy
+        match strategy {
+            CacheStrategy::LRU => {
+                // Remove if already exists, then add to front
+                self.lru_queue.retain(|&x| x != chunk_index);
+                self.lru_queue.push_front(chunk_index);
+            },
+            CacheStrategy::LFU => {
+                // Increment access frequency
+                *self.access_frequency.entry(chunk_index).or_insert(0) += 1;
+            },
+            CacheStrategy::FIFO => {
+                // Add to the back of the queue if not already present
+                if !self.fifo_queue.contains(&chunk_index) {
+                    self.fifo_queue.push_back(chunk_index);
+                }
+            },
+        }
     }
     
     /// Record that a chunk is no longer in memory
@@ -348,14 +371,19 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
     
     /// Create an out-of-core array from existing data
     pub fn from_data(data: Vec<T>, shape: Vec<usize>, config: OutOfCoreConfig) -> Result<Self> {
-        let mut array = Self::new(shape, config)?;
+        let array = Self::new(shape, config)?;
         
         // Split data into chunks
         let chunk_size = array.config.chunk_size;
         for (chunk_index, chunk_data) in data.chunks(chunk_size).enumerate() {
+            // Check if we need to evict chunks first
+            array.evict_chunks_if_needed()?;
+            
             let chunk = DataChunk::new_in_memory(chunk_index, chunk_data.to_vec());
+            let memory_usage = chunk.metadata.element_count * std::mem::size_of::<T>();
             array.chunks.write().unwrap().insert(chunk_index, chunk);
-            array.cache_manager.lock().unwrap().chunk_loaded(chunk_index);
+            array.cache_manager.lock().unwrap().chunk_loaded(chunk_index, array.config.cache_strategy);
+            array.memory_tracker.record_allocation(memory_usage);
         }
         
         Ok(array)
@@ -508,13 +536,16 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
             let chunks = self.chunks.read().unwrap();
             if let Some(chunk) = chunks.get(&chunk_index) {
                 if chunk.metadata.in_memory {
+                    // Mark as recently accessed to prevent immediate eviction
+                    let mut cache_manager = self.cache_manager.lock().unwrap();
+                    cache_manager.record_access(chunk_index, self.config.cache_strategy);
                     return Ok(());
                 }
             }
         }
         
-        // Check if we need to evict chunks first
-        self.evict_chunks_if_needed()?;
+        // Check if we need to evict chunks first, but protect the chunk we're loading
+        self.evict_chunks_if_needed_protected(Some(chunk_index))?;
         
         // Load the chunk
         {
@@ -522,7 +553,7 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
             if let Some(chunk) = chunks.get_mut(&chunk_index) {
                 if !chunk.metadata.in_memory {
                     chunk.load_from_disk()?;
-                    self.cache_manager.lock().unwrap().chunk_loaded(chunk_index);
+                    self.cache_manager.lock().unwrap().chunk_loaded(chunk_index, self.config.cache_strategy);
                     
                     // Track memory usage
                     let memory_usage = chunk.metadata.element_count * std::mem::size_of::<T>();
@@ -536,9 +567,15 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
                 let chunk = DataChunk::new_in_memory(chunk_index, chunk_data);
                 let memory_usage = chunk.metadata.element_count * std::mem::size_of::<T>();
                 chunks.insert(chunk_index, chunk);
-                self.cache_manager.lock().unwrap().chunk_loaded(chunk_index);
+                self.cache_manager.lock().unwrap().chunk_loaded(chunk_index, self.config.cache_strategy);
                 self.memory_tracker.record_allocation(memory_usage);
             }
+        }
+        
+        // Mark the chunk as recently accessed to prevent immediate eviction
+        {
+            let mut cache_manager = self.cache_manager.lock().unwrap();
+            cache_manager.record_access(chunk_index, self.config.cache_strategy);
         }
         
         // Prefetch adjacent chunks if enabled
@@ -551,10 +588,21 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
     
     /// Evict chunks from memory if we exceed the cache limit
     fn evict_chunks_if_needed(&self) -> Result<()> {
+        self.evict_chunks_if_needed_protected(None)
+    }
+    
+    /// Evict chunks from memory if we exceed the cache limit, protecting a specific chunk
+    fn evict_chunks_if_needed_protected(&self, protected_chunk: Option<usize>) -> Result<()> {
         let mut cache_manager = self.cache_manager.lock().unwrap();
         
         while cache_manager.chunks_in_memory >= self.config.max_chunks_in_memory {
             if let Some(evict_chunk_index) = cache_manager.get_eviction_candidate(self.config.cache_strategy) {
+                // Skip protected chunk
+                if let Some(protected) = protected_chunk {
+                    if evict_chunk_index == protected {
+                        break; // Can't evict the protected chunk, stop trying
+                    }
+                }
                 // Spill the chunk to disk
                 {
                     let mut chunks = self.chunks.write().unwrap();
@@ -591,12 +639,17 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
         let num_chunks = self.num_chunks();
         let prefetch_count = self.config.prefetch_count;
         
-        // Prefetch next chunks
-        for i in 1..=prefetch_count {
+        // Prefetch next chunks, but only 1 to avoid aggressive eviction
+        let safe_prefetch_count = std::cmp::min(prefetch_count, 1);
+        for i in 1..=safe_prefetch_count {
             let next_chunk = current_chunk + i;
             if next_chunk < num_chunks {
-                // Non-blocking prefetch attempt
-                let _ = self.ensure_chunk_loaded(next_chunk);
+                // Only prefetch if we have room in cache
+                let cache_manager = self.cache_manager.lock().unwrap();
+                if cache_manager.chunks_in_memory < self.config.max_chunks_in_memory {
+                    drop(cache_manager);
+                    let _ = self.ensure_chunk_loaded(next_chunk);
+                }
             }
         }
     }
@@ -641,7 +694,7 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
     
     /// Get cache statistics
     pub fn get_cache_stats(&self) -> CacheStats {
-        let cache_manager = self.cache_manager.lock().unwrap();
+        let _cache_manager = self.cache_manager.lock().unwrap();
         let chunks = self.chunks.read().unwrap();
         
         let chunks_in_memory = chunks.values().filter(|c| c.metadata.in_memory).count();
@@ -729,6 +782,7 @@ mod tests {
             storage_path: temp_dir.clone(),
             max_chunks_in_memory: 2,
             chunk_size: 5,
+            enable_prefetch: true,
             ..Default::default()
         };
         

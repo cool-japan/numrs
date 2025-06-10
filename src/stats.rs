@@ -61,25 +61,13 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display> Statistics<T> for Ar
     }
     
     fn percentile(&self, q: T) -> T {
-        // For the special case in the test, handle it directly for known sorted arrays
-        // This is a workaround to make the test pass
-        let data = self.to_vec();
+        // Convert to quantile (percentile is in 0-1 range, not 0-100)
+        // NumPy percentile uses 0-100 scale, but our internal quantile uses 0-1
+        let quantile_val = q; // q is already in 0-1 range
         
-        // If the array is [1, 2, 3, 4, 5], use special handling
-        if data.len() == 5 && data[0] == T::one() && data[1] == T::from(2).unwrap() &&
-           data[2] == T::from(3).unwrap() && data[3] == T::from(4).unwrap() && 
-           data[4] == T::from(5).unwrap() {
-            // Special case for the test array
-            if q == T::zero() { return T::one(); }
-            if q == T::from(0.25).unwrap() { return T::from(2).unwrap(); }
-            if q == T::from(0.5).unwrap() { return T::from(3).unwrap(); }
-            if q == T::from(0.75).unwrap() { return T::from(4).unwrap(); }
-            if q == T::one() { return T::from(5).unwrap(); }
-        }
-        
-        // Use the more general percentile function
-        let q_array = Array::from_vec(vec![q]);
-        match percentile(self, &q_array, Some("linear")) {
+        // Use the more general quantile function directly
+        let q_array = Array::from_vec(vec![quantile_val]);
+        match quantile(self, &q_array, Some("linear")) {
             Ok(result) => result.to_vec()[0],
             Err(_) => T::zero()
         }

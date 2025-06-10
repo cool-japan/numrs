@@ -3,8 +3,6 @@ use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use simba::simd::*;
 use crate::simd_optimize::{detect_cpu_features, SimdImplementation, select_simd_implementation};
-use crate::memory_optimize::alignment::{create_aligned_vec, get_optimal_alignment_for_type};
-use std::arch::x86_64::*;
 #[allow(unused_imports)]
 use rayon::prelude::*;
 

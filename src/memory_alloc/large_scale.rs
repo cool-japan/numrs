@@ -3,12 +3,15 @@
 //! This module provides memory management strategies specifically designed
 //! for handling datasets that are too large to fit entirely in memory.
 
+#[allow(unused_imports)]
 use std::alloc::{alloc, dealloc, Layout};
 use std::collections::{HashMap, VecDeque};
+#[allow(unused_imports)]
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::fs::{File, OpenOptions};
+#[allow(unused_imports)]
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -159,6 +162,7 @@ pub struct SpilledData {
     /// Size of the data in bytes
     size: usize,
     /// Creation timestamp
+    #[allow(dead_code)]
     created_at: SystemTime,
     /// Last access timestamp
     last_accessed: SystemTime,
@@ -521,63 +525,76 @@ impl<'a, T> Iterator for ChunkIterator<'a, T> {
     }
 }
 
-/// Global large-scale manager instance
-static mut GLOBAL_MANAGER: Option<LargeScaleManager> = None;
-static MANAGER_INIT: std::sync::Once = std::sync::Once::new();
+lazy_static::lazy_static! {
+    /// Global large-scale manager instance
+    static ref GLOBAL_MANAGER: std::sync::RwLock<Option<LargeScaleManager>> = std::sync::RwLock::new(None);
+}
 
 /// Initialize the global large-scale manager
 pub fn init_global_manager(config: LargeScaleConfig) -> Result<()> {
-    unsafe {
-        if GLOBAL_MANAGER.is_some() {
-            return Err(NumRs2Error::InvalidOperation(
-                "Global large-scale manager already initialized".to_string()
-            ));
-        }
-        
-        MANAGER_INIT.call_once(|| {
-            GLOBAL_MANAGER = Some(LargeScaleManager::new(config).unwrap());
-        });
-        
-        Ok(())
+    let mut manager = GLOBAL_MANAGER.write().unwrap();
+    if manager.is_some() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Global large-scale manager already initialized".to_string()
+        ));
     }
+    
+    *manager = Some(LargeScaleManager::new(config)?);
+    Ok(())
 }
 
-/// Get the global large-scale manager
-pub fn get_global_manager() -> Result<&'static LargeScaleManager> {
-    unsafe {
-        GLOBAL_MANAGER.as_ref().ok_or_else(|| {
-            NumRs2Error::InvalidOperation(
-                "Global large-scale manager not initialized. Call init_global_manager() first.".to_string()
-            )
-        })
-    }
+/// Execute a function with access to the global large-scale manager
+pub fn with_global_manager<F, R>(f: F) -> Result<R> 
+where
+    F: FnOnce(&LargeScaleManager) -> R,
+{
+    let manager = GLOBAL_MANAGER.read().unwrap();
+    let manager_ref = manager.as_ref().ok_or_else(|| {
+        NumRs2Error::InvalidOperation(
+            "Global large-scale manager not initialized. Call init_global_manager() first.".to_string()
+        )
+    })?;
+    Ok(f(manager_ref))
 }
 
 /// Convenience function to check if we should spill based on global manager
 pub fn should_spill_globally() -> bool {
-    get_global_manager()
-        .map(|manager| manager.should_spill())
+    with_global_manager(|manager| manager.should_spill())
         .unwrap_or(false)
+}
+
+/// Execute a function with mutable access to the global large-scale manager
+pub fn with_global_manager_mut<F, R>(f: F) -> Result<R> 
+where
+    F: FnOnce(&mut LargeScaleManager) -> Result<R>,
+{
+    let mut manager = GLOBAL_MANAGER.write().unwrap();
+    let manager_ref = manager.as_mut().ok_or_else(|| {
+        NumRs2Error::InvalidOperation(
+            "Global large-scale manager not initialized. Call init_global_manager() first.".to_string()
+        )
+    })?;
+    f(manager_ref)
 }
 
 /// Convenience function to spill data using global manager
 pub fn spill_data_globally(data: &[u8], id: Option<String>) -> Result<String> {
-    get_global_manager()?.spill_data(data, id)
+    with_global_manager_mut(|manager| manager.spill_data(data, id))
 }
 
 /// Convenience function to load spilled data using global manager
 pub fn load_spilled_data_globally(spill_id: &str) -> Result<Vec<u8>> {
-    get_global_manager()?.load_spilled_data(spill_id)
+    with_global_manager_mut(|manager| manager.load_spilled_data(spill_id))
 }
 
 /// Convenience function to get memory stats from global manager
 pub fn get_global_memory_stats() -> Result<MemoryStats> {
-    Ok(get_global_manager()?.get_memory_stats())
+    with_global_manager(|manager| manager.get_memory_stats())
 }
 
 /// Convenience function to get spill stats from global manager
 pub fn get_global_spill_stats() -> Result<SpillStats> {
-    Ok(get_global_manager()?.get_spill_stats())
+    with_global_manager(|manager| manager.get_spill_stats())
 }
 
 #[cfg(test)]

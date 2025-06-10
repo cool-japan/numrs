@@ -43,11 +43,11 @@ fn main() {
     let exact_c = Array::from_vec(vec![1, 2, 3, 5]);
     println!(
         "array_equal for identical arrays: {}",
-        array_equal(&exact_a, &exact_b)
+        array_equal(&exact_a, &exact_b, None)
     );
     println!(
         "array_equal for different arrays: {}",
-        array_equal(&exact_a, &exact_c)
+        array_equal(&exact_a, &exact_c, None)
     );
 
     // 5. Comparison operations (greater, less, etc.)

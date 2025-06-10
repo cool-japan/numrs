@@ -3,8 +3,6 @@
 //! This module provides highly optimized implementations of common numerical
 //! operations using AVX2 intrinsics.
 
-use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
 use std::arch::x86_64::*;
 
 /// AVX2-optimized element-wise addition for f32 arrays

@@ -641,10 +641,10 @@ pub fn require<T: Clone>(array: &Array<T>, requirements: Option<ArrayRequirement
     let need_contiguous = requirements.contains(ArrayRequirements::CONTIGUOUS);
     
     // Check if we need to own the data
-    let need_owner = requirements.contains(ArrayRequirements::OWNDATA);
+    let _need_owner = requirements.contains(ArrayRequirements::OWNDATA);
     
     // Check if we need a writeable array
-    let need_writeable = requirements.contains(ArrayRequirements::WRITEABLE);
+    let _need_writeable = requirements.contains(ArrayRequirements::WRITEABLE);
     
     // Check if the input array satisfies the requirements
     let meets_c_layout = if need_c_layout { array.is_c_contiguous() } else { true };
@@ -999,12 +999,12 @@ pub fn diagonal<T: Clone + num_traits::Zero>(
     // Helper function to calculate index without axis1 and axis2
     let calc_base_index = |indices: &[usize]| -> usize {
         let mut base_idx = 0;
-        let mut dst_idx = 0;
+        let mut _dst_idx = 0;
         
         for (src_idx, &dim) in indices.iter().enumerate() {
             if src_idx != axis1 && src_idx != axis2 {
                 base_idx += dim * strides[src_idx];
-                dst_idx += 1;
+                _dst_idx += 1;
             }
         }
         

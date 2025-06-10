@@ -791,21 +791,31 @@ mod tests {
     
     #[test]
     fn test_set_seed() {
-        // When testing with a fixed seed, we're only checking that the same seed
-        // produces the same output in the same run, not across different runs
-        set_seed(12345);
-        let arr1 = normal(0.0, 1.0, &[5]).unwrap();
+        // Test that the same seed produces the same sequence
+        // by generating multiple arrays with the same seed
+        let seed1 = 12345u64;
+        let seed2 = 54321u64;
+        
+        // First sequence with seed1
+        set_seed(seed1);
+        let arr1_a = normal(0.0, 1.0, &[5]).unwrap();
+        let arr1_b = normal(0.0, 1.0, &[5]).unwrap();
 
-        set_seed(12345);
-        let arr2 = normal(0.0, 1.0, &[5]).unwrap();
+        // Reset to seed1 and generate the same sequence
+        set_seed(seed1);
+        let arr2_a = normal(0.0, 1.0, &[5]).unwrap();
+        let arr2_b = normal(0.0, 1.0, &[5]).unwrap();
 
-        // Verify that using the same seed produces the same results
-        assert_eq!(arr1.to_vec(), arr2.to_vec());
+        // Verify that resetting the seed reproduces the same sequence
+        assert_eq!(arr1_a.to_vec(), arr2_a.to_vec(), "First arrays should be identical");
+        assert_eq!(arr1_b.to_vec(), arr2_b.to_vec(), "Second arrays should be identical");
 
-        // But different seeds should produce different results
-        set_seed(54321);
-        let arr3 = normal(0.0, 1.0, &[5]).unwrap();
-        assert_ne!(arr1.to_vec(), arr3.to_vec());
+        // Now test with a different seed
+        set_seed(seed2);
+        let arr3_a = normal(0.0, 1.0, &[5]).unwrap();
+        
+        // Different seeds should produce different results
+        assert_ne!(arr1_a.to_vec(), arr3_a.to_vec(), "Different seeds should produce different results");
     }
 
     #[test]

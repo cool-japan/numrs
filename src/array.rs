@@ -995,8 +995,75 @@ impl<T: Clone> Array<T> {
     pub fn transpose(&self) -> Self 
     where T: Clone
     {
-        let transposed = self.data.clone().reversed_axes();
-        Self { data: transposed }
+        match self.data.ndim() {
+            1 => {
+                // 1D arrays remain unchanged when transposed
+                self.clone()
+            },
+            2 => {
+                // For 2D arrays, perform proper matrix transpose
+                let shape = self.shape();
+                let rows = shape[0];
+                let cols = shape[1];
+                let old_data = self.to_vec();
+                let mut new_data = Vec::with_capacity(old_data.len());
+                
+                // Transpose: new[j * rows + i] = old[i * cols + j]
+                for j in 0..cols {
+                    for i in 0..rows {
+                        new_data.push(old_data[i * cols + j].clone());
+                    }
+                }
+                
+                Self::from_vec(new_data).reshape(&[cols, rows])
+            },
+            _ => {
+                // For N-D arrays, reverse all axes
+                let shape = self.shape();
+                let mut reversed_shape = shape.clone();
+                reversed_shape.reverse();
+                
+                let old_data = self.to_vec();
+                let mut new_data = Vec::with_capacity(old_data.len());
+                
+                // Calculate strides for both original and transposed arrays
+                let mut old_strides = vec![1; shape.len()];
+                for i in (0..shape.len()-1).rev() {
+                    old_strides[i] = old_strides[i+1] * shape[i+1];
+                }
+                
+                let mut new_strides = vec![1; reversed_shape.len()];
+                for i in (0..reversed_shape.len()-1).rev() {
+                    new_strides[i] = new_strides[i+1] * reversed_shape[i+1];
+                }
+                
+                // For each position in the new array, find corresponding position in old array
+                let total_elements = old_data.len();
+                for linear_idx in 0..total_elements {
+                    // Convert linear index to multi-dimensional index in new array
+                    let mut new_indices = vec![0; reversed_shape.len()];
+                    let mut temp = linear_idx;
+                    for i in 0..reversed_shape.len() {
+                        new_indices[i] = temp / new_strides[i];
+                        temp %= new_strides[i];
+                    }
+                    
+                    // Map to old array indices (reverse the indices)
+                    let mut old_indices = new_indices.clone();
+                    old_indices.reverse();
+                    
+                    // Convert old multi-dimensional indices to linear index
+                    let mut old_linear_idx = 0;
+                    for i in 0..shape.len() {
+                        old_linear_idx += old_indices[i] * old_strides[i];
+                    }
+                    
+                    new_data.push(old_data[old_linear_idx].clone());
+                }
+                
+                Self::from_vec(new_data).reshape(&reversed_shape)
+            }
+        }
     }
     
     /// Transpose (interchange) the given axes of the array.

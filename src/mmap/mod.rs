@@ -43,6 +43,7 @@ pub enum PrefetchStrategy {
 
 /// Access pattern information for optimization
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct AccessPattern {
     /// Recent access indices
     recent_accesses: Vec<Vec<usize>>,
@@ -56,7 +57,8 @@ struct AccessPattern {
 
 /// Types of detected access patterns
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum AccessPatternType {
+#[allow(dead_code)]
+pub enum AccessPatternType {
     Unknown,
     Sequential,
     Strided,
@@ -92,6 +94,7 @@ pub struct MmapArray<T: Copy> {
     /// Data offset in the file (after metadata)
     data_offset: usize,
     /// Page size for optimal I/O
+    #[allow(dead_code)]
     page_size: usize,
     /// Phantom data for type T
     _phantom: PhantomData<T>,
@@ -143,6 +146,7 @@ impl Default for AccessPattern {
     }
 }
 
+#[allow(dead_code)]
 impl<T: Copy> MmapArray<T> {
     /// Create a new memory-mapped array
     ///
@@ -561,9 +565,7 @@ impl<T: Copy> MmapArray<T> {
                 
                 // Touch the memory to trigger prefetch
                 if byte_offset + mem::size_of::<T>() <= self.mmap.len() {
-                    unsafe {
-                        let _ = self.mmap[byte_offset];
-                    }
+                    let _ = self.mmap[byte_offset];
                 }
             }
         }
@@ -572,7 +574,7 @@ impl<T: Copy> MmapArray<T> {
     }
     
     /// Prefetch data for strided access pattern
-    fn prefetch_strided(&self, indices: &[usize]) -> Result<()> {
+    fn prefetch_strided(&self, _indices: &[usize]) -> Result<()> {
         // Implementation for strided prefetching
         // (Simplified for brevity)
         Ok(())
@@ -718,11 +720,13 @@ fn get_page_size() -> usize {
 }
 
 /// Align size to page boundary
+#[allow(dead_code)]
 fn align_to_page(size: usize, page_size: usize) -> usize {
     (size + page_size - 1) & !(page_size - 1)
 }
 
 /// Apply memory advice for optimization
+#[allow(dead_code)]
 fn apply_memory_advice(_mmap: &mut MmapMut, _config: &MmapConfig) {
     // Memory advice is platform-specific and not always available
     // For now, we'll skip this optimization

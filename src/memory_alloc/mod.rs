@@ -17,9 +17,9 @@ pub use aligned::{AlignedAllocator, AlignmentConfig};
 pub use strategy::{AllocStrategy, MemoryAllocator, get_default_allocator};
 pub use large_scale::{
     LargeScaleManager, LargeScaleConfig, MemoryTracker, MemoryStats, SpillStats,
-    ChunkIterator, init_global_manager, get_global_manager, should_spill_globally,
-    spill_data_globally, load_spilled_data_globally, get_global_memory_stats,
-    get_global_spill_stats
+    ChunkIterator, init_global_manager, with_global_manager, with_global_manager_mut,
+    should_spill_globally, spill_data_globally, load_spilled_data_globally, 
+    get_global_memory_stats, get_global_spill_stats
 };
 pub use out_of_core::{
     OutOfCoreArray, OutOfCoreConfig, CacheStrategy, CacheStats

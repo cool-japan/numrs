@@ -4,7 +4,6 @@
 //! to improve cache utilization and reduce memory access latency.
 
 use std::mem;
-use std::alloc;
 
 /// Strategy for optimizing memory placement
 #[derive(Debug, Copy, Clone, PartialEq)]

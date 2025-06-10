@@ -29,7 +29,7 @@ The simplest way to install NumRS2 is directly from [crates.io](https://crates.i
 1. Add NumRS2 to your `Cargo.toml`:
    ```toml
    [dependencies]
-   numrs2 = "0.1.0-alpha.2"
+   numrs2 = "0.1.0-alpha.3"
    ```
 
 2. Or use Cargo to add it directly:
@@ -135,7 +135,7 @@ To verify your installation:
 2. Add NumRS2 to dependencies in `Cargo.toml`:
    ```toml
    [dependencies]
-   numrs2 = "0.1.0-alpha.2"
+   numrs2 = "0.1.0-alpha.3"
    ```
 
 3. Replace `src/main.rs` content with:
@@ -168,7 +168,7 @@ NumRS2 can be configured with various feature flags in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.2", features = ["blas", "lapack", "serde"] }
+numrs2 = { version = "0.1.0-alpha.3", features = ["blas", "lapack", "serde"] }
 ```
 
 Available features:

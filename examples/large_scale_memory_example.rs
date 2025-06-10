@@ -3,13 +3,12 @@
 //! This example shows how to use NumRS2's large-scale memory management features
 //! for handling datasets that are too large to fit entirely in memory.
 
-use numrs::memory_alloc::{
-    LargeScaleManager, LargeScaleConfig, OutOfCoreArray, OutOfCoreConfig, CacheStrategy,
+use numrs2::memory_alloc::{
+    LargeScaleConfig, OutOfCoreArray, OutOfCoreConfig, CacheStrategy,
     init_global_manager, get_global_memory_stats, get_global_spill_stats, should_spill_globally
 };
-use numrs::array::Array;
-use numrs::error::Result;
-use std::path::PathBuf;
+use numrs2::array::Array;
+use numrs2::error::Result;
 
 fn main() -> Result<()> {
     println!("NumRS2 Large-Scale Memory Management Example");

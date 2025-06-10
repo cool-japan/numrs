@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition = "2021"
 authors = ["NumRS Contributors"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -14,7 +14,7 @@ categories = ["science"]
 default = ["matrix_decomp"]
 matrix_decomp = []
 validation = []
-scirs = ["dep:scirs2-stats", "dep:scirs2-core"]
+scirs = ["dep:scirs2-stats", "dep:scirs2-core", "dep:scirs2-linalg"]
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
 
 [dependencies]
@@ -43,8 +43,9 @@ memmap2 = "0.9.1"   # Memory-mapped file I/O
 num_cpus = "1.16.0"
 
 # Optional SciRS2 dependencies
-scirs2-stats = { version = "0.1.0-alpha.2", optional = true }
-scirs2-core = { version = "0.1.0-alpha.2", optional = true }
+scirs2-stats = { version = "0.1.0-alpha.4", optional = true }
+scirs2-core = { version = "0.1.0-alpha.4", optional = true }
+scirs2-linalg = { version = "0.1.0-alpha.4", optional = true }
 
 # Optional GPU acceleration dependencies
 wgpu = { version = "0.19.1", optional = true }
