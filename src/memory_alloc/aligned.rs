@@ -29,7 +29,10 @@ impl Default for AlignmentConfig {
 impl AlignmentConfig {
     /// Create a new alignment configuration
     pub fn new(alignment: usize, zero_init: bool) -> Self {
-        assert!(alignment.is_power_of_two(), "Alignment must be a power of 2");
+        assert!(
+            alignment.is_power_of_two(),
+            "Alignment must be a power of 2"
+        );
         Self {
             alignment,
             zero_init,
@@ -196,11 +199,7 @@ impl AlignedAllocator {
         let ptr = self.allocate_array::<T>(values.len())?;
 
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                values.as_ptr(),
-                ptr.as_ptr(),
-                values.len(),
-            );
+            std::ptr::copy_nonoverlapping(values.as_ptr(), ptr.as_ptr(), values.len());
         }
 
         Some(ptr)
@@ -224,7 +223,7 @@ impl AlignedAllocator {
     /// - The pointer must have been allocated by this allocator
     /// - The count must match the original allocation
     /// - The memory must be properly initialized
-    pub unsafe fn as_mut_slice<T>(&self, ptr: NonNull<T>, count: usize) -> &mut [T] {
+    pub unsafe fn as_mut_slice<T>(&mut self, ptr: NonNull<T>, count: usize) -> &mut [T] {
         std::slice::from_raw_parts_mut(ptr.as_ptr(), count)
     }
 }
@@ -240,37 +239,37 @@ impl<T> AlignedBox<T> {
     pub fn new(value: T, alignment: usize) -> Option<Self> {
         let config = AlignmentConfig::new(alignment, false);
         let allocator = AlignedAllocator::new(config);
-        
+
         let ptr = allocator.allocate_for_type::<T>()?;
-        
+
         unsafe {
             std::ptr::write(ptr.as_ptr(), value);
         }
-        
+
         Some(Self { ptr, allocator })
     }
-    
+
     /// Get a reference to the contained value
     pub fn get(&self) -> &T {
         unsafe { self.ptr.as_ref() }
     }
-    
+
     /// Get a mutable reference to the contained value
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { self.ptr.as_mut() }
     }
-    
+
     /// Convert into the contained value
     pub fn into_inner(self) -> T {
         // Read the value
         let value = unsafe { std::ptr::read(self.ptr.as_ptr()) };
-        
+
         // Prevent the destructor from running
         std::mem::forget(self);
-        
+
         value
     }
-    
+
     /// Get the alignment of this allocation
     pub fn alignment(&self) -> usize {
         self.allocator.alignment()
@@ -282,10 +281,12 @@ impl<T> Drop for AlignedBox<T> {
         unsafe {
             // Drop the contained value
             std::ptr::drop_in_place(self.ptr.as_ptr());
-            
+
             // Deallocate the memory
-            self.allocator.deallocate(NonNull::new_unchecked(self.ptr.as_ptr() as *mut u8), 
-                                     mem::size_of::<T>());
+            self.allocator.deallocate(
+                NonNull::new_unchecked(self.ptr.as_ptr() as *mut u8),
+                mem::size_of::<T>(),
+            );
         }
     }
 }
@@ -313,35 +314,37 @@ impl<T> AlignedVec<T> {
 
         let config = AlignmentConfig::new(alignment, false);
         let allocator = AlignedAllocator::new(config);
-        
+
         let ptr = allocator.allocate_array::<T>(capacity)?;
-        
-        Some(Self { 
-            ptr, 
-            len: 0, 
-            allocator 
+
+        Some(Self {
+            ptr,
+            len: 0,
+            allocator,
         })
     }
-    
+
     /// Create a new zero-initialized aligned vector with the given capacity
-    pub fn with_capacity_zeroed(capacity: usize, alignment: usize) -> Option<Self> 
-    where T: Copy + Default {
+    pub fn with_capacity_zeroed(capacity: usize, alignment: usize) -> Option<Self>
+    where
+        T: Copy + Default,
+    {
         if capacity == 0 {
             return None;
         }
 
         let config = AlignmentConfig::new(alignment, true);
         let allocator = AlignedAllocator::new(config);
-        
+
         let ptr = allocator.allocate_array::<T>(capacity)?;
-        
-        Some(Self { 
-            ptr, 
-            len: capacity, 
-            allocator 
+
+        Some(Self {
+            ptr,
+            len: capacity,
+            allocator,
         })
     }
-    
+
     /// Push a value to the end of the vector
     ///
     /// Returns false if there's no more capacity
@@ -349,46 +352,42 @@ impl<T> AlignedVec<T> {
         if self.len >= self.capacity() {
             return false;
         }
-        
+
         unsafe {
             std::ptr::write(self.ptr.as_ptr().add(self.len), value);
         }
-        
+
         self.len += 1;
         true
     }
-    
+
     /// Get the length of the vector
     pub fn len(&self) -> usize {
         self.len
     }
-    
+
     /// Check if the vector is empty
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
-    
+
     /// Get the current capacity of the vector
     pub fn capacity(&self) -> usize {
         // For simplicity, we just use length as capacity
         // A real implementation would track capacity separately
         self.len
     }
-    
+
     /// Get a reference to the vector as a slice
     pub fn as_slice(&self) -> &[T] {
-        unsafe {
-            std::slice::from_raw_parts(self.ptr.as_ptr(), self.len)
-        }
+        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
     }
-    
+
     /// Get a mutable reference to the vector as a slice
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe {
-            std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len)
-        }
+        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
     }
-    
+
     /// Get the alignment of this vector
     pub fn alignment(&self) -> usize {
         self.allocator.alignment()
@@ -402,7 +401,7 @@ impl<T> Drop for AlignedVec<T> {
             for i in 0..self.len {
                 std::ptr::drop_in_place(self.ptr.as_ptr().add(i));
             }
-            
+
             // Deallocate the memory
             self.allocator.deallocate_array(self.ptr, self.len);
         }
@@ -423,7 +422,11 @@ mod tests {
         let ptr = allocator.allocate(100).expect("Allocation should succeed");
 
         // Check alignment
-        assert_eq!(ptr.as_ptr() as usize % 16, 0, "Pointer should be 16-byte aligned");
+        assert_eq!(
+            ptr.as_ptr() as usize % 16,
+            0,
+            "Pointer should be 16-byte aligned"
+        );
 
         // Deallocate
         unsafe {
@@ -435,7 +438,11 @@ mod tests {
         let allocator = AlignedAllocator::new(config);
 
         let ptr = allocator.allocate(100).expect("Allocation should succeed");
-        assert_eq!(ptr.as_ptr() as usize % 4096, 0, "Pointer should be 4096-byte aligned");
+        assert_eq!(
+            ptr.as_ptr() as usize % 4096,
+            0,
+            "Pointer should be 4096-byte aligned"
+        );
 
         unsafe {
             allocator.deallocate(ptr, 100);
@@ -449,7 +456,9 @@ mod tests {
         let allocator = AlignedAllocator::new(config);
 
         // Allocate memory for an array of 10 integers
-        let ptr = allocator.allocate_array::<i32>(10).expect("Allocation should succeed");
+        let ptr = allocator
+            .allocate_array::<i32>(10)
+            .expect("Allocation should succeed");
 
         // Check that it's properly zero-initialized
         unsafe {
@@ -487,7 +496,8 @@ mod tests {
     #[test]
     fn test_aligned_vec() {
         // Create an aligned vector with capacity
-        let mut vec = AlignedVec::<i32>::with_capacity_zeroed(5, 64).expect("Allocation should succeed");
+        let mut vec =
+            AlignedVec::<i32>::with_capacity_zeroed(5, 64).expect("Allocation should succeed");
 
         // Check initial state
         assert_eq!(vec.len(), 5);
@@ -519,7 +529,8 @@ mod tests {
     #[test]
     fn test_aligned_vec_zeroed() {
         // Create a zero-initialized vector
-        let vec = AlignedVec::<i32>::with_capacity_zeroed(10, 32).expect("Allocation should succeed");
+        let vec =
+            AlignedVec::<i32>::with_capacity_zeroed(10, 32).expect("Allocation should succeed");
 
         // Check that it's properly zero-initialized
         assert_eq!(vec.len(), 10);

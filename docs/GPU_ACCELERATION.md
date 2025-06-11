@@ -14,7 +14,7 @@ GPU acceleration is an optional feature that needs to be explicitly enabled in y
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.2", features = ["gpu"] }
+numrs2 = { version = "0.1.0-alpha.3", features = ["gpu"] }
 ```
 
 Or when building NumRS2 directly:

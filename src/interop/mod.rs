@@ -3,18 +3,18 @@
 //! This module provides conversion functions to and from other popular Rust
 //! numerical libraries like ndarray, nalgebra, and SciRS2.
 
-pub mod ndarray_compat;
 pub mod nalgebra_compat;
+pub mod ndarray_compat;
 pub mod scirs_compat;
 
 #[cfg(test)]
 mod tests {
-    
+
     #[test]
     fn test_ndarray_conversions() {
         // Tests moved to the ndarray_compat module
     }
-    
+
     #[test]
     fn test_nalgebra_conversions() {
         // Tests moved to the nalgebra_compat module

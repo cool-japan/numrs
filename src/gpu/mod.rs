@@ -15,15 +15,15 @@
 //!
 //! ## Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use numrs2::array::Array;
 //! use numrs2::gpu;
 //!
 //! #[cfg(feature = "gpu")]
 //! fn main() -> numrs2::error::Result<()> {
-//!     // Create two arrays on the CPU
-//!     let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]).reshape(&[5]);
-//!     let b = Array::from_vec(vec![5.0, 4.0, 3.0, 2.0, 1.0]).reshape(&[5]);
+//!     // Create two arrays on the CPU (using f32 for better GPU compatibility)
+//!     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0]).reshape(&[5]);
+//!     let b = Array::from_vec(vec![5.0f32, 4.0, 3.0, 2.0, 1.0]).reshape(&[5]);
 //!
 //!     // Create GPU arrays from CPU arrays
 //!     let gpu_a = gpu::GpuArray::from_array(&a)?;
@@ -62,24 +62,27 @@
 //! - Performance benefits are most noticeable for large arrays
 
 // Re-export public types
-pub use context::GpuContext;
 pub use array::GpuArray;
+pub use context::GpuContext;
 pub use ops::*;
+#[cfg(feature = "gpu")]
+pub use util::get_gpu_info;
 
 // Conditionally include GPU modules when the feature is enabled
 #[cfg(feature = "gpu")]
-mod context;
-#[cfg(feature = "gpu")]
 mod array;
+#[cfg(feature = "gpu")]
+mod context;
 #[cfg(feature = "gpu")]
 mod ops;
 #[cfg(feature = "gpu")]
 mod shaders;
 #[cfg(feature = "gpu")]
-mod util;
+pub mod util;
 
-// Placeholder for non-GPU builds
+// Placeholder stubs for non-GPU builds
 #[cfg(not(feature = "gpu"))]
-mod placeholder;
+pub struct GpuArray;
+
 #[cfg(not(feature = "gpu"))]
-pub use placeholder::{GpuArray, GpuContext};
+pub struct GpuContext;

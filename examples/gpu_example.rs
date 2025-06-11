@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     #[cfg(feature = "gpu")]
     {
         println!("\nDetecting GPU hardware...");
-        if let Some(gpu_info) = gpu::util::get_gpu_info() {
+        if let Some(gpu_info) = gpu::get_gpu_info() {
             println!("✓ GPU detected: {}", gpu_info);
         } else {
             println!("✗ No compatible GPU detected");

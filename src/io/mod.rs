@@ -10,11 +10,12 @@ mod npy_npz;
 pub use npy_npz::*;
 
 /// Module for input/output operations with NumRS arrays.
-/// 
+///
 /// This module provides functionality for:
 /// 1. Serializing/deserializing arrays to/from various formats
 /// 2. Reading and writing arrays from/to files
 /// 3. Converting between arrays and other data formats
+///    
 /// Internal representation of an Array for serialization
 #[derive(Serialize, Deserialize)]
 struct SerializedArray<T> {
@@ -27,7 +28,7 @@ struct SerializedArray<T> {
 pub enum SerializeFormat {
     /// JSON format
     Json,
-    /// CSV format 
+    /// CSV format
     Csv,
     /// Binary format
     Binary,
@@ -64,11 +65,9 @@ impl<T: Clone + Serialize> Array<T> {
         };
 
         match format {
-            SerializeFormat::Json => {
-                serde_json::to_string(&serialized).map_err(|e| {
-                    NumRs2Error::SerializationError(format!("JSON serialization error: {}", e))
-                })
-            }
+            SerializeFormat::Json => serde_json::to_string(&serialized).map_err(|e| {
+                NumRs2Error::SerializationError(format!("JSON serialization error: {}", e))
+            }),
             SerializeFormat::Csv => {
                 // For CSV, we'll just write the flattened data as there's no standard
                 // for multidimensional arrays in CSV
@@ -77,30 +76,24 @@ impl<T: Clone + Serialize> Array<T> {
                 writer.serialize(&data).map_err(|e| {
                     NumRs2Error::SerializationError(format!("CSV serialization error: {}", e))
                 })?;
-                
+
                 let csv_bytes = writer.into_inner().map_err(|e| {
                     NumRs2Error::SerializationError(format!("CSV serialization error: {}", e))
                 })?;
-                
+
                 String::from_utf8(csv_bytes).map_err(|e| {
                     NumRs2Error::SerializationError(format!("CSV serialization error: {}", e))
                 })
             }
-            SerializeFormat::Binary => {
-                Err(NumRs2Error::SerializationError(
-                    "Binary serialization to string not supported".to_string(),
-                ))
-            }
-            SerializeFormat::Npy => {
-                Err(NumRs2Error::SerializationError(
-                    "NPY format serialization to string not supported".to_string(),
-                ))
-            }
-            SerializeFormat::Npz => {
-                Err(NumRs2Error::SerializationError(
-                    "NPZ format serialization to string not supported".to_string(),
-                ))
-            }
+            SerializeFormat::Binary => Err(NumRs2Error::SerializationError(
+                "Binary serialization to string not supported".to_string(),
+            )),
+            SerializeFormat::Npy => Err(NumRs2Error::SerializationError(
+                "NPY format serialization to string not supported".to_string(),
+            )),
+            SerializeFormat::Npz => Err(NumRs2Error::SerializationError(
+                "NPZ format serialization to string not supported".to_string(),
+            )),
         }
     }
 
@@ -127,9 +120,8 @@ impl<T: Clone + Serialize> Array<T> {
     /// // array.to_file(Path::new("array.json"), SerializeFormat::Json).unwrap();
     /// ```
     pub fn to_file<P: AsRef<Path>>(&self, path: P, format: SerializeFormat) -> Result<()> {
-        let file = File::create(path).map_err(|e| {
-            NumRs2Error::IOError(format!("Failed to create file: {}", e))
-        })?;
+        let file = File::create(path)
+            .map_err(|e| NumRs2Error::IOError(format!("Failed to create file: {}", e)))?;
         let mut writer = BufWriter::new(file);
 
         let serialized = SerializedArray {
@@ -142,9 +134,9 @@ impl<T: Clone + Serialize> Array<T> {
                 let json = serde_json::to_string(&serialized).map_err(|e| {
                     NumRs2Error::SerializationError(format!("JSON serialization error: {}", e))
                 })?;
-                writer.write_all(json.as_bytes()).map_err(|e| {
-                    NumRs2Error::IOError(format!("Failed to write to file: {}", e))
-                })?;
+                writer
+                    .write_all(json.as_bytes())
+                    .map_err(|e| NumRs2Error::IOError(format!("Failed to write to file: {}", e)))?;
             }
             SerializeFormat::Csv => {
                 let mut csv_writer = csv::Writer::from_writer(writer);
@@ -244,38 +236,35 @@ impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
                 let serialized: SerializedArray<T> = serde_json::from_str(s).map_err(|e| {
                     NumRs2Error::DeserializationError(format!("JSON deserialization error: {}", e))
                 })?;
-                
+
                 Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }
             SerializeFormat::Csv => {
                 let mut reader = csv::Reader::from_reader(s.as_bytes());
                 let mut data = Vec::new();
-                
+
                 for result in reader.deserialize() {
                     let record: Vec<T> = result.map_err(|e| {
-                        NumRs2Error::DeserializationError(format!("CSV deserialization error: {}", e))
+                        NumRs2Error::DeserializationError(format!(
+                            "CSV deserialization error: {}",
+                            e
+                        ))
                     })?;
                     data.extend(record);
                 }
-                
+
                 // For CSV, we assume 1D array since we don't have shape information
                 Ok(Array::from_vec(data))
             }
-            SerializeFormat::Binary => {
-                Err(NumRs2Error::DeserializationError(
-                    "Binary deserialization from string not supported".to_string(),
-                ))
-            }
-            SerializeFormat::Npy => {
-                Err(NumRs2Error::DeserializationError(
-                    "NPY format deserialization from string not supported".to_string(),
-                ))
-            }
-            SerializeFormat::Npz => {
-                Err(NumRs2Error::DeserializationError(
-                    "NPZ format deserialization from string not supported".to_string(),
-                ))
-            }
+            SerializeFormat::Binary => Err(NumRs2Error::DeserializationError(
+                "Binary deserialization from string not supported".to_string(),
+            )),
+            SerializeFormat::Npy => Err(NumRs2Error::DeserializationError(
+                "NPY format deserialization from string not supported".to_string(),
+            )),
+            SerializeFormat::Npz => Err(NumRs2Error::DeserializationError(
+                "NPZ format deserialization from string not supported".to_string(),
+            )),
         }
     }
 
@@ -301,37 +290,43 @@ impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
     /// // let array = Array::<i32>::from_file(Path::new("array.json"), SerializeFormat::Json).unwrap();
     /// ```
     pub fn from_file<P: AsRef<Path>>(path: P, format: SerializeFormat) -> Result<Self> {
-        let file = File::open(path).map_err(|e| {
-            NumRs2Error::IOError(format!("Failed to open file: {}", e))
-        })?;
+        let file = File::open(path)
+            .map_err(|e| NumRs2Error::IOError(format!("Failed to open file: {}", e)))?;
         let reader = BufReader::new(file);
 
         match format {
             SerializeFormat::Json => {
-                let serialized: SerializedArray<T> = serde_json::from_reader(reader).map_err(|e| {
-                    NumRs2Error::DeserializationError(format!("JSON deserialization error: {}", e))
-                })?;
-                
+                let serialized: SerializedArray<T> =
+                    serde_json::from_reader(reader).map_err(|e| {
+                        NumRs2Error::DeserializationError(format!(
+                            "JSON deserialization error: {}",
+                            e
+                        ))
+                    })?;
+
                 Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }
             SerializeFormat::Csv => {
                 let mut csv_reader = csv::Reader::from_reader(reader);
                 // Read all rows first to determine shape
                 let mut all_rows: Vec<Vec<T>> = Vec::new();
-                
+
                 for result in csv_reader.deserialize() {
                     let record: Vec<T> = result.map_err(|e| {
-                        NumRs2Error::DeserializationError(format!("CSV deserialization error: {}", e))
+                        NumRs2Error::DeserializationError(format!(
+                            "CSV deserialization error: {}",
+                            e
+                        ))
                     })?;
                     all_rows.push(record);
                 }
-                
+
                 if all_rows.is_empty() {
                     return Err(NumRs2Error::DeserializationError(
                         "CSV file contained no data".to_string(),
                     ));
                 }
-                
+
                 // Check if all rows have the same length
                 let row_length = all_rows[0].len();
                 for (i, row) in all_rows.iter().enumerate().skip(1) {
@@ -342,24 +337,28 @@ impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
                         ));
                     }
                 }
-                
+
                 // Store the rows count before moving the data
                 let rows_count = all_rows.len();
-                
+
                 // Flatten the rows into a single vector
                 let mut data = Vec::with_capacity(rows_count * row_length);
                 for row in all_rows {
                     data.extend(row);
                 }
-                
+
                 // Create a 2D array with the appropriate shape
                 Ok(Array::from_vec(data).reshape(&[rows_count, row_length]))
             }
             SerializeFormat::Binary => {
-                let serialized: SerializedArray<T> = bincode::deserialize_from(reader).map_err(|e| {
-                    NumRs2Error::DeserializationError(format!("Binary deserialization error: {}", e))
-                })?;
-                
+                let serialized: SerializedArray<T> =
+                    bincode::deserialize_from(reader).map_err(|e| {
+                        NumRs2Error::DeserializationError(format!(
+                            "Binary deserialization error: {}",
+                            e
+                        ))
+                    })?;
+
                 Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }
             SerializeFormat::Npy | SerializeFormat::Npz => {
@@ -432,9 +431,12 @@ pub fn vec2d_to_array<T: Clone>(vec: Vec<Vec<T>>) -> Result<Array<T>> {
     // Check that all rows have the same length
     for (i, row) in vec.iter().enumerate() {
         if row.len() != cols {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Row 0 has length {}, but row {} has length {}", cols, i, row.len())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Row 0 has length {}, but row {} has length {}",
+                cols,
+                i,
+                row.len()
+            )));
         }
     }
 
@@ -470,9 +472,10 @@ pub fn vec2d_to_array<T: Clone>(vec: Vec<Vec<T>>) -> Result<Array<T>> {
 /// ```
 pub fn array_to_vec2d<T: Clone>(array: &Array<T>) -> Result<Vec<Vec<T>>> {
     if array.ndim() != 2 {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Expected 2D array, got {}D", array.ndim())
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Expected 2D array, got {}D",
+            array.ndim()
+        )));
     }
 
     let shape = array.shape();

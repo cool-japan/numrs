@@ -18,9 +18,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-#[cfg(feature = "scirs")]
-use numrs2::interop::scirs_compat::*;
-
 const SAMPLE_SIZE: usize = 10000;
 const REFERENCE_FILE: &str = "tests/py/distribution_reference_data.json";
 const EPSILON: f64 = 0.1; // Tolerance for statistical comparisons

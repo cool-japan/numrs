@@ -3,16 +3,25 @@
 //! This module provides specialized memory allocators optimized for
 //! numerical computing workloads.
 
-pub mod pool;
-pub mod arena;
 pub mod aligned;
+pub mod arena;
+pub mod large_scale;
+pub mod out_of_core;
+pub mod pool;
 pub mod strategy;
 
 // Re-export the main types and functions for convenience
-pub use pool::{PoolAllocator, PoolConfig};
-pub use arena::{ArenaAllocator, ArenaConfig};
 pub use aligned::{AlignedAllocator, AlignmentConfig};
-pub use strategy::{AllocStrategy, MemoryAllocator, get_default_allocator};
+pub use arena::{ArenaAllocator, ArenaConfig};
+pub use large_scale::{
+    get_global_memory_stats, get_global_spill_stats, init_global_manager,
+    load_spilled_data_globally, should_spill_globally, spill_data_globally, with_global_manager,
+    with_global_manager_mut, ChunkIterator, LargeScaleConfig, LargeScaleManager, MemoryStats,
+    MemoryTracker, SpillStats,
+};
+pub use out_of_core::{CacheStats, CacheStrategy, OutOfCoreArray, OutOfCoreConfig};
+pub use pool::{PoolAllocator, PoolConfig};
+pub use strategy::{get_default_allocator, AllocStrategy, MemoryAllocator};
 
 /// Initialize the global allocator with the preferred strategy
 pub fn init_global_allocator(strategy: AllocStrategy) {

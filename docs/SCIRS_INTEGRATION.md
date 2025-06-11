@@ -24,7 +24,7 @@ To enable SciRS2 integration:
 1. Add SciRS2 dependencies to your `Cargo.toml`:
    ```toml
    [dependencies]
-   numrs2 = { version = "0.1.0-alpha.2", features = ["scirs"] }
+   numrs2 = { version = "0.1.0-alpha.3", features = ["scirs"] }
    ```
 
 2. Or, when building NumRS2 directly:

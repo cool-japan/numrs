@@ -1,10 +1,13 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::fmt::Debug;
-use std::collections::HashSet;
 use num_traits::Zero;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::fmt::Debug;
+use std::hash::Hash;
+
+/// Type alias for unique operation tuple results
+pub type UniqueTuple<T> = (Array<T>, Array<usize>, Array<usize>, Array<usize>);
 
 /// Find the unique elements of an array.
 ///
@@ -68,13 +71,13 @@ where
     // If no axis is provided, flatten the array and find unique elements
     if axis.is_none() {
         let flat_data = a.to_vec();
-        
+
         // Track unique elements, their first indices, and counts
         let mut unique_elements = Vec::new();
         let mut first_indices = Vec::new();
         let mut inverse_indices = vec![0; flat_data.len()];
         let mut value_to_index = HashMap::new();
-        
+
         // Process each element
         for (i, value) in flat_data.iter().enumerate() {
             if let Some(&idx) = value_to_index.get(value) {
@@ -89,7 +92,7 @@ where
                 inverse_indices[i] = new_idx;
             }
         }
-        
+
         // Calculate counts if needed
         let counts = if return_counts.unwrap_or(false) {
             let mut counts_vec = vec![0; unique_elements.len()];
@@ -100,68 +103,78 @@ where
         } else {
             None
         };
-        
+
         // Construct the result
         let unique_array = Array::from_vec(unique_elements);
-        
+
         return Ok(UniqueResult {
             values: unique_array,
-            indices: if return_index.unwrap_or(false) { Some(Array::from_vec(first_indices)) } else { None },
-            inverse: if return_inverse.unwrap_or(false) { Some(Array::from_vec(inverse_indices)) } else { None },
+            indices: if return_index.unwrap_or(false) {
+                Some(Array::from_vec(first_indices))
+            } else {
+                None
+            },
+            inverse: if return_inverse.unwrap_or(false) {
+                Some(Array::from_vec(inverse_indices))
+            } else {
+                None
+            },
             counts,
         });
     }
-    
+
     // Process along a specific axis
     let axis_val = axis.unwrap();
     if axis_val >= a.ndim() {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Axis {} out of bounds for array of dimension {}", axis_val, a.ndim())
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Axis {} out of bounds for array of dimension {}",
+            axis_val,
+            a.ndim()
+        )));
     }
-    
+
     // Get the shape
     let shape = a.shape();
-    
+
     // For 1D arrays, axis=0 is the same as no axis
     if shape.len() == 1 && axis_val == 0 {
         return unique(a, None, return_index, return_inverse, return_counts);
     }
-    
+
     // For higher dimensions, we need to find unique subarrays along the specified axis
-    
+
     // We'll convert each subarray along the axis to a hashable representation
     // This is a simplified approach - for better performance we would use more
     // efficient data structures and algorithms
-    
+
     // Get the size of the axis and calculate the shape of each subarray
     let axis_len = shape[axis_val];
-    
+
     // Create a vector to hold each subarray along the axis
     let mut subarrays = Vec::with_capacity(axis_len);
     let mut subarray_hashes = Vec::with_capacity(axis_len);
-    
+
     // Extract subarrays along the specified axis
     for i in 0..axis_len {
         // Get the subarray
         let subarray = a.slice(axis_val, i)?;
-        
+
         // Convert to a hashable representation (serialize to a vector)
         let hash_rep = subarray.to_vec();
-        
+
         subarrays.push(subarray);
         subarray_hashes.push(hash_rep);
     }
-    
+
     // Find unique subarrays
     let mut unique_indices = Vec::new();
     let mut index_map = HashMap::new();
     let mut inverse = vec![0; axis_len];
     let mut seen = HashSet::new();
-    
+
     for i in 0..axis_len {
         let hash_rep = &subarray_hashes[i];
-        
+
         if !seen.contains(hash_rep) {
             // This is a new unique subarray
             let idx = unique_indices.len();
@@ -175,7 +188,7 @@ where
             inverse[i] = idx;
         }
     }
-    
+
     // Calculate counts if needed
     let counts = if return_counts.unwrap_or(false) {
         let mut counts_vec = vec![0; unique_indices.len()];
@@ -186,19 +199,19 @@ where
     } else {
         None
     };
-    
+
     // Create the output arrays
-    
+
     // Create a new shape for the output with the axis dimension set to the number of unique subarrays
     let mut output_shape = shape.clone();
     output_shape[axis_val] = unique_indices.len();
-    
+
     // Create the result array by concatenating the unique subarrays along the axis
     let mut unique_subarrays = Vec::with_capacity(unique_indices.len());
     for &idx in &unique_indices {
         unique_subarrays.push(&subarrays[idx]);
     }
-    
+
     // Use the concatenate function to join the unique subarrays
     let values = if !unique_subarrays.is_empty() {
         // For now, convert the subarrays to a 1D array for each unique subarray
@@ -212,11 +225,19 @@ where
         // Empty result
         Array::zeros(&output_shape)
     };
-    
+
     Ok(UniqueResult {
         values,
-        indices: if return_index.unwrap_or(false) { Some(Array::from_vec(unique_indices)) } else { None },
-        inverse: if return_inverse.unwrap_or(false) { Some(Array::from_vec(inverse)) } else { None },
+        indices: if return_index.unwrap_or(false) {
+            Some(Array::from_vec(unique_indices))
+        } else {
+            None
+        },
+        inverse: if return_inverse.unwrap_or(false) {
+            Some(Array::from_vec(inverse))
+        } else {
+            None
+        },
         counts,
     })
 }
@@ -234,75 +255,76 @@ impl<T: Clone> UniqueResult<T> {
     pub fn values(self) -> Array<T> {
         self.values
     }
-    
+
     /// Get a tuple of (values, indices) if indices were requested
     pub fn values_indices(self) -> Result<(Array<T>, Array<usize>)> {
         match self.indices {
             Some(indices) => Ok((self.values, indices)),
             None => Err(NumRs2Error::InvalidOperation(
-                "indices were not requested in the unique call".to_string()
+                "indices were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, inverse) if inverse was requested
     pub fn values_inverse(self) -> Result<(Array<T>, Array<usize>)> {
         match self.inverse {
             Some(inverse) => Ok((self.values, inverse)),
             None => Err(NumRs2Error::InvalidOperation(
-                "inverse was not requested in the unique call".to_string()
+                "inverse was not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, counts) if counts were requested
     pub fn values_counts(self) -> Result<(Array<T>, Array<usize>)> {
         match self.counts {
             Some(counts) => Ok((self.values, counts)),
             None => Err(NumRs2Error::InvalidOperation(
-                "counts were not requested in the unique call".to_string()
+                "counts were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, indices, inverse) if both were requested
     pub fn values_indices_inverse(self) -> Result<(Array<T>, Array<usize>, Array<usize>)> {
         match (self.indices, self.inverse) {
             (Some(indices), Some(inverse)) => Ok((self.values, indices, inverse)),
             _ => Err(NumRs2Error::InvalidOperation(
-                "either indices or inverse were not requested in the unique call".to_string()
+                "either indices or inverse were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, indices, counts) if both were requested
     pub fn values_indices_counts(self) -> Result<(Array<T>, Array<usize>, Array<usize>)> {
         match (self.indices, self.counts) {
             (Some(indices), Some(counts)) => Ok((self.values, indices, counts)),
             _ => Err(NumRs2Error::InvalidOperation(
-                "either indices or counts were not requested in the unique call".to_string()
+                "either indices or counts were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, inverse, counts) if both were requested
     pub fn values_inverse_counts(self) -> Result<(Array<T>, Array<usize>, Array<usize>)> {
         match (self.inverse, self.counts) {
             (Some(inverse), Some(counts)) => Ok((self.values, inverse, counts)),
             _ => Err(NumRs2Error::InvalidOperation(
-                "either inverse or counts were not requested in the unique call".to_string()
+                "either inverse or counts were not requested in the unique call".to_string(),
             )),
         }
     }
-    
+
     /// Get a tuple of (values, indices, inverse, counts) if all were requested
-    pub fn values_indices_inverse_counts(self) -> Result<(Array<T>, Array<usize>, Array<usize>, Array<usize>)> {
+    pub fn values_indices_inverse_counts(self) -> Result<UniqueTuple<T>> {
         match (self.indices, self.inverse, self.counts) {
             (Some(indices), Some(inverse), Some(counts)) => {
                 Ok((self.values, indices, inverse, counts))
-            },
+            }
             _ => Err(NumRs2Error::InvalidOperation(
-                "not all of indices, inverse, and counts were requested in the unique call".to_string()
+                "not all of indices, inverse, and counts were requested in the unique call"
+                    .to_string(),
             )),
         }
     }

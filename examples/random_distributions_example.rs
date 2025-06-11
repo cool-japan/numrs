@@ -9,9 +9,7 @@ use numrs2::array::Array;
 use numrs2::error::Result;
 use numrs2::random::distributions::*;
 
-// Import the SciRS2 integration for advanced distributions
-#[cfg(feature = "scirs")]
-use numrs2::interop::scirs_compat::*;
+// Import the SciRS2 integration for advanced distributions (removed wildcard to avoid conflicts)
 use std::time::Instant;
 
 fn main() -> Result<()> {

@@ -29,22 +29,34 @@ enum ElementWiseOp {
 }
 
 /// Adds two GPU arrays element-wise
-pub fn add<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArray<T>) -> Result<GpuArray<T>> {
+pub fn add<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
     element_wise_op(a, b, ElementWiseOp::Add)
 }
 
 /// Subtracts two GPU arrays element-wise
-pub fn subtract<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArray<T>) -> Result<GpuArray<T>> {
+pub fn subtract<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
     element_wise_op(a, b, ElementWiseOp::Subtract)
 }
 
 /// Multiplies two GPU arrays element-wise
-pub fn multiply<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArray<T>) -> Result<GpuArray<T>> {
+pub fn multiply<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
     element_wise_op(a, b, ElementWiseOp::Multiply)
 }
 
 /// Divides two GPU arrays element-wise
-pub fn divide<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArray<T>) -> Result<GpuArray<T>> {
+pub fn divide<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
     element_wise_op(a, b, ElementWiseOp::Divide)
 }
 
@@ -89,12 +101,18 @@ pub fn neg<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Result<Gpu
 }
 
 /// Performs element-wise power (a^b)
-pub fn pow<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArray<T>) -> Result<GpuArray<T>> {
+pub fn pow<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
     element_wise_op(a, b, ElementWiseOp::Pow)
 }
 
 /// Performs matrix multiplication of two GPU arrays
-pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArray<T>) -> Result<GpuArray<T>> {
+pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
     // Validate shapes for matrix multiplication
     if a.shape().len() != 2 || b.shape().len() != 2 {
         return Err(NumRs2Error::ShapeMismatch {
@@ -107,68 +125,72 @@ pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArr
     let b_shape = b.shape();
 
     if a_shape[1] != b_shape[0] {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Cannot multiply matrices with shapes {:?} and {:?}", a_shape, b_shape)
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Cannot multiply matrices with shapes {:?} and {:?}",
+            a_shape, b_shape
+        )));
     }
 
     // Output shape is [a_rows, b_cols]
     let out_shape = vec![a_shape[0], b_shape[1]];
     let context = a.context().clone();
-    
+
     // Create output array
     let result = GpuArray::<T>::new_with_shape(&out_shape, context.clone())?;
 
     // Create bind group layout and pipeline
-    let bind_group_layout = context.device().create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("NumRS2 MatMul Bind Group Layout"),
-        entries: &[
-            // Input matrix A
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Input matrix B
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Output matrix C
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Dimensions
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-    });
+    let bind_group_layout =
+        context
+            .device()
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("NumRS2 MatMul Bind Group Layout"),
+                entries: &[
+                    // Input matrix A
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Input matrix B
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Output matrix C
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Dimensions
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
     // Select the appropriate shader based on the type
     let shader = if std::mem::size_of::<T>() == 4 {
@@ -177,160 +199,46 @@ pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>, b: &GpuArr
         context.matmul_f64_shader()
     };
 
-    let pipeline_layout = context.device().create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("NumRS2 MatMul Pipeline Layout"),
-        bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
-    });
+    let pipeline_layout =
+        context
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("NumRS2 MatMul Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
-    let pipeline = context.device().create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("NumRS2 MatMul Pipeline"),
-        layout: Some(&pipeline_layout),
-        module: shader,
-        entry_point: "main",
-    });
+    let pipeline = context
+        .device()
+        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("NumRS2 MatMul Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: shader,
+            entry_point: "main",
+        });
 
     // Create dimensions buffer
     let dims = [
-        a_shape[0] as u32,    // a_rows
-        a_shape[1] as u32,    // a_cols (same as b_rows)
-        b_shape[1] as u32,    // b_cols
-        0,                    // padding
+        a_shape[0] as u32, // a_rows
+        a_shape[1] as u32, // a_cols (same as b_rows)
+        b_shape[1] as u32, // b_cols
+        0,                 // padding
     ];
-    
-    let dimensions_buffer = context.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("MatMul Dimensions"),
-        contents: bytemuck::cast_slice(&dims),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
+
+    let dimensions_buffer =
+        context
+            .device()
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("MatMul Dimensions"),
+                contents: bytemuck::cast_slice(&dims),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
     // Create bind group
-    let bind_group = context.device().create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("NumRS2 MatMul Bind Group"),
-        layout: &bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: a.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: b.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: result.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: dimensions_buffer.as_entire_binding(),
-            },
-        ],
-    });
-
-    // Calculate workgroup dimensions (one workgroup per output element with tiling)
-    let workgroup_count_x = (out_shape[1] as f32 / 16.0).ceil() as u32;
-    let workgroup_count_y = (out_shape[0] as f32 / 16.0).ceil() as u32;
-
-    // Run the compute pass
-    context.run_compute(&pipeline, &[&bind_group], (workgroup_count_x, workgroup_count_y, 1));
-
-    Ok(result)
-}
-
-/// Transposes a GPU array
-pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Result<GpuArray<T>> {
-    // Validate that the array has at least 2 dimensions
-    if a.shape().len() < 2 {
-        return Err(NumRs2Error::InvalidOperation(
-            format!("Cannot transpose array with less than 2 dimensions, got shape {:?}", a.shape())
-        ));
-    }
-
-    // For 2D arrays, simply swap the dimensions
-    if a.shape().len() == 2 {
-        let mut out_shape = a.shape().to_vec();
-        out_shape.swap(0, 1);
-        
-        let context = a.context().clone();
-        let result = GpuArray::<T>::new_with_shape(&out_shape, context.clone())?;
-
-        // Create bind group layout and pipeline
-        let bind_group_layout = context.device().create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("NumRS2 Transpose Bind Group Layout"),
-            entries: &[
-                // Input array
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // Output array
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // Dimensions
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-        });
-
-        // Select the appropriate shader based on the type
-        let shader = if std::mem::size_of::<T>() == 4 {
-            context.element_wise_f32_shader()
-        } else {
-            context.element_wise_f64_shader()
-        };
-
-        let pipeline_layout = context.device().create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("NumRS2 Transpose Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = context.device().create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("NumRS2 Transpose Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: shader,
-            entry_point: "transpose",
-        });
-
-        // Create dimensions buffer
-        let dims = [
-            a.shape()[0] as u32,
-            a.shape()[1] as u32,
-            0, 0,
-        ];
-        
-        let dimensions_buffer = context.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Transpose Dimensions"),
-            contents: bytemuck::cast_slice(&dims),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-
-        // Create bind group
-        let bind_group = context.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("NumRS2 Transpose Bind Group"),
+    let bind_group = context
+        .device()
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("NumRS2 MatMul Bind Group"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -339,21 +247,163 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: result.buffer().as_entire_binding(),
+                    resource: b.buffer().as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
+                    resource: result.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
                     resource: dimensions_buffer.as_entire_binding(),
                 },
             ],
         });
+
+    // Calculate workgroup dimensions (one workgroup per output element with tiling)
+    let workgroup_count_x = (out_shape[1] as f32 / 16.0).ceil() as u32;
+    let workgroup_count_y = (out_shape[0] as f32 / 16.0).ceil() as u32;
+
+    // Run the compute pass
+    context.run_compute(
+        &pipeline,
+        &[&bind_group],
+        (workgroup_count_x, workgroup_count_y, 1),
+    );
+
+    Ok(result)
+}
+
+/// Transposes a GPU array
+pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Result<GpuArray<T>> {
+    // Validate that the array has at least 2 dimensions
+    if a.shape().len() < 2 {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Cannot transpose array with less than 2 dimensions, got shape {:?}",
+            a.shape()
+        )));
+    }
+
+    // For 2D arrays, simply swap the dimensions
+    if a.shape().len() == 2 {
+        let mut out_shape = a.shape().to_vec();
+        out_shape.swap(0, 1);
+
+        let context = a.context().clone();
+        let result = GpuArray::<T>::new_with_shape(&out_shape, context.clone())?;
+
+        // Create bind group layout and pipeline
+        let bind_group_layout =
+            context
+                .device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("NumRS2 Transpose Bind Group Layout"),
+                    entries: &[
+                        // Input array
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        // Output array
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        // Dimensions
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
+        // Select the appropriate shader based on the type
+        let shader = if std::mem::size_of::<T>() == 4 {
+            context.element_wise_f32_shader()
+        } else {
+            context.element_wise_f64_shader()
+        };
+
+        let pipeline_layout =
+            context
+                .device()
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("NumRS2 Transpose Pipeline Layout"),
+                    bind_group_layouts: &[&bind_group_layout],
+                    push_constant_ranges: &[],
+                });
+
+        let pipeline = context
+            .device()
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("NumRS2 Transpose Pipeline"),
+                layout: Some(&pipeline_layout),
+                module: shader,
+                entry_point: "transpose",
+            });
+
+        // Create dimensions buffer
+        let dims = [a.shape()[0] as u32, a.shape()[1] as u32, 0, 0];
+
+        let dimensions_buffer =
+            context
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Transpose Dimensions"),
+                    contents: bytemuck::cast_slice(&dims),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                });
+
+        // Create bind group
+        let bind_group = context
+            .device()
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("NumRS2 Transpose Bind Group"),
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: a.buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: result.buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: dimensions_buffer.as_entire_binding(),
+                    },
+                ],
+            });
 
         // Calculate workgroup dimensions
         let workgroup_count_x = (out_shape[1] as f32 / 16.0).ceil() as u32;
         let workgroup_count_y = (out_shape[0] as f32 / 16.0).ceil() as u32;
 
         // Run the compute pass
-        context.run_compute(&pipeline, &[&bind_group], (workgroup_count_x, workgroup_count_y, 1));
+        context.run_compute(
+            &pipeline,
+            &[&bind_group],
+            (workgroup_count_x, workgroup_count_y, 1),
+        );
 
         return Ok(result);
     }
@@ -361,7 +411,7 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
     // For higher dimensions, we need a more complex implementation
     // (not covered in this initial version)
     Err(NumRs2Error::NotImplemented(
-        "Transpose for arrays with more than 2 dimensions is not implemented yet".to_string()
+        "Transpose for arrays with more than 2 dimensions is not implemented yet".to_string(),
     ))
 }
 
@@ -384,55 +434,58 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     let result = GpuArray::<T>::new_with_shape(a.shape(), context.clone())?;
 
     // Create bind group layout
-    let bind_group_layout = context.device().create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("NumRS2 Element-wise Bind Group Layout"),
-        entries: &[
-            // Input array A
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Input array B
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Output array
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Operation type and array size
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-    });
+    let bind_group_layout =
+        context
+            .device()
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("NumRS2 Element-wise Bind Group Layout"),
+                entries: &[
+                    // Input array A
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Input array B
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Output array
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Operation type and array size
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
     // Select the appropriate shader based on the type
     let shader = if std::mem::size_of::<T>() == 4 {
@@ -442,55 +495,60 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     };
 
     // Create pipeline
-    let pipeline_layout = context.device().create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("NumRS2 Element-wise Pipeline Layout"),
-        bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
-    });
+    let pipeline_layout =
+        context
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("NumRS2 Element-wise Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
-    let pipeline = context.device().create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("NumRS2 Element-wise Pipeline"),
-        layout: Some(&pipeline_layout),
-        module: shader,
-        entry_point: "binary_op",
-    });
+    let pipeline = context
+        .device()
+        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("NumRS2 Element-wise Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: shader,
+            entry_point: "binary_op",
+        });
 
     // Create uniform buffer with operation type and size
-    let params = [
-        op as u32,
-        a.size() as u32,
-        0, 0,
-    ];
-    
-    let params_buffer = context.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Element-wise Op Params"),
-        contents: bytemuck::cast_slice(&params),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
+    let params = [op as u32, a.size() as u32, 0, 0];
+
+    let params_buffer = context
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Element-wise Op Params"),
+            contents: bytemuck::cast_slice(&params),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
 
     // Create bind group
-    let bind_group = context.device().create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("NumRS2 Element-wise Bind Group"),
-        layout: &bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: a.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: b.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: result.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: params_buffer.as_entire_binding(),
-            },
-        ],
-    });
+    let bind_group = context
+        .device()
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("NumRS2 Element-wise Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: a.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: b.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: result.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
 
     // Calculate workgroup count
     let total_threads = a.size() as u32;
@@ -512,44 +570,47 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     let result = GpuArray::<T>::new_with_shape(a.shape(), context.clone())?;
 
     // Create bind group layout
-    let bind_group_layout = context.device().create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("NumRS2 Unary Element-wise Bind Group Layout"),
-        entries: &[
-            // Input array
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Output array
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // Operation type and array size
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-    });
+    let bind_group_layout =
+        context
+            .device()
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("NumRS2 Unary Element-wise Bind Group Layout"),
+                entries: &[
+                    // Input array
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Output array
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Operation type and array size
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
     // Select the appropriate shader based on the type
     let shader = if std::mem::size_of::<T>() == 4 {
@@ -559,51 +620,56 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     };
 
     // Create pipeline
-    let pipeline_layout = context.device().create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("NumRS2 Unary Element-wise Pipeline Layout"),
-        bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
-    });
+    let pipeline_layout =
+        context
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("NumRS2 Unary Element-wise Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
-    let pipeline = context.device().create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("NumRS2 Unary Element-wise Pipeline"),
-        layout: Some(&pipeline_layout),
-        module: shader,
-        entry_point: "unary_op",
-    });
+    let pipeline = context
+        .device()
+        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("NumRS2 Unary Element-wise Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: shader,
+            entry_point: "unary_op",
+        });
 
     // Create uniform buffer with operation type and size
-    let params = [
-        op as u32,
-        a.size() as u32,
-        0, 0,
-    ];
-    
-    let params_buffer = context.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Unary Element-wise Op Params"),
-        contents: bytemuck::cast_slice(&params),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
+    let params = [op as u32, a.size() as u32, 0, 0];
+
+    let params_buffer = context
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Unary Element-wise Op Params"),
+            contents: bytemuck::cast_slice(&params),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
 
     // Create bind group
-    let bind_group = context.device().create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("NumRS2 Unary Element-wise Bind Group"),
-        layout: &bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: a.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: result.buffer().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: params_buffer.as_entire_binding(),
-            },
-        ],
-    });
+    let bind_group = context
+        .device()
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("NumRS2 Unary Element-wise Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: a.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: result.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
 
     // Calculate workgroup count
     let total_threads = a.size() as u32;

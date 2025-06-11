@@ -80,40 +80,38 @@
 //! - `random_simple_test.rs`: A simplified example for quick verification
 
 // Import the modules
-pub mod state;
-pub mod distributions;
-pub mod generator;
 pub mod advanced_distributions;
+pub mod distributions;
 pub mod distributions_enhanced;
+pub mod generator;
+pub mod state;
 
 // Re-export essential items from the modules
-pub use state::RandomState;
-pub use distributions::*;
-pub use generator::{default_rng, Generator, BitGenerator, StdBitGenerator, PCG64BitGenerator};
-pub use generator::{pcg64_rng, pcg64_seed_rng};
 #[cfg(not(feature = "scirs"))]
-pub use advanced_distributions::{
-    noncentral_chisquare, noncentral_f, vonmises, maxwell, wald
-};
+pub use advanced_distributions::{maxwell, noncentral_chisquare, noncentral_f, vonmises, wald};
+pub use distributions::*;
+pub use generator::{default_rng, BitGenerator, Generator, PCG64BitGenerator, StdBitGenerator};
+pub use generator::{pcg64_rng, pcg64_seed_rng};
+pub use state::RandomState;
 
 // Re-export enhanced distributions
 #[cfg(not(feature = "scirs"))]
 pub use distributions_enhanced::{
-    truncated_normal, multivariate_normal_cholesky, random_correlation_matrix,
-    mixture_of_normals, power, sobol_sequence, latin_hypercube, copula
+    copula, latin_hypercube, mixture_of_normals, multivariate_normal_cholesky, power,
+    random_correlation_matrix, sobol_sequence, truncated_normal,
 };
 
 #[cfg(feature = "scirs")]
 pub use distributions_enhanced::{
-    multivariate_normal_cholesky, random_correlation_matrix,
-    mixture_of_normals, power, sobol_sequence, latin_hypercube, copula
+    copula, latin_hypercube, mixture_of_normals, multivariate_normal_cholesky, power,
+    random_correlation_matrix, sobol_sequence,
 };
 
 // Use SciRS2 integration when the feature is enabled
 #[cfg(feature = "scirs")]
 pub use crate::interop::scirs_compat::{
-    noncentral_chisquare, noncentral_f, vonmises, maxwell,
-    truncated_normal, multivariate_normal_with_rotation
+    maxwell, multivariate_normal_with_rotation, noncentral_chisquare, noncentral_f,
+    truncated_normal, vonmises,
 };
 
 /// Create a new RandomState with the given seed.
@@ -146,23 +144,23 @@ pub fn seed_rng(seed: u64) -> RandomState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_random_state() {
         let rng1 = RandomState::with_seed(42);
         let rng2 = RandomState::with_seed(42);
-        
+
         let arr1 = rng1.random::<f64>(&[5, 5]).unwrap();
         let arr2 = rng2.random::<f64>(&[5, 5]).unwrap();
-        
+
         assert_eq!(arr1.to_vec(), arr2.to_vec());
     }
-    
+
     #[test]
     fn test_seed_rng() {
         let rng = seed_rng(123);
         let arr = rng.random::<f64>(&[3, 3]).unwrap();
-        
+
         assert_eq!(arr.shape(), vec![3, 3]);
     }
 }

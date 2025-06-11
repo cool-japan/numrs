@@ -37,12 +37,12 @@ impl SimdImplementation {
             SimdImplementation::SVE => "SVE",
         }
     }
-    
+
     /// Check if the implementation is AVX2 or better
     pub fn is_avx2_or_better(&self) -> bool {
         matches!(self, SimdImplementation::AVX2 | SimdImplementation::AVX512)
     }
-    
+
     /// Check if the implementation supports FMA operations
     pub fn supports_fma(&self, features: &CpuFeatures) -> bool {
         match self {
@@ -50,7 +50,7 @@ impl SimdImplementation {
             _ => false,
         }
     }
-    
+
     /// Check if the implementation is NEON or better
     pub fn is_neon_or_better(&self) -> bool {
         matches!(self, SimdImplementation::NEON | SimdImplementation::SVE)
@@ -71,28 +71,28 @@ pub fn select_simd_implementation(features: &CpuFeatures) -> SimdImplementation 
     if features.avx512f {
         return SimdImplementation::AVX512;
     }
-    
+
     if features.avx2 {
         return SimdImplementation::AVX2;
     }
-    
+
     if features.avx {
         return SimdImplementation::AVX;
     }
-    
+
     if features.sse2 {
         return SimdImplementation::SSE;
     }
-    
+
     // Check for aarch64 features
     if features.sve {
         return SimdImplementation::SVE;
     }
-    
+
     if features.neon {
         return SimdImplementation::NEON;
     }
-    
+
     // Fall back to scalar implementation
     SimdImplementation::Scalar
 }
@@ -116,6 +116,7 @@ pub fn select_simd_implementation(features: &CpuFeatures) -> SimdImplementation 
 /// # Returns
 ///
 /// The result of the selected implementation
+#[allow(clippy::too_many_arguments)]
 pub fn apply_simd_strategy<T, S, SSE, AVX, AVX2, AVX512, NEON, SVE>(
     features: &CpuFeatures,
     scalar: S,
@@ -136,7 +137,7 @@ where
     SVE: FnOnce() -> T,
 {
     let implementation = select_simd_implementation(features);
-    
+
     match implementation {
         SimdImplementation::AVX512 => avx512(),
         SimdImplementation::AVX2 => avx2(),
@@ -151,51 +152,72 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_simd_selection() {
         // Test with no features
         let features = CpuFeatures::default();
-        assert_eq!(select_simd_implementation(&features), SimdImplementation::Scalar);
-        
+        assert_eq!(
+            select_simd_implementation(&features),
+            SimdImplementation::Scalar
+        );
+
         // Test with SSE2 only
         let mut features = CpuFeatures::default();
         features.sse2 = true;
-        assert_eq!(select_simd_implementation(&features), SimdImplementation::SSE);
-        
+        assert_eq!(
+            select_simd_implementation(&features),
+            SimdImplementation::SSE
+        );
+
         // Test with AVX
         let mut features = CpuFeatures::default();
         features.sse2 = true;
         features.avx = true;
-        assert_eq!(select_simd_implementation(&features), SimdImplementation::AVX);
-        
+        assert_eq!(
+            select_simd_implementation(&features),
+            SimdImplementation::AVX
+        );
+
         // Test with AVX2
         let mut features = CpuFeatures::default();
         features.sse2 = true;
         features.avx = true;
         features.avx2 = true;
-        assert_eq!(select_simd_implementation(&features), SimdImplementation::AVX2);
-        
+        assert_eq!(
+            select_simd_implementation(&features),
+            SimdImplementation::AVX2
+        );
+
         // Test with all x86_64 features
         let mut features = CpuFeatures::default();
         features.sse2 = true;
         features.avx = true;
         features.avx2 = true;
         features.avx512f = true;
-        assert_eq!(select_simd_implementation(&features), SimdImplementation::AVX512);
-        
+        assert_eq!(
+            select_simd_implementation(&features),
+            SimdImplementation::AVX512
+        );
+
         // Test with NEON
         let mut features = CpuFeatures::default();
         features.neon = true;
-        assert_eq!(select_simd_implementation(&features), SimdImplementation::NEON);
-        
+        assert_eq!(
+            select_simd_implementation(&features),
+            SimdImplementation::NEON
+        );
+
         // Test with SVE
         let mut features = CpuFeatures::default();
         features.neon = true;
         features.sve = true;
-        assert_eq!(select_simd_implementation(&features), SimdImplementation::SVE);
+        assert_eq!(
+            select_simd_implementation(&features),
+            SimdImplementation::SVE
+        );
     }
-    
+
     #[test]
     fn test_simd_strategy() {
         // Create a test function that returns a string based on the implementation
@@ -211,22 +233,22 @@ mod tests {
                 || "sve",
             )
         };
-        
+
         // Test with no features
         let features = CpuFeatures::default();
         assert_eq!(apply_test(&features), "scalar");
-        
+
         // Test with SSE2 only
         let mut features = CpuFeatures::default();
         features.sse2 = true;
         assert_eq!(apply_test(&features), "sse");
-        
+
         // Test with AVX
         let mut features = CpuFeatures::default();
         features.sse2 = true;
         features.avx = true;
         assert_eq!(apply_test(&features), "avx");
-        
+
         // Test with AVX2
         let mut features = CpuFeatures::default();
         features.sse2 = true;

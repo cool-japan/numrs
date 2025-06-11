@@ -70,7 +70,7 @@ impl ArenaChunk {
         // Calculate aligned offset
         let align_mask = alignment - 1;
         let aligned_offset = (self.offset + align_mask) & !align_mask;
-        
+
         // Check if we have enough space
         if aligned_offset + size <= self.size {
             // We have enough space
@@ -169,11 +169,14 @@ impl ArenaAllocator {
         if state.config.allow_growth {
             // Calculate the size for the new chunk
             let current_total = state.total_allocated;
-            let growth = (current_total as f64 * (state.config.growth_factor - 1.0)).ceil() as usize;
+            let growth =
+                (current_total as f64 * (state.config.growth_factor - 1.0)).ceil() as usize;
             let new_size = growth.max(size.max(state.config.initial_size));
 
             // Allocate new chunk
-            if let Some(mut new_chunk) = ArenaChunk::new(new_size, alignment.max(state.config.alignment)) {
+            if let Some(mut new_chunk) =
+                ArenaChunk::new(new_size, alignment.max(state.config.alignment))
+            {
                 // Allocate from the new chunk
                 let result = new_chunk.allocate(size, alignment);
                 state.total_allocated += new_size;
@@ -208,7 +211,11 @@ impl ArenaAllocator {
     pub fn available_size(&self) -> usize {
         let state_mutex = self.state.lock().unwrap();
         let state = unsafe { &*state_mutex.get() };
-        state.chunks.iter().map(|chunk| chunk.available_space()).sum()
+        state
+            .chunks
+            .iter()
+            .map(|chunk| chunk.available_space())
+            .sum()
     }
 
     /// Get the default alignment used by this arena
@@ -302,7 +309,8 @@ impl<'a, T> ArenaVec<'a, T> {
 
         // Allocate memory from the arena
         let size = capacity * mem::size_of::<T>();
-        let ptr = arena.allocate_aligned(size, mem::align_of::<T>())
+        let ptr = arena
+            .allocate_aligned(size, mem::align_of::<T>())
             .expect("Arena allocation failed");
 
         Self {
@@ -427,7 +435,7 @@ impl<'a, T: Clone> ArenaVec<'a, T> {
     }
 }
 
-impl<'a, T> Drop for ArenaVec<'a, T> {
+impl<T> Drop for ArenaVec<'_, T> {
     fn drop(&mut self) {
         // Only need to drop the elements, not deallocate the memory
         // as that's handled by the arena
@@ -464,7 +472,9 @@ mod tests {
         assert!(ptr1 != ptr2);
 
         // Allocate a large block that exceeds current capacity
-        let ptr3 = arena.allocate(1000).expect("Allocation should trigger growth");
+        let ptr3 = arena
+            .allocate(1000)
+            .expect("Allocation should trigger growth");
         assert!(ptr1 != ptr3 && ptr2 != ptr3);
 
         // Check that we've grown
@@ -487,10 +497,18 @@ mod tests {
         let arena = ArenaAllocator::new(config);
 
         // Allocate with different alignments
-        let ptr1 = arena.allocate_aligned(10, 1).expect("Allocation should succeed");
-        let ptr2 = arena.allocate_aligned(10, 4).expect("Allocation should succeed");
-        let ptr3 = arena.allocate_aligned(10, 8).expect("Allocation should succeed");
-        let ptr4 = arena.allocate_aligned(10, 16).expect("Allocation should succeed");
+        let ptr1 = arena
+            .allocate_aligned(10, 1)
+            .expect("Allocation should succeed");
+        let ptr2 = arena
+            .allocate_aligned(10, 4)
+            .expect("Allocation should succeed");
+        let ptr3 = arena
+            .allocate_aligned(10, 8)
+            .expect("Allocation should succeed");
+        let ptr4 = arena
+            .allocate_aligned(10, 16)
+            .expect("Allocation should succeed");
 
         // Check alignments
         assert_eq!(ptr1.as_ptr() as usize % 1, 0);

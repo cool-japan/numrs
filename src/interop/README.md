@@ -50,7 +50,7 @@ To use the SciRS2 integration, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.2", features = ["scirs"] }
+numrs2 = { version = "0.1.0-alpha.3", features = ["scirs"] }
 ```
 
 Then import the SciRS2 compatibility module:

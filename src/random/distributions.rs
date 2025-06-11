@@ -1,4 +1,4 @@
-//! Advanced random distributions 
+//! Advanced random distributions
 //!
 //! This module provides functions for generating random arrays from various
 //! probability distributions, similar to NumPy's random.distributions module.
@@ -22,9 +22,10 @@ pub fn set_seed(seed: u64) {
 /// Get a reference to the global random state
 pub fn get_global_random_state() -> Result<std::sync::MutexGuard<'static, RandomState>> {
     GLOBAL_RANDOM_STATE.lock().map_err(|e| {
-        crate::error::NumRs2Error::InvalidOperation(
-            format!("Failed to acquire global random state lock: {}", e)
-        )
+        crate::error::NumRs2Error::InvalidOperation(format!(
+            "Failed to acquire global random state lock: {}",
+            e
+        ))
     })
 }
 
@@ -39,9 +40,9 @@ pub fn get_global_random_state() -> Result<std::sync::MutexGuard<'static, Random
 /// # Returns
 ///
 /// An array of random values from the beta distribution
-pub fn beta<T>(a: T, b: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn beta<T>(a: T, b: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.beta(a, b, shape)
@@ -58,9 +59,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the binomial distribution
-pub fn binomial<T>(n: u64, p: f64, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+pub fn binomial<T>(n: u64, p: f64, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.binomial(n, p, shape)
@@ -76,9 +77,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the chi-square distribution
-pub fn chisquare<T>(df: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn chisquare<T>(df: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.chisquare(df, shape)
@@ -94,9 +95,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the Dirichlet distribution
-pub fn dirichlet<T>(alpha: &[T], shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn dirichlet<T>(alpha: &[T], shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.dirichlet(alpha, shape)
@@ -113,9 +114,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the gamma distribution
-pub fn gamma<T>(shape_param: T, scale: T, output_shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn gamma<T>(shape_param: T, scale: T, output_shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.gamma(shape_param, scale, output_shape)
@@ -132,9 +133,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the normal distribution
-pub fn normal<T>(mean: T, std: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn normal<T>(mean: T, std: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.normal(mean, std, shape)
@@ -149,9 +150,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the standard normal distribution
-pub fn standard_normal<T>(shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn standard_normal<T>(shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.standard_normal(shape)
@@ -167,9 +168,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the Poisson distribution
-pub fn poisson<T>(lam: f64, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+pub fn poisson<T>(lam: f64, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.poisson(lam, shape)
@@ -186,9 +187,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the uniform distribution
-pub fn uniform<T>(low: T, high: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: Clone + PartialOrd + rand_distr::uniform::SampleUniform
+pub fn uniform<T>(low: T, high: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: Clone + PartialOrd + rand_distr::uniform::SampleUniform,
 {
     let rng = get_global_random_state()?;
     rng.uniform(low, high, shape)
@@ -205,10 +206,10 @@ where
 /// # Returns
 ///
 /// An array of random integers
-pub fn integers<T>(low: T, high: T, shape: &[usize]) -> Result<Array<T>> 
-where 
+pub fn integers<T>(low: T, high: T, shape: &[usize]) -> Result<Array<T>>
+where
     T: Clone + PartialOrd + rand_distr::uniform::SampleUniform + Into<i64> + TryFrom<i64>,
-    <T as TryFrom<i64>>::Error: std::fmt::Debug
+    <T as TryFrom<i64>>::Error: std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.integers(low, high, shape)
@@ -225,9 +226,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the log-normal distribution
-pub fn lognormal<T>(mean: T, sigma: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn lognormal<T>(mean: T, sigma: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.lognormal(mean, sigma, shape)
@@ -244,9 +245,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the Cauchy distribution
-pub fn cauchy<T>(loc: T, scale: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn cauchy<T>(loc: T, scale: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.cauchy(loc, scale, shape)
@@ -262,9 +263,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the Student's t-distribution
-pub fn student_t<T>(df: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn student_t<T>(df: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.student_t(df, shape)
@@ -280,9 +281,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the exponential distribution
-pub fn exponential<T>(scale: T, shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn exponential<T>(scale: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.exponential(scale, shape)
@@ -299,9 +300,9 @@ where
 /// # Returns
 ///
 /// An array of random values from the Weibull distribution
-pub fn weibull<T>(shape_param: T, scale: T, output_shape: &[usize]) -> Result<Array<T>> 
-where 
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+pub fn weibull<T>(shape_param: T, scale: T, output_shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.weibull(shape_param, scale, output_shape)
@@ -319,7 +320,7 @@ where
 /// An array of random binary values
 pub fn bernoulli<T>(p: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.bernoulli(p, shape)
@@ -337,7 +338,7 @@ where
 /// An array of random values from the Pareto distribution
 pub fn pareto<T>(alpha: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.pareto(alpha, shape)
@@ -357,7 +358,7 @@ where
 /// An array of random values from the Triangular distribution
 pub fn triangular<T>(low: T, mode: T, high: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.triangular(low, mode, high, shape)
@@ -377,7 +378,7 @@ where
 /// An array of random values from the PERT distribution
 pub fn pert<T>(min: T, mode: T, max: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.pert(min, mode, max, shape)
@@ -394,9 +395,13 @@ where
 /// # Returns
 ///
 /// An array of random values from the multivariate normal distribution
-pub fn multivariate_normal<T>(mean: &[T], cov: &Array<T>, size: Option<&[usize]>) -> Result<Array<T>>
+pub fn multivariate_normal<T>(
+    mean: &[T],
+    cov: &Array<T>,
+    size: Option<&[usize]>,
+) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.multivariate_normal(mean, cov, size)
@@ -415,7 +420,7 @@ where
 /// An array of random values from the Laplace distribution
 pub fn laplace<T>(loc: T, scale: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.laplace(loc, scale, shape)
@@ -434,7 +439,7 @@ where
 /// An array of random values from the Gumbel distribution
 pub fn gumbel<T>(loc: T, scale: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.gumbel(loc, scale, shape)
@@ -453,7 +458,7 @@ where
 /// An array of random values from the logistic distribution
 pub fn logistic<T>(loc: T, scale: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.logistic(loc, scale, shape)
@@ -471,7 +476,7 @@ where
 /// An array of random values from the Rayleigh distribution
 pub fn rayleigh<T>(scale: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.rayleigh(scale, shape)
@@ -490,7 +495,7 @@ where
 /// An array of random values from the Wald distribution
 pub fn wald<T>(mean: T, scale: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.wald(mean, scale, shape)
@@ -509,7 +514,7 @@ where
 /// An array of random values from the negative binomial distribution
 pub fn negative_binomial<T>(n: f64, p: f64, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.negative_binomial(n, p, shape)
@@ -527,7 +532,7 @@ where
 /// An array of random values from the geometric distribution
 pub fn geometric<T>(p: f64, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.geometric(p, shape)
@@ -546,7 +551,7 @@ where
 /// An array of random values from the multinomial distribution
 pub fn multinomial<T>(n: usize, pvals: &[f64], shape: Option<&[usize]>) -> Result<Array<T>>
 where
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.multinomial(n, pvals, shape)
@@ -564,9 +569,14 @@ where
 /// # Returns
 ///
 /// An array of random values from the hypergeometric distribution
-pub fn hypergeometric<T>(ngood: usize, nbad: usize, nsample: usize, shape: &[usize]) -> Result<Array<T>>
+pub fn hypergeometric<T>(
+    ngood: usize,
+    nbad: usize,
+    nsample: usize,
+    shape: &[usize],
+) -> Result<Array<T>>
 where
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.hypergeometric(ngood, nbad, nsample, shape)
@@ -584,7 +594,7 @@ where
 /// An array of random values from the zipf distribution
 pub fn zipf<T>(a: f64, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.zipf(a, shape)
@@ -602,7 +612,7 @@ where
 /// An array of random values from the logseries distribution
 pub fn logseries<T>(p: f64, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::NumCast + Clone + std::fmt::Debug
+    T: num_traits::NumCast + Clone + std::fmt::Debug,
 {
     let rng = get_global_random_state()?;
     rng.logseries(p, shape)
@@ -621,7 +631,7 @@ where
 /// An array of random values from the noncentral chi-square distribution
 pub fn noncentral_chisquare<T>(df: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.noncentral_chisquare(df, nonc, shape)
@@ -641,7 +651,7 @@ where
 /// An array of random values from the noncentral F distribution
 pub fn noncentral_f<T>(dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.noncentral_f(dfnum, dfden, nonc, shape)
@@ -664,7 +674,7 @@ where
 /// An array of random values from the von Mises distribution in the range [-π, π)
 pub fn vonmises<T>(mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.vonmises(mu, kappa, shape)
@@ -685,7 +695,7 @@ where
 /// An array of random values from the Maxwell-Boltzmann distribution
 pub fn maxwell<T>(scale: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.maxwell(scale, shape)
@@ -710,7 +720,7 @@ where
 /// An array of random values from the truncated normal distribution in the range [low, high]
 pub fn truncated_normal<T>(mean: T, std: T, low: T, high: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.truncated_normal(mean, std, low, high, shape)
@@ -736,10 +746,10 @@ pub fn multivariate_normal_with_rotation<T>(
     mean: &[T],
     cov: &Array<T>,
     size: Option<&[usize]>,
-    rotation: Option<&Array<T>>
+    rotation: Option<&Array<T>>,
 ) -> Result<Array<T>>
 where
-    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
 {
     let rng = get_global_random_state()?;
     rng.multivariate_normal_with_rotation(mean, cov, size, rotation)
@@ -748,64 +758,86 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_beta_distribution() {
         let arr = beta(2.0, 5.0, &[10]).unwrap();
         assert_eq!(arr.shape(), vec![10]);
     }
-    
+
     #[test]
     fn test_normal_distribution() {
         let arr = normal(0.0, 1.0, &[5, 5]).unwrap();
         assert_eq!(arr.shape(), vec![5, 5]);
     }
-    
+
     #[test]
     fn test_standard_normal_distribution() {
         let arr = standard_normal::<f64>(&[3, 3]).unwrap();
         assert_eq!(arr.shape(), vec![3, 3]);
     }
-    
+
     #[test]
     fn test_binomial_distribution() {
         let arr = binomial::<u64>(10, 0.5, &[5]).unwrap();
         assert_eq!(arr.shape(), vec![5]);
-        
+
         // Values should be in the range [0, 10]
         for val in arr.to_vec() {
             assert!(val <= 10);
         }
     }
-    
+
     #[test]
     fn test_gamma_distribution() {
         let arr = gamma(2.0, 2.0, &[10]).unwrap();
         assert_eq!(arr.shape(), vec![10]);
-        
+
         // Gamma values should be positive
         for val in arr.to_vec() {
             assert!(val > 0.0);
         }
     }
-    
+
     #[test]
     fn test_set_seed() {
-        // When testing with a fixed seed, we're only checking that the same seed
-        // produces the same output in the same run, not across different runs
-        set_seed(12345);
-        let arr1 = normal(0.0, 1.0, &[5]).unwrap();
+        // Test that the same seed produces the same sequence
+        // by generating multiple arrays with the same seed
+        let seed1 = 12345u64;
+        let seed2 = 54321u64;
 
-        set_seed(12345);
-        let arr2 = normal(0.0, 1.0, &[5]).unwrap();
+        // First sequence with seed1
+        set_seed(seed1);
+        let arr1_a = normal(0.0, 1.0, &[5]).unwrap();
+        let arr1_b = normal(0.0, 1.0, &[5]).unwrap();
 
-        // Verify that using the same seed produces the same results
-        assert_eq!(arr1.to_vec(), arr2.to_vec());
+        // Reset to seed1 and generate the same sequence
+        set_seed(seed1);
+        let arr2_a = normal(0.0, 1.0, &[5]).unwrap();
+        let arr2_b = normal(0.0, 1.0, &[5]).unwrap();
 
-        // But different seeds should produce different results
-        set_seed(54321);
-        let arr3 = normal(0.0, 1.0, &[5]).unwrap();
-        assert_ne!(arr1.to_vec(), arr3.to_vec());
+        // Verify that resetting the seed reproduces the same sequence
+        assert_eq!(
+            arr1_a.to_vec(),
+            arr2_a.to_vec(),
+            "First arrays should be identical"
+        );
+        assert_eq!(
+            arr1_b.to_vec(),
+            arr2_b.to_vec(),
+            "Second arrays should be identical"
+        );
+
+        // Now test with a different seed
+        set_seed(seed2);
+        let arr3_a = normal(0.0, 1.0, &[5]).unwrap();
+
+        // Different seeds should produce different results
+        assert_ne!(
+            arr1_a.to_vec(),
+            arr3_a.to_vec(),
+            "Different seeds should produce different results"
+        );
     }
 
     #[test]
@@ -947,12 +979,13 @@ mod tests {
 
         // Create a rotation matrix for 45 degrees
         let rotation_data = vec![
-            0.7071, 0.7071,  // cos(45°), sin(45°)
-            -0.7071, 0.7071  // -sin(45°), cos(45°)
+            0.7071, 0.7071, // cos(45°), sin(45°)
+            -0.7071, 0.7071, // -sin(45°), cos(45°)
         ];
         let rotation = Array::from_vec(rotation_data).reshape(&[2, 2]);
 
-        let arr = multivariate_normal_with_rotation(&mean, &cov, Some(&[5]), Some(&rotation)).unwrap();
+        let arr =
+            multivariate_normal_with_rotation(&mean, &cov, Some(&[5]), Some(&rotation)).unwrap();
         assert_eq!(arr.shape(), vec![5, 2]);
 
         // Test without rotation matrix (should default to regular multivariate normal)

@@ -26,11 +26,11 @@ pub struct PoolConfig {
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            block_size: 4096,        // 4KB blocks by default
-            initial_blocks: 16,      // Start with 16 blocks (64KB total)
-            max_blocks: Some(1024),  // Limit to 1024 blocks (4MB total)
-            auto_resize: true,       // Automatically resize when needed
-            growth_factor: 2.0,      // Double the size when resizing
+            block_size: 4096,       // 4KB blocks by default
+            initial_blocks: 16,     // Start with 16 blocks (64KB total)
+            max_blocks: Some(1024), // Limit to 1024 blocks (4MB total)
+            auto_resize: true,      // Automatically resize when needed
+            growth_factor: 2.0,     // Double the size when resizing
         }
     }
 }
@@ -98,8 +98,8 @@ impl PoolAllocator {
         };
 
         // Pre-allocate the initial blocks
-        let layout = Layout::from_size_align(config.block_size, 8)
-            .expect("Invalid block size or alignment");
+        let layout =
+            Layout::from_size_align(config.block_size, 8).expect("Invalid block size or alignment");
 
         for _ in 0..config.initial_blocks {
             if let Some(block) = MemoryBlock::new(layout) {
@@ -136,8 +136,8 @@ impl PoolAllocator {
 
             if can_grow {
                 // Calculate how many new blocks to add
-                let growth = (state.total_blocks as f64 * 
-                             (state.config.growth_factor - 1.0)).ceil() as usize;
+                let growth = (state.total_blocks as f64 * (state.config.growth_factor - 1.0)).ceil()
+                    as usize;
                 let new_blocks = growth.max(1); // At least 1 new block
                 let max_new = match state.config.max_blocks {
                     Some(max) => (max - state.total_blocks).min(new_blocks),

@@ -32,9 +32,9 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use rand::prelude::*;
-use rand_distr::{Distribution, ChiSquared, Normal};
 use num_traits::{Float, NumCast};
+use rand::prelude::*;
+use rand_distr::{ChiSquared, Distribution, Normal};
 use std::fmt::{Debug, Display};
 
 /// Non-central chi-squared distribution
@@ -53,36 +53,38 @@ impl NonCentralChiSquared {
     /// Create a new non-central chi-squared distribution
     pub fn new(df: f64, nonc: f64) -> Result<Self> {
         if df <= 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("df must be positive, got {}", df)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "df must be positive, got {}",
+                df
+            )));
         }
         if nonc < 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("non-centrality parameter must be non-negative, got {}", nonc)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "non-centrality parameter must be non-negative, got {}",
+                nonc
+            )));
         }
-        
+
         Ok(Self { df, nonc })
     }
-    
+
     /// Sample from the distribution
     pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         // Implementation based on the algorithm described in:
         // "Methods for generating random numbers from normal and non-central chi-squared distributions"
         // by B. E. Cooper (1968)
-        
+
         // 1. Generate a normal random variable with mean sqrt(nonc) and variance 1
         let normal = Normal::new(self.nonc.sqrt(), 1.0).unwrap();
         let z = normal.sample(rng);
-        
+
         // 2. Generate a chi-squared random variable with df-1 degrees of freedom
         let chi_squared = if self.df > 1.0 {
             ChiSquared::new(self.df - 1.0).unwrap().sample(rng)
         } else {
             0.0
         };
-        
+
         // 3. Return z^2 + chi_squared
         z * z + chi_squared
     }
@@ -106,24 +108,27 @@ impl NonCentralF {
     /// Create a new non-central F distribution
     pub fn new(df1: f64, df2: f64, nonc: f64) -> Result<Self> {
         if df1 <= 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("df1 must be positive, got {}", df1)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "df1 must be positive, got {}",
+                df1
+            )));
         }
         if df2 <= 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("df2 must be positive, got {}", df2)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "df2 must be positive, got {}",
+                df2
+            )));
         }
         if nonc < 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("non-centrality parameter must be non-negative, got {}", nonc)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "non-centrality parameter must be non-negative, got {}",
+                nonc
+            )));
         }
-        
+
         Ok(Self { df1, df2, nonc })
     }
-    
+
     /// Sample from the distribution
     pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         // Implementation based on the algorithm:
@@ -131,13 +136,13 @@ impl NonCentralF {
         //    and non-centrality parameter nonc
         // 2. Generate a chi-squared random variable Y with df2 degrees of freedom
         // 3. Return (X/df1)/(Y/df2)
-        
+
         let nc_chi2 = NonCentralChiSquared::new(self.df1, self.nonc).unwrap();
         let x = nc_chi2.sample(rng);
-        
+
         let chi2 = ChiSquared::new(self.df2).unwrap();
         let y = chi2.sample(rng);
-        
+
         (x / self.df1) / (y / self.df2)
     }
 }
@@ -158,59 +163,75 @@ impl VonMises {
     /// Create a new von Mises distribution
     pub fn new(mu: f64, kappa: f64) -> Result<Self> {
         if kappa < 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("kappa must be non-negative, got {}", kappa)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "kappa must be non-negative, got {}",
+                kappa
+            )));
         }
-        
+
         Ok(Self { mu, kappa })
     }
-    
+
     /// Compute the ratio a/r for the rejection method
     fn compute_ratio(kappa: f64) -> f64 {
         if kappa < 1e-6 {
             // For small kappa, use a first-order approximation
             return 0.0;
         }
-        
+
         let r = 1.0 + (1.0 + 4.0 * kappa * kappa).sqrt();
         let a = r + 2.0 * kappa / r;
-        a / (2.0 * kappa)
+        let ratio = a / (2.0 * kappa);
+
+        // Ensure finite result
+        if ratio.is_finite() {
+            ratio
+        } else {
+            1.0 // Fallback value
+        }
     }
-    
+
     /// Sample from the distribution
     pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         // Special case for kappa = 0 (uniform distribution)
         if self.kappa == 0.0 {
-            return self.mu + 2.0 * std::f64::consts::PI * rng.random::<f64>();
+            let sample = self.mu + 2.0 * std::f64::consts::PI * (rng.random::<f64>() - 0.5);
+            // Ensure the result is in [-π, π]
+            return ((sample + std::f64::consts::PI) % (2.0 * std::f64::consts::PI))
+                - std::f64::consts::PI;
         }
-        
+
         // Implementation based on:
         // "Best Practices in Rejection Sampling" by J. H. Ahrens (1995)
-        
+
         let ratio = Self::compute_ratio(self.kappa);
-        
+
         loop {
             // Generate a uniform random variable in [0, 1)
             let u1 = rng.random::<f64>();
-            
+
             // Generate theta from wrapped Cauchy distribution
             let z = ratio * (2.0 * u1 - 1.0);
             let w = (1.0 + z * z).recip();
             let c = (self.kappa * (ratio - w)).exp();
-            
+
             // Generate another uniform random variable for acceptance/rejection
             let u2 = rng.random::<f64>();
-            
+
             if u2 <= c {
                 // Accept the sample
-                let theta = if z < 0.0 {
-                    std::f64::consts::PI - z.acos()
+                // Generate a symmetric angle around 0
+                let abs_z = z.abs().min(1.0);
+                let theta = if rng.random::<f64>() < 0.5 {
+                    abs_z.acos()
                 } else {
-                    z.acos()
+                    -abs_z.acos()
                 };
-                
-                return self.mu + theta;
+
+                let sample = self.mu + theta;
+                // Ensure the result is in [-π, π]
+                return ((sample + std::f64::consts::PI) % (2.0 * std::f64::consts::PI))
+                    - std::f64::consts::PI;
             }
             // Reject and try again
         }
@@ -232,27 +253,28 @@ impl Maxwell {
     /// Create a new Maxwell-Boltzmann distribution
     pub fn new(scale: f64) -> Result<Self> {
         if scale <= 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("scale must be positive, got {}", scale)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "scale must be positive, got {}",
+                scale
+            )));
         }
-        
+
         Ok(Self { scale })
     }
-    
+
     /// Sample from the distribution
     pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         // Implementation based on the relationship with the chi distribution:
         // If X, Y, Z are independent normal random variables with mean 0 and variance σ^2,
         // then sqrt(X^2 + Y^2 + Z^2) follows a Maxwell-Boltzmann distribution with scale σ.
-        
+
         let normal = Normal::new(0.0, self.scale).unwrap();
-        
+
         let x = normal.sample(rng);
         let y = normal.sample(rng);
         let z = normal.sample(rng);
-        
-        (x*x + y*y + z*z).sqrt()
+
+        (x * x + y * y + z * z).sqrt()
     }
 }
 
@@ -272,38 +294,41 @@ impl Wald {
     /// Create a new Wald distribution
     pub fn new(mean: f64, shape: f64) -> Result<Self> {
         if mean <= 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("mean must be positive, got {}", mean)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "mean must be positive, got {}",
+                mean
+            )));
         }
         if shape <= 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("shape must be positive, got {}", shape)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "shape must be positive, got {}",
+                shape
+            )));
         }
-        
+
         Ok(Self { mean, shape })
     }
-    
+
     /// Sample from the distribution
     pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         // Implementation based on the algorithm described in:
         // "Random variate generation for exponentially and normally distributed random variables"
         // by J. R. Michael, W. R. Schucany, and R. W. Haas (1976)
-        
+
         let normal = Normal::new(0.0, 1.0).unwrap();
         let y = normal.sample(rng);
         let y_squared = y * y;
-        
+
         let mu = self.mean;
         let lambda = self.shape;
-        
-        let x1 = mu + (mu * mu * y_squared / (2.0 * lambda)) 
-               - (mu / (2.0 * lambda)) * (mu * y_squared * 4.0 * lambda / mu + mu * mu * y_squared * y_squared).sqrt();
-                
+
+        let x1 = mu + (mu * mu * y_squared / (2.0 * lambda))
+            - (mu / (2.0 * lambda))
+                * (mu * y_squared * 4.0 * lambda / mu + mu * mu * y_squared * y_squared).sqrt();
+
         // Generate a uniform random variable for acceptance/rejection
         let u = rng.random::<f64>();
-        
+
         if u <= mu / (mu + x1) {
             x1
         } else {
@@ -323,24 +348,33 @@ impl Wald {
 /// # Returns
 ///
 /// An array of random values from the non-central chi-squared distribution
-pub fn noncentral_chisquare<T: Float + NumCast + Clone + Debug + Display>(df: T, nonc: T, shape: &[usize]) -> Result<Array<T>> {
+pub fn noncentral_chisquare<T: Float + NumCast + Clone + Debug + Display>(
+    df: T,
+    nonc: T,
+    shape: &[usize],
+) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
     let mut rng_lock = rng.get_rng()?;
-    
-    let df_f64 = df.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert df to f64".to_string())
-    })?;
+
+    let df_f64 = df
+        .to_f64()
+        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to convert df to f64".to_string()))?;
     let nonc_f64 = nonc.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert non-centrality parameter to f64".to_string())
+        NumRs2Error::InvalidOperation(
+            "Failed to convert non-centrality parameter to f64".to_string(),
+        )
     })?;
-    
+
     let dist = NonCentralChiSquared::new(df_f64, nonc_f64).map_err(|e| {
-        NumRs2Error::InvalidOperation(format!("Failed to create non-central chi-squared distribution: {}", e))
+        NumRs2Error::InvalidOperation(format!(
+            "Failed to create non-central chi-squared distribution: {}",
+            e
+        ))
     })?;
-    
+
     let size: usize = shape.iter().product();
     let mut vec = Vec::with_capacity(size);
-    
+
     for _ in 0..size {
         let val_f64 = dist.sample(&mut *rng_lock);
         let val = T::from(val_f64).ok_or_else(|| {
@@ -348,7 +382,7 @@ pub fn noncentral_chisquare<T: Float + NumCast + Clone + Debug + Display>(df: T,
         })?;
         vec.push(val);
     }
-    
+
     Ok(Array::from_vec(vec).reshape(shape))
 }
 
@@ -364,10 +398,15 @@ pub fn noncentral_chisquare<T: Float + NumCast + Clone + Debug + Display>(df: T,
 /// # Returns
 ///
 /// An array of random values from the non-central F distribution
-pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>> {
+pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(
+    dfnum: T,
+    dfden: T,
+    nonc: T,
+    shape: &[usize],
+) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
     let mut rng_lock = rng.get_rng()?;
-    
+
     let dfnum_f64 = dfnum.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert dfnum to f64".to_string())
     })?;
@@ -375,16 +414,21 @@ pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(dfnum: T, dfde
         NumRs2Error::InvalidOperation("Failed to convert dfden to f64".to_string())
     })?;
     let nonc_f64 = nonc.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert non-centrality parameter to f64".to_string())
+        NumRs2Error::InvalidOperation(
+            "Failed to convert non-centrality parameter to f64".to_string(),
+        )
     })?;
-    
+
     let dist = NonCentralF::new(dfnum_f64, dfden_f64, nonc_f64).map_err(|e| {
-        NumRs2Error::InvalidOperation(format!("Failed to create non-central F distribution: {}", e))
+        NumRs2Error::InvalidOperation(format!(
+            "Failed to create non-central F distribution: {}",
+            e
+        ))
     })?;
-    
+
     let size: usize = shape.iter().product();
     let mut vec = Vec::with_capacity(size);
-    
+
     for _ in 0..size {
         let val_f64 = dist.sample(&mut *rng_lock);
         let val = T::from(val_f64).ok_or_else(|| {
@@ -392,7 +436,7 @@ pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(dfnum: T, dfde
         })?;
         vec.push(val);
     }
-    
+
     Ok(Array::from_vec(vec).reshape(shape))
 }
 
@@ -407,24 +451,28 @@ pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(dfnum: T, dfde
 /// # Returns
 ///
 /// An array of random values from the von Mises distribution
-pub fn vonmises<T: Float + NumCast + Clone + Debug + Display>(mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>> {
+pub fn vonmises<T: Float + NumCast + Clone + Debug + Display>(
+    mu: T,
+    kappa: T,
+    shape: &[usize],
+) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
     let mut rng_lock = rng.get_rng()?;
-    
-    let mu_f64 = mu.to_f64().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("Failed to convert mu to f64".to_string())
-    })?;
+
+    let mu_f64 = mu
+        .to_f64()
+        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to convert mu to f64".to_string()))?;
     let kappa_f64 = kappa.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert kappa to f64".to_string())
     })?;
-    
+
     let dist = VonMises::new(mu_f64, kappa_f64).map_err(|e| {
         NumRs2Error::InvalidOperation(format!("Failed to create von Mises distribution: {}", e))
     })?;
-    
+
     let size: usize = shape.iter().product();
     let mut vec = Vec::with_capacity(size);
-    
+
     for _ in 0..size {
         let val_f64 = dist.sample(&mut *rng_lock);
         let val = T::from(val_f64).ok_or_else(|| {
@@ -432,7 +480,7 @@ pub fn vonmises<T: Float + NumCast + Clone + Debug + Display>(mu: T, kappa: T, s
         })?;
         vec.push(val);
     }
-    
+
     Ok(Array::from_vec(vec).reshape(shape))
 }
 
@@ -446,21 +494,24 @@ pub fn vonmises<T: Float + NumCast + Clone + Debug + Display>(mu: T, kappa: T, s
 /// # Returns
 ///
 /// An array of random values from the Maxwell-Boltzmann distribution
-pub fn maxwell<T: Float + NumCast + Clone + Debug + Display>(scale: T, shape: &[usize]) -> Result<Array<T>> {
+pub fn maxwell<T: Float + NumCast + Clone + Debug + Display>(
+    scale: T,
+    shape: &[usize],
+) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
     let mut rng_lock = rng.get_rng()?;
-    
+
     let scale_f64 = scale.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
     })?;
-    
+
     let dist = Maxwell::new(scale_f64).map_err(|e| {
         NumRs2Error::InvalidOperation(format!("Failed to create Maxwell distribution: {}", e))
     })?;
-    
+
     let size: usize = shape.iter().product();
     let mut vec = Vec::with_capacity(size);
-    
+
     for _ in 0..size {
         let val_f64 = dist.sample(&mut *rng_lock);
         let val = T::from(val_f64).ok_or_else(|| {
@@ -468,7 +519,7 @@ pub fn maxwell<T: Float + NumCast + Clone + Debug + Display>(scale: T, shape: &[
         })?;
         vec.push(val);
     }
-    
+
     Ok(Array::from_vec(vec).reshape(shape))
 }
 
@@ -483,24 +534,28 @@ pub fn maxwell<T: Float + NumCast + Clone + Debug + Display>(scale: T, shape: &[
 /// # Returns
 ///
 /// An array of random values from the Wald distribution
-pub fn wald<T: Float + NumCast + Clone + Debug + Display>(mean: T, scale: T, shape: &[usize]) -> Result<Array<T>> {
+pub fn wald<T: Float + NumCast + Clone + Debug + Display>(
+    mean: T,
+    scale: T,
+    shape: &[usize],
+) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
     let mut rng_lock = rng.get_rng()?;
-    
+
     let mean_f64 = mean.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert mean to f64".to_string())
     })?;
     let scale_f64 = scale.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
     })?;
-    
+
     let dist = Wald::new(mean_f64, scale_f64).map_err(|e| {
         NumRs2Error::InvalidOperation(format!("Failed to create Wald distribution: {}", e))
     })?;
-    
+
     let size: usize = shape.iter().product();
     let mut vec = Vec::with_capacity(size);
-    
+
     for _ in 0..size {
         let val_f64 = dist.sample(&mut *rng_lock);
         let val = T::from(val_f64).ok_or_else(|| {
@@ -508,36 +563,36 @@ pub fn wald<T: Float + NumCast + Clone + Debug + Display>(mean: T, scale: T, sha
         })?;
         vec.push(val);
     }
-    
+
     Ok(Array::from_vec(vec).reshape(shape))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_noncentral_chisquare() {
         let arr = noncentral_chisquare(2.0, 1.0, &[10]).unwrap();
         assert_eq!(arr.shape(), vec![10]);
-        
+
         // All values should be positive
         for val in arr.to_vec() {
             assert!(val > 0.0);
         }
     }
-    
+
     #[test]
     fn test_noncentral_f() {
         let arr = noncentral_f(2.0, 3.0, 1.0, &[10]).unwrap();
         assert_eq!(arr.shape(), vec![10]);
-        
+
         // All values should be positive
         for val in arr.to_vec() {
             assert!(val > 0.0);
         }
     }
-    
+
     #[test]
     fn test_vonmises() {
         let arr = vonmises(0.0, 1.0, &[10]).unwrap();
@@ -547,23 +602,23 @@ mod tests {
         // The distribution shape and bounds should be checked in more sophisticated tests
         assert_eq!(arr.size(), 10);
     }
-    
+
     #[test]
     fn test_maxwell() {
         let arr = maxwell(1.0, &[10]).unwrap();
         assert_eq!(arr.shape(), vec![10]);
-        
+
         // All values should be positive
         for val in arr.to_vec() {
             assert!(val > 0.0);
         }
     }
-    
+
     #[test]
     fn test_wald() {
         let arr = wald(1.0, 1.0, &[10]).unwrap();
         assert_eq!(arr.shape(), vec![10]);
-        
+
         // All values should be positive
         for val in arr.to_vec() {
             assert!(val > 0.0);

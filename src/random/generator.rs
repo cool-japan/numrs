@@ -41,28 +41,28 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+use num_traits::{Float, NumCast};
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use rand_distr::{Distribution, Uniform, Normal, LogNormal, Bernoulli, Gamma, Exp as Exponential};
-use rand_distr::{Beta, ChiSquared as ChiSquare, Poisson, Binomial, Weibull};
 use rand_distr::uniform::SampleUniform;
-use num_traits::{Float, NumCast};
-use std::fmt::Display;
+use rand_distr::{Bernoulli, Distribution, Exp as Exponential, Gamma, LogNormal, Normal, Uniform};
+use rand_distr::{Beta, Binomial, ChiSquared as ChiSquare, Poisson, Weibull};
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 
 /// Bit generator trait for implementing different random number bit generators
 pub trait BitGenerator {
     /// Return next u64 random value
     fn next_u64(&mut self) -> u64;
-    
+
     /// Return next u32 random value
     fn next_u32(&mut self) -> u32;
-    
+
     /// Return random values between 0 and 1
     fn next_f64(&mut self) -> f64;
-    
+
     /// Seed the bit generator
     fn seed(&mut self, seed: u64);
 }
@@ -123,7 +123,11 @@ impl PCG64BitGenerator {
         let inc = ((seed.wrapping_add(1) as u128) << 64) | 1;
         let multiplier = 0x2360ED051FC65DA44385DF649FCCF645;
 
-        let mut gen = Self { state, inc, multiplier };
+        let mut gen = Self {
+            state,
+            inc,
+            multiplier,
+        };
         // Warm up the generator
         for _ in 0..10 {
             gen.next_u64();
@@ -140,7 +144,11 @@ impl PCG64BitGenerator {
     /// Create a new PCG64 bit generator with specific state and increment values
     pub fn with_state_and_inc(state: u128, inc: u128) -> Self {
         let multiplier = 0x2360ED051FC65DA44385DF649FCCF645;
-        Self { state, inc, multiplier }
+        Self {
+            state,
+            inc,
+            multiplier,
+        }
     }
 
     /// Get the current state of the generator
@@ -158,7 +166,9 @@ impl BitGenerator for PCG64BitGenerator {
     fn next_u64(&mut self) -> u64 {
         // PCG update step
         let old_state = self.state;
-        self.state = old_state.wrapping_mul(self.multiplier).wrapping_add(self.inc);
+        self.state = old_state
+            .wrapping_mul(self.multiplier)
+            .wrapping_add(self.inc);
 
         // Output function (XSH RR: xorshift high (bits), random rotation)
         let xorshifted = (((old_state >> 64) ^ old_state) >> 64) as u64;
@@ -201,19 +211,19 @@ impl<B: BitGenerator> Generator<B> {
             bit_generator: Arc::new(Mutex::new(bit_generator)),
         }
     }
-    
+
     /// Get a locked reference to the bit generator
     fn get_bit_generator(&self) -> Result<std::sync::MutexGuard<'_, B>> {
         self.bit_generator.lock().map_err(|_| {
             NumRs2Error::InvalidOperation("Failed to acquire bit generator lock".to_string())
         })
     }
-    
+
     /// Generate uniform random values in [0, 1)
     pub fn random<T>(&self, shape: &[usize]) -> Result<Array<T>>
     where
         T: Clone,
-        rand_distr::StandardUniform: rand_distr::Distribution<T>
+        rand_distr::StandardUniform: rand_distr::Distribution<T>,
     {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
@@ -230,7 +240,7 @@ impl<B: BitGenerator> Generator<B> {
 
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate integers in the range [low, high)
     ///
     /// # Arguments
@@ -242,15 +252,23 @@ impl<B: BitGenerator> Generator<B> {
     /// # Returns
     ///
     /// An array of random integers.
-    pub fn integers<T: Clone + PartialOrd + SampleUniform + Into<i64> + TryFrom<i64>>(&self, low: T, high: T, shape: &[usize]) -> Result<Array<T>> 
-    where 
-        <T as TryFrom<i64>>::Error: Debug
+    pub fn integers<T: Clone + PartialOrd + SampleUniform + Into<i64> + TryFrom<i64>>(
+        &self,
+        low: T,
+        high: T,
+        shape: &[usize],
+    ) -> Result<Array<T>>
+    where
+        <T as TryFrom<i64>>::Error: Debug,
     {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        
+
         let dist = Uniform::new_inclusive(low, high).map_err(|e| {
-            NumRs2Error::InvalidOperation(format!("Failed to create uniform integer distribution: {}", e))
+            NumRs2Error::InvalidOperation(format!(
+                "Failed to create uniform integer distribution: {}",
+                e
+            ))
         })?;
 
         let mut bit_gen = self.get_bit_generator()?;
@@ -260,18 +278,24 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             vec.push(dist.sample(&mut temp_rng));
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate random values from a normal (Gaussian) distribution
-    pub fn normal<T: Float + NumCast + Clone + Debug + Display>(&self, mean: T, std: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn normal<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        mean: T,
+        std: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         if std <= T::zero() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Standard deviation must be positive, got {}", std)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Standard deviation must be positive, got {}",
+                std
+            )));
         }
-        
+
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
         let mean_f64 = mean.to_f64().ok_or_else(|| {
@@ -280,7 +304,7 @@ impl<B: BitGenerator> Generator<B> {
         let std_f64 = std.to_f64().ok_or_else(|| {
             NumRs2Error::InvalidOperation("Failed to convert std to f64".to_string())
         })?;
-        
+
         let dist = Normal::new(mean_f64, std_f64).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
         })?;
@@ -292,25 +316,36 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_f64 = dist.sample(&mut temp_rng);
             let val = T::from(val_f64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert normal sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert normal sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
-        
+
         Ok(Array::from_vec(vec).reshape(shape))
     }
-    
+
     /// Generate a standard normal distribution
-    pub fn standard_normal<T: Float + NumCast + Clone + Debug + Display>(&self, shape: &[usize]) -> Result<Array<T>> {
+    pub fn standard_normal<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         self.normal(T::zero(), T::one(), shape)
     }
 
     /// Generate random values from a log-normal distribution
-    pub fn lognormal<T: Float + NumCast + Clone + Debug + Display>(&self, mean: T, sigma: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn lognormal<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        mean: T,
+        sigma: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         if sigma <= T::zero() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Sigma must be positive, got {}", sigma)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Sigma must be positive, got {}",
+                sigma
+            )));
         }
 
         let size: usize = shape.iter().product();
@@ -323,7 +358,10 @@ impl<B: BitGenerator> Generator<B> {
         })?;
 
         let dist = LogNormal::new(mean_f64, sigma_f64).map_err(|e| {
-            NumRs2Error::InvalidOperation(format!("Failed to create log-normal distribution: {}", e))
+            NumRs2Error::InvalidOperation(format!(
+                "Failed to create log-normal distribution: {}",
+                e
+            ))
         })?;
 
         let mut bit_gen = self.get_bit_generator()?;
@@ -333,7 +371,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_f64 = dist.sample(&mut temp_rng);
             let val = T::from(val_f64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert lognormal sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert lognormal sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -342,11 +382,17 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from a Beta distribution
-    pub fn beta<T: Float + NumCast + Clone + Debug + Display>(&self, a: T, b: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn beta<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        a: T,
+        b: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         if a <= T::zero() || b <= T::zero() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Alpha and Beta parameters must be positive, got alpha={}, beta={}", a, b)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Alpha and Beta parameters must be positive, got alpha={}, beta={}",
+                a, b
+            )));
         }
 
         let size: usize = shape.iter().product();
@@ -369,7 +415,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_f64 = dist.sample(&mut temp_rng);
             let val = T::from(val_f64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert beta sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert beta sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -378,11 +426,16 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from a Chi-Square distribution
-    pub fn chisquare<T: Float + NumCast + Clone + Debug + Display>(&self, df: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn chisquare<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        df: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         if df <= T::zero() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Degrees of freedom must be positive, got {}", df)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Degrees of freedom must be positive, got {}",
+                df
+            )));
         }
 
         let size: usize = shape.iter().product();
@@ -392,7 +445,10 @@ impl<B: BitGenerator> Generator<B> {
         })?;
 
         let dist = ChiSquare::new(df_f64).map_err(|e| {
-            NumRs2Error::InvalidOperation(format!("Failed to create chi-square distribution: {}", e))
+            NumRs2Error::InvalidOperation(format!(
+                "Failed to create chi-square distribution: {}",
+                e
+            ))
         })?;
 
         let mut bit_gen = self.get_bit_generator()?;
@@ -402,7 +458,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_f64 = dist.sample(&mut temp_rng);
             let val = T::from(val_f64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert chi-square sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert chi-square sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -411,11 +469,17 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from a gamma distribution
-    pub fn gamma<T: Float + NumCast + Clone + Debug + Display>(&self, shape_param: T, scale: T, size_shape: &[usize]) -> Result<Array<T>> {
+    pub fn gamma<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        shape_param: T,
+        scale: T,
+        size_shape: &[usize],
+    ) -> Result<Array<T>> {
         if shape_param <= T::zero() || scale <= T::zero() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Shape and scale parameters must be positive, got shape={}, scale={}", shape_param, scale)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Shape and scale parameters must be positive, got shape={}, scale={}",
+                shape_param, scale
+            )));
         }
 
         let arr_size: usize = size_shape.iter().product();
@@ -438,7 +502,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_f64 = dist.sample(&mut temp_rng);
             let val = T::from(val_f64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert gamma sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert gamma sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -447,11 +513,16 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from an exponential distribution
-    pub fn exponential<T: Float + NumCast + Clone + Debug + Display>(&self, scale: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn exponential<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        scale: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         if scale <= T::zero() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Scale parameter must be positive, got {}", scale)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Scale parameter must be positive, got {}",
+                scale
+            )));
         }
 
         let size: usize = shape.iter().product();
@@ -461,7 +532,10 @@ impl<B: BitGenerator> Generator<B> {
         })?;
 
         let dist = Exponential::new(1.0 / scale_f64).map_err(|e| {
-            NumRs2Error::InvalidOperation(format!("Failed to create exponential distribution: {}", e))
+            NumRs2Error::InvalidOperation(format!(
+                "Failed to create exponential distribution: {}",
+                e
+            ))
         })?;
 
         let mut bit_gen = self.get_bit_generator()?;
@@ -471,7 +545,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_f64 = dist.sample(&mut temp_rng);
             let val = T::from(val_f64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert exponential sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert exponential sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -480,11 +556,17 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from a Weibull distribution
-    pub fn weibull<T: Float + NumCast + Clone + Debug + Display>(&self, shape_param: T, scale: T, size_shape: &[usize]) -> Result<Array<T>> {
+    pub fn weibull<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        shape_param: T,
+        scale: T,
+        size_shape: &[usize],
+    ) -> Result<Array<T>> {
         if shape_param <= T::zero() || scale <= T::zero() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Shape and scale parameters must be positive, got shape={}, scale={}", shape_param, scale)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Shape and scale parameters must be positive, got shape={}, scale={}",
+                shape_param, scale
+            )));
         }
 
         let arr_size: usize = size_shape.iter().product();
@@ -507,7 +589,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_f64 = dist.sample(&mut temp_rng);
             let val = T::from(val_f64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert Weibull sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert Weibull sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -516,7 +600,12 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from a uniform distribution
-    pub fn uniform<T: Clone + PartialOrd + SampleUniform>(&self, low: T, high: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn uniform<T: Clone + PartialOrd + SampleUniform>(
+        &self,
+        low: T,
+        high: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 
@@ -536,11 +625,16 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate binary random values with given probability of success
-    pub fn bernoulli<T: Float + NumCast + Clone + Debug + Display>(&self, p: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn bernoulli<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        p: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         if p < T::zero() || p > T::one() {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Probability must be in [0, 1], got {}", p)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Probability must be in [0, 1], got {}",
+                p
+            )));
         }
 
         let size: usize = shape.iter().product();
@@ -567,11 +661,16 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from a Poisson distribution
-    pub fn poisson<T: NumCast + Clone + Debug>(&self, lam: f64, shape: &[usize]) -> Result<Array<T>> {
+    pub fn poisson<T: NumCast + Clone + Debug>(
+        &self,
+        lam: f64,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         if lam <= 0.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Lambda must be positive, got {}", lam)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Lambda must be positive, got {}",
+                lam
+            )));
         }
 
         let size: usize = shape.iter().product();
@@ -588,7 +687,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_u64 = dist.sample(&mut temp_rng);
             let val = T::from(val_u64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert Poisson sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert Poisson sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -597,11 +698,17 @@ impl<B: BitGenerator> Generator<B> {
     }
 
     /// Generate random values from a binomial distribution
-    pub fn binomial<T: NumCast + Clone + Debug>(&self, n: u64, p: f64, shape: &[usize]) -> Result<Array<T>> {
-        if p < 0.0 || p > 1.0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Probability must be in [0, 1], got {}", p)
-            ));
+    pub fn binomial<T: NumCast + Clone + Debug>(
+        &self,
+        n: u64,
+        p: f64,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
+        if !(0.0..=1.0).contains(&p) {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Probability must be in [0, 1], got {}",
+                p
+            )));
         }
 
         let size: usize = shape.iter().product();
@@ -618,7 +725,9 @@ impl<B: BitGenerator> Generator<B> {
             let mut temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
             let val_u64 = dist.sample(&mut temp_rng);
             let val = T::from(val_u64).ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert Binomial sample to target type".to_string())
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert Binomial sample to target type".to_string(),
+                )
             })?;
             vec.push(val);
         }
@@ -637,7 +746,12 @@ impl<B: BitGenerator> Generator<B> {
     /// # Returns
     ///
     /// An array of random integers in the specified range.
-    pub fn integers_simple<T: Clone + PartialOrd + SampleUniform>(&self, low: T, high: T, shape: &[usize]) -> Result<Array<T>> {
+    pub fn integers_simple<T: Clone + PartialOrd + SampleUniform>(
+        &self,
+        low: T,
+        high: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
         self.uniform(low, high, shape)
     }
 
@@ -716,26 +830,26 @@ pub fn pcg64_seed_rng(seed: u64) -> Generator<PCG64BitGenerator> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_rng() {
         let rng = default_rng();
         let arr = rng.random::<f64>(&[3, 3]).unwrap();
         assert_eq!(arr.shape(), vec![3, 3]);
     }
-    
+
     #[test]
     fn test_seed_rng() {
         let rng1 = seed_rng(42);
         let arr1 = rng1.random::<f64>(&[3, 3]).unwrap();
-        
+
         let rng2 = seed_rng(42);
         let arr2 = rng2.random::<f64>(&[3, 3]).unwrap();
-        
+
         // Same seed should produce the same random numbers
         assert_eq!(arr1.to_vec(), arr2.to_vec());
     }
-    
+
     #[test]
     fn test_generator_normal() {
         let rng = default_rng();

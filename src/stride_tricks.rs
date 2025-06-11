@@ -44,44 +44,47 @@ use std::fmt::Debug;
 /// are valid for the given array.
 pub fn set_strides<T>(array: &Array<T>, strides: &[isize]) -> Result<Array<T>>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     if strides.len() != array.ndim() {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Expected {} strides, got {}", array.ndim(), strides.len())
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Expected {} strides, got {}",
+            array.ndim(),
+            strides.len()
+        )));
     }
-    
+
     let view = array.array().view();
     let shape = array.shape();
-    
+
     // Create stride information for each dimension
     let mut slice_info = Vec::with_capacity(array.ndim());
-    
+
     for (i, &stride) in strides.iter().enumerate() {
         let dim_size = shape[i];
-        
+
         if stride == 0 {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Stride for dimension {} cannot be zero", i)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Stride for dimension {} cannot be zero",
+                i
+            )));
         }
-        
+
         // If stride is positive, create a slice from 0 to dim_size with step stride
         let start = if stride > 0 { 0 } else { dim_size as isize - 1 };
         let end = if stride > 0 { dim_size as isize } else { -1 };
-        
+
         slice_info.push(SliceInfoElem::Slice {
             start,
             end: Some(end),
             step: stride,
         });
     }
-    
+
     // Create the slice information
     let slice_info = SliceInfo::<_, IxDyn, IxDyn>::try_from(slice_info)
         .map_err(|_| NumRs2Error::InvalidOperation("Failed to create slice info".to_string()))?;
-    
+
     // Slice the array and return the view
     let strided = view.slice(slice_info);
     let result = Array::from_ndarray(strided.to_owned());
@@ -124,37 +127,38 @@ where
 /// ensure they are valid for the given array.
 pub fn as_strided<T>(array: &Array<T>, shape: &[usize], strides: &[isize]) -> Result<Array<T>>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     if shape.len() != strides.len() {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Shape and strides must have the same length, got {} and {}", 
-                    shape.len(), strides.len())
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Shape and strides must have the same length, got {} and {}",
+            shape.len(),
+            strides.len()
+        )));
     }
-    
+
     // For simplicity and safety, we'll create a new array with the desired shape
     // This is less efficient but more portable than direct stride manipulation
-    
+
     // First, create a flattened copy of the original array
     let flat_data = array.to_vec();
-    
+
     // Create a new array with the desired shape
     let mut result_data = Vec::with_capacity(shape.iter().product());
-    
+
     // Simple case for 1D arrays being converted to 2D
     if array.ndim() == 1 && shape.len() == 2 {
         let arr_len = array.size();
         let stride1 = strides[0] as usize;
         let stride2 = strides[1] as usize;
-        
+
         // Validate strides and shape to ensure we're within bounds
         if stride1 * (shape[0] - 1) + stride2 * (shape[1] - 1) >= arr_len {
             return Err(NumRs2Error::InvalidOperation(
-                format!("Strides and shape would access beyond array bounds")
+                "Strides and shape would access beyond array bounds".to_string(),
             ));
         }
-        
+
         // Fill the result data based on the strides
         for i in 0..shape[0] {
             for j in 0..shape[1] {
@@ -162,10 +166,10 @@ where
                 result_data.push(flat_data[idx].clone());
             }
         }
-        
+
         return Ok(Array::from_vec(result_data).reshape(shape));
     }
-    
+
     // For other dimensions, we need more complex logic
     // For now, just return a dummy implementation for the example
     match (array.ndim(), shape.len()) {
@@ -174,15 +178,16 @@ where
             let window_size = shape[1];
             let step = strides[0] as usize;
             let arr_len = array.size();
-            
+
             if window_size > arr_len {
-                return Err(NumRs2Error::InvalidOperation(
-                    format!("Window size {} exceeds array length {}", window_size, arr_len)
-                ));
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Window size {} exceeds array length {}",
+                    window_size, arr_len
+                )));
             }
-            
+
             let valid_windows = (arr_len - window_size) / step + 1;
-            
+
             // Create sliding windows
             for i in 0..valid_windows {
                 let start = i * step;
@@ -190,17 +195,23 @@ where
                     result_data.push(flat_data[start + j].clone());
                 }
             }
-            
-            return Ok(Array::from_vec(result_data).reshape(shape));
-        },
+
+            Ok(Array::from_vec(result_data).reshape(shape))
+        }
         // Special case for the 2D to 4D sliding window example
-        (2, 4) if array.shape()[0] == 4 && array.shape()[1] == 4 && 
-                 shape[0] == 3 && shape[1] == 3 && shape[2] == 2 && shape[3] == 2 => {
+        (2, 4)
+            if array.shape()[0] == 4
+                && array.shape()[1] == 4
+                && shape[0] == 3
+                && shape[1] == 3
+                && shape[2] == 2
+                && shape[3] == 2 =>
+        {
             // Create a 3x3 grid of 2x2 windows for the example
             let arr_shape = array.shape();
             let rows = arr_shape[0];
             let cols = arr_shape[1];
-            
+
             // Create sliding windows
             for r in 0..shape[0] {
                 for c in 0..shape[1] {
@@ -218,14 +229,14 @@ where
                     }
                 }
             }
-            
-            return Ok(Array::from_vec(result_data).reshape(shape));
-        },
+
+            Ok(Array::from_vec(result_data).reshape(shape))
+        }
         _ => {
             // For other cases, create a dummy array of the right shape
             let total_size: usize = shape.iter().product();
             let dummy_data = vec![flat_data[0].clone(); total_size];
-            return Ok(Array::from_vec(dummy_data).reshape(shape));
+            Ok(Array::from_vec(dummy_data).reshape(shape))
         }
     }
 }
@@ -259,73 +270,79 @@ where
 /// let windows = sliding_window_view(&array, &[2, 2], None).unwrap();
 /// assert_eq!(windows.shape(), vec![2, 2, 2, 2]);
 /// ```
-pub fn sliding_window_view<T>(array: &Array<T>, window_shape: &[usize], step: Option<&[usize]>) -> Result<Array<T>>
+pub fn sliding_window_view<T>(
+    array: &Array<T>,
+    window_shape: &[usize],
+    step: Option<&[usize]>,
+) -> Result<Array<T>>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     let step_values = match step {
         Some(s) => {
             if s.len() != array.ndim() {
-                return Err(NumRs2Error::DimensionMismatch(
-                    format!("Step must have the same length as array dimensions, got {} and {}", 
-                            s.len(), array.ndim())
-                ));
+                return Err(NumRs2Error::DimensionMismatch(format!(
+                    "Step must have the same length as array dimensions, got {} and {}",
+                    s.len(),
+                    array.ndim()
+                )));
             }
             s.to_vec()
-        },
+        }
         None => vec![1; array.ndim()],
     };
-    
+
     if window_shape.len() != array.ndim() {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Window shape must have the same length as array dimensions, got {} and {}", 
-                    window_shape.len(), array.ndim())
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Window shape must have the same length as array dimensions, got {} and {}",
+            window_shape.len(),
+            array.ndim()
+        )));
     }
-    
+
     // Calculate the output shape
     let array_shape = array.shape();
     let mut output_shape = Vec::with_capacity(array.ndim() * 2);
-    
+
     for i in 0..array.ndim() {
         let window_size = window_shape[i];
         let step_size = step_values[i];
         let dim_size = array_shape[i];
-        
+
         if window_size > dim_size {
-            return Err(NumRs2Error::InvalidOperation(
-                format!("Window size {} exceeds array dimension {} of size {}", 
-                        window_size, i, dim_size)
-            ));
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Window size {} exceeds array dimension {} of size {}",
+                window_size, i, dim_size
+            )));
         }
-        
+
         // Calculate number of valid windows in this dimension
         let n_windows = (dim_size - window_size) / step_size + 1;
         output_shape.push(n_windows);
     }
-    
+
     // Append window shape to output shape
     output_shape.extend_from_slice(window_shape);
-    
+
     // Simple implementation for 1D arrays
     if array.ndim() == 1 {
         let data = array.to_vec();
         let window_size = window_shape[0];
         let step_size = step_values[0];
         let n_windows = output_shape[0];
-        
+
         let mut result_data = Vec::with_capacity(n_windows * window_size);
-        
+
         for i in 0..n_windows {
             let start = i * step_size;
             for j in 0..window_size {
                 result_data.push(data[start + j].clone());
             }
         }
-        
+
         return Ok(Array::from_vec(result_data).reshape(&output_shape));
     }
-    
+
     // Special case for 2D arrays with 2D windows
     if array.ndim() == 2 && window_shape.len() == 2 {
         let arr_shape = array.shape();
@@ -335,18 +352,19 @@ where
         let window_cols = window_shape[1];
         let row_step = step_values[0];
         let col_step = step_values[1];
-        
+
         let n_row_windows = output_shape[0];
         let n_col_windows = output_shape[1];
-        
+
         let data = array.to_vec();
-        let mut result_data = Vec::with_capacity(n_row_windows * n_col_windows * window_rows * window_cols);
-        
+        let mut result_data =
+            Vec::with_capacity(n_row_windows * n_col_windows * window_rows * window_cols);
+
         for i in 0..n_row_windows {
             let row_start = i * row_step;
             for j in 0..n_col_windows {
                 let col_start = j * col_step;
-                
+
                 for wi in 0..window_rows {
                     for wj in 0..window_cols {
                         let idx = (row_start + wi) * cols + (col_start + wj);
@@ -355,19 +373,20 @@ where
                 }
             }
         }
-        
+
         return Ok(Array::from_vec(result_data).reshape(&output_shape));
     }
-    
+
     // For higher dimensions or more complex cases, we'd need a more general implementation
-    Err(NumRs2Error::InvalidOperation(
-        format!("Sliding window view not implemented for arrays with {} dimensions", array.ndim())
-    ))
+    Err(NumRs2Error::InvalidOperation(format!(
+        "Sliding window view not implemented for arrays with {} dimensions",
+        array.ndim()
+    )))
 }
 
 /// Returns the byte strides of an array.
 ///
-/// Byte strides represent the number of bytes to move along each dimension 
+/// Byte strides represent the number of bytes to move along each dimension
 /// when navigating the array in memory.
 ///
 /// # Arguments
@@ -388,14 +407,17 @@ where
 /// ```
 pub fn byte_strides<T>(array: &Array<T>) -> Vec<usize>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     // Get the memory strides in terms of elements
     let elem_strides = array.array().strides();
-    
+
     // Convert to byte strides by multiplying by the size of T
     let elem_size = std::mem::size_of::<T>();
-    elem_strides.iter().map(|&s| s as usize * elem_size).collect()
+    elem_strides
+        .iter()
+        .map(|&s| s as usize * elem_size)
+        .collect()
 }
 
 /// Create views into arrays in a way that broadcasting might occur.
@@ -426,25 +448,25 @@ where
 /// ```
 pub fn broadcast_arrays<T>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     if arrays.is_empty() {
         return Ok(Vec::new());
     }
-    
+
     // Get the shapes of all arrays
     let shapes: Vec<_> = arrays.iter().map(|a| a.shape()).collect();
-    
+
     // Determine the output shape (the shape all arrays will be broadcast to)
     let output_shape = broadcast_shape(&shapes)?;
-    
+
     // Broadcast each array to the output shape
     let mut result = Vec::with_capacity(arrays.len());
     for array in arrays {
         let broadcast = broadcast_to(array, &output_shape)?;
         result.push(broadcast);
     }
-    
+
     Ok(result)
 }
 
@@ -476,7 +498,7 @@ where
 /// ```
 pub fn broadcast_to<T>(array: &Array<T>, shape: &[usize]) -> Result<Array<T>>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     // Check if the array can be broadcast to the target shape
     if !is_broadcastable(&array.shape(), shape) {
@@ -485,20 +507,18 @@ where
             actual: array.shape(),
         });
     }
-    
+
     // Get the original shape and strides
     let orig_shape = array.shape();
     let byte_strides = byte_strides(array);
-    
+
     // Calculate the new strides for the broadcast array
     let mut new_strides = Vec::with_capacity(shape.len());
-    
+
     // Prepend dimensions to match the length of the target shape
     let prepend_dims = shape.len() - orig_shape.len();
-    for _ in 0..prepend_dims {
-        new_strides.push(0); // Stride 0 for broadcast dimensions
-    }
-    
+    new_strides.extend(std::iter::repeat_n(0, prepend_dims)); // Stride 0 for broadcast dimensions
+
     // Set strides for existing dimensions
     for (i, &dim) in orig_shape.iter().enumerate() {
         let target_dim = shape[i + prepend_dims];
@@ -510,7 +530,7 @@ where
             new_strides.push(byte_strides[i] as isize);
         }
     }
-    
+
     // Use as_strided to create the broadcast view
     as_strided(array, shape, &new_strides)
 }
@@ -538,12 +558,12 @@ fn is_broadcastable(source_shape: &[usize], target_shape: &[usize]) -> bool {
     if source_shape.is_empty() {
         return true;
     }
-    
+
     // If the source has more dimensions than target, it cannot be broadcast
     if source_shape.len() > target_shape.len() {
         return false;
     }
-    
+
     // Check each dimension from the end (right-aligned)
     let offset = target_shape.len() - source_shape.len();
     for (i, &dim) in source_shape.iter().enumerate() {
@@ -552,7 +572,7 @@ fn is_broadcastable(source_shape: &[usize], target_shape: &[usize]) -> bool {
             return false;
         }
     }
-    
+
     true
 }
 
@@ -570,13 +590,13 @@ fn broadcast_shape(shapes: &[Vec<usize>]) -> Result<Vec<usize>> {
     if shapes.is_empty() {
         return Ok(Vec::new());
     }
-    
+
     // Find the maximum number of dimensions
     let max_ndim = shapes.iter().map(|s| s.len()).max().unwrap();
-    
+
     // Initialize the output shape with 1s
     let mut output_shape = vec![1; max_ndim];
-    
+
     // Determine the output shape
     for shape in shapes {
         let offset = max_ndim - shape.len();
@@ -592,6 +612,6 @@ fn broadcast_shape(shapes: &[Vec<usize>]) -> Result<Vec<usize>> {
             }
         }
     }
-    
+
     Ok(output_shape)
 }
