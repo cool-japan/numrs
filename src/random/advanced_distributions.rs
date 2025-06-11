@@ -181,14 +181,24 @@ impl VonMises {
 
         let r = 1.0 + (1.0 + 4.0 * kappa * kappa).sqrt();
         let a = r + 2.0 * kappa / r;
-        a / (2.0 * kappa)
+        let ratio = a / (2.0 * kappa);
+
+        // Ensure finite result
+        if ratio.is_finite() {
+            ratio
+        } else {
+            1.0 // Fallback value
+        }
     }
 
     /// Sample from the distribution
     pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         // Special case for kappa = 0 (uniform distribution)
         if self.kappa == 0.0 {
-            return self.mu + 2.0 * std::f64::consts::PI * rng.random::<f64>();
+            let sample = self.mu + 2.0 * std::f64::consts::PI * (rng.random::<f64>() - 0.5);
+            // Ensure the result is in [-π, π]
+            return ((sample + std::f64::consts::PI) % (2.0 * std::f64::consts::PI))
+                - std::f64::consts::PI;
         }
 
         // Implementation based on:
@@ -210,13 +220,18 @@ impl VonMises {
 
             if u2 <= c {
                 // Accept the sample
-                let theta = if z < 0.0 {
-                    std::f64::consts::PI - z.acos()
+                // Generate a symmetric angle around 0
+                let abs_z = z.abs().min(1.0);
+                let theta = if rng.random::<f64>() < 0.5 {
+                    abs_z.acos()
                 } else {
-                    z.acos()
+                    -abs_z.acos()
                 };
 
-                return self.mu + theta;
+                let sample = self.mu + theta;
+                // Ensure the result is in [-π, π]
+                return ((sample + std::f64::consts::PI) % (2.0 * std::f64::consts::PI))
+                    - std::f64::consts::PI;
             }
             // Reject and try again
         }

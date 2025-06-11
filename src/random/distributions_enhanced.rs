@@ -302,7 +302,15 @@ impl RandomState {
             let z = normal_inv_cdf(scaled_u);
 
             // Transform back to the original scale
-            let val = mean + std * <T as NumCast>::from(z).unwrap_or(T::zero());
+            let mut val = mean + std * <T as NumCast>::from(z).unwrap_or(T::zero());
+
+            // Ensure the value is within bounds (clamp to avoid numerical errors)
+            if val < low {
+                val = low;
+            } else if val > high {
+                val = high;
+            }
+
             vec.push(val);
         }
 

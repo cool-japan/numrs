@@ -1,35 +1,35 @@
 //! SciRS2 compatibility module for advanced statistical distributions
 //!
-//! This module provides compatibility layers and adapters for using SciRS2's
-//! advanced statistical distributions within NumRS2. It enables seamless
-//! integration with SciRS2 while maintaining the NumRS2 API.
+//! This module provides compatibility functions for advanced statistical distributions
+//! that are available when SciRS2 integration is enabled. When SciRS2 is not available,
+//! it provides implementations using NumRS2's built-in advanced distributions.
 //!
-//! Note: This module is currently being updated for SciRS2 v0.1.0-alpha.4 compatibility
+//! This approach ensures compatibility while maintaining functionality.
 
 #![allow(unexpected_cfgs)]
 
 use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
 use num_traits::{Float, NumCast};
 use std::fmt::{Debug, Display};
 
-// When the scirs feature is enabled, import the necessary modules from SciRS2
+// When the __never feature is enabled, import the necessary modules from SciRS2
 // Note: Currently disabled while updating for SciRS2 v0.1.0-alpha.4 API changes
 #[cfg(feature = "__never")]
 use {
+    // Import array and generator types
+    __never2_core::ndarray_ext::Array as SciArray,
+    __never2_core::random::Generator as SciGenerator,
+
+    // Import SCIRS linalg for linear equation solving
+    __never2_linalg::decomposition::lu_solve,
+
+    // Import distributions from SciRS2
+    __never2_stats::distributions::continuous::*,
     rand::rngs::StdRng,
     // Import random number generation
     rand::Rng,
     rand::SeedableRng,
-    // Import array and generator types
-    scirs2_core::ndarray_ext::Array as SciArray,
-    scirs2_core::random::Generator as SciGenerator,
-
-    // Import SCIRS linalg for linear equation solving
-    scirs2_linalg::decomposition::lu_solve,
-
-    // Import distributions from SciRS2
-    scirs2_stats::distributions::continuous::*,
 };
 
 // Conversion helpers between NumRS2 and SciRS2 arrays
@@ -127,15 +127,13 @@ where
     convert_to_numrs_array(samples, shape)
 }
 
-/// Placeholder for non-SciRS2 build
+/// Implementation using NumRS2's built-in advanced distributions
 #[cfg(not(feature = "__never"))]
-pub fn noncentral_chisquare<T>(_df: T, _nonc: T, _shape: &[usize]) -> Result<Array<T>>
+pub fn noncentral_chisquare<T>(df: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
 {
-    Err(NumRs2Error::NotImplemented(
-        "Noncentral chi-square distribution requires SciRS2 integration. Enable the 'scirs' feature in Cargo.toml.".to_string()
-    ))
+    crate::random::advanced_distributions::noncentral_chisquare(df, nonc, shape)
 }
 
 /// Adapter function for SciRS2's noncentral F distribution
@@ -217,15 +215,13 @@ where
     convert_to_numrs_array(samples, shape)
 }
 
-/// Placeholder for non-SciRS2 build
+/// Implementation using NumRS2's built-in advanced distributions
 #[cfg(not(feature = "__never"))]
-pub fn noncentral_f<T>(_dfnum: T, _dfden: T, _nonc: T, _shape: &[usize]) -> Result<Array<T>>
+pub fn noncentral_f<T>(dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
 {
-    Err(NumRs2Error::NotImplemented(
-        "Noncentral F distribution requires SciRS2 integration. Enable the 'scirs' feature in Cargo.toml.".to_string()
-    ))
+    crate::random::advanced_distributions::noncentral_f(dfnum, dfden, nonc, shape)
 }
 
 /// Adapter function for SciRS2's von Mises distribution
@@ -302,15 +298,13 @@ where
     convert_to_numrs_array(samples, shape)
 }
 
-/// Placeholder for non-SciRS2 build
+/// Implementation using NumRS2's built-in advanced distributions
 #[cfg(not(feature = "__never"))]
-pub fn vonmises<T>(_mu: T, _kappa: T, _shape: &[usize]) -> Result<Array<T>>
+pub fn vonmises<T>(mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
 {
-    Err(NumRs2Error::NotImplemented(
-        "Von Mises distribution requires SciRS2 integration. Enable the 'scirs' feature in Cargo.toml.".to_string()
-    ))
+    crate::random::advanced_distributions::vonmises(mu, kappa, shape)
 }
 
 /// Adapter function for SciRS2's Maxwell distribution
@@ -382,15 +376,13 @@ where
     convert_to_numrs_array(samples, shape)
 }
 
-/// Placeholder for non-SciRS2 build
+/// Implementation using NumRS2's built-in advanced distributions
 #[cfg(not(feature = "__never"))]
-pub fn maxwell<T>(_scale: T, _shape: &[usize]) -> Result<Array<T>>
+pub fn maxwell<T>(scale: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
 {
-    Err(NumRs2Error::NotImplemented(
-        "Maxwell distribution requires SciRS2 integration. Enable the 'scirs' feature in Cargo.toml.".to_string()
-    ))
+    crate::random::advanced_distributions::maxwell(scale, shape)
 }
 
 /// Adapter function for SciRS2's multivariate normal distribution with factor rotation
@@ -522,20 +514,18 @@ where
     convert_to_numrs_array(samples, &out_shape)
 }
 
-/// Placeholder for non-SciRS2 build
+/// Implementation using NumRS2's built-in distributions
 #[cfg(not(feature = "__never"))]
 pub fn multivariate_normal_with_rotation<T>(
-    _means: &[T],
-    _cov: &Array<T>,
-    _size: Option<&[usize]>,
-    _rotation: Option<&Array<T>>,
+    means: &[T],
+    cov: &Array<T>,
+    size: Option<&[usize]>,
+    rotation: Option<&Array<T>>,
 ) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
 {
-    Err(NumRs2Error::NotImplemented(
-        "Multivariate normal with rotation requires SciRS2 integration. Enable the 'scirs' feature in Cargo.toml.".to_string()
-    ))
+    crate::random::distributions::multivariate_normal_with_rotation(means, cov, size, rotation)
 }
 
 /// Adapter function for SciRS2's truncated normal distribution
@@ -629,21 +619,13 @@ where
     convert_to_numrs_array(samples, shape)
 }
 
-/// Placeholder for non-SciRS2 build
+/// Implementation using NumRS2's built-in distributions
 #[cfg(not(feature = "__never"))]
-pub fn truncated_normal<T>(
-    _mean: T,
-    _std: T,
-    _low: T,
-    _high: T,
-    _shape: &[usize],
-) -> Result<Array<T>>
+pub fn truncated_normal<T>(mean: T, std: T, low: T, high: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
 {
-    Err(NumRs2Error::NotImplemented(
-        "Truncated normal distribution requires SciRS2 integration. Enable the 'scirs' feature in Cargo.toml.".to_string()
-    ))
+    crate::random::distributions::truncated_normal(mean, std, low, high, shape)
 }
 
 /// Adapter function for SciRS2's linear equation solver
@@ -731,15 +713,14 @@ where
     convert_to_numrs_array(x_sci, &[a_shape[0]])
 }
 
-/// Placeholder for non-SciRS2 build
+/// Implementation using NumRS2's built-in linear algebra
 #[cfg(not(feature = "__never"))]
-pub fn solve_linear_system<T>(_a: &Array<T>, _b: &Array<T>) -> Result<Array<T>>
+pub fn solve_linear_system<T>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
-    T: Float + NumCast + Clone + Debug + Display,
+    T: Float + NumCast + Clone + Debug + Display + ndarray_linalg::Lapack,
 {
-    Err(NumRs2Error::NotImplemented(
-        "Linear equation system solver requires SciRS2 integration. Enable the 'scirs' feature in Cargo.toml.".to_string()
-    ))
+    // Use NumRS2's built-in linear algebra solve function
+    crate::linalg::solve(a, b)
 }
 
 #[cfg(test)]

@@ -1,8 +1,7 @@
 use numrs2::array::Array;
 use numrs2::error::Result;
 use numrs2::ufuncs::{
-    add, subtract, multiply, divide, power, maximum, minimum,
-    square, sqrt, exp, log, sin, cos, abs
+    abs, add, cos, divide, exp, log, maximum, minimum, multiply, power, sin, sqrt, square, subtract,
 };
 
 fn main() -> Result<()> {
