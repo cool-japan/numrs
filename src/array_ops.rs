@@ -3,6 +3,7 @@ use crate::error::{NumRs2Error, Result};
 use ndarray::{Axis, IxDyn, Order};
 use num_traits::Zero;
 use std::cmp;
+use std::fmt::Display;
 
 /// Construct an array by repeating array the given number of times
 pub fn tile<T: Clone>(array: &Array<T>, reps: &[usize]) -> Result<Array<T>> {
@@ -3269,4 +3270,398 @@ where
 
     // Reshape result back to original shape of x
     Ok(result.reshape(&x_shape))
+}
+
+/// Return elements chosen from x or y depending on condition
+///
+/// # Parameters
+///
+/// * `condition` - Where True, yield x, otherwise yield y
+/// * `x` - Values to choose from where condition is True
+/// * `y` - Values to choose from where condition is False
+///
+/// # Returns
+///
+/// A new array with values chosen from x or y based on condition
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let condition = Array::from_vec(vec![true, false, true, false]);
+/// let x = Array::from_vec(vec![1, 2, 3, 4]);
+/// let y = Array::from_vec(vec![10, 20, 30, 40]);
+/// let result = where_cond(&condition, &x, &y).unwrap();
+/// assert_eq!(result.to_vec(), vec![1, 20, 3, 40]);
+///
+/// // With broadcasting
+/// let condition_2d = Array::from_vec(vec![true, false, true, false]).reshape(&[2, 2]);
+/// let x_scalar = Array::from_vec(vec![100]);
+/// let y_2d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let result_2d = where_cond(&condition_2d, &x_scalar, &y_2d).unwrap();
+/// assert_eq!(result_2d.to_vec(), vec![100, 2, 100, 4]);
+/// ```
+pub fn where_cond<T: Clone + Display>(
+    condition: &Array<bool>,
+    x: &Array<T>,
+    y: &Array<T>,
+) -> Result<Array<T>> {
+    // Get the shapes
+    let cond_shape = condition.shape();
+    let x_shape = x.shape();
+    let y_shape = y.shape();
+
+    // Calculate broadcast shape for all three arrays
+    let broadcast_shape_xy = Array::<T>::broadcast_shape(&x_shape, &y_shape)?;
+    let broadcast_shape = Array::<bool>::broadcast_shape(&cond_shape, &broadcast_shape_xy)?;
+
+    // Broadcast all arrays to the common shape
+    let cond_broadcast = condition.broadcast_to(&broadcast_shape)?;
+    let x_broadcast = x.broadcast_to(&broadcast_shape)?;
+    let y_broadcast = y.broadcast_to(&broadcast_shape)?;
+
+    // Apply the conditional logic element-wise
+    let cond_data = cond_broadcast.to_vec();
+    let x_data = x_broadcast.to_vec();
+    let y_data = y_broadcast.to_vec();
+
+    let result_data: Vec<T> = cond_data
+        .iter()
+        .zip(x_data.iter())
+        .zip(y_data.iter())
+        .map(|((&cond, x_val), y_val)| {
+            if cond {
+                x_val.clone()
+            } else {
+                y_val.clone()
+            }
+        })
+        .collect();
+
+    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+}
+
+/// Select elements from choices array based on conditions
+///
+/// Given a list of conditions and a list of choices, return an array drawn from the elements in choices,
+/// depending on the conditions.
+///
+/// # Parameters
+///
+/// * `condlist` - A list of boolean arrays. The length of condlist determines the number of conditions
+/// * `choicelist` - A list of arrays from which to choose. Must have the same length as condlist
+/// * `default` - The element to use if no condition is satisfied. If None, uses zero.
+///
+/// # Returns
+///
+/// A new array with elements selected from choicelist based on conditions
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create conditions
+/// let x = Array::from_vec(vec![0, 1, 2, 3, 4, 5]);
+/// let cond1 = x.map(|&val| val < 3);
+/// let cond2 = x.map(|&val| val >= 3);
+///
+/// // Create choices
+/// let choice1 = Array::from_vec(vec![10, 10, 10, 10, 10, 10]);
+/// let choice2 = Array::from_vec(vec![20, 20, 20, 20, 20, 20]);
+///
+/// let result = select(&[&cond1, &cond2], &[&choice1, &choice2], Some(99)).unwrap();
+/// assert_eq!(result.to_vec(), vec![10, 10, 10, 20, 20, 20]);
+///
+/// // When no condition matches, use default
+/// let always_false = Array::from_vec(vec![false, false, false]);
+/// let choice_unused = Array::from_vec(vec![1, 2, 3]);
+/// let result_default = select(&[&always_false], &[&choice_unused], Some(99)).unwrap();
+/// assert_eq!(result_default.to_vec(), vec![99, 99, 99]);
+/// ```
+pub fn select<T: Clone + num_traits::Zero>(
+    condlist: &[&Array<bool>],
+    choicelist: &[&Array<T>],
+    default: Option<T>,
+) -> Result<Array<T>> {
+    if condlist.len() != choicelist.len() {
+        return Err(NumRs2Error::InvalidOperation(
+            "condlist and choicelist must have the same length".to_string(),
+        ));
+    }
+
+    if condlist.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "condlist and choicelist cannot be empty".to_string(),
+        ));
+    }
+
+    // Determine the broadcast shape
+    let mut broadcast_shape = condlist[0].shape();
+    for cond in condlist.iter() {
+        broadcast_shape = Array::<bool>::broadcast_shape(&broadcast_shape, &cond.shape())?;
+    }
+    for choice in choicelist.iter() {
+        broadcast_shape = Array::<T>::broadcast_shape(&broadcast_shape, &choice.shape())?;
+    }
+
+    // Broadcast all arrays to the common shape
+    let mut cond_broadcasts = Vec::with_capacity(condlist.len());
+    let mut choice_broadcasts = Vec::with_capacity(choicelist.len());
+
+    for cond in condlist.iter() {
+        cond_broadcasts.push(cond.broadcast_to(&broadcast_shape)?);
+    }
+    for choice in choicelist.iter() {
+        choice_broadcasts.push(choice.broadcast_to(&broadcast_shape)?);
+    }
+
+    // Create result array with default values
+    let default_val = default.unwrap_or_else(T::zero);
+    let mut result = Array::full(&broadcast_shape, default_val);
+
+    // Process each element
+    let total_size = broadcast_shape.iter().product::<usize>();
+    for i in 0..total_size {
+        // Convert flat index to multi-dimensional index
+        let mut indices = Vec::with_capacity(broadcast_shape.len());
+        let mut temp = i;
+        for &dim in broadcast_shape.iter().rev() {
+            indices.insert(0, temp % dim);
+            temp /= dim;
+        }
+
+        // Check conditions in order
+        for (cond_broadcast, choice_broadcast) in 
+            cond_broadcasts.iter().zip(choice_broadcasts.iter()) {
+            let cond_val = cond_broadcast.array().get(ndarray::IxDyn(&indices)).unwrap();
+            if *cond_val {
+                let choice_val = choice_broadcast.array().get(ndarray::IxDyn(&indices)).unwrap();
+                result.set(&indices, choice_val.clone())?;
+                break; // Take the first matching condition
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// Construct an array by executing a function over each coordinate
+///
+/// # Parameters
+///
+/// * `function` - Function to call at each coordinate
+/// * `shape` - Shape of the output array
+/// * `dtype` - Data type of the output array (for type inference)
+///
+/// # Returns
+///
+/// A new array where `arr[i,j,k,...] = function(i,j,k,...)`
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create a 3x3 array where arr[i,j] = i + j
+/// let result = fromfunction(|indices: &[usize]| (indices[0] + indices[1]) as f64, &[3, 3]).unwrap();
+/// assert_eq!(result.get(&[0, 0]).unwrap(), 0.0);
+/// assert_eq!(result.get(&[0, 1]).unwrap(), 1.0);
+/// assert_eq!(result.get(&[1, 1]).unwrap(), 2.0);
+/// assert_eq!(result.get(&[2, 2]).unwrap(), 4.0);
+///
+/// // Create a 2x4 array where arr[i,j] = i * j
+/// let result = fromfunction(|indices: &[usize]| (indices[0] * indices[1]) as i32, &[2, 4]).unwrap();
+/// assert_eq!(result.get(&[1, 3]).unwrap(), 3);
+/// assert_eq!(result.get(&[0, 2]).unwrap(), 0);
+/// ```
+pub fn fromfunction<T, F>(function: F, shape: &[usize]) -> Result<Array<T>>
+where
+    T: Clone + num_traits::Zero,
+    F: Fn(&[usize]) -> T,
+{
+    if shape.is_empty() {
+        return Ok(Array::from_vec(vec![]));
+    }
+
+    // Calculate total number of elements
+    let total_elements: usize = shape.iter().product();
+
+    // Create result vector
+    let mut result_data = Vec::with_capacity(total_elements);
+
+    // Iterate through all indices and compute function values
+    let mut indices = vec![0; shape.len()];
+    for _ in 0..total_elements {
+        // Call the function with current indices
+        let value = function(&indices);
+        result_data.push(value);
+
+        // Increment indices (like an odometer)
+        let mut carry = true;
+        for dim in (0..shape.len()).rev() {
+            if carry {
+                indices[dim] += 1;
+                carry = indices[dim] >= shape[dim];
+                if carry {
+                    indices[dim] = 0;
+                }
+            }
+        }
+    }
+
+    // Create and reshape the array
+    Ok(Array::from_vec(result_data).reshape(shape))
+}
+
+/// Create an array from a raw buffer
+///
+/// # Parameters
+///
+/// * `buffer` - The raw buffer as a slice of bytes
+/// * `dtype_size` - Size of each element in bytes (e.g., 4 for i32, 8 for f64)
+/// * `count` - Number of elements to read from buffer (-1 means read all available)
+/// * `offset` - Start reading from this position in the buffer (in bytes)
+///
+/// # Returns
+///
+/// A 1D array created from the buffer data
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create array from i32 buffer
+/// let data: Vec<i32> = vec![1, 2, 3, 4, 5];
+/// let buffer = unsafe {
+///     std::slice::from_raw_parts(
+///         data.as_ptr() as *const u8,
+///         data.len() * std::mem::size_of::<i32>()
+///     )
+/// };
+/// let result = frombuffer::<i32>(buffer, std::mem::size_of::<i32>(), -1, 0).unwrap();
+/// assert_eq!(result.to_vec(), vec![1, 2, 3, 4, 5]);
+///
+/// // Create array from f64 buffer with count limit
+/// let data: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+/// let buffer = unsafe {
+///     std::slice::from_raw_parts(
+///         data.as_ptr() as *const u8,
+///         data.len() * std::mem::size_of::<f64>()
+///     )
+/// };
+/// let result = frombuffer::<f64>(buffer, std::mem::size_of::<f64>(), 3, 0).unwrap();
+/// assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0]);
+/// ```
+pub fn frombuffer<T: Clone + Default>(
+    buffer: &[u8],
+    dtype_size: usize,
+    count: isize,
+    offset: usize,
+) -> Result<Array<T>> {
+    if dtype_size == 0 {
+        return Err(NumRs2Error::InvalidOperation(
+            "Data type size cannot be zero".to_string(),
+        ));
+    }
+
+    if offset >= buffer.len() {
+        return Err(NumRs2Error::IndexOutOfBounds(format!(
+            "Offset {} is beyond buffer size {}",
+            offset, buffer.len()
+        )));
+    }
+
+    if dtype_size != std::mem::size_of::<T>() {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Data type size mismatch: expected {}, got {}",
+            std::mem::size_of::<T>(),
+            dtype_size
+        )));
+    }
+
+    let available_bytes = buffer.len() - offset;
+    let max_elements = available_bytes / dtype_size;
+    
+    let num_elements = if count < 0 {
+        max_elements
+    } else {
+        let requested = count as usize;
+        if requested > max_elements {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Requested {} elements but only {} available in buffer",
+                requested, max_elements
+            )));
+        }
+        requested
+    };
+
+    if num_elements == 0 {
+        return Ok(Array::from_vec(vec![]));
+    }
+
+    // Create vector by copying bytes and converting to T
+    let mut result = Vec::with_capacity(num_elements);
+    
+    for i in 0..num_elements {
+        let byte_offset = offset + i * dtype_size;
+        let element_bytes = &buffer[byte_offset..byte_offset + dtype_size];
+        
+        // Safety: We've checked the size matches T and bounds are valid
+        let element = unsafe {
+            std::ptr::read(element_bytes.as_ptr() as *const T)
+        };
+        
+        result.push(element);
+    }
+
+    Ok(Array::from_vec(result))
+}
+
+/// Create an array from an iterator
+///
+/// # Parameters
+///
+/// * `iter` - Iterator that yields elements
+/// * `shape` - Optional shape for the resulting array
+///
+/// # Returns
+///
+/// Array created from the iterator elements
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create 1D array from range
+/// let result = fromiter((0..5).map(|x| x as f64), None).unwrap();
+/// assert_eq!(result.to_vec(), vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+///
+/// // Create 2D array from range with specified shape
+/// let result = fromiter((0..6).map(|x| x as i32), Some(&[2, 3])).unwrap();
+/// assert_eq!(result.shape(), vec![2, 3]);
+/// assert_eq!(result.to_vec(), vec![0, 1, 2, 3, 4, 5]);
+/// ```
+pub fn fromiter<T: Clone, I: Iterator<Item = T>>(
+    iter: I,
+    shape: Option<&[usize]>,
+) -> Result<Array<T>> {
+    let data: Vec<T> = iter.collect();
+    
+    match shape {
+        Some(s) => {
+            let expected_size: usize = s.iter().product();
+            if data.len() != expected_size {
+                return Err(NumRs2Error::ShapeMismatch {
+                    expected: vec![expected_size],
+                    actual: vec![data.len()],
+                });
+            }
+            Ok(Array::from_vec(data).reshape(s))
+        }
+        None => Ok(Array::from_vec(data)),
+    }
 }

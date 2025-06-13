@@ -1132,7 +1132,7 @@ mod tests {
         // Check bounds (should be in [-π, π))
         for &val in &data {
             assert!(
-                val >= -std::f64::consts::PI && val < std::f64::consts::PI,
+                (-std::f64::consts::PI..std::f64::consts::PI).contains(&val),
                 "Value outside bounds: {}",
                 val
             );

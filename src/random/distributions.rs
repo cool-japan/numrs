@@ -852,20 +852,15 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_triangular_distribution() {
-        // NOTE: There seems to be an issue with the triangular distribution in rand_distr
-        // This test is currently ignored until the issue is resolved
-        // Even when parameters satisfy low <= mode <= high, the distribution can still fail
-
+        // Now using our own implementation instead of rand_distr
         let result = triangular(0.0, 2.0, 10.0, &[10]);
-        if let Ok(arr) = result {
-            assert_eq!(arr.shape(), vec![10]);
+        let arr = result.unwrap();
+        assert_eq!(arr.shape(), vec![10]);
 
-            // Triangular values should be in the range [low, high]
-            for val in arr.to_vec() {
-                assert!(val >= 0.0 && val <= 10.0);
-            }
+        // Triangular values should be in the range [low, high]
+        for val in arr.to_vec() {
+            assert!((0.0..=10.0).contains(&val));
         }
     }
 
@@ -876,7 +871,7 @@ mod tests {
 
         // PERT values should be in the range [min, max]
         for val in arr.to_vec() {
-            assert!(val >= 0.0 && val <= 10.0);
+            assert!((0.0..=10.0).contains(&val));
         }
     }
 
@@ -942,7 +937,7 @@ mod tests {
 
         // Von Mises values should be in the range [-π, π)
         for val in arr.to_vec() {
-            assert!(val >= -std::f64::consts::PI && val < std::f64::consts::PI);
+            assert!((-std::f64::consts::PI..std::f64::consts::PI).contains(&val));
         }
     }
 
@@ -979,8 +974,8 @@ mod tests {
 
         // Create a rotation matrix for 45 degrees
         let rotation_data = vec![
-            0.7071, 0.7071, // cos(45°), sin(45°)
-            -0.7071, 0.7071, // -sin(45°), cos(45°)
+            std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2, // cos(45°), sin(45°)
+            -std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2, // -sin(45°), cos(45°)
         ];
         let rotation = Array::from_vec(rotation_data).reshape(&[2, 2]);
 

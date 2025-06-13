@@ -2,8 +2,8 @@ use numrs2::prelude::*;
 use numrs2::random_base;
 
 fn main() -> Result<()> {
-    println!("NumRS2 Basic Usage Example");
-    println!("========================");
+    println!("NumRS2 v0.1.0-alpha.4 Basic Usage Example");
+    println!("==========================================");
 
     // Create arrays
     let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);

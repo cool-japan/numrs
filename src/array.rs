@@ -613,6 +613,11 @@ impl<T: Clone> Array<T> {
     /// let eye_below = Array::<i32>::eye(3, 3, -1);
     /// assert_eq!(eye_below.shape(), vec![3, 3]);
     /// assert_eq!(eye_below.to_vec(), vec![0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    /// 
+    /// // Rectangular matrix
+    /// let rect_eye = Array::<f64>::eye(2, 4, 0);
+    /// assert_eq!(rect_eye.shape(), vec![2, 4]);
+    /// assert_eq!(rect_eye.to_vec(), vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
     /// ```
     pub fn eye(n_rows: usize, n_cols: usize, k: isize) -> Self
     where
@@ -620,11 +625,20 @@ impl<T: Clone> Array<T> {
     {
         let mut result = Self::zeros(&[n_rows, n_cols]);
 
-        // Set ones on the specified diagonal
-        for i in 0..n_rows {
-            let j = (i as isize) + k;
-            if j >= 0 && j < (n_cols as isize) {
-                result.set(&[i, j as usize], T::one()).unwrap_or_default();
+        // Optimized diagonal setting with bounds checking
+        let diagonal_start = if k >= 0 { 0 } else { (-k) as usize };
+        let diagonal_col_start = if k >= 0 { k as usize } else { 0 };
+        
+        let max_diagonal_length = n_rows.saturating_sub(diagonal_start).min(
+            n_cols.saturating_sub(diagonal_col_start)
+        );
+
+        // Set ones on the specified diagonal efficiently
+        for i in 0..max_diagonal_length {
+            let row = diagonal_start + i;
+            let col = diagonal_col_start + i;
+            if row < n_rows && col < n_cols {
+                result.set(&[row, col], T::one()).unwrap_or_default();
             }
         }
 

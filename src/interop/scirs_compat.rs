@@ -13,19 +13,19 @@ use crate::error::Result;
 use num_traits::{Float, NumCast};
 use std::fmt::{Debug, Display};
 
-// When the __never feature is enabled, import the necessary modules from SciRS2
-// Note: Currently disabled while updating for SciRS2 v0.1.0-alpha.4 API changes
-#[cfg(feature = "__never")]
+// When the scirs feature is enabled, import the necessary modules from SciRS2
+// Updated for SciRS2 v0.1.0-alpha.4 API
+#[cfg(feature = "scirs")]
 use {
     // Import array and generator types
-    __never2_core::ndarray_ext::Array as SciArray,
-    __never2_core::random::Generator as SciGenerator,
+    scirs2_core::ndarray_ext::Array as SciArray,
+    scirs2_core::random::Generator as SciGenerator,
 
-    // Import SCIRS linalg for linear equation solving
-    __never2_linalg::decomposition::lu_solve,
+    // Import SciRS linalg for linear equation solving
+    scirs2_linalg::decomposition::lu_solve,
 
     // Import distributions from SciRS2
-    __never2_stats::distributions::continuous::*,
+    scirs2_stats::distributions::continuous::*,
     rand::rngs::StdRng,
     // Import random number generation
     rand::Rng,
@@ -33,7 +33,7 @@ use {
 };
 
 // Conversion helpers between NumRS2 and SciRS2 arrays
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 fn convert_to_numrs_array<T>(sci_array: SciArray<f64>, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -72,7 +72,7 @@ where
 ///
 /// Returns an error if the distribution parameters are invalid or if the
 /// SciRS2 integration fails.
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 pub fn noncentral_chisquare<T>(df: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -128,7 +128,7 @@ where
 }
 
 /// Implementation using NumRS2's built-in advanced distributions
-#[cfg(not(feature = "__never"))]
+#[cfg(not(feature = "scirs"))]
 pub fn noncentral_chisquare<T>(df: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -156,7 +156,7 @@ where
 ///
 /// Returns an error if the distribution parameters are invalid or if the
 /// SciRS2 integration fails.
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 pub fn noncentral_f<T>(dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -216,7 +216,7 @@ where
 }
 
 /// Implementation using NumRS2's built-in advanced distributions
-#[cfg(not(feature = "__never"))]
+#[cfg(not(feature = "scirs"))]
 pub fn noncentral_f<T>(dfnum: T, dfden: T, nonc: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -243,7 +243,7 @@ where
 ///
 /// Returns an error if the distribution parameters are invalid or if the
 /// SciRS2 integration fails.
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 pub fn vonmises<T>(mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -299,7 +299,7 @@ where
 }
 
 /// Implementation using NumRS2's built-in advanced distributions
-#[cfg(not(feature = "__never"))]
+#[cfg(not(feature = "scirs"))]
 pub fn vonmises<T>(mu: T, kappa: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -325,7 +325,7 @@ where
 ///
 /// Returns an error if the distribution parameters are invalid or if the
 /// SciRS2 integration fails.
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 pub fn maxwell<T>(scale: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -377,7 +377,7 @@ where
 }
 
 /// Implementation using NumRS2's built-in advanced distributions
-#[cfg(not(feature = "__never"))]
+#[cfg(not(feature = "scirs"))]
 pub fn maxwell<T>(scale: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -405,7 +405,7 @@ where
 ///
 /// Returns an error if the distribution parameters are invalid or if the
 /// SciRS2 integration fails.
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 pub fn multivariate_normal_with_rotation<T>(
     means: &[T],
     cov: &Array<T>,
@@ -515,7 +515,7 @@ where
 }
 
 /// Implementation using NumRS2's built-in distributions
-#[cfg(not(feature = "__never"))]
+#[cfg(not(feature = "scirs"))]
 pub fn multivariate_normal_with_rotation<T>(
     means: &[T],
     cov: &Array<T>,
@@ -549,7 +549,7 @@ where
 ///
 /// Returns an error if the distribution parameters are invalid or if the
 /// SciRS2 integration fails.
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 pub fn truncated_normal<T>(mean: T, std: T, low: T, high: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -620,7 +620,7 @@ where
 }
 
 /// Implementation using NumRS2's built-in distributions
-#[cfg(not(feature = "__never"))]
+#[cfg(not(feature = "scirs"))]
 pub fn truncated_normal<T>(mean: T, std: T, low: T, high: T, shape: &[usize]) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -646,7 +646,7 @@ where
 ///
 /// Returns an error if the matrix is singular or if the
 /// SciRS2 integration fails.
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 pub fn solve_linear_system<T>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display,
@@ -714,7 +714,7 @@ where
 }
 
 /// Implementation using NumRS2's built-in linear algebra
-#[cfg(not(feature = "__never"))]
+#[cfg(not(feature = "scirs"))]
 pub fn solve_linear_system<T>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display + ndarray_linalg::Lapack,
@@ -724,7 +724,7 @@ where
 }
 
 #[cfg(test)]
-#[cfg(feature = "__never")]
+#[cfg(feature = "scirs")]
 mod tests {
     use super::*;
 

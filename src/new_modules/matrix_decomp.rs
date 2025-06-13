@@ -2073,7 +2073,7 @@ mod tests {
         let mut pa = Array::zeros(&[3, 3]);
         for i in 0..3 {
             for j in 0..3 {
-                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap() as usize, j]).unwrap())
+                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
                     .unwrap();
             }
         }
@@ -2148,7 +2148,7 @@ mod tests {
         let mut pa = Array::zeros(&[3, 3]);
         for i in 0..3 {
             for j in 0..3 {
-                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap() as usize, j]).unwrap())
+                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
                     .unwrap();
             }
         }
@@ -2354,7 +2354,7 @@ mod tests {
         let mut pa = Array::zeros(&[3, 3]);
         for i in 0..3 {
             for j in 0..3 {
-                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap() as usize, j]).unwrap())
+                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
                     .unwrap();
             }
         }

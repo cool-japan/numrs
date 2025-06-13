@@ -511,7 +511,11 @@ mod tests {
             .expect("Allocation should succeed");
 
         // Check alignments
-        assert_eq!(ptr1.as_ptr() as usize % 1, 0);
+        // Note: Any alignment of 1 is always satisfied, verify pointers are valid
+        #[allow(useless_ptr_null_checks)]
+        {
+            assert!(!ptr1.as_ptr().is_null());
+        }
         assert_eq!(ptr2.as_ptr() as usize % 4, 0);
         assert_eq!(ptr3.as_ptr() as usize % 8, 0);
         assert_eq!(ptr4.as_ptr() as usize % 16, 0);

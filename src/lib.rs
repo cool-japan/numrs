@@ -1,3 +1,31 @@
+//! # NumRS2: High-Performance Numerical Computing in Rust
+//!
+//! NumRS2 v0.1.0-alpha.4 is a comprehensive numerical computing library for Rust, inspired by NumPy.
+//! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
+//! and advanced linear algebra, statistical, and random number functionality.
+//!
+//! ## Quick Start
+//!
+//! ```
+//! use numrs2::prelude::*;
+//!
+//! let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+//! let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
+//! let c = a.matmul(&b).unwrap();
+//! println!("Matrix multiplication result: {}", c);
+//! ```
+//!
+//! ## Main Features
+//!
+//! - **N-dimensional Array**: Core `Array` type with efficient memory layout and broadcasting
+//! - **Linear Algebra**: Matrix operations, decompositions, solvers through BLAS/LAPACK integration
+//! - **Mathematical Functions**: Comprehensive set of element-wise mathematical operations
+//! - **SIMD Acceleration**: Vectorized math operations using SIMD instructions
+//! - **Parallel Computing**: Multi-threaded execution with Rayon
+//! - **Random Number Generation**: Modern interface for various distributions
+//! - **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
+//! - **Type Safety**: Leverage Rust's type system for compile-time guarantees
+
 pub mod array;
 pub mod array_ops;
 pub mod axis_ops;
@@ -20,6 +48,7 @@ pub mod mmap;
 pub mod parallel_optimize;
 pub mod random;
 pub mod random_base; // For backward compatibility
+pub mod set_ops;
 pub mod simd;
 pub mod simd_optimize;
 pub mod stats;
@@ -53,7 +82,7 @@ pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
     pub use crate::array_ops::{
-        atleast_1d, atleast_2d, atleast_3d, flatten, moveaxis, ravel, swapaxes,
+        atleast_1d, atleast_2d, atleast_3d, flatten, frombuffer, fromfunction, fromiter, moveaxis, ravel, select, swapaxes, where_cond,
     };
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
@@ -64,6 +93,7 @@ pub mod prelude {
     pub use crate::conversions::*;
     pub use crate::error::{NumRs2Error, Result};
     pub use crate::indexing::*;
+    pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
     pub use crate::linalg::*;
     pub use crate::masked::MaskedArray;
@@ -74,6 +104,7 @@ pub mod prelude {
     pub use crate::random::distributions;
     pub use crate::random::generator::{default_rng, BitGenerator, Generator, StdBitGenerator};
     pub use crate::random::{self, RandomState};
+    pub use crate::set_ops::{in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options};
     pub use crate::simd::*;
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
     pub use crate::simd_optimize::{detect_cpu_features, CpuFeatures, SimdImplementation};
@@ -370,7 +401,7 @@ mod tests {
         // Test SIMD operations
         let sqrt_a = simd_sqrt(&a);
         assert_relative_eq!(sqrt_a.to_vec()[0], 1.0, epsilon = 1e-10);
-        assert_relative_eq!(sqrt_a.to_vec()[1], 1.4142135623730951, epsilon = 1e-10);
+        assert_relative_eq!(sqrt_a.to_vec()[1], std::f64::consts::SQRT_2, epsilon = 1e-10);
         assert_relative_eq!(sqrt_a.to_vec()[2], 1.7320508075688772, epsilon = 1e-10);
         assert_relative_eq!(sqrt_a.to_vec()[3], 2.0, epsilon = 1e-10);
 
@@ -424,17 +455,17 @@ mod tests {
 
         // Test exp
         let exp_a = a.exp();
-        assert_relative_eq!(exp_a.to_vec()[0], (1.0 as f64).exp(), epsilon = 1e-10);
-        assert_relative_eq!(exp_a.to_vec()[1], (4.0 as f64).exp(), epsilon = 1e-10);
-        assert_relative_eq!(exp_a.to_vec()[2], (9.0 as f64).exp(), epsilon = 1e-10);
-        assert_relative_eq!(exp_a.to_vec()[3], (16.0 as f64).exp(), epsilon = 1e-10);
+        assert_relative_eq!(exp_a.to_vec()[0], 1.0_f64.exp(), epsilon = 1e-10);
+        assert_relative_eq!(exp_a.to_vec()[1], 4.0_f64.exp(), epsilon = 1e-10);
+        assert_relative_eq!(exp_a.to_vec()[2], 9.0_f64.exp(), epsilon = 1e-10);
+        assert_relative_eq!(exp_a.to_vec()[3], 16.0_f64.exp(), epsilon = 1e-10);
 
         // Test log
         let log_a = a.log();
-        assert_relative_eq!(log_a.to_vec()[0], (1.0 as f64).ln(), epsilon = 1e-10);
-        assert_relative_eq!(log_a.to_vec()[1], (4.0 as f64).ln(), epsilon = 1e-10);
-        assert_relative_eq!(log_a.to_vec()[2], (9.0 as f64).ln(), epsilon = 1e-10);
-        assert_relative_eq!(log_a.to_vec()[3], (16.0 as f64).ln(), epsilon = 1e-10);
+        assert_relative_eq!(log_a.to_vec()[0], 1.0_f64.ln(), epsilon = 1e-10);
+        assert_relative_eq!(log_a.to_vec()[1], 4.0_f64.ln(), epsilon = 1e-10);
+        assert_relative_eq!(log_a.to_vec()[2], 9.0_f64.ln(), epsilon = 1e-10);
+        assert_relative_eq!(log_a.to_vec()[3], 16.0_f64.ln(), epsilon = 1e-10);
 
         // Test sqrt
         let sqrt_a = a.sqrt();
@@ -975,21 +1006,21 @@ mod tests {
 
         let result = sqrt(&a);
         assert_relative_eq!(result.to_vec()[0], 1.0, epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[1], 1.4142135623730951, epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[1], std::f64::consts::SQRT_2, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[2], 1.7320508075688772, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[3], 2.0, epsilon = 1e-10);
 
         let result = exp(&a);
-        assert_relative_eq!(result.to_vec()[0], (1.0 as f64).exp(), epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[1], (2.0 as f64).exp(), epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[2], (3.0 as f64).exp(), epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[3], (4.0 as f64).exp(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[0], 1.0_f64.exp(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[1], 2.0_f64.exp(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[2], 3.0_f64.exp(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[3], 4.0_f64.exp(), epsilon = 1e-10);
 
         let result = log(&a);
-        assert_relative_eq!(result.to_vec()[0], (1.0 as f64).ln(), epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[1], (2.0 as f64).ln(), epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[2], (3.0 as f64).ln(), epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[3], (4.0 as f64).ln(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[0], 1.0_f64.ln(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[1], 2.0_f64.ln(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[2], 3.0_f64.ln(), epsilon = 1e-10);
+        assert_relative_eq!(result.to_vec()[3], 4.0_f64.ln(), epsilon = 1e-10);
 
         // Test scalar multiplication using the scalar function
         let result = multiply_scalar(&a, 2.0);

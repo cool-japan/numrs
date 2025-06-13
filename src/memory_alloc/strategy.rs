@@ -325,13 +325,13 @@ mod tests {
         // Write to the memory to ensure it's valid
         unsafe {
             let slice = std::slice::from_raw_parts_mut(ptr.as_ptr(), 100);
-            for i in 0..100 {
-                slice[i] = i as u8;
+            for (i, item) in slice.iter_mut().enumerate() {
+                *item = i as u8;
             }
 
             // Read back and verify
-            for i in 0..100 {
-                assert_eq!(slice[i], i as u8);
+            for (i, &item) in slice.iter().enumerate() {
+                assert_eq!(item, i as u8);
             }
 
             // Deallocate

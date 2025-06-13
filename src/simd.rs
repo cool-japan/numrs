@@ -911,7 +911,6 @@ mod tests {
             | SimdImplementation::NEON
             | SimdImplementation::SVE => {
                 // Implementation is valid
-                assert!(true);
             }
         }
     }

@@ -43,7 +43,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.3", features = ["scirs"] }
+numrs2 = { version = "0.1.0-alpha.4", features = ["scirs"] }
 ```
 
 Or, when building:
@@ -165,7 +165,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-alpha.3"
+numrs2 = "0.1.0-alpha.4"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
