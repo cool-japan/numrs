@@ -192,7 +192,7 @@ impl FFTEnhanced {
     /// * A map of window type to its energy concentration in dB
     pub fn window_energy_concentration<T>(window_types: &[&str], n: usize) -> Result<Vec<(String, T)>>
     where
-        T: Float + Clone + Debug + From<f64>,
+        T: Float + Clone + Debug + From<f64> + Into<f64>,
     {
         let mut results = Vec::new();
         
@@ -312,7 +312,7 @@ impl FFTEnhanced {
             for i in 0..n {
                 let i_t = <T as NumCast>::from(i as f64).unwrap_or(T::zero());
                 let idx = if i <= n / 2 { i_t } else { i_t - n_t };
-                let gauss_arg = -T::from(2.0).unwrap_or(T::zero()) * T::powi(PI * idx * width_factor / n_t, 2);
+                let gauss_arg = -<T as NumCast>::from(2.0).unwrap_or(T::zero()) * T::powi(<T as NumCast>::from(PI).unwrap_or(T::zero()) * idx * width_factor / n_t, 2);
                 gauss.push(Complex::new(gauss_arg.exp(), T::zero()));
             }
             
@@ -331,7 +331,7 @@ impl FFTEnhanced {
                 }
             } else {
                 // Create scaled Gaussian window for this frequency
-                let width_factor = <T as NumCast>::from(1.0).unwrap_or(T::zero());
+                let width_factor = <T as NumCast>::from(1.0).unwrap_or(T::one());
                 let gauss_window = create_gaussian(freq, width_factor);
                 
                 // For each frequency, apply the scaled Gaussian window
@@ -442,15 +442,16 @@ impl FFTEnhanced {
         };
         
         // Step 3: Unpack the FFT to obtain the FFT of the original signal
-        let mut result = Vec::with_capacity(n);
+        let mut result: Vec<Complex<T>> = Vec::with_capacity(n);
         let half = <T as NumCast>::from(0.5).unwrap_or(T::zero());
+        let half_complex = Complex::new(half, T::zero());
         
         for k in 0..n / 2 + 1 {
             let k_t = <T as NumCast>::from(k as f64).unwrap_or(T::zero());
             let n_t = <T as NumCast>::from(n as f64).unwrap_or(T::zero());
             
             // Twiddle factor for unpacking
-            let angle = -T::from(2.0).unwrap_or(T::zero()) * PI * k_t / n_t;
+            let angle = -<T as NumCast>::from(2.0).unwrap_or(T::zero()) * <T as NumCast>::from(PI).unwrap_or(T::zero()) * k_t / n_t;
             let twiddle = Complex::new(
                 angle.cos(),
                 angle.sin(),
@@ -466,7 +467,7 @@ impl FFTEnhanced {
                 packed_fft[idx].conj()
             };
             
-            let even_part = half * (packed_fft[k % (n / 2)] + conj_val);
+            let even_part = half_complex * (packed_fft[k % (n / 2)] + conj_val);
             let odd_part = Complex::new(T::zero(), -half) * (packed_fft[k % (n / 2)] - conj_val) * twiddle;
             
             // F[k] = F_e[k] + F_o[k]
@@ -676,14 +677,14 @@ where
 
 /// Rectangular window
 fn rectangular_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
-    vec![T::from(1.0); n]
+    vec![<T as NumCast>::from(1.0).unwrap_or(T::one()); n]
 }
 
 /// Hann window: 0.5 * (1 - cos(2π*i/(n-1)))
 fn hann_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
     (0..n).map(|i| {
         let arg = 2.0 * PI * i as f64 / (n - 1) as f64;
-        T::from(0.5 * (1.0 - arg.cos()))
+        <T as NumCast>::from(0.5 * (1.0 - arg.cos())).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -691,7 +692,7 @@ fn hann_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
 fn hamming_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
     (0..n).map(|i| {
         let arg = 2.0 * PI * i as f64 / (n - 1) as f64;
-        T::from(0.54 - 0.46 * arg.cos())
+        <T as NumCast>::from(0.54 - 0.46 * arg.cos()).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -699,7 +700,7 @@ fn hamming_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
 fn blackman_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
     (0..n).map(|i| {
         let arg = 2.0 * PI * i as f64 / (n - 1) as f64;
-        T::from(0.42 - 0.5 * arg.cos() + 0.08 * (2.0 * arg).cos())
+        <T as NumCast>::from(0.42 - 0.5 * arg.cos() + 0.08 * (2.0 * arg).cos()).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -712,7 +713,7 @@ fn blackman_harris_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
     
     (0..n).map(|i| {
         let arg = 2.0 * PI * i as f64 / (n - 1) as f64;
-        T::from(a0 - a1 * arg.cos() + a2 * (2.0 * arg).cos() - a3 * (3.0 * arg).cos())
+        <T as NumCast>::from(a0 - a1 * arg.cos() + a2 * (2.0 * arg).cos() - a3 * (3.0 * arg).cos()).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -726,11 +727,11 @@ fn flattop_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
     
     (0..n).map(|i| {
         let arg = 2.0 * PI * i as f64 / (n - 1) as f64;
-        T::from(a0 
+        <T as NumCast>::from(a0 
                 - a1 * arg.cos() 
                 + a2 * (2.0 * arg).cos() 
                 - a3 * (3.0 * arg).cos()
-                + a4 * (4.0 * arg).cos())
+                + a4 * (4.0 * arg).cos()).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -738,7 +739,7 @@ fn flattop_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
 fn gaussian_window<T: Float + From<f64>>(n: usize, alpha: f64) -> Vec<T> {
     (0..n).map(|i| {
         let x = (i as f64 - (n - 1) as f64 / 2.0) / ((n - 1) as f64 / 2.0);
-        T::from((-0.5 * alpha * alpha * x * x).exp())
+        <T as NumCast>::from((-0.5 * alpha * alpha * x * x).exp()).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -746,7 +747,7 @@ fn gaussian_window<T: Float + From<f64>>(n: usize, alpha: f64) -> Vec<T> {
 fn bartlett_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
     (0..n).map(|i| {
         let x = (i as f64 * 2.0 / (n - 1) as f64) - 1.0;
-        T::from(1.0 - x.abs())
+        <T as NumCast>::from(1.0 - x.abs()).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -754,7 +755,7 @@ fn bartlett_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
 fn triangular_window<T: Float + From<f64>>(n: usize) -> Vec<T> {
     (0..n).map(|i| {
         let x = (i as f64 * 2.0 / n as f64) - 1.0;
-        T::from(1.0 - x.abs())
+        <T as NumCast>::from(1.0 - x.abs()).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -784,7 +785,7 @@ fn kaiser_window<T: Float + From<f64>>(n: usize, beta: f64) -> Vec<T> {
     (0..n).map(|i| {
         let x = (i as f64 * 2.0 / (n - 1) as f64) - 1.0;
         let arg = beta * (1.0 - x * x).sqrt();
-        T::from(bessel_i0(arg) / i0_beta)
+        <T as NumCast>::from(bessel_i0(arg) / i0_beta).unwrap_or(T::zero())
     }).collect()
 }
 
@@ -793,10 +794,10 @@ fn ten_log10<T: Float>(x: T) -> T {
     let x_f64: f64 = x.to_f64().unwrap_or(0.0);
     
     if x_f64 <= 0.0 {
-        return T::from(-100.0).unwrap_or(T::zero());
+        return <T as NumCast>::from(-100.0).unwrap_or(T::zero());
     }
     
-    T::from(10.0 * x_f64.log10()).unwrap_or(T::zero())
+    <T as NumCast>::from(10.0 * x_f64.log10()).unwrap_or(T::zero())
 }
 
 #[cfg(test)]

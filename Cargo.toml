@@ -14,6 +14,7 @@ categories = ["science"]
 default = ["matrix_decomp"]
 matrix_decomp = []
 validation = []
+unstable = []
 scirs = ["dep:scirs2-stats", "dep:scirs2-core", "dep:scirs2-linalg"]
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
 

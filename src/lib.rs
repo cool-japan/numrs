@@ -26,6 +26,7 @@
 //! - **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
 //! - **Type Safety**: Leverage Rust's type system for compile-time guarantees
 
+pub mod algorithms;
 pub mod array;
 pub mod array_ops;
 pub mod axis_ops;
@@ -39,20 +40,25 @@ pub mod indexing;
 pub mod interop;
 pub mod io;
 pub mod linalg;
+pub mod linalg_extended;
 pub mod masked;
 pub mod math;
+pub mod math_extended;
 pub mod matrix;
 pub mod memory_alloc;
 pub mod memory_optimize;
 pub mod mmap;
+pub mod parallel;
 pub mod parallel_optimize;
 pub mod random;
-pub mod random_base; // For backward compatibility
 pub mod set_ops;
+pub mod signal;
 pub mod simd;
 pub mod simd_optimize;
+pub mod sparse;
 pub mod stats;
 pub mod stride_tricks;
+pub mod traits;
 pub mod types;
 pub mod ufuncs;
 pub mod unique;
@@ -60,10 +66,12 @@ pub mod unique_optimized;
 pub mod util;
 pub mod views;
 
-// New modules
+// Transitional modules (deprecated - use new core structure)
+#[deprecated(since = "0.2.0", note = "Use the new core module structure instead. See migration guide.")]
 pub mod new_modules {
     pub mod eigenvalues;
     pub mod fft;
+    pub mod fft_enhanced;
     #[cfg(feature = "matrix_decomp")]
     pub mod matrix_decomp;
     pub mod polynomial;
@@ -72,6 +80,9 @@ pub mod new_modules {
 }
 
 pub use error::{NumRs2Error, Result};
+
+// Backward compatibility re-export for random_base
+pub use random::random_base;
 
 // Disable doctests for now since they need a dedicated fix
 #[cfg(doctest)]
@@ -96,8 +107,10 @@ pub mod prelude {
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
     pub use crate::linalg::*;
+    pub use crate::linalg_extended::*;
     pub use crate::masked::MaskedArray;
     pub use crate::math::*;
+    pub use crate::math_extended::*;
     pub use crate::matrix::{BandedMatrix, Matrix};
     pub use crate::mmap::MmapArray;
     pub use crate::random::advanced_distributions;
@@ -105,13 +118,16 @@ pub mod prelude {
     pub use crate::random::generator::{default_rng, BitGenerator, Generator, StdBitGenerator};
     pub use crate::random::{self, RandomState};
     pub use crate::set_ops::{in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options};
+    pub use crate::signal;
     pub use crate::simd::*;
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
     pub use crate::simd_optimize::{detect_cpu_features, CpuFeatures, SimdImplementation};
+    pub use crate::sparse;
     pub use crate::stats::*;
     pub use crate::stride_tricks::{
         as_strided, broadcast_arrays, broadcast_to, byte_strides, set_strides, sliding_window_view,
     };
+    pub use crate::traits::*;
     pub use crate::ufuncs::*;
     pub use crate::unique::{unique, UniqueResult};
     pub use crate::unique_optimized::unique_optimized;
@@ -146,7 +162,34 @@ pub mod prelude {
     };
     pub use crate::memory_alloc::{
         AlignedAllocator, AlignmentConfig, AllocStrategy, ArenaAllocator, ArenaConfig,
-        PoolAllocator, PoolConfig,
+        PoolAllocator, PoolConfig, CacheOptimizedAllocator, CacheConfig, CacheLevel,
+    };
+
+    // Cache-aware algorithms
+    pub use crate::algorithms::{
+        CacheAwareArrayOps, CacheAwareFFT, CacheAwareConvolution, BandwidthOptimizer,
+        MemoryOperation, BandwidthEstimate,
+    };
+
+    // Parallel processing
+    pub use crate::parallel::{
+        ParallelContext, ParallelScheduler, SchedulerConfig, TaskPriority,
+        LoadBalancer, WorkloadMetrics, BalancingStrategy,
+        ParallelArrayOps, ParallelMatrixOps, ParallelFFT,
+        WorkStealingPool, Task, TaskResult, task,
+        ParallelAllocator, ThreadLocalAllocator, ParallelAllocatorConfig,
+        initialize_parallel_context, global_parallel_context, shutdown_parallel_context,
+    };
+    pub use crate::parallel::parallel_algorithms::ParallelConfig as ParallelAlgorithmConfig;
+    
+    // Enhanced memory management traits
+    pub use crate::memory_alloc::{
+        EnhancedAllocatorBridge, IntelligentAllocationStrategy, NumericalArrayAllocator,
+    };
+    pub use crate::traits::{
+        AllocationFrequency, AllocationLifetime, AllocationRequirements, AllocationStats,
+        AllocationStrategy, MemoryAllocator, MemoryAware, MemoryOptimization, MemoryUsage,
+        OptimizationType, SpecializedAllocator, ThreadingRequirements,
     };
 
     // New modules

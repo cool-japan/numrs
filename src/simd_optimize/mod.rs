@@ -4,8 +4,14 @@
 //! and selecting the most efficient SIMD implementation for the current hardware.
 
 pub mod avx2_ops;
+pub mod avx2_enhanced;
+#[cfg(feature = "unstable")]
+pub mod avx512_enhanced;
+pub mod neon_enhanced;
 pub mod feature_detect;
 pub mod simd_select;
+pub mod unified_dispatcher;
+pub mod simd_traits;
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
@@ -13,6 +19,8 @@ use crate::error::{NumRs2Error, Result};
 // Re-export the main functions for convenience
 pub use feature_detect::{detect_cpu_features, CpuFeatures};
 pub use simd_select::{select_simd_implementation, SimdImplementation};
+pub use unified_dispatcher::{UnifiedSimdDispatcher, global_dispatcher, optimized};
+pub use simd_traits::{SimdPerformanceHints};
 
 /// CPU feature detection and SIMD implementation selection in one step
 ///

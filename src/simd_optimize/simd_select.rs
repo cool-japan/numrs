@@ -55,6 +55,19 @@ impl SimdImplementation {
     pub fn is_neon_or_better(&self) -> bool {
         matches!(self, SimdImplementation::NEON | SimdImplementation::SVE)
     }
+
+    /// Get the vector width in bits for this implementation
+    pub fn vector_width(&self) -> usize {
+        match self {
+            SimdImplementation::Scalar => 0,
+            SimdImplementation::SSE => 128,
+            SimdImplementation::AVX => 256,
+            SimdImplementation::AVX2 => 256,
+            SimdImplementation::AVX512 => 512,
+            SimdImplementation::NEON => 128,
+            SimdImplementation::SVE => 128, // Simplified - SVE can be variable
+        }
+    }
 }
 
 /// Select the most efficient SIMD implementation based on CPU features

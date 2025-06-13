@@ -1,5 +1,5 @@
 use numrs2::prelude::*;
-use numrs2::random_base;
+use numrs2::random;
 
 fn main() -> Result<()> {
     println!("NumRS2 v0.1.0-alpha.4 Basic Usage Example");
@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     println!("\nParallel sqrt: {}", parallel_sqrt);
 
     // Random arrays
-    let rand_arr = random_base::rand::<f64>(&[2, 3])?;
+    let rand_arr = random::rand::<f64>(&[2, 3])?;
     println!("\nrandom(2, 3) = {}", rand_arr);
 
     // Vector operations

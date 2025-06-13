@@ -84,6 +84,7 @@ pub mod advanced_distributions;
 pub mod distributions;
 pub mod distributions_enhanced;
 pub mod generator;
+pub mod legacy;
 pub mod state;
 
 // Re-export essential items from the modules
@@ -140,6 +141,19 @@ pub use crate::interop::scirs_compat::{
 pub fn seed_rng(seed: u64) -> RandomState {
     RandomState::with_seed(seed)
 }
+
+/// Legacy backward compatibility module (re-exports from random_base.rs)
+pub mod random_base {
+    //! Legacy random number generation interface
+    //!
+    //! This module provides backward compatibility for the original random_base.rs functionality.
+    //! All functionality has been moved to the unified random module structure.
+    
+    pub use super::legacy::*;
+}
+
+// Direct re-exports for legacy compatibility
+pub use legacy::{Generator as LegacyGenerator, choice, rand, randn, seed, shuffle, uniform};
 
 #[cfg(test)]
 mod tests {
