@@ -9,9 +9,9 @@ use numrs2::array_ops;
 use numrs2::memory_optimize::cache_layout::{
     calculate_optimal_block_size, optimize_layout, LayoutStrategy,
 };
-use numrs2::prelude::*;
-use numrs2::simd;
-use numrs2::stats;
+use numrs2::simd::SimdOps;
+use numrs2::linalg::LinAlg;
+use numrs2::stats::Statistics;
 use std::time::Duration;
 
 /// Benchmark array indexing operations
@@ -99,7 +99,7 @@ fn bench_broadcasting(c: &mut Criterion) {
             &size,
             |b, _| {
                 b.iter(|| {
-                    let result = array_ops::add(&matrix, &vector).unwrap();
+                    let result = &matrix + &vector;
                     black_box(result)
                 })
             },
@@ -131,14 +131,14 @@ fn bench_element_wise_operations(c: &mut Criterion) {
 
     group.bench_function("f32_add", |b| {
         b.iter(|| {
-            let result = array_ops::add(&arr_f32_1, &arr_f32_2).unwrap();
+            let result = &arr_f32_1 + &arr_f32_2;
             black_box(result)
         })
     });
 
     group.bench_function("f32_multiply", |b| {
         b.iter(|| {
-            let result = array_ops::multiply(&arr_f32_1, &arr_f32_2).unwrap();
+            let result = &arr_f32_1 * &arr_f32_2;
             black_box(result)
         })
     });
@@ -150,14 +150,14 @@ fn bench_element_wise_operations(c: &mut Criterion) {
 
     group.bench_function("f64_add", |b| {
         b.iter(|| {
-            let result = array_ops::add(&arr_f64_1, &arr_f64_2).unwrap();
+            let result = &arr_f64_1 + &arr_f64_2;
             black_box(result)
         })
     });
 
     group.bench_function("f64_multiply", |b| {
         b.iter(|| {
-            let result = array_ops::multiply(&arr_f64_1, &arr_f64_2).unwrap();
+            let result = &arr_f64_1 * &arr_f64_2;
             black_box(result)
         })
     });
@@ -185,30 +185,30 @@ fn bench_cache_optimization(c: &mut Criterion) {
 
     for size in sizes {
         let data: Vec<f64> = (0..size).map(|i| i as f64).collect();
-        let mut arr_data = data.clone();
 
         // Benchmark layout optimization strategies
         group.bench_with_input(BenchmarkId::new("row_major_layout", size), &size, |b, _| {
             b.iter(|| {
-                optimize_layout(&mut arr_data, LayoutStrategy::RowMajor);
-                black_box(&arr_data)
+                let mut arr_data_copy = data.clone();
+                optimize_layout(&mut arr_data_copy, LayoutStrategy::RowMajor);
+                black_box(arr_data_copy)
             })
         });
 
         group.bench_with_input(BenchmarkId::new("morton_layout", size), &size, |b, _| {
-            let mut data_copy = data.clone();
             b.iter(|| {
+                let mut data_copy = data.clone();
                 optimize_layout(&mut data_copy, LayoutStrategy::Morton);
-                black_box(&data_copy)
+                black_box(data_copy)
             })
         });
 
         group.bench_with_input(BenchmarkId::new("blocked_layout", size), &size, |b, _| {
-            let mut data_copy = data.clone();
             let block_size = calculate_optimal_block_size::<f64>();
             b.iter(|| {
+                let mut data_copy = data.clone();
                 optimize_layout(&mut data_copy, LayoutStrategy::Blocked(block_size));
-                black_box(&data_copy)
+                black_box(data_copy)
             })
         });
     }
@@ -231,7 +231,7 @@ fn bench_reductions(c: &mut Criterion) {
         // Sum reduction
         group.bench_with_input(BenchmarkId::new("sum", size), &size, |b, _| {
             b.iter(|| {
-                let result = stats::sum(&arr, None).unwrap();
+                let result = arr.to_vec().iter().sum::<f64>();
                 black_box(result)
             })
         });
@@ -239,7 +239,7 @@ fn bench_reductions(c: &mut Criterion) {
         // Product reduction
         group.bench_with_input(BenchmarkId::new("product", size), &size, |b, _| {
             b.iter(|| {
-                let result = stats::prod(&arr, None).unwrap();
+                let result = arr.to_vec().iter().product::<f64>();
                 black_box(result)
             })
         });
@@ -247,14 +247,14 @@ fn bench_reductions(c: &mut Criterion) {
         // Min/Max reductions
         group.bench_with_input(BenchmarkId::new("min", size), &size, |b, _| {
             b.iter(|| {
-                let result = stats::min(&arr, None).unwrap();
+                let result = arr.min();
                 black_box(result)
             })
         });
 
         group.bench_with_input(BenchmarkId::new("max", size), &size, |b, _| {
             b.iter(|| {
-                let result = stats::max(&arr, None).unwrap();
+                let result = arr.max();
                 black_box(result)
             })
         });
@@ -281,32 +281,24 @@ fn bench_axis_operations(c: &mut Criterion) {
         let data: Vec<f64> = (0..size * size).map(|i| i as f64).collect();
         let arr = Array::from_vec(data).reshape(&[size, size]);
 
-        // Sum along different axes
-        group.bench_with_input(BenchmarkId::new("sum_axis_0", size), &size, |b, _| {
+        // Statistics operations
+        group.bench_with_input(BenchmarkId::new("mean", size), &size, |b, _| {
             b.iter(|| {
-                let result = stats::sum(&arr, Some(0)).unwrap();
+                let result = arr.mean();
                 black_box(result)
             })
         });
 
-        group.bench_with_input(BenchmarkId::new("sum_axis_1", size), &size, |b, _| {
+        group.bench_with_input(BenchmarkId::new("std", size), &size, |b, _| {
             b.iter(|| {
-                let result = stats::sum(&arr, Some(1)).unwrap();
+                let result = arr.std();
                 black_box(result)
             })
         });
 
-        // Mean along axes
-        group.bench_with_input(BenchmarkId::new("mean_axis_0", size), &size, |b, _| {
+        group.bench_with_input(BenchmarkId::new("var", size), &size, |b, _| {
             b.iter(|| {
-                let result = stats::mean(&arr, Some(0)).unwrap();
-                black_box(result)
-            })
-        });
-
-        group.bench_with_input(BenchmarkId::new("mean_axis_1", size), &size, |b, _| {
-            b.iter(|| {
-                let result = stats::mean(&arr, Some(1)).unwrap();
+                let result = arr.var();
                 black_box(result)
             })
         });
@@ -332,7 +324,7 @@ fn bench_simd_performance(c: &mut Criterion) {
         // SIMD addition
         group.bench_with_input(BenchmarkId::new("simd_add_f64", size), &size, |b, _| {
             b.iter(|| {
-                let result = simd::SIMDOps::simd_add(&arr1, &arr2).unwrap();
+                let result = arr1.simd_add(&arr2).unwrap();
                 black_box(result)
             })
         });
@@ -343,7 +335,7 @@ fn bench_simd_performance(c: &mut Criterion) {
             &size,
             |b, _| {
                 b.iter(|| {
-                    let result = simd::SIMDOps::simd_multiply(&arr1, &arr2).unwrap();
+                    let result = arr1.simd_mul(&arr2).unwrap();
                     black_box(result)
                 })
             },
@@ -352,7 +344,7 @@ fn bench_simd_performance(c: &mut Criterion) {
         // SIMD dot product
         group.bench_with_input(BenchmarkId::new("simd_dot_f64", size), &size, |b, _| {
             b.iter(|| {
-                let result = simd::SIMDOps::simd_dot(&arr1, &arr2).unwrap();
+                let result = arr1.simd_dot(&arr2).unwrap();
                 black_box(result)
             })
         });
@@ -360,7 +352,7 @@ fn bench_simd_performance(c: &mut Criterion) {
         // FMA operations
         group.bench_with_input(BenchmarkId::new("simd_fma_f64", size), &size, |b, _| {
             b.iter(|| {
-                let result = simd::SIMDOps::simd_fma(&arr1, &arr2, &arr1).unwrap();
+                let result = arr1.simd_fma(&arr2, &arr1).unwrap();
                 black_box(result)
             })
         });
@@ -398,7 +390,7 @@ fn bench_array_shapes(c: &mut Criterion) {
         // Benchmark sum across different shapes
         group.bench_with_input(BenchmarkId::new("sum", &shape_name), &shape_name, |b, _| {
             b.iter(|| {
-                let result = stats::sum(&arr, None).unwrap();
+                let result = arr.to_vec().iter().sum::<f64>();
                 black_box(result)
             })
         });
@@ -438,7 +430,6 @@ fn generate_indices_for_shape(shape: &[usize], count: usize) -> Vec<Vec<usize>> 
     indices
 }
 
-/// Benchmark core array operations comprehensive suite
 criterion_group! {
     name = core_operations_benches;
     config = Criterion::default()

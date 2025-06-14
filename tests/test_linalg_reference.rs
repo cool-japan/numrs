@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use num_traits::sign::Signed;
 /// Reference tests for linear algebra operations

@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use numrs2::prelude::*;
 use numrs2::random;
 
@@ -79,17 +81,17 @@ fn main() -> Result<()> {
     println!("\nCondition Number Examples:");
     println!("Well-conditioned matrix:");
     println!("{}", well_conditioned);
-    println!("Condition number: {}", well_conditioned.cond().unwrap());
+    println!("Condition number: {}", condition_number(&well_conditioned).unwrap());
     println!(
         "Is well-conditioned: {}",
-        well_conditioned.is_well_conditioned().unwrap()
+        condition_number(&well_conditioned).unwrap() < 1e6
     );
 
     println!("\nModerately ill-conditioned matrix:");
     println!("{}", moderately_ill_conditioned);
     println!(
         "Condition number: {}",
-        moderately_ill_conditioned.cond().unwrap()
+        condition_number(&moderately_ill_conditioned).unwrap()
     );
     println!(
         "Is well-conditioned: {}",

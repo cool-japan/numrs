@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 // NumRS2 Array Views Example
 //
 // This example demonstrates the powerful view functionality in NumRS2,

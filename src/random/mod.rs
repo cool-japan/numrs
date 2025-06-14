@@ -111,8 +111,7 @@ pub use distributions_enhanced::{
 // Use SciRS2 integration when the feature is enabled
 #[cfg(feature = "scirs")]
 pub use crate::interop::scirs_compat::{
-    maxwell, multivariate_normal_with_rotation, noncentral_chisquare, noncentral_f,
-    truncated_normal, vonmises,
+    noncentral_chisquare, noncentral_f,
 };
 
 /// Create a new RandomState with the given seed.

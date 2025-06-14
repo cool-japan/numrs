@@ -8,6 +8,7 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use super::feature_detect::{detect_cpu_features, CpuFeatures};
 use super::simd_select::{select_simd_implementation, SimdImplementation};
+use std::sync::OnceLock;
 
 #[cfg(target_arch = "x86_64")]
 use super::avx2_enhanced::EnhancedSimdOps;
@@ -368,17 +369,11 @@ impl SimdBenchmarkResults {
 }
 
 /// Global dispatcher instance for convenience
-static mut GLOBAL_DISPATCHER: Option<UnifiedSimdDispatcher> = None;
-static INIT: std::sync::Once = std::sync::Once::new();
+static GLOBAL_DISPATCHER: OnceLock<UnifiedSimdDispatcher> = OnceLock::new();
 
 /// Get or initialize the global SIMD dispatcher
 pub fn global_dispatcher() -> &'static UnifiedSimdDispatcher {
-    unsafe {
-        INIT.call_once(|| {
-            GLOBAL_DISPATCHER = Some(UnifiedSimdDispatcher::new());
-        });
-        GLOBAL_DISPATCHER.as_ref().unwrap()
-    }
+    GLOBAL_DISPATCHER.get_or_init(|| UnifiedSimdDispatcher::new())
 }
 
 /// Convenience functions using the global dispatcher

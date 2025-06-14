@@ -1,6 +1,6 @@
 //! Memory management errors - allocation failures, out of memory, corruption
 
-use super::context::{ErrorSeverity, MemoryInfo, OperationContext};
+use super::context::{ErrorSeverity, OperationContext};
 use thiserror::Error;
 
 /// Memory management errors

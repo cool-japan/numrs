@@ -255,9 +255,9 @@ impl IOError {
                 
                 if let Some(code) = status_code {
                     match *code {
+                        429 => suggestions.push("Rate limited - reduce request frequency".to_string()),
                         400..=499 => suggestions.push("Check request parameters and authentication".to_string()),
                         500..=599 => suggestions.push("Server error - retry later".to_string()),
-                        429 => suggestions.push("Rate limited - reduce request frequency".to_string()),
                         _ => {},
                     }
                 }
@@ -421,6 +421,7 @@ impl From<std::io::Error> for IOError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
     use std::path::Path;
 
     #[test]

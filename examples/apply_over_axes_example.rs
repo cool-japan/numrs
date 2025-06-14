@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use numrs2::axis_ops::AxisOps;
 use numrs2::prelude::*;
 

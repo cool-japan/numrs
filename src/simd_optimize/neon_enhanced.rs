@@ -6,11 +6,14 @@
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
 
 /// NEON vectorization constants
+#[allow(dead_code)]
 const NEON_F32_LANES: usize = 4;
+#[allow(dead_code)]
 const NEON_F64_LANES: usize = 2;
+#[allow(dead_code)]
 const NEON_ALIGNMENT: usize = 16;
 
 /// Advanced NEON operations for ARM processors
@@ -497,7 +500,7 @@ pub struct NeonFeatureDetector;
 impl NeonFeatureDetector {
     /// Detect available NEON features
     pub fn detect_neon_features() -> NeonFeatures {
-        let mut features = NeonFeatures::default();
+        let features = NeonFeatures::default();
         
         #[cfg(target_arch = "aarch64")]
         {

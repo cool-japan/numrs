@@ -4,7 +4,7 @@
 //! memory allocator performance across different workload patterns.
 
 use crate::error::{NumRs2Error, Result};
-use crate::traits::{AllocationStrategy, MemoryAllocator, SpecializedAllocator};
+use crate::traits::SpecializedAllocator;
 use std::collections::HashMap;
 use std::fmt;
 use std::time::{Duration, Instant};

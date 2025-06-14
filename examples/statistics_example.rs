@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 // Example demonstrating statistical functions in NumRS2
 //
 // This example shows how to use various statistical functions in NumRS2,

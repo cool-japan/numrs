@@ -3364,8 +3364,8 @@ pub fn where_cond<T: Clone + Display>(
 ///
 /// // Create conditions
 /// let x = Array::from_vec(vec![0, 1, 2, 3, 4, 5]);
-/// let cond1 = x.map(|&val| val < 3);
-/// let cond2 = x.map(|&val| val >= 3);
+/// let cond1 = x.map(|val| val < 3);
+/// let cond2 = x.map(|val| val >= 3);
 ///
 /// // Create choices
 /// let choice1 = Array::from_vec(vec![10, 10, 10, 10, 10, 10]);

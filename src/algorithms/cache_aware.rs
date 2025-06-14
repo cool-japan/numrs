@@ -6,6 +6,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::memory_alloc::cache_optimization::{CacheConfig, CacheLevel};
 #[cfg(test)]
+#[allow(unused_imports)]
 use crate::memory_alloc::cache_optimization::cache_constants;
 use crate::traits::{NumericElement, FloatingPoint};
 use std::marker::PhantomData;
@@ -256,6 +257,7 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
 
 /// Cache-aware FFT implementation with locality optimization
 pub struct CacheAwareFFT<T> {
+    #[allow(dead_code)]
     cache_config: CacheConfig,
     _phantom: PhantomData<T>,
 }

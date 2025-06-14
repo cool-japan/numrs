@@ -80,7 +80,6 @@ impl SchedulerConfig {
 }
 
 /// A scheduled task with priority and execution context
-#[derive(Debug)]
 pub struct ScheduledTask {
     pub id: u64,
     pub priority: TaskPriority,
@@ -88,6 +87,19 @@ pub struct ScheduledTask {
     pub estimated_duration: Option<Duration>,
     pub thread_affinity: Option<usize>,
     pub task: Box<dyn FnOnce() -> TaskResult + Send + 'static>,
+}
+
+impl std::fmt::Debug for ScheduledTask {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScheduledTask")
+            .field("id", &self.id)
+            .field("priority", &self.priority)
+            .field("submitted_at", &self.submitted_at)
+            .field("estimated_duration", &self.estimated_duration)
+            .field("thread_affinity", &self.thread_affinity)
+            .field("task", &"<closure>")
+            .finish()
+    }
 }
 
 impl PartialEq for ScheduledTask {
@@ -125,6 +137,7 @@ pub enum TaskResult {
 /// Thread-local scheduler state
 #[derive(Debug)]
 struct ThreadState {
+    #[allow(dead_code)]
     id: usize,
     local_queue: BinaryHeap<ScheduledTask>,
     tasks_executed: u64,
@@ -159,6 +172,7 @@ impl ThreadState {
 pub struct ParallelScheduler {
     config: SchedulerConfig,
     global_queue: Arc<Mutex<BinaryHeap<ScheduledTask>>>,
+    #[allow(dead_code)]
     worker_threads: Vec<JoinHandle<()>>,
     shutdown_signal: Arc<(Mutex<bool>, Condvar)>,
     thread_states: Arc<Mutex<Vec<ThreadState>>>,
@@ -385,8 +399,10 @@ impl ParallelScheduler {
                         // Update average execution time (simple moving average)
                         let total_tasks = stats.tasks_completed + stats.tasks_failed;
                         if total_tasks > 0 {
-                            stats.average_execution_time = 
-                                (stats.average_execution_time * (total_tasks - 1) + execution_time) / total_tasks as u32;
+                            let old_time_nanos = stats.average_execution_time.as_nanos() as u64;
+                            let new_time_nanos = execution_time.as_nanos() as u64;
+                            let avg_nanos = (old_time_nanos * (total_tasks - 1) + new_time_nanos) / total_tasks;
+                            stats.average_execution_time = Duration::from_nanos(avg_nanos);
                         }
                     }
                 },
@@ -402,7 +418,7 @@ impl ParallelScheduler {
                     }
 
                     // Wait for notification or timeout
-                    let mut flag = shutdown_flag.lock().unwrap();
+                    let flag = shutdown_flag.lock().unwrap();
                     if !*flag {
                         let _ = condvar.wait_timeout(flag, Duration::from_millis(config.time_slice_ms));
                     }

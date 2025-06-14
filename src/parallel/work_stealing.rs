@@ -86,6 +86,7 @@ impl WorkerQueue {
         self.deque.len()
     }
 
+    #[allow(dead_code)]
     fn is_empty(&self) -> bool {
         self.deque.is_empty()
     }
@@ -125,6 +126,7 @@ impl WorkerState {
         self.is_idle.store(idle, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     fn throughput(&self) -> f64 {
         let total_time = self.total_execution_time.lock().unwrap();
         if total_time.is_zero() {
@@ -172,6 +174,7 @@ impl Default for WorkStealingConfig {
 pub struct WorkStealingPool {
     config: WorkStealingConfig,
     workers: Vec<Arc<WorkerState>>,
+    #[allow(dead_code)]
     threads: Vec<JoinHandle<()>>,
     shutdown: Arc<AtomicBool>,
     global_queue: Arc<Mutex<VecDeque<BoxedTask>>>,
@@ -583,7 +586,7 @@ where
 
 impl<F> Task for ClosureTask<F, ()>
 where
-    F: FnOnce() -> () + Send + 'static,
+    F: FnOnce() + Send + 'static,
 {
     type Output = TaskResult<()>;
 
@@ -600,7 +603,7 @@ where
 /// Convenience function to create a task from a closure
 pub fn task<F>(closure: F) -> ClosureTask<F, ()>
 where
-    F: FnOnce() -> () + Send + 'static,
+    F: FnOnce() + Send + 'static,
 {
     ClosureTask::new(closure)
 }

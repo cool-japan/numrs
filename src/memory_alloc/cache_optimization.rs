@@ -4,7 +4,7 @@
 //! of modern CPU cache hierarchies and memory access patterns to maximize performance.
 
 use crate::error::{NumRs2Error, Result};
-use crate::traits::{AllocationStrategy, MemoryAllocator, SpecializedAllocator};
+use crate::traits::{MemoryAllocator, SpecializedAllocator};
 use std::alloc::Layout;
 use std::collections::HashMap;
 use std::ptr::NonNull;
@@ -387,8 +387,11 @@ struct AccessTracker {
 #[derive(Debug, Clone)]
 struct MemoryAccess {
     address: usize,
+    #[allow(dead_code)]
     size: usize,
+    #[allow(dead_code)]
     access_type: AccessType,
+    #[allow(dead_code)]
     timestamp: Instant,
 }
 

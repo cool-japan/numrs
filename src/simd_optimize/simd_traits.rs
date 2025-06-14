@@ -5,7 +5,6 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::traits::{ArrayOps, ArrayReduction, ArrayMath, LinearAlgebra, FloatingPoint};
 use super::unified_dispatcher::global_dispatcher;
 
 /// SIMD-optimized extension methods for Array<f32>

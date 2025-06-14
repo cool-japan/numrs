@@ -15,7 +15,6 @@ mod legacy;
 mod hierarchical;
 
 use std::fmt;
-use thiserror::Error;
 
 // Re-export the hierarchical error system
 pub use self::hierarchical::*;

@@ -13,8 +13,8 @@ use std::thread::{self, ThreadId};
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
-/// Thread-local allocator for reduced contention
 thread_local! {
+    /// Thread-local allocator for reduced contention
     static LOCAL_ALLOCATOR: RefCell<Option<ThreadLocalState>> = RefCell::new(None);
 }
 

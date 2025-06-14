@@ -10,8 +10,11 @@ use crate::simd::SimdOps;
 
 /// Enhanced vectorization constants
 const AVX2_F32_LANES: usize = 8;
+#[allow(dead_code)]
 const AVX2_F64_LANES: usize = 4;
+#[allow(dead_code)]
 const CACHE_LINE_SIZE: usize = 64;
+#[allow(dead_code)]
 const L1_CACHE_SIZE: usize = 32 * 1024;
 const PREFETCH_DISTANCE: usize = 512;
 

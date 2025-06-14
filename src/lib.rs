@@ -26,9 +26,12 @@
 //! - **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
 //! - **Type Safety**: Leverage Rust's type system for compile-time guarantees
 
+#![allow(deprecated)] // Allow deprecated warnings during transition period
+
 pub mod algorithms;
 pub mod array;
 pub mod array_ops;
+pub mod arrays;
 pub mod axis_ops;
 pub mod blas;
 pub mod comparisons;
@@ -41,6 +44,9 @@ pub mod interop;
 pub mod io;
 pub mod linalg;
 pub mod linalg_extended;
+pub mod linalg_optimized;
+pub mod linalg_parallel;
+pub mod linalg_stable;
 pub mod masked;
 pub mod math;
 pub mod math_extended;
@@ -56,6 +62,7 @@ pub mod signal;
 pub mod simd;
 pub mod simd_optimize;
 pub mod sparse;
+pub mod sparse_enhanced;
 pub mod stats;
 pub mod stride_tricks;
 pub mod traits;
@@ -72,11 +79,14 @@ pub mod new_modules {
     pub mod eigenvalues;
     pub mod fft;
     pub mod fft_enhanced;
+    pub mod frequency_analysis;
     #[cfg(feature = "matrix_decomp")]
     pub mod matrix_decomp;
     pub mod polynomial;
+    pub mod signal_processing;
     pub mod sparse;
     pub mod special;
+    pub mod spectral_analysis;
 }
 
 pub use error::{NumRs2Error, Result};
@@ -106,8 +116,15 @@ pub mod prelude {
     pub use crate::indexing::*;
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
+    #[allow(ambiguous_glob_reexports)]
     pub use crate::linalg::*;
+    #[allow(ambiguous_glob_reexports)]
     pub use crate::linalg_extended::*;
+    pub use crate::linalg_optimized::{OptimizedBlas, lu_optimized, transpose_optimized};
+    pub use crate::linalg_parallel::ParallelLinAlg;
+    pub use crate::linalg_stable::{
+        StableDecompositions, QRPivotedResult, CholeskyStableResult, SVDStableResult
+    };
     pub use crate::masked::MaskedArray;
     pub use crate::math::*;
     pub use crate::math_extended::*;
@@ -123,6 +140,7 @@ pub mod prelude {
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
     pub use crate::simd_optimize::{detect_cpu_features, CpuFeatures, SimdImplementation};
     pub use crate::sparse;
+    pub use crate::sparse_enhanced::SparseOpsAdvanced;
     pub use crate::stats::*;
     pub use crate::stride_tricks::{
         as_strided, broadcast_arrays, broadcast_to, byte_strides, set_strides, sliding_window_view,
@@ -210,6 +228,12 @@ pub mod prelude {
     pub use crate::new_modules::special::{
         bessel_i, bessel_j, bessel_k, bessel_y, digamma, ellipe, ellipk, erf, erfc, erfcinv,
         erfinv, gamma, gammainc, gammaln,
+    };
+
+    // Advanced array operations (Phase 3)
+    pub use crate::arrays::{
+        Shape, ArrayView, IndexSpec, ResolvedIndex, BroadcastOp, BroadcastEngine, BroadcastReduction,
+        FancyIndexEngine, FancyIndexResult, SpecializedIndexing, BooleanCombineOp,
     };
 
     // Re-export advanced types

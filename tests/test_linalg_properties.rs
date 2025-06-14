@@ -700,7 +700,7 @@ fn test_solve_properties() {
         // by solving for each column and combining the results
         let mut x2_cols = Vec::new();
         for j in 0..2 {
-            let b_col = b2.index(&[IndexSpec::All, IndexSpec::Index(j)]).unwrap();
+            let b_col = b2.index(&[numrs2::indexing::IndexSpec::All, numrs2::indexing::IndexSpec::Index(j)]).unwrap();
             let x_col = solve(&a, &b_col.reshape(&[size])).unwrap();
             x2_cols.push(x_col);
         }
@@ -714,8 +714,8 @@ fn test_solve_properties() {
 
         // Check each column of solution
         for j in 0..2 {
-            let b_col = b2.index(&[IndexSpec::All, IndexSpec::Index(j)]).unwrap();
-            let x_col = x2.index(&[IndexSpec::All, IndexSpec::Index(j)]).unwrap();
+            let b_col = b2.index(&[numrs2::indexing::IndexSpec::All, numrs2::indexing::IndexSpec::Index(j)]).unwrap();
+            let x_col = x2.index(&[numrs2::indexing::IndexSpec::All, numrs2::indexing::IndexSpec::Index(j)]).unwrap();
 
             let a_x_col = a
                 .matmul(&x_col.reshape(&[size, 1]))

@@ -4,10 +4,10 @@
 //! based on runtime characteristics and workload patterns.
 
 use crate::error::{NumRs2Error, Result};
-use crate::traits::{AllocationStrategy, MemoryAllocator, SpecializedAllocator};
+use crate::traits::SpecializedAllocator;
 use crate::memory_alloc::benchmarking::{AllocatorBenchmark, BenchmarkConfig, BenchmarkResults};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// Performance metrics collected during allocator usage
@@ -520,16 +520,11 @@ impl PerformanceTuner {
 }
 
 /// Global performance tuner instance
-static mut GLOBAL_TUNER: Option<PerformanceTuner> = None;
-static INIT: std::sync::Once = std::sync::Once::new();
+static GLOBAL_TUNER: OnceLock<Mutex<PerformanceTuner>> = OnceLock::new();
 
 /// Initialize the global performance tuner
 pub fn init_global_tuner(config: TuningConfig) {
-    INIT.call_once(|| {
-        unsafe {
-            GLOBAL_TUNER = Some(PerformanceTuner::new(config));
-        }
-    });
+    let _ = GLOBAL_TUNER.set(Mutex::new(PerformanceTuner::new(config)));
 }
 
 /// Get reference to the global performance tuner
@@ -537,9 +532,9 @@ pub fn with_global_tuner<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&PerformanceTuner) -> R,
 {
-    unsafe {
-        GLOBAL_TUNER.as_ref().map(f)
-    }
+    GLOBAL_TUNER.get().and_then(|tuner| {
+        tuner.lock().ok().map(|guard| f(&*guard))
+    })
 }
 
 /// Get mutable reference to the global performance tuner
@@ -547,15 +542,16 @@ pub fn with_global_tuner_mut<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&mut PerformanceTuner) -> R,
 {
-    unsafe {
-        GLOBAL_TUNER.as_mut().map(f)
-    }
+    GLOBAL_TUNER.get().and_then(|tuner| {
+        tuner.lock().ok().map(|mut guard| f(&mut *guard))
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::memory_alloc::enhanced_traits::NumericalArrayAllocator;
+    #[allow(unused_imports)]
     use std::thread;
     use std::time::Duration;
 

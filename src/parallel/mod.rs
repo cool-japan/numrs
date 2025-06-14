@@ -102,8 +102,8 @@ impl Default for ParallelContext {
     }
 }
 
-/// Thread-safe global parallel context instance
 lazy_static::lazy_static! {
+    /// Thread-safe global parallel context instance
     static ref GLOBAL_PARALLEL_CONTEXT: std::sync::Mutex<Option<Arc<ParallelContext>>> = 
         std::sync::Mutex::new(None);
 }

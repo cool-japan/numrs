@@ -126,7 +126,7 @@ pub trait MemoryAllocator: Send + Sync {
 }
 
 /// Standard system allocator
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct StandardAllocator;
 
 impl MemoryAllocator for StandardAllocator {

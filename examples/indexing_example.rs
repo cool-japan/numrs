@@ -1,4 +1,7 @@
+#![allow(deprecated)]
+
 use numrs2::prelude::*;
+use numrs2::indexing::IndexSpec;
 
 fn main() -> Result<()> {
     println!("NumRS Indexing Examples");
