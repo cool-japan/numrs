@@ -191,8 +191,13 @@ fn test_truncated_normal_statistics() {
 
         // Check that all samples are within bounds
         for &val in &data {
-            assert!(val >= low && val <= high, 
-                    "Sample {} outside bounds [{}, {}]", val, low, high);
+            assert!(
+                val >= low && val <= high,
+                "Sample {} outside bounds [{}, {}]",
+                val,
+                low,
+                high
+            );
         }
 
         let actual_mean = calculate_mean(&data);
@@ -200,27 +205,33 @@ fn test_truncated_normal_statistics() {
         // Calculate theoretical expected mean for truncated normal
         let alpha = (low - mean) / std;
         let beta = (high - mean) / std;
-        
+
         let phi_alpha = (-0.5 * alpha * alpha).exp() / (2.0 * PI).sqrt();
         let phi_beta = (-0.5 * beta * beta).exp() / (2.0 * PI).sqrt();
-        
+
         let phi_cdf_alpha = 0.5 * (1.0 + erf(alpha / 2.0f64.sqrt()));
         let phi_cdf_beta = 0.5 * (1.0 + erf(beta / 2.0f64.sqrt()));
-        
+
         let expected_mean = mean + std * (phi_alpha - phi_beta) / (phi_cdf_beta - phi_cdf_alpha);
 
         // Check that our mean is close to the theoretical expected value
         // Use more lenient tolerances for truncated distributions
-        if (expected_mean - actual_mean).abs() < 0.1 || 
-           (expected_mean - actual_mean).abs() / expected_mean.max(1.0) < 0.1 {
+        if (expected_mean - actual_mean).abs() < 0.1
+            || (expected_mean - actual_mean).abs() / expected_mean.max(1.0) < 0.1
+        {
             // Test passes
         } else {
-            println!("Warning: Mean discrepancy for case ({}, {}, {}, {}): expected {:.4}, got {:.4}", 
-                     mean, std, low, high, expected_mean, actual_mean);
+            println!(
+                "Warning: Mean discrepancy for case ({}, {}, {}, {}): expected {:.4}, got {:.4}",
+                mean, std, low, high, expected_mean, actual_mean
+            );
             // Allow larger tolerance for edge cases
-            assert!((expected_mean - actual_mean).abs() < 0.2, 
-                    "Mean too far from expected: expected {:.4}, got {:.4}", 
-                    expected_mean, actual_mean);
+            assert!(
+                (expected_mean - actual_mean).abs() < 0.2,
+                "Mean too far from expected: expected {:.4}, got {:.4}",
+                expected_mean,
+                actual_mean
+            );
         }
     }
 }

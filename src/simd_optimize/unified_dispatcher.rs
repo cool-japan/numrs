@@ -4,10 +4,10 @@
 //! the best SIMD implementation based on the target architecture and
 //! available CPU features.
 
-use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
 use super::feature_detect::{detect_cpu_features, CpuFeatures};
 use super::simd_select::{select_simd_implementation, SimdImplementation};
+use crate::array::Array;
+use crate::error::{NumRs2Error, Result};
 use std::sync::OnceLock;
 
 #[cfg(target_arch = "x86_64")]
@@ -29,7 +29,7 @@ impl UnifiedSimdDispatcher {
     pub fn new() -> Self {
         let features = detect_cpu_features();
         let implementation = select_simd_implementation(&features);
-        
+
         Self {
             features,
             implementation,
@@ -48,18 +48,18 @@ impl UnifiedSimdDispatcher {
     }
 
     /// Optimized matrix multiplication with automatic SIMD selection
-    pub fn optimized_matmul_f32(
-        &self,
-        a: &Array<f32>,
-        b: &Array<f32>,
-    ) -> Result<Array<f32>> {
+    pub fn optimized_matmul_f32(&self, a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
         let [m, k] = a.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix A must be 2D".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix A must be 2D".to_string(),
+            ));
         };
         let [k2, n] = b.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix B must be 2D".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix B must be 2D".to_string(),
+            ));
         };
-        
+
         if k != k2 {
             return Err(NumRs2Error::ShapeMismatch {
                 expected: vec![k],
@@ -98,20 +98,12 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_exp_f32(&self, input: &Array<f32>) -> Array<f32> {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => {
-                Avx512EnhancedOps::avx512_exp_f32(input)
-            }
+            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_exp_f32(input),
             #[cfg(target_arch = "x86_64")]
-            SimdImplementation::AVX2 => {
-                EnhancedSimdOps::vectorized_exp_f32(input)
-            }
+            SimdImplementation::AVX2 => EnhancedSimdOps::vectorized_exp_f32(input),
             #[cfg(target_arch = "aarch64")]
-            SimdImplementation::NEON => {
-                NeonEnhancedOps::neon_exp_f32(input)
-            }
-            _ => {
-                input.map(|x| x.exp())
-            }
+            SimdImplementation::NEON => NeonEnhancedOps::neon_exp_f32(input),
+            _ => input.map(|x| x.exp()),
         }
     }
 
@@ -119,20 +111,12 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_log_f32(&self, input: &Array<f32>) -> Array<f32> {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => {
-                Avx512EnhancedOps::avx512_log_f32(input)
-            }
+            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_log_f32(input),
             #[cfg(target_arch = "x86_64")]
-            SimdImplementation::AVX2 => {
-                EnhancedSimdOps::vectorized_log_f32(input)
-            }
+            SimdImplementation::AVX2 => EnhancedSimdOps::vectorized_log_f32(input),
             #[cfg(target_arch = "aarch64")]
-            SimdImplementation::NEON => {
-                NeonEnhancedOps::neon_log_f32(input)
-            }
-            _ => {
-                input.map(|x| x.ln())
-            }
+            SimdImplementation::NEON => NeonEnhancedOps::neon_log_f32(input),
+            _ => input.map(|x| x.ln()),
         }
     }
 
@@ -140,9 +124,7 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_sin_cos_f32(&self, input: &Array<f32>) -> (Array<f32>, Array<f32>) {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => {
-                Avx512EnhancedOps::avx512_sin_cos_f32(input)
-            }
+            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_sin_cos_f32(input),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => {
                 let sin_result = EnhancedSimdOps::vectorized_sin_f32(input);
@@ -150,12 +132,8 @@ impl UnifiedSimdDispatcher {
                 (sin_result, cos_result)
             }
             #[cfg(target_arch = "aarch64")]
-            SimdImplementation::NEON => {
-                NeonEnhancedOps::neon_sin_cos_f32(input)
-            }
-            _ => {
-                (input.map(|x| x.sin()), input.map(|x| x.cos()))
-            }
+            SimdImplementation::NEON => NeonEnhancedOps::neon_sin_cos_f32(input),
+            _ => (input.map(|x| x.sin()), input.map(|x| x.cos())),
         }
     }
 
@@ -163,20 +141,12 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_sum_f32(&self, input: &Array<f32>) -> f32 {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => {
-                Avx512EnhancedOps::avx512_parallel_sum_f32(input)
-            }
+            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_parallel_sum_f32(input),
             #[cfg(target_arch = "x86_64")]
-            SimdImplementation::AVX2 => {
-                EnhancedSimdOps::kahan_sum_f32(input)
-            }
+            SimdImplementation::AVX2 => EnhancedSimdOps::kahan_sum_f32(input),
             #[cfg(target_arch = "aarch64")]
-            SimdImplementation::NEON => {
-                NeonEnhancedOps::neon_sum_f32(input)
-            }
-            _ => {
-                input.sum()
-            }
+            SimdImplementation::NEON => NeonEnhancedOps::neon_sum_f32(input),
+            _ => input.sum(),
         }
     }
 
@@ -191,12 +161,8 @@ impl UnifiedSimdDispatcher {
 
         let result = match self.implementation {
             #[cfg(target_arch = "aarch64")]
-            SimdImplementation::NEON => {
-                NeonEnhancedOps::neon_dot_f32(a, b)?
-            }
-            _ => {
-                a.dot(b)?
-            }
+            SimdImplementation::NEON => NeonEnhancedOps::neon_dot_f32(a, b)?,
+            _ => a.dot(b)?,
         };
 
         Ok(result)
@@ -205,8 +171,10 @@ impl UnifiedSimdDispatcher {
     /// Optimized complex number operations
     pub fn optimized_complex_multiply_f32(
         &self,
-        a_real: &Array<f32>, a_imag: &Array<f32>,
-        b_real: &Array<f32>, b_imag: &Array<f32>
+        a_real: &Array<f32>,
+        a_imag: &Array<f32>,
+        b_real: &Array<f32>,
+        b_imag: &Array<f32>,
     ) -> Result<(Array<f32>, Array<f32>)> {
         match self.implementation {
             #[cfg(target_arch = "x86_64")]
@@ -219,9 +187,10 @@ impl UnifiedSimdDispatcher {
             }
             _ => {
                 // Fallback implementation
-                if a_real.shape() != a_imag.shape() || 
-                   b_real.shape() != b_imag.shape() ||
-                   a_real.shape() != b_real.shape() {
+                if a_real.shape() != a_imag.shape()
+                    || b_real.shape() != b_imag.shape()
+                    || a_real.shape() != b_real.shape()
+                {
                     return Err(NumRs2Error::ShapeMismatch {
                         expected: a_real.shape(),
                         actual: b_real.shape(),
@@ -233,17 +202,23 @@ impl UnifiedSimdDispatcher {
                 let b_r = b_real.to_vec();
                 let b_i = b_imag.to_vec();
 
-                let c_r: Vec<f32> = a_r.iter().zip(a_i.iter()).zip(b_r.iter().zip(b_i.iter()))
+                let c_r: Vec<f32> = a_r
+                    .iter()
+                    .zip(a_i.iter())
+                    .zip(b_r.iter().zip(b_i.iter()))
                     .map(|((&ar, &ai), (&br, &bi))| ar * br - ai * bi)
                     .collect();
-                
-                let c_i: Vec<f32> = a_r.iter().zip(a_i.iter()).zip(b_r.iter().zip(b_i.iter()))
+
+                let c_i: Vec<f32> = a_r
+                    .iter()
+                    .zip(a_i.iter())
+                    .zip(b_r.iter().zip(b_i.iter()))
                     .map(|((&ar, &ai), (&br, &bi))| ar * bi + ai * br)
                     .collect();
 
                 Ok((
                     Array::from_vec(c_r).reshape(&a_real.shape()),
-                    Array::from_vec(c_i).reshape(&a_real.shape())
+                    Array::from_vec(c_i).reshape(&a_real.shape()),
                 ))
             }
         }
@@ -252,7 +227,7 @@ impl UnifiedSimdDispatcher {
     /// Memory-optimized copy operation
     pub fn optimized_copy_f32(&self, src: &Array<f32>) -> Result<Array<f32>> {
         let mut dst = Array::zeros(&src.shape());
-        
+
         match self.implementation {
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => {
@@ -279,7 +254,7 @@ impl UnifiedSimdDispatcher {
         use std::time::Instant;
 
         let data = Array::from_vec((0..size).map(|i| i as f32).collect::<Vec<_>>());
-        
+
         // Benchmark different operations
         let start = Instant::now();
         for _ in 0..iterations {
@@ -405,8 +380,10 @@ pub mod optimized {
     }
 
     pub fn complex_multiply_f32(
-        a_real: &Array<f32>, a_imag: &Array<f32>,
-        b_real: &Array<f32>, b_imag: &Array<f32>
+        a_real: &Array<f32>,
+        a_imag: &Array<f32>,
+        b_real: &Array<f32>,
+        b_imag: &Array<f32>,
     ) -> Result<(Array<f32>, Array<f32>)> {
         global_dispatcher().optimized_complex_multiply_f32(a_real, a_imag, b_real, b_imag)
     }
@@ -459,7 +436,7 @@ mod tests {
         let dispatcher = UnifiedSimdDispatcher::new();
         let results = dispatcher.benchmark_operations(1000, 100);
         results.print_summary();
-        
+
         assert!(results.exp_throughput > 0.0);
         assert!(results.sum_throughput > 0.0);
         assert!(results.copy_throughput > 0.0);
@@ -471,9 +448,9 @@ mod tests {
         let a_i = Array::from_vec(vec![3.0, 4.0]);
         let b_r = Array::from_vec(vec![5.0, 6.0]);
         let b_i = Array::from_vec(vec![7.0, 8.0]);
-        
+
         let (c_r, c_i) = optimized::complex_multiply_f32(&a_r, &a_i, &b_r, &b_i).unwrap();
-        
+
         // (1+3i) * (5+7i) = -16 + 22i
         assert_relative_eq!(c_r.to_vec()[0], -16.0, epsilon = 1e-6);
         assert_relative_eq!(c_i.to_vec()[0], 22.0, epsilon = 1e-6);

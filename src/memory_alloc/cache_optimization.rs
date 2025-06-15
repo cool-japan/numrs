@@ -149,7 +149,7 @@ impl CacheOptimizedAllocator {
         // Use approximately 1/4 of cache for blocking to leave room for other data
         let usable_cache = cache_size / 4;
         let elements_per_block = usable_cache / element_size;
-        
+
         // Round down to nearest power of 2 for efficient indexing
         elements_per_block.next_power_of_two() / 2
     }
@@ -161,7 +161,7 @@ impl CacheOptimizedAllocator {
             CacheLevel::L2 => self.config.l2_cache_size,
             CacheLevel::L3 => self.config.l3_cache_size,
         };
-        
+
         // Data should fit comfortably (use 80% of cache)
         size <= (cache_size * 4) / 5
     }
@@ -170,7 +170,7 @@ impl CacheOptimizedAllocator {
     fn record_access(&self, address: usize, size: usize, access_type: AccessType) {
         if let Ok(mut tracker) = self.access_tracker.try_lock() {
             tracker.record_access(address, size, access_type);
-            
+
             // Update cache metrics periodically
             if tracker.should_update_metrics() {
                 if let Ok(mut metrics) = self.metrics.try_lock() {
@@ -256,20 +256,31 @@ impl MemoryAllocator for CacheOptimizedAllocator {
 
         let aligned_layout = Layout::from_size_align(
             aligned_size,
-            layout.align().max(self.config.cache_line_size)
-        ).map_err(|_| NumRs2Error::Memory(crate::error::memory::MemoryError::alignment_error("Invalid layout", self.config.cache_line_size)))?;
+            layout.align().max(self.config.cache_line_size),
+        )
+        .map_err(|_| {
+            NumRs2Error::Memory(crate::error::memory::MemoryError::alignment_error(
+                "Invalid layout",
+                self.config.cache_line_size,
+            ))
+        })?;
 
         unsafe {
             let ptr = std::alloc::alloc(aligned_layout);
             if ptr.is_null() {
-                return Err(NumRs2Error::Memory(crate::error::memory::MemoryError::allocation_failed("Allocation failed", aligned_size)));
+                return Err(NumRs2Error::Memory(
+                    crate::error::memory::MemoryError::allocation_failed(
+                        "Allocation failed",
+                        aligned_size,
+                    ),
+                ));
             }
 
             let non_null_ptr = NonNull::new_unchecked(ptr);
-            
+
             // Record the allocation for cache analysis
             self.record_access(ptr as usize, aligned_size, AccessType::Write);
-            
+
             Ok(non_null_ptr)
         }
     }
@@ -283,8 +294,14 @@ impl MemoryAllocator for CacheOptimizedAllocator {
 
         let aligned_layout = Layout::from_size_align(
             aligned_size,
-            layout.align().max(self.config.cache_line_size)
-        ).map_err(|_| NumRs2Error::Memory(crate::error::memory::MemoryError::alignment_error("Invalid layout", self.config.cache_line_size)))?;
+            layout.align().max(self.config.cache_line_size),
+        )
+        .map_err(|_| {
+            NumRs2Error::Memory(crate::error::memory::MemoryError::alignment_error(
+                "Invalid layout",
+                self.config.cache_line_size,
+            ))
+        })?;
 
         std::alloc::dealloc(ptr.as_ptr(), aligned_layout);
         Ok(())
@@ -299,12 +316,12 @@ impl MemoryAllocator for CacheOptimizedAllocator {
         // For cache optimization, we prefer to allocate new memory and copy
         // to maintain alignment and avoid fragmentation
         let new_ptr = self.allocate(new_layout)?;
-        
+
         let copy_size = old_layout.size().min(new_layout.size());
         std::ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr(), copy_size);
-        
+
         self.deallocate(ptr, old_layout)?;
-        
+
         Ok(new_ptr)
     }
 
@@ -449,13 +466,13 @@ impl AccessTracker {
         // Simulate cache behavior based on recent access patterns
         let mut simulated_l1_cache = std::collections::HashSet::new();
         let mut simulated_l2_cache = std::collections::HashSet::new();
-        
+
         let l1_cache_lines = config.l1_cache_size / config.cache_line_size;
         let l2_cache_lines = config.l2_cache_size / config.cache_line_size;
 
         for access in &self.recent_accesses {
             let cache_line = access.address / config.cache_line_size;
-            
+
             if simulated_l1_cache.contains(&cache_line) {
                 l1_hits += 1;
             } else if simulated_l2_cache.contains(&cache_line) {
@@ -578,7 +595,8 @@ impl<T: Clone> CacheBlockedMatrix<T> {
                         for j in j_block..j_end {
                             let mut sum = result.data[i * result.cols + j];
                             for k in k_block..k_end {
-                                sum = sum + self.data[i * self.cols + k] * other.data[k * other.cols + j];
+                                sum = sum
+                                    + self.data[i * self.cols + k] * other.data[k * other.cols + j];
                             }
                             result.data[i * result.cols + j] = sum;
                         }
@@ -642,9 +660,13 @@ impl CacheOptimizedBuilder {
     }
 
     /// Calculate optimal parameters for a given data size
-    pub fn optimize_for_size(&self, total_elements: usize, element_size: usize) -> CacheOptimizationParams {
+    pub fn optimize_for_size(
+        &self,
+        total_elements: usize,
+        element_size: usize,
+    ) -> CacheOptimizationParams {
         let total_size = total_elements * element_size;
-        
+
         let recommended_block_size = if total_size <= self.config.l1_cache_size {
             // Fits in L1, use small blocks
             (self.config.l1_cache_size / 4 / element_size) as usize
@@ -691,10 +713,10 @@ mod tests {
 
         let layout = Layout::from_size_align(1024, 8).unwrap();
         let ptr = allocator.allocate(layout).unwrap();
-        
+
         // Check that allocation is cache-line aligned
         assert_eq!(ptr.as_ptr() as usize % cache_constants::CACHE_LINE_SIZE, 0);
-        
+
         unsafe {
             allocator.deallocate(ptr, layout).unwrap();
         }
@@ -768,11 +790,11 @@ mod tests {
 
         // Small data should fit in L1
         assert!(allocator.fits_in_cache(16 * 1024, CacheLevel::L1));
-        
+
         // Medium data should fit in L2 but not L1
         assert!(!allocator.fits_in_cache(100 * 1024, CacheLevel::L1));
         assert!(allocator.fits_in_cache(100 * 1024, CacheLevel::L2));
-        
+
         // Large data should only fit in L3
         assert!(!allocator.fits_in_cache(4 * 1024 * 1024, CacheLevel::L2));
         assert!(allocator.fits_in_cache(4 * 1024 * 1024, CacheLevel::L3));

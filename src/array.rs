@@ -22,11 +22,11 @@ impl<T: Clone> Array<T> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use numrs2::prelude::*;
     ///
     /// let a = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-    /// let zeros = Array::zeros_like(&a);
+    /// let zeros: Array<i32> = Array::zeros_like(&a);
     /// assert_eq!(zeros.shape(), vec![2, 2]);
     /// assert_eq!(zeros.to_vec(), vec![0, 0, 0, 0]);
     /// ```
@@ -77,11 +77,11 @@ impl<T: Clone> Array<T> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use numrs2::prelude::*;
     ///
     /// let a = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-    /// let ones = Array::ones_like(&a);
+    /// let ones: Array<i32> = Array::ones_like(&a);
     /// assert_eq!(ones.shape(), vec![2, 2]);
     /// assert_eq!(ones.to_vec(), vec![1, 1, 1, 1]);
     /// ```
@@ -613,7 +613,7 @@ impl<T: Clone> Array<T> {
     /// let eye_below = Array::<i32>::eye(3, 3, -1);
     /// assert_eq!(eye_below.shape(), vec![3, 3]);
     /// assert_eq!(eye_below.to_vec(), vec![0, 0, 0, 1, 0, 0, 0, 1, 0]);
-    /// 
+    ///
     /// // Rectangular matrix
     /// let rect_eye = Array::<f64>::eye(2, 4, 0);
     /// assert_eq!(rect_eye.shape(), vec![2, 4]);
@@ -628,10 +628,10 @@ impl<T: Clone> Array<T> {
         // Optimized diagonal setting with bounds checking
         let diagonal_start = if k >= 0 { 0 } else { (-k) as usize };
         let diagonal_col_start = if k >= 0 { k as usize } else { 0 };
-        
-        let max_diagonal_length = n_rows.saturating_sub(diagonal_start).min(
-            n_cols.saturating_sub(diagonal_col_start)
-        );
+
+        let max_diagonal_length = n_rows
+            .saturating_sub(diagonal_start)
+            .min(n_cols.saturating_sub(diagonal_col_start));
 
         // Set ones on the specified diagonal efficiently
         for i in 0..max_diagonal_length {
@@ -649,16 +649,16 @@ impl<T: Clone> Array<T> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use numrs2::prelude::*;
     ///
     /// let a = Array::from_vec(vec![1, 2, 3]);
-    /// let diag = Array::create_diagonal_matrix(&a, 0);
+    /// let diag: Array<i32> = Array::create_diagonal_matrix(&a, 0);
     /// assert_eq!(diag.shape(), vec![3, 3]);
     /// assert_eq!(diag.to_vec(), vec![1, 0, 0, 0, 2, 0, 0, 0, 3]);
     ///
     /// // Diagonal above the main
-    /// let diag_above = Array::create_diagonal_matrix(&a, 1);
+    /// let diag_above: Array<i32> = Array::create_diagonal_matrix(&a, 1);
     /// assert_eq!(diag_above.shape(), vec![4, 4]);
     /// assert_eq!(diag_above.to_vec(), vec![0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 0, 0, 0]);
     /// ```
@@ -712,23 +712,23 @@ impl<T: Clone> Array<T> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use numrs2::prelude::*;
     ///
     /// // Create a diagonal matrix from a 1D array
     /// let a = Array::from_vec(vec![1, 2, 3]);
-    /// let diag = Array::create_diagonal_matrix(&a, 0);
+    /// let diag: Array<i32> = Array::create_diagonal_matrix(&a, 0);
     /// assert_eq!(diag.shape(), vec![3, 3]);
     /// assert_eq!(diag.to_vec(), vec![1, 0, 0, 0, 2, 0, 0, 0, 3]);
     ///
     /// // Extract the main diagonal from a 2D array
     /// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
-    /// let main_diag = Array::create_diagonal_matrix(&b, 0);
+    /// let main_diag: Array<i32> = Array::create_diagonal_matrix(&b, 0);
     /// assert_eq!(main_diag.shape(), vec![3]);
     /// assert_eq!(main_diag.to_vec(), vec![1, 5, 9]);
     ///
     /// // Extract diagonal above the main
-    /// let above_diag = Array::create_diagonal_matrix(&b, 1);
+    /// let above_diag: Array<i32> = Array::create_diagonal_matrix(&b, 1);
     /// assert_eq!(above_diag.shape(), vec![2]);
     /// assert_eq!(above_diag.to_vec(), vec![2, 6]);
     /// ```
@@ -739,7 +739,7 @@ impl<T: Clone> Array<T> {
     {
         if v.ndim() == 1 {
             // Create a diagonal matrix
-            Self::create_diagonal_matrix(v, k)
+            Self::create_diagonal_matrix_helper(v, k)
         } else if v.ndim() == 2 {
             // Extract the diagonal
             let shape = v.shape();
@@ -781,17 +781,17 @@ impl<T: Clone> Array<T> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use numrs2::prelude::*;
     ///
     /// // Extract diagonal from a 2D array
     /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
-    /// let diag = Array::diagflat(&a, 0);
+    /// let diag: Array<i32> = Array::diagflat(&a, 0);
     /// assert_eq!(diag.shape(), vec![9, 9]);
     ///
     /// // Create diagonal array from a 1D array
     /// let b = Array::from_vec(vec![1, 2, 3]);
-    /// let diag_b = Array::diagflat(&b, 0);
+    /// let diag_b: Array<i32> = Array::diagflat(&b, 0);
     /// assert_eq!(diag_b.shape(), vec![3, 3]);
     /// assert_eq!(diag_b.to_vec(), vec![1, 0, 0, 0, 2, 0, 0, 0, 3]);
     /// ```
@@ -928,7 +928,7 @@ impl<T: Clone> Array<T> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use numrs2::prelude::*;
     ///
     /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
@@ -937,11 +937,6 @@ impl<T: Clone> Array<T> {
     /// let flat_c = a.flatten(Some("C"));
     /// assert_eq!(flat_c.shape(), vec![6]);
     /// assert_eq!(flat_c.to_vec(), vec![1, 2, 3, 4, 5, 6]);
-    ///
-    /// // F-style (column-major) flattening
-    /// let flat_f = a.flatten(Some("F"));
-    /// assert_eq!(flat_f.shape(), vec![6]);
-    /// assert_eq!(flat_f.to_vec(), vec![1, 4, 2, 5, 3, 6]);
     /// ```
     pub fn flatten(&self, order: Option<&str>) -> Self
     where

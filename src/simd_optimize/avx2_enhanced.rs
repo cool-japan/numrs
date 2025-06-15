@@ -3,10 +3,10 @@
 //! This module provides highly optimized SIMD implementations for advanced
 //! mathematical operations, cache-aware algorithms, and specialized functions.
 
-use std::arch::x86_64::*;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::simd::SimdOps;
+use std::arch::x86_64::*;
 
 /// Enhanced vectorization constants
 const AVX2_F32_LANES: usize = 8;
@@ -31,12 +31,16 @@ impl EnhancedSimdOps {
         block_size: usize,
     ) -> Result<()> {
         let [m, k] = a.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix A must be 2D".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix A must be 2D".to_string(),
+            ));
         };
         let [k2, n] = b.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix B must be 2D".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix B must be 2D".to_string(),
+            ));
         };
-        
+
         if k != k2 {
             return Err(NumRs2Error::ShapeMismatch {
                 expected: vec![k],
@@ -49,10 +53,7 @@ impl EnhancedSimdOps {
         let mut c_data = c.to_vec();
 
         unsafe {
-            Self::blocked_matmul_avx2_f32(
-                &a_data, &b_data, &mut c_data,
-                m, n, k, block_size
-            );
+            Self::blocked_matmul_avx2_f32(&a_data, &b_data, &mut c_data, m, n, k, block_size);
         }
 
         *c = Array::from_vec(c_data).reshape(&[m, n]);
@@ -63,8 +64,13 @@ impl EnhancedSimdOps {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn blocked_matmul_avx2_f32(
-        a: &[f32], b: &[f32], c: &mut [f32],
-        m: usize, n: usize, k: usize, block_size: usize
+        a: &[f32],
+        b: &[f32],
+        c: &mut [f32],
+        m: usize,
+        n: usize,
+        k: usize,
+        block_size: usize,
     ) {
         for ii in (0..m).step_by(block_size) {
             for jj in (0..n).step_by(block_size) {
@@ -76,7 +82,7 @@ impl EnhancedSimdOps {
                     for i in ii..i_end {
                         for j in (jj..j_end).step_by(AVX2_F32_LANES) {
                             let lanes = (j_end - j).min(AVX2_F32_LANES);
-                            
+
                             // Load C values
                             let mut vc = if lanes == AVX2_F32_LANES {
                                 _mm256_loadu_ps(c.as_ptr().add(i * n + j))
@@ -154,36 +160,39 @@ impl EnhancedSimdOps {
             if i + PREFETCH_DISTANCE < len {
                 _mm_prefetch(
                     input.as_ptr().add(i + PREFETCH_DISTANCE) as *const i8,
-                    _MM_HINT_T0
+                    _MM_HINT_T0,
                 );
             }
 
             let x = _mm256_loadu_ps(input.as_ptr().add(i));
-            
+
             // Range reduction: x = n*ln(2) + r
             let n_float = _mm256_mul_ps(x, log2_e);
             let n = _mm256_cvtps_epi32(n_float);
             let n_f = _mm256_cvtepi32_ps(n);
-            
+
             // r = x - n*ln(2)
             let r = _mm256_fmsub_ps(n_f, ln2_hi, x);
             let r = _mm256_fmsub_ps(n_f, ln2_lo, r);
-            
+
             // Taylor series: exp(r) ≈ 1 + r + r²/2! + r³/3! + r⁴/4!
             let r2 = _mm256_mul_ps(r, r);
             let r3 = _mm256_mul_ps(r2, r);
             let r4 = _mm256_mul_ps(r3, r);
-            
-            let poly = _mm256_fmadd_ps(c5, r4,
-                       _mm256_fmadd_ps(c4, r3,
-                       _mm256_fmadd_ps(c3, r2,
-                       _mm256_fmadd_ps(c2, r, c1))));
-            
+
+            let poly = _mm256_fmadd_ps(
+                c5,
+                r4,
+                _mm256_fmadd_ps(c4, r3, _mm256_fmadd_ps(c3, r2, _mm256_fmadd_ps(c2, r, c1))),
+            );
+
             // Scale by 2^n
             let result = _mm256_castsi256_ps(_mm256_slli_epi32(
-                _mm256_add_epi32(n, _mm256_set1_epi32(127)), 23));
+                _mm256_add_epi32(n, _mm256_set1_epi32(127)),
+                23,
+            ));
             let final_result = _mm256_mul_ps(poly, result);
-            
+
             _mm256_storeu_ps(output.as_mut_ptr().add(i), final_result);
         }
 
@@ -223,32 +232,33 @@ impl EnhancedSimdOps {
 
         for i in (0..simd_len).step_by(AVX2_F32_LANES) {
             let x = _mm256_loadu_ps(input.as_ptr().add(i));
-            
+
             // Extract exponent
             let x_int = _mm256_castps_si256(x);
             let exp = _mm256_sub_epi32(_mm256_srli_epi32(x_int, 23), _mm256_set1_epi32(127));
             let exp_f = _mm256_cvtepi32_ps(exp);
-            
+
             // Extract mantissa
             let mantissa = _mm256_castsi256_ps(_mm256_or_si256(
                 _mm256_and_si256(x_int, _mm256_set1_epi32(0x007FFFFF)),
-                _mm256_set1_epi32(0x3F800000)
+                _mm256_set1_epi32(0x3F800000),
             ));
-            
+
             // Use polynomial approximation for log(1+x) where x = mantissa - 1
             let u = _mm256_sub_ps(mantissa, one);
             let u2 = _mm256_mul_ps(u, u);
             let u3 = _mm256_mul_ps(u2, u);
             let u4 = _mm256_mul_ps(u3, u);
-            
-            let poly = _mm256_fmadd_ps(c4, u4,
-                       _mm256_fmadd_ps(c3, u3,
-                       _mm256_fmadd_ps(c2, u2,
-                       _mm256_fmadd_ps(c1, u2, u))));
-            
+
+            let poly = _mm256_fmadd_ps(
+                c4,
+                u4,
+                _mm256_fmadd_ps(c3, u3, _mm256_fmadd_ps(c2, u2, _mm256_fmadd_ps(c1, u2, u))),
+            );
+
             // log(x) = exp * ln(2) + log(mantissa)
             let result = _mm256_fmadd_ps(exp_f, ln2, poly);
-            
+
             _mm256_storeu_ps(output.as_mut_ptr().add(i), result);
         }
 
@@ -290,31 +300,40 @@ impl EnhancedSimdOps {
 
         for i in (0..simd_len).step_by(AVX2_F32_LANES) {
             let mut x = _mm256_loadu_ps(input.as_ptr().add(i));
-            
+
             // Range reduction: bring x to [-π, π]
             let k = _mm256_round_ps(_mm256_div_ps(x, two_pi), _MM_FROUND_TO_NEAREST_INT);
             x = _mm256_fmsub_ps(k, two_pi, x);
-            
+
             // Determine quadrant and adjust
             let abs_x = _mm256_and_ps(x, _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF)));
             let quadrant = _mm256_cmp_ps(abs_x, pi_2, _CMP_GT_OQ);
-            
+
             // For |x| > π/2, use sin(π - x) = sin(x)
             let x_adj = _mm256_blendv_ps(x, _mm256_sub_ps(pi, abs_x), quadrant);
-            let sign_adj = _mm256_blendv_ps(one, _mm256_set1_ps(-1.0), _mm256_cmp_ps(x, _mm256_setzero_ps(), _CMP_LT_OQ));
-            
+            let sign_adj = _mm256_blendv_ps(
+                one,
+                _mm256_set1_ps(-1.0),
+                _mm256_cmp_ps(x, _mm256_setzero_ps(), _CMP_LT_OQ),
+            );
+
             // Taylor series: sin(x) ≈ x - x³/3! + x⁵/5! - x⁷/7! + x⁹/9!
             let x2 = _mm256_mul_ps(x_adj, x_adj);
             let x3 = _mm256_mul_ps(x2, x_adj);
             let x5 = _mm256_mul_ps(x3, x2);
             let x7 = _mm256_mul_ps(x5, x2);
             let x9 = _mm256_mul_ps(x7, x2);
-            
-            let poly = _mm256_fmadd_ps(c9, x9,
-                       _mm256_fmadd_ps(c7, x7,
-                       _mm256_fmadd_ps(c5, x5,
-                       _mm256_fmadd_ps(c3, x3, x_adj))));
-            
+
+            let poly = _mm256_fmadd_ps(
+                c9,
+                x9,
+                _mm256_fmadd_ps(
+                    c7,
+                    x7,
+                    _mm256_fmadd_ps(c5, x5, _mm256_fmadd_ps(c3, x3, x_adj)),
+                ),
+            );
+
             let result = _mm256_mul_ps(poly, sign_adj);
             _mm256_storeu_ps(output.as_mut_ptr().add(i), result);
         }
@@ -344,8 +363,8 @@ impl EnhancedSimdOps {
 
         for i in (0..simd_len).step_by(AVX2_F32_LANES) {
             let x = _mm256_loadu_ps(input.as_ptr().add(i));
-            let y = _mm256_sub_ps(x, c);    // Compensated input
-            let t = _mm256_add_ps(sum, y);  // New sum
+            let y = _mm256_sub_ps(x, c); // Compensated input
+            let t = _mm256_add_ps(sum, y); // New sum
             c = _mm256_sub_ps(_mm256_sub_ps(t, sum), y); // Update compensation
             sum = t;
         }
@@ -375,12 +394,15 @@ impl EnhancedSimdOps {
     /// Vectorized complex number operations
     #[cfg(target_arch = "x86_64")]
     pub fn complex_multiply_f32(
-        a_real: &Array<f32>, a_imag: &Array<f32>,
-        b_real: &Array<f32>, b_imag: &Array<f32>
+        a_real: &Array<f32>,
+        a_imag: &Array<f32>,
+        b_real: &Array<f32>,
+        b_imag: &Array<f32>,
     ) -> Result<(Array<f32>, Array<f32>)> {
-        if a_real.shape() != a_imag.shape() || 
-           b_real.shape() != b_imag.shape() ||
-           a_real.shape() != b_real.shape() {
+        if a_real.shape() != a_imag.shape()
+            || b_real.shape() != b_imag.shape()
+            || a_real.shape() != b_real.shape()
+        {
             return Err(NumRs2Error::ShapeMismatch {
                 expected: a_real.shape(),
                 actual: b_real.shape(),
@@ -392,7 +414,7 @@ impl EnhancedSimdOps {
         let a_i = a_imag.to_vec();
         let b_r = b_real.to_vec();
         let b_i = b_imag.to_vec();
-        
+
         let mut c_r = vec![0.0f32; len];
         let mut c_i = vec![0.0f32; len];
 
@@ -402,7 +424,7 @@ impl EnhancedSimdOps {
 
         Ok((
             Array::from_vec(c_r).reshape(&a_real.shape()),
-            Array::from_vec(c_i).reshape(&a_real.shape())
+            Array::from_vec(c_i).reshape(&a_real.shape()),
         ))
     }
 
@@ -410,9 +432,12 @@ impl EnhancedSimdOps {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_complex_mul_f32(
-        a_real: &[f32], a_imag: &[f32],
-        b_real: &[f32], b_imag: &[f32],
-        c_real: &mut [f32], c_imag: &mut [f32]
+        a_real: &[f32],
+        a_imag: &[f32],
+        b_real: &[f32],
+        b_imag: &[f32],
+        c_real: &mut [f32],
+        c_imag: &mut [f32],
     ) {
         let len = a_real.len();
         let simd_len = len & !(AVX2_F32_LANES - 1);
@@ -472,11 +497,11 @@ impl EnhancedSimdOps {
             if i + PREFETCH_DISTANCE < len {
                 _mm_prefetch(
                     src.as_ptr().add(i + PREFETCH_DISTANCE) as *const i8,
-                    _MM_HINT_T0
+                    _MM_HINT_T0,
                 );
                 _mm_prefetch(
                     dst.as_ptr().add(i + PREFETCH_DISTANCE) as *const i8,
-                    _MM_HINT_T0
+                    _MM_HINT_T0,
                 );
             }
 
@@ -575,7 +600,10 @@ impl SimdBenchmarkResults {
         println!("  Scalar time: {:.2} ns", self.scalar_time_ns);
         println!("  SIMD time: {:.2} ns", self.simd_time_ns);
         println!("  Speedup: {:.2}x", self.speedup);
-        println!("  Throughput: {:.2} elements/ns", self.throughput_elements_per_ns);
+        println!(
+            "  Throughput: {:.2} elements/ns",
+            self.throughput_elements_per_ns
+        );
     }
 }
 
@@ -588,18 +616,26 @@ mod tests {
     fn test_enhanced_exp() {
         let input = Array::from_vec(vec![0.0, 1.0, 2.0, -1.0]);
         let result = EnhancedSimdOps::vectorized_exp_f32(&input);
-        
+
         assert_relative_eq!(result.to_vec()[0], 1.0, epsilon = 1e-6);
         assert_relative_eq!(result.to_vec()[1], std::f32::consts::E, epsilon = 1e-6);
-        assert_relative_eq!(result.to_vec()[2], std::f32::consts::E.powi(2), epsilon = 1e-5);
-        assert_relative_eq!(result.to_vec()[3], 1.0 / std::f32::consts::E, epsilon = 1e-6);
+        assert_relative_eq!(
+            result.to_vec()[2],
+            std::f32::consts::E.powi(2),
+            epsilon = 1e-5
+        );
+        assert_relative_eq!(
+            result.to_vec()[3],
+            1.0 / std::f32::consts::E,
+            epsilon = 1e-6
+        );
     }
 
     #[test]
     fn test_enhanced_log() {
         let input = Array::from_vec(vec![1.0, std::f32::consts::E, std::f32::consts::E.powi(2)]);
         let result = EnhancedSimdOps::vectorized_log_f32(&input);
-        
+
         assert_relative_eq!(result.to_vec()[0], 0.0, epsilon = 1e-6);
         assert_relative_eq!(result.to_vec()[1], 1.0, epsilon = 1e-5);
         assert_relative_eq!(result.to_vec()[2], 2.0, epsilon = 1e-5);
@@ -609,7 +645,7 @@ mod tests {
     fn test_enhanced_sin() {
         let input = Array::from_vec(vec![0.0, std::f32::consts::PI / 2.0, std::f32::consts::PI]);
         let result = EnhancedSimdOps::vectorized_sin_f32(&input);
-        
+
         assert_relative_eq!(result.to_vec()[0], 0.0, epsilon = 1e-6);
         assert_relative_eq!(result.to_vec()[1], 1.0, epsilon = 1e-5);
         assert_relative_eq!(result.to_vec()[2], 0.0, epsilon = 1e-5);
@@ -628,13 +664,13 @@ mod tests {
         let a_i = Array::from_vec(vec![3.0, 4.0]);
         let b_r = Array::from_vec(vec![5.0, 6.0]);
         let b_i = Array::from_vec(vec![7.0, 8.0]);
-        
+
         let (c_r, c_i) = EnhancedSimdOps::complex_multiply_f32(&a_r, &a_i, &b_r, &b_i).unwrap();
-        
+
         // (1+3i) * (5+7i) = 5 + 7i + 15i - 21 = -16 + 22i
         assert_relative_eq!(c_r.to_vec()[0], -16.0, epsilon = 1e-6);
         assert_relative_eq!(c_i.to_vec()[0], 22.0, epsilon = 1e-6);
-        
+
         // (2+4i) * (6+8i) = 12 + 16i + 24i - 32 = -20 + 40i
         assert_relative_eq!(c_r.to_vec()[1], -20.0, epsilon = 1e-6);
         assert_relative_eq!(c_i.to_vec()[1], 40.0, epsilon = 1e-6);
@@ -644,7 +680,7 @@ mod tests {
     fn test_performance_monitor() {
         let mut monitor = SimdPerformanceMonitor::new();
         monitor.record_operation(1000, 800);
-        
+
         assert_eq!(monitor.operations_count, 1);
         assert_eq!(monitor.total_elements, 1000);
         assert_relative_eq!(monitor.vectorization_ratio, 0.8, epsilon = 1e-6);

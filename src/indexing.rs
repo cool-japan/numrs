@@ -805,7 +805,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use numrs2::prelude::*;
     ///
     /// // Create an index array
@@ -818,7 +818,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
     ///
     /// // Select elements based on the indices
     /// let result = a.choose(&[&c1, &c2, &c3], None).unwrap();
-    /// assert_eq!(result.to_vec(), vec![10, 200, 3000, 200, 10]);
+    /// assert_eq!(result.to_vec(), vec![10, 200, 3000, 400, 50]);
     /// ```
     pub fn choose(&self, choices: &[&Self], mode: Option<&str>) -> Result<Self>
     where
@@ -1121,11 +1121,11 @@ pub fn ix_<T: Clone>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use numrs2::prelude::*;
 ///
 /// // Create an array
-/// let mut a = Array::zeros(&[5]);
+/// let mut a: Array<i32> = Array::zeros(&[5]);
 ///
 /// // Set values at specific indices
 /// let indices = Array::from_vec(vec![0, 2, 4]);
@@ -1135,13 +1135,13 @@ pub fn ix_<T: Clone>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>> {
 /// assert_eq!(a.to_vec(), vec![10, 0, 20, 0, 30]);
 ///
 /// // Test with wrap mode
-/// let mut b = Array::zeros(&[3]);
+/// let mut b: Array<i32> = Array::zeros(&[3]);
 /// let indices = Array::from_vec(vec![0, 1, 2, 3, 4, 5]);
 /// let values = Array::from_vec(vec![10, 20, 30, 40, 50, 60]);
 ///
 /// put(&mut b, &indices, &values, Some("wrap")).unwrap();
 /// // Indices 3,4,5 wrap around to 0,1,2
-/// assert_eq!(b.to_vec(), vec![10 + 40, 20 + 50, 30 + 60]);
+/// assert_eq!(b.to_vec(), vec![40, 50, 60]);
 /// ```
 pub fn put<T: Clone + ToString>(
     array: &mut Array<T>,
@@ -1587,12 +1587,10 @@ pub fn take<T: Clone + ToString + num_traits::Zero>(
             let mut out_shape = shape.clone();
             out_shape[ax] = indices_vec.len();
 
-            let mut result_data = Vec::new();
-
-            // Process each index
-            for &idx_value in &indices_vec {
-                // Apply the mode
-                let idx = match handle_mode {
+            // Validate and process indices
+            let processed_indices: Result<Vec<usize>> = indices_vec
+                .iter()
+                .map(|&idx_value| match handle_mode {
                     "raise" => {
                         if idx_value < 0 || idx_value >= axis_size as isize {
                             return Err(NumRs2Error::IndexOutOfBounds(format!(
@@ -1600,38 +1598,62 @@ pub fn take<T: Clone + ToString + num_traits::Zero>(
                                 idx_value, axis_size
                             )));
                         }
-                        idx_value as usize
+                        Ok(idx_value as usize)
                     }
-                    "wrap" => {
-                        (((idx_value % axis_size as isize) + axis_size as isize)
-                            % axis_size as isize) as usize
-                    }
+                    "wrap" => Ok((((idx_value % axis_size as isize) + axis_size as isize)
+                        % axis_size as isize) as usize),
                     "clip" => {
                         if idx_value < 0 {
-                            0
+                            Ok(0)
                         } else if idx_value >= axis_size as isize {
-                            axis_size - 1
+                            Ok(axis_size - 1)
                         } else {
-                            idx_value as usize
+                            Ok(idx_value as usize)
                         }
                     }
-                    _ => {
-                        return Err(NumRs2Error::InvalidOperation(format!(
-                            "Invalid mode: {}. Must be one of 'raise', 'wrap', or 'clip'",
-                            handle_mode
-                        )));
-                    }
-                };
+                    _ => Err(NumRs2Error::InvalidOperation(format!(
+                        "Invalid mode: {}. Must be one of 'raise', 'wrap', or 'clip'",
+                        handle_mode
+                    ))),
+                })
+                .collect();
 
-                // Create index specs to select along the axis
-                let mut index_specs = vec![IndexSpec::All; array.ndim()];
-                index_specs[ax] = IndexSpec::Index(idx);
+            let processed_indices = processed_indices?;
 
-                // Get the slice at this index
-                let slice = array.index(&index_specs)?;
+            let mut result_data = Vec::new();
 
-                // Append the slice's data to the result
-                result_data.extend(slice.to_vec());
+            // Build the result by iterating through all positions and
+            // selecting the specified indices along the given axis
+            let total_elements = out_shape.iter().product::<usize>();
+
+            for result_idx in 0..total_elements {
+                // Convert linear result index to multi-dimensional coordinates
+                let mut coords = vec![0; array.ndim()];
+                let mut remaining = result_idx;
+
+                // Calculate coordinates in the output array
+                for i in (0..array.ndim()).rev() {
+                    let size = out_shape[i];
+                    coords[i] = remaining % size;
+                    remaining /= size;
+                }
+
+                // Map the coordinate along the selected axis to the original array
+                let original_axis_coord = processed_indices[coords[ax]];
+
+                // Build coordinates for the original array
+                let mut orig_coords = coords.clone();
+                orig_coords[ax] = original_axis_coord;
+
+                // Convert to linear index in original array
+                let mut orig_linear_idx = 0;
+                let mut stride = 1;
+                for i in (0..array.ndim()).rev() {
+                    orig_linear_idx += orig_coords[i] * stride;
+                    stride *= shape[i];
+                }
+
+                result_data.push(array.to_vec()[orig_linear_idx].clone());
             }
 
             // Reshape to the correct output shape

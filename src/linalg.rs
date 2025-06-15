@@ -100,9 +100,11 @@ where
         // Calculate LU decomposition
         #[cfg(feature = "matrix_decomp")]
         let (_, u, p) = lu(self)?;
-        
+
         #[cfg(not(feature = "matrix_decomp"))]
-        return Err(NumRs2Error::FeatureNotEnabled("matrix_decomp feature required for LU decomposition".to_string()));
+        return Err(NumRs2Error::FeatureNotEnabled(
+            "matrix_decomp feature required for LU decomposition".to_string(),
+        ));
 
         // For LU decomposition with row pivoting (PA = LU),
         // det(A) = det(P) * det(L) * det(U)
@@ -235,9 +237,11 @@ where
         // Step 1: Calculate LU decomposition
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
-        
+
         #[cfg(not(feature = "matrix_decomp"))]
-        return Err(NumRs2Error::FeatureNotEnabled("matrix_decomp feature required for LU decomposition".to_string()));
+        return Err(NumRs2Error::FeatureNotEnabled(
+            "matrix_decomp feature required for LU decomposition".to_string(),
+        ));
 
         // Step 2: Create a result matrix
         let mut result = Array::zeros(&[n, n]);
@@ -520,9 +524,11 @@ where
         // Step 1: Calculate LU decomposition
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
-        
+
         #[cfg(not(feature = "matrix_decomp"))]
-        return Err(NumRs2Error::FeatureNotEnabled("matrix_decomp feature required for LU decomposition".to_string()));
+        return Err(NumRs2Error::FeatureNotEnabled(
+            "matrix_decomp feature required for LU decomposition".to_string(),
+        ));
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];
@@ -1362,9 +1368,11 @@ where
         // Step 1: Calculate LU decomposition
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
-        
+
         #[cfg(not(feature = "matrix_decomp"))]
-        return Err(NumRs2Error::FeatureNotEnabled("matrix_decomp feature required for LU decomposition".to_string()));
+        return Err(NumRs2Error::FeatureNotEnabled(
+            "matrix_decomp feature required for LU decomposition".to_string(),
+        ));
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];

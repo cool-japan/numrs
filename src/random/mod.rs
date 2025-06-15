@@ -110,9 +110,7 @@ pub use distributions_enhanced::{
 
 // Use SciRS2 integration when the feature is enabled
 #[cfg(feature = "scirs")]
-pub use crate::interop::scirs_compat::{
-    noncentral_chisquare, noncentral_f,
-};
+pub use crate::interop::scirs_compat::{noncentral_chisquare, noncentral_f};
 
 /// Create a new RandomState with the given seed.
 ///
@@ -147,7 +145,7 @@ pub mod random_base {
 }
 
 // Direct re-exports for legacy compatibility
-pub use legacy::{Generator as LegacyGenerator, choice, rand, randn, seed, shuffle, uniform};
+pub use legacy::{choice, rand, randn, seed, shuffle, uniform, Generator as LegacyGenerator};
 
 #[cfg(test)]
 mod tests {

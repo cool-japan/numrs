@@ -30,7 +30,12 @@ mod test_indexing_functions {
         // Let's check the actual result and adjust
         let actual = result.to_vec();
         // Should contain elements [1, 3] (first row indices 0,2) and [4, 6] (second row indices 0,2)
-        assert!(actual.contains(&1) && actual.contains(&3) && actual.contains(&4) && actual.contains(&6));
+        assert!(
+            actual.contains(&1)
+                && actual.contains(&3)
+                && actual.contains(&4)
+                && actual.contains(&6)
+        );
         assert_eq!(actual.len(), 4);
     }
 
@@ -157,10 +162,10 @@ mod test_set_operations {
     fn test_empty_arrays() {
         let a: Array<i32> = Array::from_vec(vec![]);
         let b: Array<i32> = Array::from_vec(vec![]);
-        
+
         let intersection = intersect1d(&a, &b).unwrap();
         assert_eq!(intersection.to_vec(), Vec::<i32>::new());
-        
+
         let union = union1d(&a, &b).unwrap();
         assert_eq!(union.to_vec(), Vec::<i32>::new());
     }
@@ -229,8 +234,13 @@ mod test_conditional_operations {
         let also_always_true = Array::from_vec(vec![true, true, true]);
         let choice1 = Array::from_vec(vec![10, 10, 10]);
         let choice2 = Array::from_vec(vec![20, 20, 20]);
-        
-        let result = select(&[&always_true, &also_always_true], &[&choice1, &choice2], Some(99)).unwrap();
+
+        let result = select(
+            &[&always_true, &also_always_true],
+            &[&choice1, &choice2],
+            Some(99),
+        )
+        .unwrap();
         assert_eq!(result.to_vec(), vec![10, 10, 10]); // First condition wins
     }
 
@@ -239,7 +249,7 @@ mod test_conditional_operations {
         let cond1 = Array::from_vec(vec![true, false]);
         let choice1 = Array::from_vec(vec![1, 2]);
         let choice2 = Array::from_vec(vec![3, 4]);
-        
+
         // Mismatch: 1 condition, 2 choices
         let result = select(&[&cond1], &[&choice1, &choice2], Some(0));
         assert!(result.is_err());
@@ -294,7 +304,7 @@ mod test_grid_functions {
     fn test_mgrid_basic() {
         let x = linspace(0.0, 2.0, 3);
         let y = linspace(0.0, 2.0, 3);
-        
+
         let grids = mgrid(&[&x, &y]).unwrap();
         let xx = &grids[0];
         let yy = &grids[1];
@@ -315,7 +325,7 @@ mod test_grid_functions {
     fn test_ogrid_basic() {
         let x = linspace(0.0, 2.0, 3);
         let y = linspace(0.0, 2.0, 3);
-        
+
         let grids = ogrid(&[&x, &y]).unwrap();
         let xx = &grids[0];
         let yy = &grids[1];
@@ -383,7 +393,7 @@ mod test_new_indexing_functions {
         let indices = Array::from_vec(vec![2, 0, 1, 1]).reshape(&[2, 2]);
         let values = Array::from_vec(vec![10, 20, 30, 40]).reshape(&[2, 2]);
         put_along_axis(&mut a, &indices, &values, 1).unwrap();
-        
+
         assert_eq!(a.get(&[0, 2]).unwrap(), 10);
         assert_eq!(a.get(&[0, 0]).unwrap(), 20);
         assert_eq!(a.get(&[1, 1]).unwrap(), 40); // Last value overwrites
@@ -395,7 +405,7 @@ mod test_new_indexing_functions {
         let indices = Array::from_vec(vec![0, 2, 4]);
         let values = Array::from_vec(vec![10, 20, 30]);
         put_along_axis(&mut a, &indices, &values, 0).unwrap();
-        
+
         assert_eq!(a.to_vec(), vec![10, 0, 20, 0, 30]);
     }
 
@@ -455,7 +465,11 @@ mod test_fromfunction {
 
     #[test]
     fn test_fromfunction_basic_2d() {
-        let result = fromfunction(|indices: &[usize]| (indices[0] + indices[1]) as f64, &[3, 3]).unwrap();
+        let result = fromfunction(
+            |indices: &[usize]| (indices[0] + indices[1]) as f64,
+            &[3, 3],
+        )
+        .unwrap();
         assert_eq!(result.get(&[0, 0]).unwrap(), 0.0);
         assert_eq!(result.get(&[0, 1]).unwrap(), 1.0);
         assert_eq!(result.get(&[1, 0]).unwrap(), 1.0);
@@ -465,7 +479,11 @@ mod test_fromfunction {
 
     #[test]
     fn test_fromfunction_multiplication() {
-        let result = fromfunction(|indices: &[usize]| (indices[0] * indices[1]) as i32, &[3, 4]).unwrap();
+        let result = fromfunction(
+            |indices: &[usize]| (indices[0] * indices[1]) as i32,
+            &[3, 4],
+        )
+        .unwrap();
         assert_eq!(result.get(&[0, 0]).unwrap(), 0);
         assert_eq!(result.get(&[0, 3]).unwrap(), 0);
         assert_eq!(result.get(&[1, 3]).unwrap(), 3);
@@ -480,7 +498,11 @@ mod test_fromfunction {
 
     #[test]
     fn test_fromfunction_3d() {
-        let result = fromfunction(|indices: &[usize]| (indices[0] + indices[1] + indices[2]) as i32, &[2, 2, 2]).unwrap();
+        let result = fromfunction(
+            |indices: &[usize]| (indices[0] + indices[1] + indices[2]) as i32,
+            &[2, 2, 2],
+        )
+        .unwrap();
         assert_eq!(result.get(&[0, 0, 0]).unwrap(), 0);
         assert_eq!(result.get(&[1, 1, 1]).unwrap(), 3);
         assert_eq!(result.shape(), vec![2, 2, 2]);
@@ -489,15 +511,23 @@ mod test_fromfunction {
     #[test]
     fn test_fromfunction_distance() {
         // Create a distance-from-center function
-        let result = fromfunction(|indices: &[usize]| {
-            let x = indices[0] as f64 - 1.0; // Center at (1, 1)
-            let y = indices[1] as f64 - 1.0;
-            (x*x + y*y).sqrt()
-        }, &[3, 3]).unwrap();
-        
+        let result = fromfunction(
+            |indices: &[usize]| {
+                let x = indices[0] as f64 - 1.0; // Center at (1, 1)
+                let y = indices[1] as f64 - 1.0;
+                (x * x + y * y).sqrt()
+            },
+            &[3, 3],
+        )
+        .unwrap();
+
         assert_eq!(result.get(&[1, 1]).unwrap(), 0.0); // Center
         assert_relative_eq!(result.get(&[0, 1]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(result.get(&[0, 0]).unwrap(), std::f64::consts::SQRT_2, epsilon = 1e-10);
+        assert_relative_eq!(
+            result.get(&[0, 0]).unwrap(),
+            std::f64::consts::SQRT_2,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
@@ -526,8 +556,9 @@ mod test_unique_axis {
     fn test_unique_axis_rows() {
         // Test finding unique rows (axis=0)
         let a = Array::from_vec(vec![1, 2, 3, 1, 2, 3, 4, 5, 6]).reshape(&[3, 3]);
-        let (unique_rows, indices, inverse, counts) = unique_axis(&a, Some(0), true, true, true).unwrap();
-        
+        let (unique_rows, indices, inverse, counts) =
+            unique_axis(&a, Some(0), true, true, true).unwrap();
+
         assert_eq!(unique_rows.shape(), vec![2, 3]); // Two unique rows
         assert_eq!(indices.to_vec(), vec![0, 2]); // First occurrences
         assert_eq!(inverse.to_vec(), vec![0, 0, 1]); // Row 0 and 1 are the same, row 2 is different
@@ -538,8 +569,9 @@ mod test_unique_axis {
     fn test_unique_axis_columns() {
         // Test finding unique columns (axis=1)
         let a = Array::from_vec(vec![1, 2, 1, 3, 4, 3]).reshape(&[2, 3]);
-        let (unique_cols, indices, inverse, counts) = unique_axis(&a, Some(1), true, true, true).unwrap();
-        
+        let (unique_cols, indices, inverse, counts) =
+            unique_axis(&a, Some(1), true, true, true).unwrap();
+
         assert_eq!(unique_cols.shape(), vec![2, 2]); // Two unique columns
         assert_eq!(indices.to_vec(), vec![0, 1]); // First occurrences
         assert_eq!(inverse.to_vec(), vec![0, 1, 0]); // Col 0 and 2 are the same, col 1 is different
@@ -550,8 +582,9 @@ mod test_unique_axis {
     fn test_unique_axis_all_unique() {
         // Test when all rows are unique
         let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-        let (unique_rows, indices, inverse, counts) = unique_axis(&a, Some(0), true, true, true).unwrap();
-        
+        let (unique_rows, indices, inverse, counts) =
+            unique_axis(&a, Some(0), true, true, true).unwrap();
+
         assert_eq!(unique_rows.shape(), vec![2, 3]); // All rows are unique
         assert_eq!(indices.to_vec(), vec![0, 1]);
         assert_eq!(inverse.to_vec(), vec![0, 1]);
@@ -562,8 +595,9 @@ mod test_unique_axis {
     fn test_unique_axis_single_row() {
         // Test with single row
         let a = Array::from_vec(vec![1, 2, 3]).reshape(&[1, 3]);
-        let (unique_rows, indices, inverse, counts) = unique_axis(&a, Some(0), true, true, true).unwrap();
-        
+        let (unique_rows, indices, inverse, counts) =
+            unique_axis(&a, Some(0), true, true, true).unwrap();
+
         assert_eq!(unique_rows.shape(), vec![1, 3]);
         assert_eq!(indices.to_vec(), vec![0]);
         assert_eq!(inverse.to_vec(), vec![0]);
@@ -581,8 +615,9 @@ mod test_unique_axis {
     fn test_unique_axis_no_return_options() {
         // Test with all return options disabled
         let a = Array::from_vec(vec![1, 2, 1, 3, 4, 3]).reshape(&[2, 3]);
-        let (unique_cols, indices, inverse, counts) = unique_axis(&a, Some(1), false, false, false).unwrap();
-        
+        let (unique_cols, indices, inverse, counts) =
+            unique_axis(&a, Some(1), false, false, false).unwrap();
+
         assert_eq!(unique_cols.shape(), vec![2, 2]); // Two unique columns
         assert_eq!(indices.to_vec(), Vec::<usize>::new()); // Empty
         assert_eq!(inverse.to_vec(), Vec::<usize>::new()); // Empty
@@ -642,12 +677,10 @@ mod test_enhanced_eye_identity {
     fn test_identity_basic() {
         let identity = Array::<f64>::identity(4);
         assert_eq!(identity.shape(), vec![4, 4]);
-        assert_eq!(identity.to_vec(), vec![
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0
-        ]);
+        assert_eq!(
+            identity.to_vec(),
+            vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        );
     }
 }
 
@@ -661,7 +694,7 @@ mod test_frombuffer_fromiter {
         let buffer = unsafe {
             std::slice::from_raw_parts(
                 data.as_ptr() as *const u8,
-                data.len() * std::mem::size_of::<i32>()
+                data.len() * std::mem::size_of::<i32>(),
             )
         };
         let result = frombuffer::<i32>(buffer, std::mem::size_of::<i32>(), -1, 0).unwrap();
@@ -674,7 +707,7 @@ mod test_frombuffer_fromiter {
         let buffer = unsafe {
             std::slice::from_raw_parts(
                 data.as_ptr() as *const u8,
-                data.len() * std::mem::size_of::<f64>()
+                data.len() * std::mem::size_of::<f64>(),
             )
         };
         let result = frombuffer::<f64>(buffer, std::mem::size_of::<f64>(), 3, 0).unwrap();
@@ -687,7 +720,7 @@ mod test_frombuffer_fromiter {
         let buffer = unsafe {
             std::slice::from_raw_parts(
                 data.as_ptr() as *const u8,
-                data.len() * std::mem::size_of::<i32>()
+                data.len() * std::mem::size_of::<i32>(),
             )
         };
         let offset = 2 * std::mem::size_of::<i32>(); // Skip first 2 elements
@@ -701,7 +734,7 @@ mod test_frombuffer_fromiter {
         let buffer = unsafe {
             std::slice::from_raw_parts(
                 data.as_ptr() as *const u8,
-                data.len() * std::mem::size_of::<i32>()
+                data.len() * std::mem::size_of::<i32>(),
             )
         };
         let result = frombuffer::<i32>(buffer, 8, -1, 0); // Wrong size
@@ -714,7 +747,7 @@ mod test_frombuffer_fromiter {
         let buffer = unsafe {
             std::slice::from_raw_parts(
                 data.as_ptr() as *const u8,
-                data.len() * std::mem::size_of::<i32>()
+                data.len() * std::mem::size_of::<i32>(),
             )
         };
         let result = frombuffer::<i32>(buffer, std::mem::size_of::<i32>(), -1, 100);
@@ -749,10 +782,7 @@ mod test_frombuffer_fromiter {
     #[test]
     fn test_fromiter_complex() {
         // Test with more complex iterator
-        let result = fromiter(
-            (0..4).map(|x| x * x), 
-            Some(&[2, 2])
-        ).unwrap();
+        let result = fromiter((0..4).map(|x| x * x), Some(&[2, 2])).unwrap();
         assert_eq!(result.shape(), vec![2, 2]);
         assert_eq!(result.to_vec(), vec![0, 1, 4, 9]);
     }

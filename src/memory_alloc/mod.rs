@@ -18,12 +18,10 @@ pub mod strategy;
 // Re-export the main types and functions for convenience
 pub use aligned::{AlignedAllocator, AlignmentConfig};
 pub use arena::{ArenaAllocator, ArenaConfig};
-pub use benchmarking::{
-    AllocatorBenchmark, BenchmarkConfig, BenchmarkResults, benchmark_configs,
-};
+pub use benchmarking::{benchmark_configs, AllocatorBenchmark, BenchmarkConfig, BenchmarkResults};
 pub use cache_optimization::{
-    CacheOptimizedAllocator, CacheConfig, CacheLevel, CacheMetrics, 
-    CacheOptimizationRecommendation, CacheOptimizationType, cache_constants,
+    cache_constants, CacheConfig, CacheLevel, CacheMetrics, CacheOptimizationRecommendation,
+    CacheOptimizationType, CacheOptimizedAllocator,
 };
 pub use enhanced_traits::{
     EnhancedAllocatorBridge, IntelligentAllocationStrategy, NumericalArrayAllocator,
@@ -35,12 +33,12 @@ pub use large_scale::{
     MemoryTracker, SpillStats,
 };
 pub use monitored_allocator::{
-    MonitoredAllocator, MonitoredAllocatorFactory, MonitoringConfig, presets,
+    presets, MonitoredAllocator, MonitoredAllocatorFactory, MonitoringConfig,
 };
 pub use out_of_core::{CacheStats, CacheStrategy, OutOfCoreArray, OutOfCoreConfig};
 pub use performance_tuning::{
-    PerformanceTuner, PerformanceMetrics, OptimizationRecommendation, OptimizationType, TuningConfig,
-    init_global_tuner, with_global_tuner, with_global_tuner_mut,
+    init_global_tuner, with_global_tuner, with_global_tuner_mut, OptimizationRecommendation,
+    OptimizationType, PerformanceMetrics, PerformanceTuner, TuningConfig,
 };
 pub use pool::{PoolAllocator, PoolConfig};
 pub use strategy::{get_default_allocator, AllocStrategy, MemoryAllocator};

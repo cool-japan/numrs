@@ -108,7 +108,7 @@ mod tests {
         let ax = a.matmul(&x.reshape(&[2, 1])).unwrap().reshape(&[2]);
         let ax_data = ax.to_vec();
         let b_data = b.to_vec();
-        
+
         assert_relative_eq!(ax_data[0], b_data[0], epsilon = 1e-10);
         assert_relative_eq!(ax_data[1], b_data[1], epsilon = 1e-10);
     }

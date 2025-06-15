@@ -87,7 +87,10 @@ pub mod util;
 pub mod views;
 
 // Transitional modules (deprecated - use new core structure)
-#[deprecated(since = "0.2.0", note = "Use the new core module structure instead. See migration guide.")]
+#[deprecated(
+    since = "0.2.0",
+    note = "Use the new core module structure instead. See migration guide."
+)]
 pub mod new_modules {
     pub mod eigenvalues;
     pub mod fft;
@@ -116,7 +119,8 @@ pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
     pub use crate::array_ops::{
-        atleast_1d, atleast_2d, atleast_3d, flatten, frombuffer, fromfunction, fromiter, moveaxis, ravel, select, swapaxes, where_cond,
+        atleast_1d, atleast_2d, atleast_3d, flatten, frombuffer, fromfunction, fromiter, moveaxis,
+        ravel, select, swapaxes, where_cond,
     };
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
@@ -133,10 +137,10 @@ pub mod prelude {
     pub use crate::linalg::*;
     #[allow(ambiguous_glob_reexports)]
     pub use crate::linalg_extended::*;
-    pub use crate::linalg_optimized::{OptimizedBlas, lu_optimized, transpose_optimized};
+    pub use crate::linalg_optimized::{lu_optimized, transpose_optimized, OptimizedBlas};
     pub use crate::linalg_parallel::ParallelLinAlg;
     pub use crate::linalg_stable::{
-        StableDecompositions, QRPivotedResult, CholeskyStableResult, SVDStableResult
+        CholeskyStableResult, QRPivotedResult, SVDStableResult, StableDecompositions,
     };
     pub use crate::masked::MaskedArray;
     pub use crate::math::*;
@@ -147,7 +151,9 @@ pub mod prelude {
     pub use crate::random::distributions;
     pub use crate::random::generator::{default_rng, BitGenerator, Generator, StdBitGenerator};
     pub use crate::random::{self, RandomState};
-    pub use crate::set_ops::{in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options};
+    pub use crate::set_ops::{
+        in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options,
+    };
     pub use crate::signal;
     pub use crate::simd::*;
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
@@ -192,27 +198,26 @@ pub mod prelude {
         reset_global_allocator,
     };
     pub use crate::memory_alloc::{
-        AlignedAllocator, AlignmentConfig, AllocStrategy, ArenaAllocator, ArenaConfig,
-        PoolAllocator, PoolConfig, CacheOptimizedAllocator, CacheConfig, CacheLevel,
+        AlignedAllocator, AlignmentConfig, AllocStrategy, ArenaAllocator, ArenaConfig, CacheConfig,
+        CacheLevel, CacheOptimizedAllocator, PoolAllocator, PoolConfig,
     };
 
     // Cache-aware algorithms
     pub use crate::algorithms::{
-        CacheAwareArrayOps, CacheAwareFFT, CacheAwareConvolution, BandwidthOptimizer,
-        MemoryOperation, BandwidthEstimate,
+        BandwidthEstimate, BandwidthOptimizer, CacheAwareArrayOps, CacheAwareConvolution,
+        CacheAwareFFT, MemoryOperation,
     };
 
     // Parallel processing
-    pub use crate::parallel::{
-        ParallelContext, ParallelScheduler, SchedulerConfig, TaskPriority,
-        LoadBalancer, WorkloadMetrics, BalancingStrategy,
-        ParallelArrayOps, ParallelMatrixOps, ParallelFFT,
-        WorkStealingPool, Task, TaskResult, task,
-        ParallelAllocator, ThreadLocalAllocator, ParallelAllocatorConfig,
-        initialize_parallel_context, global_parallel_context, shutdown_parallel_context,
-    };
     pub use crate::parallel::parallel_algorithms::ParallelConfig as ParallelAlgorithmConfig;
-    
+    pub use crate::parallel::{
+        global_parallel_context, initialize_parallel_context, shutdown_parallel_context, task,
+        BalancingStrategy, LoadBalancer, ParallelAllocator, ParallelAllocatorConfig,
+        ParallelArrayOps, ParallelContext, ParallelFFT, ParallelMatrixOps, ParallelScheduler,
+        SchedulerConfig, Task, TaskPriority, TaskResult, ThreadLocalAllocator, WorkStealingPool,
+        WorkloadMetrics,
+    };
+
     // Enhanced memory management traits
     pub use crate::memory_alloc::{
         EnhancedAllocatorBridge, IntelligentAllocationStrategy, NumericalArrayAllocator,
@@ -245,8 +250,8 @@ pub mod prelude {
 
     // Advanced array operations (Phase 3)
     pub use crate::arrays::{
-        Shape, ArrayView, IndexSpec, ResolvedIndex, BroadcastOp, BroadcastEngine, BroadcastReduction,
-        FancyIndexEngine, FancyIndexResult, SpecializedIndexing, BooleanCombineOp,
+        ArrayView, BooleanCombineOp, BroadcastEngine, BroadcastOp, BroadcastReduction,
+        FancyIndexEngine, FancyIndexResult, IndexSpec, ResolvedIndex, Shape, SpecializedIndexing,
     };
 
     // Re-export advanced types
@@ -481,7 +486,11 @@ mod tests {
         // Test SIMD operations
         let sqrt_a = simd_sqrt(&a);
         assert_relative_eq!(sqrt_a.to_vec()[0], 1.0, epsilon = 1e-10);
-        assert_relative_eq!(sqrt_a.to_vec()[1], std::f64::consts::SQRT_2, epsilon = 1e-10);
+        assert_relative_eq!(
+            sqrt_a.to_vec()[1],
+            std::f64::consts::SQRT_2,
+            epsilon = 1e-10
+        );
         assert_relative_eq!(sqrt_a.to_vec()[2], 1.7320508075688772, epsilon = 1e-10);
         assert_relative_eq!(sqrt_a.to_vec()[3], 2.0, epsilon = 1e-10);
 
@@ -1086,7 +1095,11 @@ mod tests {
 
         let result = sqrt(&a);
         assert_relative_eq!(result.to_vec()[0], 1.0, epsilon = 1e-10);
-        assert_relative_eq!(result.to_vec()[1], std::f64::consts::SQRT_2, epsilon = 1e-10);
+        assert_relative_eq!(
+            result.to_vec()[1],
+            std::f64::consts::SQRT_2,
+            epsilon = 1e-10
+        );
         assert_relative_eq!(result.to_vec()[2], 1.7320508075688772, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[3], 2.0, epsilon = 1e-10);
 

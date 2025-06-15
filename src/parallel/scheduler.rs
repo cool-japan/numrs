@@ -4,11 +4,11 @@
 //! execution with priority queues, thread affinity, and adaptive scheduling.
 
 use crate::error::{NumRs2Error, Result};
+use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use std::sync::{Arc, Mutex, Condvar};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use std::cmp::Ordering;
 
 /// Task priority levels for scheduling
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -121,7 +121,7 @@ impl Ord for ScheduledTask {
         // Higher priority first, then earlier submission time
         match self.priority.cmp(&other.priority) {
             Ordering::Equal => other.submitted_at.cmp(&self.submitted_at), // Earlier tasks first
-            other => other, // Higher priority first
+            other => other,                                                // Higher priority first
         }
     }
 }
@@ -246,11 +246,12 @@ impl ParallelScheduler {
     }
 
     /// Submit a task for execution
-    pub fn submit_task<F>(&self, 
-        task: F, 
+    pub fn submit_task<F>(
+        &self,
+        task: F,
         priority: TaskPriority,
         estimated_duration: Option<Duration>,
-        thread_affinity: Option<usize>
+        thread_affinity: Option<usize>,
     ) -> Result<u64>
     where
         F: FnOnce() -> TaskResult + Send + 'static,
@@ -271,7 +272,7 @@ impl ParallelScheduler {
         };
 
         let mut queue = self.global_queue.lock().unwrap();
-        
+
         // Check queue capacity
         if queue.len() >= self.config.max_queue_size {
             let mut stats = self.scheduler_stats.lock().unwrap();
@@ -282,7 +283,7 @@ impl ParallelScheduler {
         }
 
         queue.push(scheduled_task);
-        
+
         {
             let mut stats = self.scheduler_stats.lock().unwrap();
             stats.tasks_submitted += 1;
@@ -306,14 +307,15 @@ impl ParallelScheduler {
     /// Get current scheduler statistics
     pub fn statistics(&self) -> SchedulerStats {
         let mut stats = self.scheduler_stats.lock().unwrap();
-        
+
         // Update thread efficiencies
         if let Ok(thread_states) = self.thread_states.try_lock() {
-            stats.thread_efficiency = thread_states.iter()
+            stats.thread_efficiency = thread_states
+                .iter()
                 .map(|state| state.efficiency())
                 .collect();
         }
-        
+
         stats.clone()
     }
 
@@ -340,7 +342,7 @@ impl ParallelScheduler {
         // Wait for all worker threads to finish
         // Note: We can't consume self.worker_threads here due to borrowing rules
         // In a real implementation, we'd need a different approach
-        
+
         Ok(())
     }
 
@@ -373,10 +375,10 @@ impl ParallelScheduler {
             match task {
                 Some(scheduled_task) => {
                     let start_time = Instant::now();
-                    
+
                     // Execute the task
                     let result = (scheduled_task.task)();
-                    
+
                     let execution_time = start_time.elapsed();
 
                     // Update thread state
@@ -395,21 +397,22 @@ impl ParallelScheduler {
                             TaskResult::Success => stats.tasks_completed += 1,
                             TaskResult::Error(_) | TaskResult::Cancelled => stats.tasks_failed += 1,
                         }
-                        
+
                         // Update average execution time (simple moving average)
                         let total_tasks = stats.tasks_completed + stats.tasks_failed;
                         if total_tasks > 0 {
                             let old_time_nanos = stats.average_execution_time.as_nanos() as u64;
                             let new_time_nanos = execution_time.as_nanos() as u64;
-                            let avg_nanos = (old_time_nanos * (total_tasks - 1) + new_time_nanos) / total_tasks;
+                            let avg_nanos =
+                                (old_time_nanos * (total_tasks - 1) + new_time_nanos) / total_tasks;
                             stats.average_execution_time = Duration::from_nanos(avg_nanos);
                         }
                     }
-                },
+                }
                 None => {
                     // No tasks available, wait or try work stealing
                     let idle_start = Instant::now();
-                    
+
                     if config.enable_adaptive_scheduling {
                         // Try work stealing from other threads
                         if Self::try_work_stealing(thread_id, &thread_states, &config) {
@@ -420,9 +423,10 @@ impl ParallelScheduler {
                     // Wait for notification or timeout
                     let flag = shutdown_flag.lock().unwrap();
                     if !*flag {
-                        let _ = condvar.wait_timeout(flag, Duration::from_millis(config.time_slice_ms));
+                        let _ =
+                            condvar.wait_timeout(flag, Duration::from_millis(config.time_slice_ms));
                     }
-                    
+
                     let idle_time = idle_start.elapsed();
                     {
                         let mut states = thread_states.lock().unwrap();
@@ -443,11 +447,12 @@ impl ParallelScheduler {
     ) -> bool {
         if let Ok(mut states) = thread_states.try_lock() {
             let current_time = Instant::now();
-            
+
             // Check if enough time has passed since last steal attempt
             if let Some(current_state) = states.get_mut(thread_id) {
-                if current_time.duration_since(current_state.last_steal_time) < 
-                   Duration::from_millis(config.time_slice_ms) {
+                if current_time.duration_since(current_state.last_steal_time)
+                    < Duration::from_millis(config.time_slice_ms)
+                {
                     return false;
                 }
                 current_state.last_steal_time = current_time;
@@ -502,21 +507,23 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = Arc::clone(&counter);
 
-        let task_id = scheduler.submit_task(
-            move || {
-                counter_clone.fetch_add(1, Ordering::SeqCst);
-                TaskResult::Success
-            },
-            TaskPriority::Normal,
-            None,
-            None,
-        ).unwrap();
+        let task_id = scheduler
+            .submit_task(
+                move || {
+                    counter_clone.fetch_add(1, Ordering::SeqCst);
+                    TaskResult::Success
+                },
+                TaskPriority::Normal,
+                None,
+                None,
+            )
+            .unwrap();
 
         assert!(task_id > 0);
-        
+
         // Give some time for task execution
         std::thread::sleep(Duration::from_millis(100));
-        
+
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
@@ -528,17 +535,24 @@ mod tests {
         let execution_order = Arc::new(Mutex::new(Vec::new()));
 
         // Submit tasks in reverse priority order
-        for priority in [TaskPriority::Low, TaskPriority::Normal, TaskPriority::High, TaskPriority::Critical] {
+        for priority in [
+            TaskPriority::Low,
+            TaskPriority::Normal,
+            TaskPriority::High,
+            TaskPriority::Critical,
+        ] {
             let order_clone = Arc::clone(&execution_order);
-            let _ = scheduler.submit_task(
-                move || {
-                    order_clone.lock().unwrap().push(priority);
-                    TaskResult::Success
-                },
-                priority,
-                None,
-                None,
-            ).unwrap();
+            let _ = scheduler
+                .submit_task(
+                    move || {
+                        order_clone.lock().unwrap().push(priority);
+                        TaskResult::Success
+                    },
+                    priority,
+                    None,
+                    None,
+                )
+                .unwrap();
         }
 
         // Wait for execution
@@ -546,7 +560,7 @@ mod tests {
 
         let order = execution_order.lock().unwrap();
         assert!(order.len() >= 4);
-        
+
         // Critical tasks should be executed first
         assert_eq!(order[0], TaskPriority::Critical);
     }
@@ -558,15 +572,17 @@ mod tests {
 
         // Submit some tasks
         for _ in 0..5 {
-            let _ = scheduler.submit_task(
-                || {
-                    std::thread::sleep(Duration::from_millis(10));
-                    TaskResult::Success
-                },
-                TaskPriority::Normal,
-                None,
-                None,
-            ).unwrap();
+            let _ = scheduler
+                .submit_task(
+                    || {
+                        std::thread::sleep(Duration::from_millis(10));
+                        TaskResult::Success
+                    },
+                    TaskPriority::Normal,
+                    None,
+                    None,
+                )
+                .unwrap();
         }
 
         // Wait for execution
@@ -586,13 +602,15 @@ mod tests {
         let executed = Arc::new(AtomicU32::new(0));
         let executed_clone = Arc::clone(&executed);
 
-        let task_id = scheduler.submit_urgent_task(move || {
-            executed_clone.store(1, Ordering::SeqCst);
-            TaskResult::Success
-        }).unwrap();
+        let task_id = scheduler
+            .submit_urgent_task(move || {
+                executed_clone.store(1, Ordering::SeqCst);
+                TaskResult::Success
+            })
+            .unwrap();
 
         assert!(task_id > 0);
-        
+
         std::thread::sleep(Duration::from_millis(100));
         assert_eq!(executed.load(Ordering::SeqCst), 1);
     }

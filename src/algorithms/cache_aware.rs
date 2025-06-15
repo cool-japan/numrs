@@ -7,11 +7,11 @@
 #![allow(clippy::needless_range_loop)]
 
 use crate::error::{NumRs2Error, Result};
-use crate::memory_alloc::cache_optimization::{CacheConfig, CacheLevel};
 #[cfg(test)]
 #[allow(unused_imports)]
 use crate::memory_alloc::cache_optimization::cache_constants;
-use crate::traits::{NumericElement, FloatingPoint};
+use crate::memory_alloc::cache_optimization::{CacheConfig, CacheLevel};
+use crate::traits::{FloatingPoint, NumericElement};
 use std::marker::PhantomData;
 
 /// Cache-aware array operations with blocking and tiling strategies
@@ -38,21 +38,33 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
     pub fn optimal_tile_size(&self, element_size: usize) -> (usize, usize) {
         let cache_size = self.cache_config.l1_cache_size / 4; // Use 1/4 of L1 cache
         let elements_per_tile = cache_size / element_size;
-        
+
         // For square tiles
         let side_length = (elements_per_tile as f64).sqrt() as usize;
         let power_of_two_side = side_length.next_power_of_two() / 2;
-        
+
         (power_of_two_side, power_of_two_side)
     }
 
     /// Cache-blocked matrix transpose
-    pub fn transpose_blocked(&self, src: &[T], dst: &mut [T], rows: usize, cols: usize) -> Result<()>
+    pub fn transpose_blocked(
+        &self,
+        src: &[T],
+        dst: &mut [T],
+        rows: usize,
+        cols: usize,
+    ) -> Result<()>
     where
         T: Copy,
     {
         if src.len() != rows * cols || dst.len() != rows * cols {
-            return Err(NumRs2Error::Core(crate::error::core::CoreError::dimension_mismatch("Invalid matrix dimensions", None, None)));
+            return Err(NumRs2Error::Core(
+                crate::error::core::CoreError::dimension_mismatch(
+                    "Invalid matrix dimensions",
+                    None,
+                    None,
+                ),
+            ));
         }
 
         let (tile_rows, tile_cols) = self.optimal_tile_size(std::mem::size_of::<T>());
@@ -84,7 +96,7 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
         let block_size = block_size.max(1);
 
         let mut total = T::zero();
-        
+
         for chunk in data.chunks(block_size) {
             let mut partial_sum = T::zero();
             for &value in chunk {
@@ -97,12 +109,25 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
     }
 
     /// Cache-aware matrix-vector multiplication
-    pub fn matvec_blocked(&self, matrix: &[T], vector: &[T], result: &mut [T], rows: usize, cols: usize) -> Result<()>
+    pub fn matvec_blocked(
+        &self,
+        matrix: &[T],
+        vector: &[T],
+        result: &mut [T],
+        rows: usize,
+        cols: usize,
+    ) -> Result<()>
     where
         T: Copy + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
     {
         if matrix.len() != rows * cols || vector.len() != cols || result.len() != rows {
-            return Err(NumRs2Error::Core(crate::error::core::CoreError::dimension_mismatch("Invalid dimensions for matrix-vector multiplication", None, None)));
+            return Err(NumRs2Error::Core(
+                crate::error::core::CoreError::dimension_mismatch(
+                    "Invalid dimensions for matrix-vector multiplication",
+                    None,
+                    None,
+                ),
+            ));
         }
 
         let block_size = self.cache_config.l1_cache_size / (8 * std::mem::size_of::<T>());
@@ -164,10 +189,10 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
         let mid = len / 2;
         self.merge_sort_recursive(&mut data[..mid])?;
         self.merge_sort_recursive(&mut data[mid..])?;
-        
+
         // Merge the two sorted halves
         self.merge_in_place(data, mid)?;
-        
+
         Ok(())
     }
 
@@ -179,12 +204,12 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
         for i in 1..data.len() {
             let key = data[i];
             let mut j = i;
-            
+
             while j > 0 && data[j - 1] > key {
                 data[j] = data[j - 1];
                 j -= 1;
             }
-            
+
             data[j] = key;
         }
     }
@@ -197,15 +222,15 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
         // Use a temporary buffer for merging
         let left_len = mid;
         let _right_len = data.len() - mid;
-        
+
         // Allocate temporary storage
         let mut temp = Vec::with_capacity(left_len);
         temp.extend_from_slice(&data[..mid]);
-        
+
         let mut i = 0; // Index for temp (left half)
         let mut j = mid; // Index for right half
         let mut k = 0; // Index for merged result
-        
+
         // Merge temp and right half back into data
         while i < temp.len() && j < data.len() {
             if temp[i] <= data[j] {
@@ -217,25 +242,37 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
             }
             k += 1;
         }
-        
+
         // Copy remaining elements from temp
         while i < temp.len() {
             data[k] = temp[i];
             i += 1;
             k += 1;
         }
-        
+
         Ok(())
     }
 
     /// Cache-aware stride optimization for array access patterns
-    pub fn optimize_stride_access<F>(&self, data: &mut [T], rows: usize, cols: usize, mut operation: F) -> Result<()>
+    pub fn optimize_stride_access<F>(
+        &self,
+        data: &mut [T],
+        rows: usize,
+        cols: usize,
+        mut operation: F,
+    ) -> Result<()>
     where
         F: FnMut(&mut T, usize, usize),
         T: Copy,
     {
         if data.len() != rows * cols {
-            return Err(NumRs2Error::Core(crate::error::core::CoreError::dimension_mismatch("Invalid array dimensions", None, None)));
+            return Err(NumRs2Error::Core(
+                crate::error::core::CoreError::dimension_mismatch(
+                    "Invalid array dimensions",
+                    None,
+                    None,
+                ),
+            ));
         }
 
         let (tile_rows, tile_cols) = self.optimal_tile_size(std::mem::size_of::<T>());
@@ -288,7 +325,12 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
         }
 
         if !n.is_power_of_two() {
-            return Err(NumRs2Error::Core(crate::error::core::CoreError::invalid_operation("FFT", "requires power-of-two length")));
+            return Err(NumRs2Error::Core(
+                crate::error::core::CoreError::invalid_operation(
+                    "FFT",
+                    "requires power-of-two length",
+                ),
+            ));
         }
 
         self.fft_recursive(data, false)?;
@@ -303,20 +345,25 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
         }
 
         if !n.is_power_of_two() {
-            return Err(NumRs2Error::Core(crate::error::core::CoreError::invalid_operation("IFFT", "requires power-of-two length")));
+            return Err(NumRs2Error::Core(
+                crate::error::core::CoreError::invalid_operation(
+                    "IFFT",
+                    "requires power-of-two length",
+                ),
+            ));
         }
 
         self.fft_recursive(data, true)?;
-        
+
         // Scale by 1/n for inverse transform
         let scale = num_complex::Complex::new(
             <T as NumericElement>::one() / T::from_f64(n as f64).unwrap(),
-            <T as NumericElement>::zero()
+            <T as NumericElement>::zero(),
         );
         for sample in data.iter_mut() {
             *sample = *sample * scale;
         }
-        
+
         Ok(())
     }
 
@@ -335,7 +382,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
         // Divide into even and odd indices
         let mut even = Vec::with_capacity(n / 2);
         let mut odd = Vec::with_capacity(n / 2);
-        
+
         for i in 0..n / 2 {
             even.push(data[2 * i]);
             odd.push(data[2 * i + 1]);
@@ -353,11 +400,11 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
             } else {
                 -two_pi * T::from_f64(i as f64).unwrap() / T::from_f64(n as f64).unwrap()
             };
-            
+
             let cos_angle = angle.cos();
             let sin_angle = angle.sin();
             let twiddle = num_complex::Complex::new(cos_angle, sin_angle);
-            
+
             let t = twiddle * odd[i];
             data[i] = even[i] + t;
             data[i + n / 2] = even[i] - t;
@@ -369,7 +416,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
     /// Iterative FFT for small arrays (better cache locality)
     fn fft_iterative(&self, data: &mut [num_complex::Complex<T>], inverse: bool) -> Result<()> {
         let n = data.len();
-        
+
         // Bit-reverse the input
         let mut j = 0;
         for i in 1..n {
@@ -379,7 +426,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
                 bit >>= 1;
             }
             j ^= bit;
-            
+
             if i < j {
                 data.swap(i, j);
             }
@@ -394,13 +441,16 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
             } else {
                 -two_pi / T::from_f64(length as f64).unwrap()
             };
-            
+
             let cos_angle = angle.cos();
             let sin_angle = angle.sin();
             let w_len = num_complex::Complex::new(cos_angle, sin_angle);
-            
+
             for i in (0..n).step_by(length) {
-                let mut w = num_complex::Complex::new(<T as NumericElement>::one(), <T as NumericElement>::zero());
+                let mut w = num_complex::Complex::new(
+                    <T as NumericElement>::one(),
+                    <T as NumericElement>::zero(),
+                );
                 for j in 0..length / 2 {
                     let u = data[i + j];
                     let v = data[i + j + length / 2] * w;
@@ -409,7 +459,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
                     w = w * w_len;
                 }
             }
-            
+
             length <<= 1;
         }
 
@@ -453,7 +503,13 @@ impl<T: NumericElement + Copy> CacheAwareConvolution<T> {
             || kernel.len() != kernel_height * kernel_width
             || output.len() != output_height * output_width
         {
-            return Err(NumRs2Error::Core(crate::error::core::CoreError::dimension_mismatch("Invalid convolution dimensions", None, None)));
+            return Err(NumRs2Error::Core(
+                crate::error::core::CoreError::dimension_mismatch(
+                    "Invalid convolution dimensions",
+                    None,
+                    None,
+                ),
+            ));
         }
 
         // Calculate block sizes for cache efficiency
@@ -472,20 +528,20 @@ impl<T: NumericElement + Copy> CacheAwareConvolution<T> {
                 for out_row in out_row_block..out_row_end {
                     for out_col in out_col_block..out_col_end {
                         let mut sum = T::zero();
-                        
+
                         // Convolve with kernel
                         for k_row in 0..kernel_height {
                             for k_col in 0..kernel_width {
                                 let in_row = out_row + k_row;
                                 let in_col = out_col + k_col;
-                                
+
                                 let input_val = input[in_row * input_width + in_col];
                                 let kernel_val = kernel[k_row * kernel_width + k_col];
-                                
+
                                 sum = sum + input_val * kernel_val;
                             }
                         }
-                        
+
                         output[out_row * output_width + out_col] = sum;
                     }
                 }
@@ -510,9 +566,15 @@ impl<T: NumericElement + Copy> CacheAwareConvolution<T> {
     {
         let h_kernel_size = h_kernel.len();
         let v_kernel_size = v_kernel.len();
-        
+
         if input.len() != height * width || output.len() != height * width {
-            return Err(NumRs2Error::Core(crate::error::core::CoreError::dimension_mismatch("Invalid separable convolution dimensions", None, None)));
+            return Err(NumRs2Error::Core(
+                crate::error::core::CoreError::dimension_mismatch(
+                    "Invalid separable convolution dimensions",
+                    None,
+                    None,
+                ),
+            ));
         }
 
         // Temporary buffer for horizontal pass
@@ -522,18 +584,19 @@ impl<T: NumericElement + Copy> CacheAwareConvolution<T> {
         for row in 0..height {
             for col in 0..width {
                 let mut sum = T::zero();
-                
+
                 for k in 0..h_kernel_size {
-                    let input_col = if col + k >= h_kernel_size / 2 && col + k - h_kernel_size / 2 < width {
-                        col + k - h_kernel_size / 2
-                    } else {
-                        // Handle boundary conditions (zero padding)
-                        continue;
-                    };
-                    
+                    let input_col =
+                        if col + k >= h_kernel_size / 2 && col + k - h_kernel_size / 2 < width {
+                            col + k - h_kernel_size / 2
+                        } else {
+                            // Handle boundary conditions (zero padding)
+                            continue;
+                        };
+
                     sum = sum + input[row * width + input_col] * h_kernel[k];
                 }
-                
+
                 temp[row * width + col] = sum;
             }
         }
@@ -544,22 +607,24 @@ impl<T: NumericElement + Copy> CacheAwareConvolution<T> {
 
         for col_block in (0..width).step_by(col_block_size) {
             let col_end = (col_block + col_block_size).min(width);
-            
+
             for col in col_block..col_end {
                 for row in 0..height {
                     let mut sum = T::zero();
-                    
+
                     for k in 0..v_kernel_size {
-                        let input_row = if row + k >= v_kernel_size / 2 && row + k - v_kernel_size / 2 < height {
+                        let input_row = if row + k >= v_kernel_size / 2
+                            && row + k - v_kernel_size / 2 < height
+                        {
                             row + k - v_kernel_size / 2
                         } else {
                             // Handle boundary conditions (zero padding)
                             continue;
                         };
-                        
+
                         sum = sum + temp[input_row * width + col] * v_kernel[k];
                     }
-                    
+
                     output[row * width + col] = sum;
                 }
             }
@@ -587,31 +652,36 @@ impl BandwidthOptimizer {
                 let reads = (m * k + k * n) * element_size;
                 let writes = m * n * element_size;
                 let total_bytes = reads + writes;
-                
+
                 BandwidthEstimate {
                     total_bytes,
                     cache_friendly: self.fits_in_cache(total_bytes, CacheLevel::L3),
                     recommended_blocking: !self.fits_in_cache(total_bytes, CacheLevel::L2),
                     estimated_time_ns: self.estimate_access_time(total_bytes),
                 }
-            },
+            }
             MemoryOperation::VectorOperation { length, .. } => {
                 let element_size = std::mem::size_of::<T>();
                 let total_bytes = length * element_size * 2; // Read + write
-                
+
                 BandwidthEstimate {
                     total_bytes,
                     cache_friendly: self.fits_in_cache(total_bytes, CacheLevel::L1),
                     recommended_blocking: false,
                     estimated_time_ns: self.estimate_access_time(total_bytes),
                 }
-            },
-            MemoryOperation::Convolution { input_size, kernel_size, output_size, .. } => {
+            }
+            MemoryOperation::Convolution {
+                input_size,
+                kernel_size,
+                output_size,
+                ..
+            } => {
                 let element_size = std::mem::size_of::<T>();
                 let reads = (input_size + kernel_size) * element_size;
                 let writes = output_size * element_size;
                 let total_bytes = reads + writes;
-                
+
                 BandwidthEstimate {
                     total_bytes,
                     cache_friendly: self.fits_in_cache(total_bytes, CacheLevel::L2),
@@ -628,7 +698,7 @@ impl BandwidthOptimizer {
             CacheLevel::L2 => self.cache_config.l2_cache_size,
             CacheLevel::L3 => self.cache_config.l3_cache_size,
         };
-        
+
         size <= (cache_size * 4) / 5 // 80% utilization threshold
     }
 
@@ -648,9 +718,22 @@ impl BandwidthOptimizer {
 
 /// Memory operation types for bandwidth analysis
 pub enum MemoryOperation<T> {
-    MatrixMultiply { m: usize, n: usize, k: usize, _phantom: PhantomData<T> },
-    VectorOperation { length: usize, _phantom: PhantomData<T> },
-    Convolution { input_size: usize, kernel_size: usize, output_size: usize, _phantom: PhantomData<T> },
+    MatrixMultiply {
+        m: usize,
+        n: usize,
+        k: usize,
+        _phantom: PhantomData<T>,
+    },
+    VectorOperation {
+        length: usize,
+        _phantom: PhantomData<T>,
+    },
+    Convolution {
+        input_size: usize,
+        kernel_size: usize,
+        output_size: usize,
+        _phantom: PhantomData<T>,
+    },
 }
 
 /// Memory bandwidth estimation result
@@ -674,9 +757,9 @@ mod tests {
 
         let src = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let mut dst = vec![0.0; 6];
-        
+
         ops.transpose_blocked(&src, &mut dst, 2, 3).unwrap();
-        
+
         // Expected: [1, 4, 2, 5, 3, 6] (transpose of 2x3 -> 3x2)
         assert_eq!(dst, vec![1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
     }
@@ -688,7 +771,7 @@ mod tests {
 
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = ops.sum_blocked(&data);
-        
+
         assert_eq!(result, 15.0);
     }
 
@@ -700,9 +783,10 @@ mod tests {
         let matrix = vec![1.0, 2.0, 3.0, 4.0]; // 2x2 matrix
         let vector = vec![1.0, 1.0];
         let mut result = vec![0.0; 2];
-        
-        ops.matvec_blocked(&matrix, &vector, &mut result, 2, 2).unwrap();
-        
+
+        ops.matvec_blocked(&matrix, &vector, &mut result, 2, 2)
+            .unwrap();
+
         // Expected: [3.0, 7.0] (matrix * vector)
         assert_eq!(result, vec![3.0, 7.0]);
     }
@@ -714,7 +798,7 @@ mod tests {
 
         let mut data = vec![5, 2, 8, 1, 9, 3];
         ops.merge_sort_cache_oblivious(&mut data).unwrap();
-        
+
         assert_eq!(data, vec![1, 2, 3, 5, 8, 9]);
     }
 
@@ -729,9 +813,9 @@ mod tests {
             Complex::new(0.0, 0.0),
             Complex::new(0.0, 0.0),
         ];
-        
+
         fft.fft_cache_oblivious(&mut data).unwrap();
-        
+
         // Should have non-zero values after FFT
         assert!(data.iter().any(|&x| x.norm() > 0.1));
     }
@@ -744,9 +828,10 @@ mod tests {
         let input = vec![1.0, 2.0, 3.0, 4.0]; // 2x2 input
         let kernel = vec![1.0]; // 1x1 kernel (identity)
         let mut output = vec![0.0; 4]; // 2x2 output
-        
-        conv.conv2d_blocked(&input, &kernel, &mut output, 2, 2, 1, 1).unwrap();
-        
+
+        conv.conv2d_blocked(&input, &kernel, &mut output, 2, 2, 1, 1)
+            .unwrap();
+
         // Identity convolution should preserve input
         assert_eq!(output, input);
     }
@@ -756,11 +841,11 @@ mod tests {
         let config = CacheConfig::default();
         let optimizer = BandwidthOptimizer::new(config);
 
-        let estimate = optimizer.estimate_bandwidth(MemoryOperation::<f32>::VectorOperation { 
-            length: 1000, 
-            _phantom: PhantomData 
+        let estimate = optimizer.estimate_bandwidth(MemoryOperation::<f32>::VectorOperation {
+            length: 1000,
+            _phantom: PhantomData,
         });
-        
+
         assert!(estimate.total_bytes > 0);
         assert!(estimate.estimated_time_ns > 0);
     }
@@ -771,7 +856,7 @@ mod tests {
         let ops = CacheAwareArrayOps::<f64>::new(config);
 
         let (rows, cols) = ops.optimal_tile_size(8); // 8 bytes per f64
-        
+
         assert!(rows > 0);
         assert!(cols > 0);
         assert!(rows.is_power_of_two());
@@ -787,9 +872,10 @@ mod tests {
         let h_kernel = vec![1.0]; // 1x1 horizontal kernel
         let v_kernel = vec![1.0]; // 1x1 vertical kernel
         let mut output = vec![0.0; 4];
-        
-        conv.separable_conv2d(&input, &h_kernel, &v_kernel, &mut output, 2, 2).unwrap();
-        
+
+        conv.separable_conv2d(&input, &h_kernel, &v_kernel, &mut output, 2, 2)
+            .unwrap();
+
         // Identity separable convolution
         assert_eq!(output, input);
     }
@@ -800,11 +886,12 @@ mod tests {
         let ops = CacheAwareArrayOps::<f32>::new(config);
 
         let mut data = vec![0.0; 9]; // 3x3 matrix
-        
+
         ops.optimize_stride_access(&mut data, 3, 3, |element, i, j| {
             *element = (i * 3 + j) as f32;
-        }).unwrap();
-        
+        })
+        .unwrap();
+
         // Check that elements were set correctly
         for i in 0..3 {
             for j in 0..3 {

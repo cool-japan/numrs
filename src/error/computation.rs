@@ -143,7 +143,9 @@ impl ComputationError {
     /// Get the severity level of this error
     pub fn severity(&self) -> ErrorSeverity {
         match self {
-            ComputationError::NumericalInstability { condition_number, .. } => {
+            ComputationError::NumericalInstability {
+                condition_number, ..
+            } => {
                 // High condition number indicates severe instability
                 if let Some(cond) = condition_number {
                     if *cond > 1e12 {
@@ -154,7 +156,7 @@ impl ComputationError {
                 } else {
                     ErrorSeverity::Medium
                 }
-            },
+            }
             ComputationError::ConvergenceFailure { .. } => ErrorSeverity::Medium,
             ComputationError::Overflow { .. } => ErrorSeverity::High,
             ComputationError::Underflow { .. } => ErrorSeverity::Medium,
@@ -167,7 +169,7 @@ impl ComputationError {
                 } else {
                     ErrorSeverity::Medium
                 }
-            },
+            }
             ComputationError::EigenvalueError { .. } => ErrorSeverity::Medium,
             ComputationError::SVDError { .. } => ErrorSeverity::Medium,
             ComputationError::FFTError { .. } => ErrorSeverity::Medium,
@@ -200,18 +202,21 @@ impl ComputationError {
 
     /// Check if this error might be recoverable with different parameters
     pub fn is_potentially_recoverable(&self) -> bool {
-        matches!(self,
-            ComputationError::ConvergenceFailure { .. } |
-            ComputationError::NumericalInstability { .. } |
-            ComputationError::OptimizationError { .. } |
-            ComputationError::IntegrationError { .. }
+        matches!(
+            self,
+            ComputationError::ConvergenceFailure { .. }
+                | ComputationError::NumericalInstability { .. }
+                | ComputationError::OptimizationError { .. }
+                | ComputationError::IntegrationError { .. }
         )
     }
 
     /// Get suggested recovery actions
     pub fn recovery_suggestions(&self) -> Vec<String> {
         match self {
-            ComputationError::NumericalInstability { condition_number, .. } => {
+            ComputationError::NumericalInstability {
+                condition_number, ..
+            } => {
                 let mut suggestions = vec![
                     "Use higher precision arithmetic (f64 instead of f32)".to_string(),
                     "Consider iterative refinement techniques".to_string(),
@@ -219,11 +224,14 @@ impl ComputationError {
                 ];
                 if let Some(cond) = condition_number {
                     if *cond > 1e12 {
-                        suggestions.push("Matrix is severely ill-conditioned, consider regularization".to_string());
+                        suggestions.push(
+                            "Matrix is severely ill-conditioned, consider regularization"
+                                .to_string(),
+                        );
                     }
                 }
                 suggestions
-            },
+            }
             ComputationError::SingularMatrix { .. } => {
                 vec![
                     "Use pseudo-inverse (pinv) instead of regular inverse".to_string(),
@@ -231,8 +239,13 @@ impl ComputationError {
                     "Check for linearly dependent rows/columns".to_string(),
                     "Use SVD-based solution methods".to_string(),
                 ]
-            },
-            ComputationError::ConvergenceFailure { algorithm, iterations, tolerance, .. } => {
+            }
+            ComputationError::ConvergenceFailure {
+                algorithm,
+                iterations,
+                tolerance,
+                ..
+            } => {
                 vec![
                     format!("Increase iteration limit (current: {})", iterations),
                     if let Some(tol) = tolerance {
@@ -243,28 +256,38 @@ impl ComputationError {
                     format!("Try different algorithm instead of {}", algorithm),
                     "Improve initial guess or starting conditions".to_string(),
                 ]
-            },
+            }
             ComputationError::Overflow { .. } => {
                 vec![
                     "Scale input data to prevent overflow".to_string(),
                     "Use logarithmic representation for large numbers".to_string(),
                     "Check for infinite or very large intermediate values".to_string(),
                 ]
-            },
-            ComputationError::LinearAlgebraLibraryError { error_code, library, .. } => {
+            }
+            ComputationError::LinearAlgebraLibraryError {
+                error_code,
+                library,
+                ..
+            } => {
                 vec![
-                    format!("Check {} documentation for error code {}", library, error_code),
+                    format!(
+                        "Check {} documentation for error code {}",
+                        library, error_code
+                    ),
                     "Verify input matrix properties (dimensions, data type)".to_string(),
                     "Ensure matrix storage format is correct".to_string(),
                 ]
-            },
+            }
             ComputationError::FFTError { signal_length, .. } => {
                 vec![
                     "Ensure signal length is supported by FFT implementation".to_string(),
-                    format!("Try padding signal to power of 2 (current length: {})", signal_length),
+                    format!(
+                        "Try padding signal to power of 2 (current length: {})",
+                        signal_length
+                    ),
                     "Check for NaN or infinite values in input signal".to_string(),
                 ]
-            },
+            }
             _ => vec!["Check algorithm parameters and input data validity".to_string()],
         }
     }
@@ -381,9 +404,10 @@ mod tests {
 
     #[test]
     fn test_convergence_failure() {
-        let err = ComputationError::convergence_failure("newton_raphson", "gradient too small", 100);
+        let err =
+            ComputationError::convergence_failure("newton_raphson", "gradient too small", 100);
         assert!(err.is_potentially_recoverable());
-        
+
         if let ComputationError::ConvergenceFailure { iterations, .. } = &err {
             assert_eq!(*iterations, 100);
         } else {

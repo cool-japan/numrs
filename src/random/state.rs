@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 /// Sample from a triangular distribution using inverse CDF
 fn sample_triangular(low: f64, mode: f64, high: f64, u: f64) -> f64 {
     let fc = (mode - low) / (high - low);
-    
+
     if u < fc {
         low + ((high - low) * (mode - low) * u).sqrt()
     } else {

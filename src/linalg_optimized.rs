@@ -4,11 +4,11 @@
 //! with cache-aware algorithms, SIMD optimizations, and specialized routines for
 //! different matrix sizes and structures.
 
+use crate::algorithms::CacheAwareArrayOps;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::simd_optimize::{SimdImplementation, select_simd_implementation, detect_cpu_features};
-use crate::algorithms::CacheAwareArrayOps;
 use crate::memory_alloc::CacheConfig;
+use crate::simd_optimize::{detect_cpu_features, select_simd_implementation, SimdImplementation};
 use num_traits::Float;
 use std::fmt::Debug;
 
@@ -46,8 +46,16 @@ impl OptimizedBlas {
             ));
         }
 
-        let (m, k_a) = if trans_a { (a_shape[1], a_shape[0]) } else { (a_shape[0], a_shape[1]) };
-        let (k_b, n) = if trans_b { (b_shape[1], b_shape[0]) } else { (b_shape[0], b_shape[1]) };
+        let (m, k_a) = if trans_a {
+            (a_shape[1], a_shape[0])
+        } else {
+            (a_shape[0], a_shape[1])
+        };
+        let (k_b, n) = if trans_b {
+            (b_shape[1], b_shape[0])
+        } else {
+            (b_shape[0], b_shape[1])
+        };
 
         if k_a != k_b || c_shape[0] != m || c_shape[1] != n {
             return Err(NumRs2Error::DimensionMismatch(
@@ -87,7 +95,7 @@ impl OptimizedBlas {
         for i in 0..m {
             for j in 0..n {
                 let mut sum = T::zero();
-                
+
                 // Inner loop unrolling for better performance
                 let mut idx = 0;
                 while idx + 4 <= k {
@@ -97,18 +105,18 @@ impl OptimizedBlas {
                         } else {
                             a.get(&[i, idx + unroll])?
                         };
-                        
+
                         let b_val = if trans_b {
                             b.get(&[j, idx + unroll])?
                         } else {
                             b.get(&[idx + unroll, j])?
                         };
-                        
+
                         sum = sum + a_val * b_val;
                     }
                     idx += 4;
                 }
-                
+
                 // Handle remaining elements
                 while idx < k {
                     let a_val = if trans_a {
@@ -116,13 +124,13 @@ impl OptimizedBlas {
                     } else {
                         a.get(&[i, idx])?
                     };
-                    
+
                     let b_val = if trans_b {
                         b.get(&[j, idx])?
                     } else {
                         b.get(&[idx, j])?
                     };
-                    
+
                     sum = sum + a_val * b_val;
                     idx += 1;
                 }
@@ -151,12 +159,12 @@ impl OptimizedBlas {
         // For medium matrices, use SIMD operations
         let features = detect_cpu_features();
         let simd = select_simd_implementation(&features);
-        
+
         match simd {
             SimdImplementation::AVX512 | SimdImplementation::AVX2 | SimdImplementation::SSE => {
                 Self::gemm_simd(a, b, c, alpha, beta, trans_a, trans_b)
             }
-            _ => Self::gemm_naive(a, b, c, alpha, beta, trans_a, trans_b)
+            _ => Self::gemm_naive(a, b, c, alpha, beta, trans_a, trans_b),
         }
     }
 
@@ -183,11 +191,15 @@ impl OptimizedBlas {
 
         // Use parallel execution for large matrices
         let should_parallelize = m * n > 10000; // Simple threshold for now
-        
+
         if should_parallelize {
-            Self::gemm_parallel_blocked(a, b, c, alpha, beta, trans_a, trans_b, block_m, block_n, block_k)
+            Self::gemm_parallel_blocked(
+                a, b, c, alpha, beta, trans_a, trans_b, block_m, block_n, block_k,
+            )
         } else {
-            Self::gemm_sequential_blocked(a, b, c, alpha, beta, trans_a, trans_b, block_m, block_n, block_k)
+            Self::gemm_sequential_blocked(
+                a, b, c, alpha, beta, trans_a, trans_b, block_m, block_n, block_k,
+            )
         }
     }
 
@@ -196,25 +208,29 @@ impl OptimizedBlas {
         // Use cache-aware optimization to determine block sizes
         let cache_config = CacheConfig::default();
         let _cache_optimizer: CacheAwareArrayOps<f64> = CacheAwareArrayOps::new(cache_config);
-        
+
         // L1 cache optimization (typically 32KB)
         let l1_cache_size = 32 * 1024;
         let element_size = std::mem::size_of::<f64>(); // Assume worst case
-        
+
         // Try to fit three blocks (A, B, C) in L1 cache
         let target_block_elements = l1_cache_size / (3 * element_size);
-        
+
         // Calculate block dimensions
-        let block_size = ((target_block_elements as f64).cbrt() as usize).max(32).min(256);
-        
+        let block_size = ((target_block_elements as f64).cbrt() as usize)
+            .max(32)
+            .min(256);
+
         let block_m = block_size.min(m);
         let block_n = block_size.min(n);
         let block_k = block_size.min(k);
 
         // Adjust for cache line alignment (64 bytes typical)
         let cache_line_elements = 64 / element_size;
-        let aligned_block_m = ((block_m + cache_line_elements - 1) / cache_line_elements) * cache_line_elements;
-        let aligned_block_n = ((block_n + cache_line_elements - 1) / cache_line_elements) * cache_line_elements;
+        let aligned_block_m =
+            ((block_m + cache_line_elements - 1) / cache_line_elements) * cache_line_elements;
+        let aligned_block_n =
+            ((block_n + cache_line_elements - 1) / cache_line_elements) * cache_line_elements;
 
         (aligned_block_m.min(m), aligned_block_n.min(n), block_k)
     }
@@ -280,20 +296,20 @@ impl OptimizedBlas {
                     for i in ii..i_end {
                         for j in jj..j_end {
                             let mut sum = T::zero();
-                            
+
                             for l in kk..k_end {
                                 let a_val = if trans_a {
                                     a.get(&[l, i])?
                                 } else {
                                     a.get(&[i, l])?
                                 };
-                                
+
                                 let b_val = if trans_b {
                                     b.get(&[j, l])?
                                 } else {
                                     b.get(&[l, j])?
                                 };
-                                
+
                                 sum = sum + a_val * b_val;
                             }
 
@@ -326,7 +342,9 @@ impl OptimizedBlas {
     {
         // For now, fall back to sequential blocked
         // In a full implementation, this would use parallel iteration
-        Self::gemm_sequential_blocked(a, b, c, alpha, beta, trans_a, trans_b, block_m, block_n, block_k)
+        Self::gemm_sequential_blocked(
+            a, b, c, alpha, beta, trans_a, trans_b, block_m, block_n, block_k,
+        )
     }
 
     /// Naive matrix multiplication fallback
@@ -350,20 +368,20 @@ impl OptimizedBlas {
         for i in 0..m {
             for j in 0..n {
                 let mut sum = T::zero();
-                
+
                 for l in 0..k {
                     let a_val = if trans_a {
                         a.get(&[l, i])?
                     } else {
                         a.get(&[i, l])?
                     };
-                    
+
                     let b_val = if trans_b {
                         b.get(&[j, l])?
                     } else {
                         b.get(&[l, j])?
                     };
-                    
+
                     sum = sum + a_val * b_val;
                 }
 
@@ -478,14 +496,18 @@ impl OptimizedBlas {
         T: Float + Clone,
     {
         let mut result = T::zero();
-        
+
         // Unroll loop for better performance
         let mut i = 0;
         while i + 4 <= x.len() {
-            result = result + x[i] * y[i] + x[i+1] * y[i+1] + x[i+2] * y[i+2] + x[i+3] * y[i+3];
+            result = result
+                + x[i] * y[i]
+                + x[i + 1] * y[i + 1]
+                + x[i + 2] * y[i + 2]
+                + x[i + 3] * y[i + 3];
             i += 4;
         }
-        
+
         // Handle remaining elements
         while i < x.len() {
             result = result + x[i] * y[i];
@@ -523,7 +545,7 @@ where
         // Find pivot
         let mut max_val = T::zero();
         let mut pivot_row = k;
-        
+
         for i in k..n {
             let abs_val = num_traits::Float::abs(u.get(&[i, k])?);
             if abs_val > max_val {
@@ -566,7 +588,7 @@ where
         for i in (k + 1)..n {
             let factor = u.get(&[i, k])? / pivot;
             l.set(&[i, k], factor)?;
-            
+
             // Update row i of U
             for j in k..n {
                 let new_val = u.get(&[i, j])? - factor * u.get(&[k, j])?;
@@ -595,12 +617,12 @@ where
 
     // Use blocked transpose for cache efficiency
     let block_size = 64; // Optimize for cache line size
-    
+
     for ii in (0..m).step_by(block_size) {
         for jj in (0..n).step_by(block_size) {
             let i_end = (ii + block_size).min(m);
             let j_end = (jj + block_size).min(n);
-            
+
             for i in ii..i_end {
                 for j in jj..j_end {
                     result.set(&[j, i], a.get(&[i, j])?)?;

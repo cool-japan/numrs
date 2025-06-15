@@ -172,7 +172,6 @@ impl VonMises {
         Ok(Self { mu, kappa })
     }
 
-
     /// Sample from the distribution using an improved algorithm
     pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         use std::f64::consts::PI;
@@ -188,7 +187,7 @@ impl VonMises {
             // Inverse CDF method for small concentration
             self.sample_inverse_cdf(rng)
         } else {
-            // Rejection sampling for large concentration 
+            // Rejection sampling for large concentration
             self.sample_rejection(rng)
         }
     }
@@ -196,12 +195,12 @@ impl VonMises {
     /// Sample using inverse CDF method (for small kappa)
     fn sample_inverse_cdf<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         use std::f64::consts::PI;
-        
+
         // Simple approximation for small kappa
         let normal = Normal::new(0.0, 1.0 / self.kappa.sqrt()).unwrap();
         let sample = normal.sample(rng);
         let theta = sample % (2.0 * PI);
-        
+
         let result = self.mu + theta;
         ((result + PI) % (2.0 * PI)) - PI
     }
@@ -209,27 +208,27 @@ impl VonMises {
     /// Sample using rejection method (for large kappa)
     fn sample_rejection<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         use std::f64::consts::PI;
-        
+
         // Simple rejection sampling based on wrapped normal approximation
         // This is less efficient but more reliable than complex algorithms
         let std_dev = 1.0 / self.kappa.sqrt();
         let normal = Normal::new(0.0, std_dev).unwrap();
-        
+
         loop {
             let candidate = normal.sample(rng);
-            
+
             // Wrap to [-π, π]
             let wrapped = ((candidate + PI) % (2.0 * PI)) - PI;
-            
+
             // Simple acceptance based on von Mises density ratio
             let density_ratio = (self.kappa * (wrapped.cos() - 1.0)).exp();
             let u = rng.random::<f64>();
-            
+
             if u <= density_ratio {
                 let result = self.mu + wrapped;
                 return ((result + PI) % (2.0 * PI)) - PI;
             }
-            
+
             // Prevent infinite loops by limiting iterations
             if rng.random::<f64>() < 0.01 {
                 // Fallback: just return the wrapped normal sample
@@ -577,12 +576,15 @@ mod tests {
     fn test_vonmises_basic() {
         let dist = VonMises::new(0.0, 1.0).unwrap();
         let mut rng = rand::rng();
-        
+
         // Generate a few samples to check they're in range
         for _ in 0..10 {
             let sample = dist.sample(&mut rng);
-            assert!((-std::f64::consts::PI..=std::f64::consts::PI).contains(&sample), 
-                    "Sample {} out of range", sample);
+            assert!(
+                (-std::f64::consts::PI..=std::f64::consts::PI).contains(&sample),
+                "Sample {} out of range",
+                sample
+            );
         }
     }
 

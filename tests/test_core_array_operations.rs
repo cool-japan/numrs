@@ -466,15 +466,28 @@ mod indexing_operations_tests {
 
         // Test using IndexSpec for more complex indexing
         let single_element = arr
-            .index(&[numrs2::indexing::IndexSpec::Index(1), numrs2::indexing::IndexSpec::Index(1)])
+            .index(&[
+                numrs2::indexing::IndexSpec::Index(1),
+                numrs2::indexing::IndexSpec::Index(1),
+            ])
             .unwrap();
         assert_eq!(single_element.to_vec(), vec![5.0]);
 
-        let row_slice = arr.index(&[numrs2::indexing::IndexSpec::Index(0), numrs2::indexing::IndexSpec::All]).unwrap();
+        let row_slice = arr
+            .index(&[
+                numrs2::indexing::IndexSpec::Index(0),
+                numrs2::indexing::IndexSpec::All,
+            ])
+            .unwrap();
         assert_eq!(row_slice.shape(), vec![3]);
         assert_eq!(row_slice.to_vec(), vec![1.0, 2.0, 3.0]);
 
-        let col_slice = arr.index(&[numrs2::indexing::IndexSpec::All, numrs2::indexing::IndexSpec::Index(0)]).unwrap();
+        let col_slice = arr
+            .index(&[
+                numrs2::indexing::IndexSpec::All,
+                numrs2::indexing::IndexSpec::Index(0),
+            ])
+            .unwrap();
         assert_eq!(col_slice.shape(), vec![3]);
         assert_eq!(col_slice.to_vec(), vec![1.0, 4.0, 7.0]);
     }

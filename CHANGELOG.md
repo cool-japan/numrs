@@ -5,9 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Released]
 
-## [0.1.0-alpha.4] - 2024-06-13
+## [0.1.0-alpha.4] - 2025-06-15
 
 ### Added
 - Comprehensive NumPy parity roadmap in TODO.md
@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved technical implementation documentation
 - Added success metrics for complete NumPy parity
 
-## [0.1.0-alpha.3] - 2024-XX-XX
+## [0.1.0-alpha.3] - 2024-06-12
 
 ### Added
 - Enhanced numerical stability for matrix decompositions
@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance optimization documentation
 - Technical implementation details
 
-## [0.1.0-alpha.2] - 2024-XX-XX
+## [0.1.0-alpha.2] - 2024-05-11
 
 ### Added
 - Initial release with core NumPy-like functionality
@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GPU acceleration capabilities (optional)
 - SciRS2 integration for advanced distributions (optional)
 
-## [0.1.0-alpha.1] - 2024-XX-XX
+## [0.1.0-alpha.1] - 2024-04-17
 
 ### Added
 - Initial project structure and foundation

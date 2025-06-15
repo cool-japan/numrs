@@ -10,7 +10,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::sparse::{SparseMatrix, SparseMatrixFormat};
-use num_traits::{Float, Zero, One};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
 
 /// Enhanced sparse matrix operations with advanced algorithms
@@ -36,7 +36,8 @@ impl SparseOpsAdvanced {
 
         if a_shape.len() != 2 || x_shape.len() != 1 || y_shape.len() != 1 {
             return Err(NumRs2Error::DimensionMismatch(
-                "Sparse-dense multiplication requires 2D sparse matrix and 1D dense vectors".to_string(),
+                "Sparse-dense multiplication requires 2D sparse matrix and 1D dense vectors"
+                    .to_string(),
             ));
         }
 
@@ -48,7 +49,7 @@ impl SparseOpsAdvanced {
 
         let m = a_shape[0];
         let n = a_shape[1];
-        
+
         // Apply beta scaling to y first
         if beta != T::one() {
             for i in 0..m {
@@ -60,35 +61,24 @@ impl SparseOpsAdvanced {
         // Perform sparse matrix-vector multiplication
         // Use format-specific optimizations
         match a.format {
-            SparseMatrixFormat::CSR => {
-                Self::spmv_csr(a, x, y, alpha)
-            },
-            SparseMatrixFormat::CSC => {
-                Self::spmv_csc(a, x, y, alpha)
-            },
-            _ => {
-                Self::spmv_coo(a, x, y, alpha, m, n)
-            }
+            SparseMatrixFormat::CSR => Self::spmv_csr(a, x, y, alpha),
+            SparseMatrixFormat::CSC => Self::spmv_csc(a, x, y, alpha),
+            _ => Self::spmv_coo(a, x, y, alpha, m, n),
         }
     }
 
     /// CSR format sparse matrix-vector multiplication
-    fn spmv_csr<T>(
-        a: &SparseMatrix<T>,
-        x: &Array<T>,
-        y: &mut Array<T>,
-        alpha: T,
-    ) -> Result<()>
+    fn spmv_csr<T>(a: &SparseMatrix<T>, x: &Array<T>, y: &mut Array<T>, alpha: T) -> Result<()>
     where
         T: Float + Clone + Debug,
     {
         if let (Some(indptr), Some(indices)) = (&a.indptr, &a.indices) {
             let m = a.shape()[0];
-            
+
             for i in 0..m {
                 let row_start = indptr[i];
                 let row_end = indptr[i + 1];
-                
+
                 let mut sum = T::zero();
                 for idx in row_start..row_end {
                     let j = indices[idx];
@@ -96,7 +86,7 @@ impl SparseOpsAdvanced {
                     let x_val = x.get(&[j])?;
                     sum = sum + a_val * x_val;
                 }
-                
+
                 let current = y.get(&[i])?;
                 y.set(&[i], current + alpha * sum)?;
             }
@@ -105,30 +95,25 @@ impl SparseOpsAdvanced {
                 "CSR format data not available".to_string(),
             ));
         }
-        
+
         Ok(())
     }
 
     /// CSC format sparse matrix-vector multiplication
-    fn spmv_csc<T>(
-        a: &SparseMatrix<T>,
-        x: &Array<T>,
-        y: &mut Array<T>,
-        alpha: T,
-    ) -> Result<()>
+    fn spmv_csc<T>(a: &SparseMatrix<T>, x: &Array<T>, y: &mut Array<T>, alpha: T) -> Result<()>
     where
         T: Float + Clone + Debug,
     {
         if let (Some(indptr), Some(indices)) = (&a.indptr, &a.indices) {
             let n = a.shape()[1];
-            
+
             for j in 0..n {
                 let col_start = indptr[j];
                 let col_end = indptr[j + 1];
-                
+
                 let x_val = x.get(&[j])?;
                 let scaled_x = alpha * x_val;
-                
+
                 for idx in col_start..col_end {
                     let i = indices[idx];
                     let a_val = a.get(i, j)?;
@@ -141,7 +126,7 @@ impl SparseOpsAdvanced {
                 "CSC format data not available".to_string(),
             ));
         }
-        
+
         Ok(())
     }
 
@@ -161,31 +146,28 @@ impl SparseOpsAdvanced {
         for (indices, value) in &a.array.data {
             let i = indices[0];
             let j = indices[1];
-            
+
             if i < m && j < n {
                 let x_val = x.get(&[j])?;
                 let current = y.get(&[i])?;
                 y.set(&[i], current + alpha * value.clone() * x_val)?;
             }
         }
-        
+
         Ok(())
     }
 
     /// Optimized sparse matrix-matrix multiplication
-    pub fn spgemm<T>(
-        a: &SparseMatrix<T>,
-        b: &SparseMatrix<T>,
-    ) -> Result<SparseMatrix<T>>
+    pub fn spgemm<T>(a: &SparseMatrix<T>, b: &SparseMatrix<T>) -> Result<SparseMatrix<T>>
     where
         T: Float + Clone + Debug + Zero + One,
     {
         // Use the existing matmul implementation but with optimizations
         let mut result = a.matmul(b)?;
-        
+
         // Convert result to most efficient format based on sparsity pattern
         let density = result.density();
-        
+
         if density < 0.1 {
             // Very sparse - keep as COO or convert to CSR for row operations
             result.format = SparseMatrixFormat::CSR;
@@ -196,7 +178,7 @@ impl SparseOpsAdvanced {
             // Dense enough that conversion overhead might not be worth it
             result.format = SparseMatrixFormat::COO;
         }
-        
+
         Ok(result)
     }
 
@@ -212,13 +194,13 @@ impl SparseOpsAdvanced {
         T: Float + Clone + Debug,
     {
         let n = a.shape()[0];
-        
+
         if a.shape()[1] != n {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix must be square for CG solver".to_string(),
             ));
         }
-        
+
         if b.shape()[0] != n {
             return Err(NumRs2Error::DimensionMismatch(
                 "Right-hand side vector dimension mismatch".to_string(),
@@ -235,7 +217,7 @@ impl SparseOpsAdvanced {
         // Compute initial residual: r = b - A*x
         let mut ax = Array::zeros(&[n]);
         Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
-        
+
         let mut r = Array::zeros(&[n]);
         for i in 0..n {
             let b_val = b.get(&[i])?;
@@ -247,7 +229,7 @@ impl SparseOpsAdvanced {
         let mut rsold = Self::dot_product(&r, &r)?;
 
         let tol_sq = tol * tol;
-        
+
         for iter in 0..max_iter {
             // Check convergence
             if rsold < tol_sq {
@@ -265,7 +247,7 @@ impl SparseOpsAdvanced {
                     "CG solver breakdown: p^T * A * p = 0".to_string(),
                 ));
             }
-            
+
             let alpha = rsold / ptap;
 
             // Update solution: x = x + alpha * p
@@ -315,7 +297,7 @@ impl SparseOpsAdvanced {
         T: Float + Clone + Debug,
     {
         let n = a.shape()[0];
-        
+
         if a.shape()[1] != n {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix must be square for BiCGSTAB solver".to_string(),
@@ -332,7 +314,7 @@ impl SparseOpsAdvanced {
         // Compute initial residual: r = b - A*x
         let mut ax = Array::zeros(&[n]);
         Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
-        
+
         let mut r = Array::zeros(&[n]);
         for i in 0..n {
             let b_val = b.get(&[i])?;
@@ -354,14 +336,14 @@ impl SparseOpsAdvanced {
 
         for iter in 0..max_iter {
             let r_norm_sq = Self::dot_product(&r, &r)?;
-            
+
             // Check convergence
             if r_norm_sq < tol_sq {
                 return Ok((x, iter, r_norm_sq.sqrt()));
             }
 
             let rho_new = Self::dot_product(&r0, &r)?;
-            
+
             if rho_new.abs() < T::epsilon() {
                 return Err(NumRs2Error::ComputationError(
                     "BiCGSTAB solver breakdown: rho = 0".to_string(),
@@ -369,7 +351,7 @@ impl SparseOpsAdvanced {
             }
 
             let beta = (rho_new / rho) * (alpha / omega);
-            
+
             // Update p = r + beta * (p - omega * v)
             for i in 0..n {
                 let r_val = r.get(&[i])?;
@@ -414,7 +396,7 @@ impl SparseOpsAdvanced {
 
             let ts = Self::dot_product(&t, &s)?;
             let tt = Self::dot_product(&t, &t)?;
-            
+
             if tt.abs() < T::epsilon() {
                 return Err(NumRs2Error::ComputationError(
                     "BiCGSTAB solver breakdown: t^T * t = 0".to_string(),
@@ -460,7 +442,7 @@ impl SparseOpsAdvanced {
         T: Float + Clone + Debug + Zero + One,
     {
         let n = a.shape()[0];
-        
+
         if a.shape()[1] != n {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix must be square for ILU decomposition".to_string(),
@@ -480,7 +462,7 @@ impl SparseOpsAdvanced {
         for (indices, value) in &a.array.data {
             let i = indices[0];
             let j = indices[1];
-            
+
             if i <= j {
                 u.set(i, j, value.clone())?;
             } else {
@@ -543,16 +525,12 @@ impl SparseOpsAdvanced {
     }
 
     /// Estimate the condition number of a sparse matrix using power iteration
-    pub fn condition_number_estimate<T>(
-        a: &SparseMatrix<T>,
-        max_iter: usize,
-        tol: T,
-    ) -> Result<T>
+    pub fn condition_number_estimate<T>(a: &SparseMatrix<T>, max_iter: usize, tol: T) -> Result<T>
     where
         T: Float + Clone + Debug,
     {
         let n = a.shape()[0];
-        
+
         if a.shape()[1] != n {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix must be square for condition number estimation".to_string(),
@@ -581,7 +559,7 @@ impl SparseOpsAdvanced {
             }
 
             let new_lambda = Self::dot_product(&v, &av)?;
-            
+
             if (new_lambda - lambda_max).abs() < tol {
                 lambda_max = new_lambda;
                 break;
@@ -657,9 +635,7 @@ mod tests {
         let b = Array::from_vec(vec![6.0, 8.0, 4.0]);
 
         // Solve using CG
-        let (x, iter, residual) = SparseOpsAdvanced::solve_cg(
-            &a, &b, None, 1e-10, 100
-        ).unwrap();
+        let (x, iter, residual) = SparseOpsAdvanced::solve_cg(&a, &b, None, 1e-10, 100).unwrap();
 
         // Check that the solution satisfies A*x = b (approximately)
         let mut ax = Array::zeros(&[3]);
@@ -691,9 +667,8 @@ mod tests {
         let b = Array::from_vec(vec![5.0, 6.0, 7.0]);
 
         // Solve using BiCGSTAB
-        let (x, iter, residual) = SparseOpsAdvanced::solve_bicgstab(
-            &a, &b, None, 1e-10, 100
-        ).unwrap();
+        let (x, iter, residual) =
+            SparseOpsAdvanced::solve_bicgstab(&a, &b, None, 1e-10, 100).unwrap();
 
         // Check that the solution satisfies A*x = b (approximately)
         let mut ax = Array::zeros(&[3]);

@@ -83,7 +83,9 @@ pub enum MemoryError {
     },
 
     /// Arena allocator overflow
-    #[error("Arena overflow: cannot allocate {requested_bytes} bytes (remaining: {remaining_bytes})")]
+    #[error(
+        "Arena overflow: cannot allocate {requested_bytes} bytes (remaining: {remaining_bytes})"
+    )]
     ArenaOverflow {
         requested_bytes: usize,
         remaining_bytes: usize,
@@ -159,30 +161,34 @@ impl MemoryError {
             MemoryError::AllocationFailed { .. } => ErrorSeverity::Critical,
             MemoryError::OutOfMemory { .. } => ErrorSeverity::Critical,
             MemoryError::AlignmentError { .. } => ErrorSeverity::High,
-            MemoryError::MemoryCorruption { corruption_type, .. } => {
-                match corruption_type {
-                    CorruptionType::UseAfterFree | 
-                    CorruptionType::DoubleFree | 
-                    CorruptionType::StackOverflow => ErrorSeverity::Critical,
-                    _ => ErrorSeverity::High,
-                }
+            MemoryError::MemoryCorruption {
+                corruption_type, ..
+            } => match corruption_type {
+                CorruptionType::UseAfterFree
+                | CorruptionType::DoubleFree
+                | CorruptionType::StackOverflow => ErrorSeverity::Critical,
+                _ => ErrorSeverity::High,
             },
             MemoryError::InvalidAccess { .. } => ErrorSeverity::High,
             MemoryError::MemoryLeak { leaked_bytes, .. } => {
                 // Large leaks are more critical
-                if *leaked_bytes > 1_000_000 { // > 1MB
+                if *leaked_bytes > 1_000_000 {
+                    // > 1MB
                     ErrorSeverity::High
                 } else {
                     ErrorSeverity::Medium
                 }
-            },
-            MemoryError::Fragmentation { fragmentation_level, .. } => {
+            }
+            MemoryError::Fragmentation {
+                fragmentation_level,
+                ..
+            } => {
                 if *fragmentation_level > 0.8 {
                     ErrorSeverity::Medium
                 } else {
                     ErrorSeverity::Low
                 }
-            },
+            }
             MemoryError::PoolExhausted { .. } => ErrorSeverity::High,
             MemoryError::ArenaOverflow { .. } => ErrorSeverity::High,
             MemoryError::MappingError { .. } => ErrorSeverity::High,
@@ -211,32 +217,41 @@ impl MemoryError {
 
     /// Check if this error is likely to be transient (might succeed on retry)
     pub fn is_transient(&self) -> bool {
-        matches!(self,
-            MemoryError::AllocationFailed { .. } |
-            MemoryError::Fragmentation { .. } |
-            MemoryError::PoolExhausted { .. }
+        matches!(
+            self,
+            MemoryError::AllocationFailed { .. }
+                | MemoryError::Fragmentation { .. }
+                | MemoryError::PoolExhausted { .. }
         )
     }
 
     /// Get suggested recovery actions
     pub fn recovery_suggestions(&self) -> Vec<String> {
         match self {
-            MemoryError::AllocationFailed { requested_bytes, available_bytes, .. } => {
+            MemoryError::AllocationFailed {
+                requested_bytes,
+                available_bytes,
+                ..
+            } => {
                 let mut suggestions = vec![
                     "Reduce memory usage by processing data in smaller chunks".to_string(),
                     "Consider using streaming or out-of-core algorithms".to_string(),
                     "Free unused memory before attempting allocation".to_string(),
                 ];
-                
+
                 if let Some(available) = available_bytes {
                     suggestions.push(format!(
-                        "Requested {} bytes, but only {} bytes available", 
+                        "Requested {} bytes, but only {} bytes available",
                         requested_bytes, available
                     ));
                 }
                 suggestions
-            },
-            MemoryError::OutOfMemory { total_requested, system_available, .. } => {
+            }
+            MemoryError::OutOfMemory {
+                total_requested,
+                system_available,
+                ..
+            } => {
                 vec![
                     format!("Reduce memory usage (requested: {} bytes)", total_requested),
                     if let Some(available) = system_available {
@@ -247,59 +262,79 @@ impl MemoryError {
                     "Use memory-mapped files for large datasets".to_string(),
                     "Consider distributed computing for very large problems".to_string(),
                 ]
-            },
-            MemoryError::AlignmentError { required_alignment, .. } => {
+            }
+            MemoryError::AlignmentError {
+                required_alignment, ..
+            } => {
                 vec![
-                    format!("Use properly aligned memory (required: {} bytes)", required_alignment),
+                    format!(
+                        "Use properly aligned memory (required: {} bytes)",
+                        required_alignment
+                    ),
                     "Use aligned allocation functions".to_string(),
                     "Check data structure packing and alignment".to_string(),
                 ]
+            }
+            MemoryError::MemoryCorruption {
+                corruption_type, ..
+            } => match corruption_type {
+                CorruptionType::BufferOverflow => vec![
+                    "Check array bounds before access".to_string(),
+                    "Use safe indexing methods".to_string(),
+                    "Validate input sizes".to_string(),
+                ],
+                CorruptionType::UseAfterFree => vec![
+                    "Avoid using freed memory".to_string(),
+                    "Use smart pointers or RAII".to_string(),
+                    "Check object lifetimes".to_string(),
+                ],
+                CorruptionType::DoubleFree => vec![
+                    "Avoid freeing the same memory twice".to_string(),
+                    "Set pointers to null after freeing".to_string(),
+                    "Use automatic memory management".to_string(),
+                ],
+                _ => vec!["Review memory management code".to_string()],
             },
-            MemoryError::MemoryCorruption { corruption_type, .. } => {
-                match corruption_type {
-                    CorruptionType::BufferOverflow => vec![
-                        "Check array bounds before access".to_string(),
-                        "Use safe indexing methods".to_string(),
-                        "Validate input sizes".to_string(),
-                    ],
-                    CorruptionType::UseAfterFree => vec![
-                        "Avoid using freed memory".to_string(),
-                        "Use smart pointers or RAII".to_string(),
-                        "Check object lifetimes".to_string(),
-                    ],
-                    CorruptionType::DoubleFree => vec![
-                        "Avoid freeing the same memory twice".to_string(),
-                        "Set pointers to null after freeing".to_string(),
-                        "Use automatic memory management".to_string(),
-                    ],
-                    _ => vec!["Review memory management code".to_string()],
-                }
-            },
-            MemoryError::Fragmentation { fragmentation_level, .. } => {
+            MemoryError::Fragmentation {
+                fragmentation_level,
+                ..
+            } => {
                 vec![
                     format!("Memory is {:.1}% fragmented", fragmentation_level * 100.0),
                     "Use memory pools for frequent allocations".to_string(),
                     "Consider memory defragmentation".to_string(),
                     "Use arena allocators for temporary memory".to_string(),
                 ]
-            },
-            MemoryError::PoolExhausted { pool_type, block_size, .. } => {
+            }
+            MemoryError::PoolExhausted {
+                pool_type,
+                block_size,
+                ..
+            } => {
                 vec![
                     format!("Increase {} pool size", pool_type),
                     format!("Current block size: {} bytes", block_size),
                     "Consider using different allocation strategy".to_string(),
                     "Free unused blocks before allocating new ones".to_string(),
                 ]
-            },
-            MemoryError::ArenaOverflow { remaining_bytes, arena_size, .. } => {
+            }
+            MemoryError::ArenaOverflow {
+                remaining_bytes,
+                arena_size,
+                ..
+            } => {
                 vec![
                     format!("Increase arena size (current: {} bytes)", arena_size),
                     format!("Only {} bytes remaining in arena", remaining_bytes),
                     "Reset arena to reclaim space".to_string(),
                     "Use multiple arenas for large allocations".to_string(),
                 ]
-            },
-            MemoryError::GpuMemoryError { device_id, available_bytes, .. } => {
+            }
+            MemoryError::GpuMemoryError {
+                device_id,
+                available_bytes,
+                ..
+            } => {
                 let mut suggestions = vec![
                     "Reduce GPU memory usage".to_string(),
                     "Transfer data in smaller batches".to_string(),
@@ -311,7 +346,7 @@ impl MemoryError {
                     suggestions.push(format!("GPU has {} bytes available", available));
                 }
                 suggestions
-            },
+            }
             _ => vec!["Review memory usage patterns".to_string()],
         }
     }
@@ -373,7 +408,11 @@ impl MemoryError {
     }
 
     /// Create an arena overflow error
-    pub fn arena_overflow(requested_bytes: usize, remaining_bytes: usize, arena_size: usize) -> Self {
+    pub fn arena_overflow(
+        requested_bytes: usize,
+        remaining_bytes: usize,
+        arena_size: usize,
+    ) -> Self {
         MemoryError::ArenaOverflow {
             requested_bytes,
             remaining_bytes,
@@ -407,10 +446,14 @@ mod tests {
 
     #[test]
     fn test_memory_corruption_severity() {
-        let use_after_free = MemoryError::memory_corruption("Used freed pointer", CorruptionType::UseAfterFree);
+        let use_after_free =
+            MemoryError::memory_corruption("Used freed pointer", CorruptionType::UseAfterFree);
         assert_eq!(use_after_free.severity(), ErrorSeverity::Critical);
 
-        let buffer_overflow = MemoryError::memory_corruption("Array access out of bounds", CorruptionType::BufferOverflow);
+        let buffer_overflow = MemoryError::memory_corruption(
+            "Array access out of bounds",
+            CorruptionType::BufferOverflow,
+        );
         assert_eq!(buffer_overflow.severity(), ErrorSeverity::High);
     }
 
@@ -452,14 +495,16 @@ mod tests {
         let err = MemoryError::arena_overflow(2048, 512, 4096);
         let suggestions = err.recovery_suggestions();
         assert!(suggestions.iter().any(|s| s.contains("4096 bytes")));
-        assert!(suggestions.iter().any(|s| s.contains("512 bytes remaining")));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.contains("512 bytes remaining")));
     }
 
     #[test]
     fn test_gpu_memory_error() {
         let err = MemoryError::gpu_memory_error("Insufficient GPU memory", Some(0));
         assert_eq!(err.severity(), ErrorSeverity::High);
-        
+
         let suggestions = err.recovery_suggestions();
         assert!(suggestions.iter().any(|s| s.contains("GPU device 0")));
     }

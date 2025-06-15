@@ -8,7 +8,7 @@ Add NumRS2 to your Rust project by adding this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-alpha.3"
+numrs2 = "0.1.0-alpha.4"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:

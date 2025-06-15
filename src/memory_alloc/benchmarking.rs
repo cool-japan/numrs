@@ -84,26 +84,74 @@ pub struct BenchmarkResults {
 
 impl fmt::Display for BenchmarkResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "=== Allocator Benchmark Results: {} ===", self.allocator_name)?;
+        writeln!(
+            f,
+            "=== Allocator Benchmark Results: {} ===",
+            self.allocator_name
+        )?;
         writeln!(f, "Configuration:")?;
         writeln!(f, "  Iterations: {}", self.config.iterations)?;
-        writeln!(f, "  Size range: {} - {} bytes", self.config.min_size, self.config.max_size)?;
-        writeln!(f, "  Concurrent allocations: {}", self.config.concurrent_allocations)?;
-        writeln!(f, "  Memory pressure: {:.1}%", self.config.memory_pressure * 100.0)?;
+        writeln!(
+            f,
+            "  Size range: {} - {} bytes",
+            self.config.min_size, self.config.max_size
+        )?;
+        writeln!(
+            f,
+            "  Concurrent allocations: {}",
+            self.config.concurrent_allocations
+        )?;
+        writeln!(
+            f,
+            "  Memory pressure: {:.1}%",
+            self.config.memory_pressure * 100.0
+        )?;
         writeln!(f)?;
         writeln!(f, "Performance Metrics:")?;
         writeln!(f, "  Total allocation time: {:?}", self.allocation_time)?;
         writeln!(f, "  Total deallocation time: {:?}", self.deallocation_time)?;
-        writeln!(f, "  Average allocation time: {:?}", self.avg_allocation_time)?;
-        writeln!(f, "  Average deallocation time: {:?}", self.avg_deallocation_time)?;
-        writeln!(f, "  Peak memory usage: {} MB", self.peak_memory_usage / 1024 / 1024)?;
-        writeln!(f, "  Total bytes allocated: {} MB", self.total_bytes_allocated / 1024 / 1024)?;
-        writeln!(f, "  Successful allocations: {}", self.successful_allocations)?;
+        writeln!(
+            f,
+            "  Average allocation time: {:?}",
+            self.avg_allocation_time
+        )?;
+        writeln!(
+            f,
+            "  Average deallocation time: {:?}",
+            self.avg_deallocation_time
+        )?;
+        writeln!(
+            f,
+            "  Peak memory usage: {} MB",
+            self.peak_memory_usage / 1024 / 1024
+        )?;
+        writeln!(
+            f,
+            "  Total bytes allocated: {} MB",
+            self.total_bytes_allocated / 1024 / 1024
+        )?;
+        writeln!(
+            f,
+            "  Successful allocations: {}",
+            self.successful_allocations
+        )?;
         writeln!(f, "  Failed allocations: {}", self.failed_allocations)?;
         writeln!(f, "  Fragmentation level: {:.3}", self.fragmentation_level)?;
-        writeln!(f, "  Allocation efficiency: {:.3}", self.allocation_efficiency)?;
-        writeln!(f, "  Allocation throughput: {:.0} ops/sec", self.allocation_throughput)?;
-        writeln!(f, "  Bytes throughput: {:.2} MB/sec", self.bytes_per_second / 1024.0 / 1024.0)?;
+        writeln!(
+            f,
+            "  Allocation efficiency: {:.3}",
+            self.allocation_efficiency
+        )?;
+        writeln!(
+            f,
+            "  Allocation throughput: {:.0} ops/sec",
+            self.allocation_throughput
+        )?;
+        writeln!(
+            f,
+            "  Bytes throughput: {:.2} MB/sec",
+            self.bytes_per_second / 1024.0 / 1024.0
+        )?;
         writeln!(f)?;
         writeln!(f, "Latency Percentiles:")?;
         writeln!(f, "  50th: {:?}", self.latency_percentiles.0)?;
@@ -147,12 +195,12 @@ impl AllocatorBenchmark {
         if !self.config.randomize_sizes {
             return (self.config.min_size + self.config.max_size) / 2;
         }
-        
+
         let range = self.config.max_size - self.config.min_size;
         if range == 0 {
             return self.config.min_size;
         }
-        
+
         let random_offset = (self.next_random() as usize) % range;
         self.config.min_size + random_offset
     }
@@ -178,7 +226,12 @@ impl AllocatorBenchmark {
             allocation_throughput: 0.0,
             bytes_per_second: 0.0,
             size_distribution: HashMap::new(),
-            latency_percentiles: (Duration::ZERO, Duration::ZERO, Duration::ZERO, Duration::ZERO),
+            latency_percentiles: (
+                Duration::ZERO,
+                Duration::ZERO,
+                Duration::ZERO,
+                Duration::ZERO,
+            ),
         };
 
         let mut active_allocations: Vec<(std::ptr::NonNull<u8>, std::alloc::Layout)> = Vec::new();
@@ -201,8 +254,12 @@ impl AllocatorBenchmark {
             if should_allocate {
                 // Perform allocation
                 let size = self.random_size();
-                let align = if size >= 32 { 32 } else { std::mem::align_of::<usize>() };
-                
+                let align = if size >= 32 {
+                    32
+                } else {
+                    std::mem::align_of::<usize>()
+                };
+
                 match std::alloc::Layout::from_size_align(size, align) {
                     Ok(layout) => {
                         let alloc_start = Instant::now();
@@ -214,8 +271,9 @@ impl AllocatorBenchmark {
                                 results.successful_allocations += 1;
                                 results.total_bytes_allocated += size;
                                 current_memory_usage += size;
-                                results.peak_memory_usage = results.peak_memory_usage.max(current_memory_usage);
-                                
+                                results.peak_memory_usage =
+                                    results.peak_memory_usage.max(current_memory_usage);
+
                                 *results.size_distribution.entry(size).or_insert(0) += 1;
                                 active_allocations.push((ptr, layout));
                             }
@@ -235,14 +293,14 @@ impl AllocatorBenchmark {
                 } else {
                     0 // FIFO order
                 };
-                
+
                 let (ptr, layout) = active_allocations.remove(index);
                 let dealloc_start = Instant::now();
-                
+
                 unsafe {
                     let _ = allocator.deallocate(ptr, layout);
                 }
-                
+
                 let dealloc_time = dealloc_start.elapsed();
                 deallocation_times.push(dealloc_time);
                 results.deallocation_time += dealloc_time;
@@ -269,7 +327,12 @@ impl AllocatorBenchmark {
         let total_benchmark_time = benchmark_start.elapsed();
 
         // Calculate derived metrics
-        self.calculate_derived_metrics(&mut results, &allocation_times, &deallocation_times, total_benchmark_time);
+        self.calculate_derived_metrics(
+            &mut results,
+            &allocation_times,
+            &deallocation_times,
+            total_benchmark_time,
+        );
 
         Ok(results)
     }
@@ -286,7 +349,7 @@ impl AllocatorBenchmark {
         for _ in 0..warmup_iterations {
             let size = self.random_size();
             let align = std::mem::align_of::<usize>();
-            
+
             if let Ok(layout) = std::alloc::Layout::from_size_align(size, align) {
                 if let Ok(ptr) = allocator.allocate(layout) {
                     warmup_allocations.push((ptr, layout));
@@ -318,8 +381,9 @@ impl AllocatorBenchmark {
         }
 
         // Randomly deallocate some allocations to simulate pressure
-        let deallocations_to_perform = ((active_allocations.len() as f64 * self.config.memory_pressure) as usize).max(1);
-        
+        let deallocations_to_perform =
+            ((active_allocations.len() as f64 * self.config.memory_pressure) as usize).max(1);
+
         for _ in 0..deallocations_to_perform.min(active_allocations.len()) {
             if !active_allocations.is_empty() {
                 let index = (self.next_random() as usize) % active_allocations.len();
@@ -343,11 +407,13 @@ impl AllocatorBenchmark {
     ) {
         // Calculate average times
         if results.successful_allocations > 0 {
-            results.avg_allocation_time = results.allocation_time / results.successful_allocations as u32;
+            results.avg_allocation_time =
+                results.allocation_time / results.successful_allocations as u32;
         }
-        
+
         if !deallocation_times.is_empty() {
-            results.avg_deallocation_time = results.deallocation_time / deallocation_times.len() as u32;
+            results.avg_deallocation_time =
+                results.deallocation_time / deallocation_times.len() as u32;
         }
 
         // Calculate throughput
@@ -360,33 +426,38 @@ impl AllocatorBenchmark {
         // Calculate allocation efficiency (assuming minimal overhead)
         let total_allocations = results.successful_allocations + results.failed_allocations;
         if total_allocations > 0 {
-            results.allocation_efficiency = results.successful_allocations as f64 / total_allocations as f64;
+            results.allocation_efficiency =
+                results.successful_allocations as f64 / total_allocations as f64;
         }
 
         // Calculate latency percentiles
         if !allocation_times.is_empty() {
             let mut sorted_times = allocation_times.to_vec();
             sorted_times.sort();
-            
+
             let len = sorted_times.len();
             results.latency_percentiles = (
-                sorted_times[len / 2],                    // 50th percentile
-                sorted_times[(len * 9) / 10],             // 90th percentile
-                sorted_times[(len * 95) / 100],           // 95th percentile
-                sorted_times[(len * 99) / 100],           // 99th percentile
+                sorted_times[len / 2],          // 50th percentile
+                sorted_times[(len * 9) / 10],   // 90th percentile
+                sorted_times[(len * 95) / 100], // 95th percentile
+                sorted_times[(len * 99) / 100], // 99th percentile
             );
         }
 
         // Estimate fragmentation (simplified heuristic)
         if results.peak_memory_usage > 0 && results.total_bytes_allocated > 0 {
             // Higher values indicate more fragmentation
-            results.fragmentation_level = 1.0 - (results.total_bytes_allocated as f64 / results.peak_memory_usage as f64);
+            results.fragmentation_level =
+                1.0 - (results.total_bytes_allocated as f64 / results.peak_memory_usage as f64);
             results.fragmentation_level = results.fragmentation_level.max(0.0).min(1.0);
         }
     }
 
     /// Compare multiple allocators with the same benchmark configuration
-    pub fn compare_allocators(&mut self, allocators: Vec<(Box<dyn SpecializedAllocator<Error = NumRs2Error>>, String)>) -> Result<Vec<BenchmarkResults>> {
+    pub fn compare_allocators(
+        &mut self,
+        allocators: Vec<(Box<dyn SpecializedAllocator<Error = NumRs2Error>>, String)>,
+    ) -> Result<Vec<BenchmarkResults>> {
         let mut all_results = Vec::new();
 
         for (allocator, name) in allocators {
@@ -400,9 +471,9 @@ impl AllocatorBenchmark {
     /// Generate a performance report comparing multiple benchmark results
     pub fn generate_comparison_report(results: &[BenchmarkResults]) -> String {
         let mut report = String::new();
-        
+
         report.push_str("=== Allocator Performance Comparison ===\n\n");
-        
+
         if results.is_empty() {
             report.push_str("No benchmark results to compare.\n");
             return report;
@@ -410,13 +481,16 @@ impl AllocatorBenchmark {
 
         // Summary table
         report.push_str("Performance Summary:\n");
-        report.push_str(&format!("{:<20} {:<15} {:<15} {:<15} {:<15} {:<10}\n", 
-            "Allocator", "Alloc Time", "Dealloc Time", "Throughput", "Efficiency", "Frag"));
+        report.push_str(&format!(
+            "{:<20} {:<15} {:<15} {:<15} {:<15} {:<10}\n",
+            "Allocator", "Alloc Time", "Dealloc Time", "Throughput", "Efficiency", "Frag"
+        ));
         report.push_str(&"-".repeat(100));
         report.push('\n');
 
         for result in results {
-            report.push_str(&format!("{:<20} {:<15.2?} {:<15.2?} {:<15.0} {:<15.3} {:<10.3}\n",
+            report.push_str(&format!(
+                "{:<20} {:<15.2?} {:<15.2?} {:<15.0} {:<15.3} {:<10.3}\n",
                 result.allocator_name,
                 result.avg_allocation_time,
                 result.avg_deallocation_time,
@@ -428,30 +502,52 @@ impl AllocatorBenchmark {
 
         // Find best performer in each category
         report.push_str("\n\nBest Performers:\n");
-        
+
         if let Some(fastest_alloc) = results.iter().min_by_key(|r| r.avg_allocation_time) {
-            report.push_str(&format!("Fastest Allocation: {} ({:?})\n", 
-                fastest_alloc.allocator_name, fastest_alloc.avg_allocation_time));
+            report.push_str(&format!(
+                "Fastest Allocation: {} ({:?})\n",
+                fastest_alloc.allocator_name, fastest_alloc.avg_allocation_time
+            ));
         }
-        
+
         if let Some(fastest_dealloc) = results.iter().min_by_key(|r| r.avg_deallocation_time) {
-            report.push_str(&format!("Fastest Deallocation: {} ({:?})\n", 
-                fastest_dealloc.allocator_name, fastest_dealloc.avg_deallocation_time));
+            report.push_str(&format!(
+                "Fastest Deallocation: {} ({:?})\n",
+                fastest_dealloc.allocator_name, fastest_dealloc.avg_deallocation_time
+            ));
         }
-        
-        if let Some(highest_throughput) = results.iter().max_by(|a, b| a.allocation_throughput.partial_cmp(&b.allocation_throughput).unwrap()) {
-            report.push_str(&format!("Highest Throughput: {} ({:.0} ops/sec)\n", 
-                highest_throughput.allocator_name, highest_throughput.allocation_throughput));
+
+        if let Some(highest_throughput) = results.iter().max_by(|a, b| {
+            a.allocation_throughput
+                .partial_cmp(&b.allocation_throughput)
+                .unwrap()
+        }) {
+            report.push_str(&format!(
+                "Highest Throughput: {} ({:.0} ops/sec)\n",
+                highest_throughput.allocator_name, highest_throughput.allocation_throughput
+            ));
         }
-        
-        if let Some(most_efficient) = results.iter().max_by(|a, b| a.allocation_efficiency.partial_cmp(&b.allocation_efficiency).unwrap()) {
-            report.push_str(&format!("Most Efficient: {} ({:.3})\n", 
-                most_efficient.allocator_name, most_efficient.allocation_efficiency));
+
+        if let Some(most_efficient) = results.iter().max_by(|a, b| {
+            a.allocation_efficiency
+                .partial_cmp(&b.allocation_efficiency)
+                .unwrap()
+        }) {
+            report.push_str(&format!(
+                "Most Efficient: {} ({:.3})\n",
+                most_efficient.allocator_name, most_efficient.allocation_efficiency
+            ));
         }
-        
-        if let Some(least_fragmented) = results.iter().min_by(|a, b| a.fragmentation_level.partial_cmp(&b.fragmentation_level).unwrap()) {
-            report.push_str(&format!("Least Fragmentation: {} ({:.3})\n", 
-                least_fragmented.allocator_name, least_fragmented.fragmentation_level));
+
+        if let Some(least_fragmented) = results.iter().min_by(|a, b| {
+            a.fragmentation_level
+                .partial_cmp(&b.fragmentation_level)
+                .unwrap()
+        }) {
+            report.push_str(&format!(
+                "Least Fragmentation: {} ({:.3})\n",
+                least_fragmented.allocator_name, least_fragmented.fragmentation_level
+            ));
         }
 
         report
@@ -480,8 +576,8 @@ pub mod benchmark_configs {
     pub fn large_matrices() -> BenchmarkConfig {
         BenchmarkConfig {
             iterations: 1000,
-            min_size: 1024 * 1024,        // 1MB
-            max_size: 64 * 1024 * 1024,   // 64MB
+            min_size: 1024 * 1024,      // 1MB
+            max_size: 64 * 1024 * 1024, // 64MB
             concurrent_allocations: 10,
             randomize_sizes: true,
             randomize_order: false,
@@ -495,7 +591,7 @@ pub mod benchmark_configs {
         BenchmarkConfig {
             iterations: 10000,
             min_size: 64,
-            max_size: 4 * 1024 * 1024,   // 4MB
+            max_size: 4 * 1024 * 1024, // 4MB
             concurrent_allocations: 100,
             randomize_sizes: true,
             randomize_order: true,
@@ -568,8 +664,10 @@ mod tests {
         });
 
         let allocator = NumericalArrayAllocator::new();
-        let results = benchmark.benchmark_allocator(&allocator, "NumericalArrayAllocator").unwrap();
-        
+        let results = benchmark
+            .benchmark_allocator(&allocator, "NumericalArrayAllocator")
+            .unwrap();
+
         assert_eq!(results.allocator_name, "NumericalArrayAllocator");
         assert!(results.successful_allocations > 0);
         assert!(results.allocation_throughput > 0.0);
@@ -588,26 +686,29 @@ mod tests {
 
     #[test]
     fn test_comparison_report_generation() {
-        let results = vec![
-            BenchmarkResults {
-                allocator_name: "TestAllocator1".to_string(),
-                config: BenchmarkConfig::default(),
-                allocation_time: Duration::from_millis(100),
-                deallocation_time: Duration::from_millis(50),
-                avg_allocation_time: Duration::from_micros(10),
-                avg_deallocation_time: Duration::from_micros(5),
-                peak_memory_usage: 1024 * 1024,
-                total_bytes_allocated: 800 * 1024,
-                successful_allocations: 10000,
-                failed_allocations: 0,
-                fragmentation_level: 0.2,
-                allocation_efficiency: 1.0,
-                allocation_throughput: 100000.0,
-                bytes_per_second: 8000000.0,
-                size_distribution: HashMap::new(),
-                latency_percentiles: (Duration::from_micros(8), Duration::from_micros(15), Duration::from_micros(20), Duration::from_micros(30)),
-            }
-        ];
+        let results = vec![BenchmarkResults {
+            allocator_name: "TestAllocator1".to_string(),
+            config: BenchmarkConfig::default(),
+            allocation_time: Duration::from_millis(100),
+            deallocation_time: Duration::from_millis(50),
+            avg_allocation_time: Duration::from_micros(10),
+            avg_deallocation_time: Duration::from_micros(5),
+            peak_memory_usage: 1024 * 1024,
+            total_bytes_allocated: 800 * 1024,
+            successful_allocations: 10000,
+            failed_allocations: 0,
+            fragmentation_level: 0.2,
+            allocation_efficiency: 1.0,
+            allocation_throughput: 100000.0,
+            bytes_per_second: 8000000.0,
+            size_distribution: HashMap::new(),
+            latency_percentiles: (
+                Duration::from_micros(8),
+                Duration::from_micros(15),
+                Duration::from_micros(20),
+                Duration::from_micros(30),
+            ),
+        }];
 
         let report = AllocatorBenchmark::generate_comparison_report(&results);
         assert!(report.contains("Allocator Performance Comparison"));

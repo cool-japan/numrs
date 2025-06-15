@@ -137,25 +137,23 @@ impl IOError {
     /// Get the severity level of this error
     pub fn severity(&self) -> ErrorSeverity {
         match self {
-            IOError::FileOperation { io_error_kind, .. } => {
-                match io_error_kind {
-                    Some(std::io::ErrorKind::NotFound) => ErrorSeverity::Medium,
-                    Some(std::io::ErrorKind::PermissionDenied) => ErrorSeverity::High,
-                    Some(std::io::ErrorKind::OutOfMemory) => ErrorSeverity::Critical,
-                    Some(std::io::ErrorKind::StorageFull) => ErrorSeverity::High,
-                    _ => ErrorSeverity::Medium,
-                }
+            IOError::FileOperation { io_error_kind, .. } => match io_error_kind {
+                Some(std::io::ErrorKind::NotFound) => ErrorSeverity::Medium,
+                Some(std::io::ErrorKind::PermissionDenied) => ErrorSeverity::High,
+                Some(std::io::ErrorKind::OutOfMemory) => ErrorSeverity::Critical,
+                Some(std::io::ErrorKind::StorageFull) => ErrorSeverity::High,
+                _ => ErrorSeverity::Medium,
             },
             IOError::InvalidFormat { .. } => ErrorSeverity::Medium,
             IOError::Serialization { .. } => ErrorSeverity::Medium,
             IOError::Deserialization { .. } => ErrorSeverity::Medium,
             IOError::Network { status_code, .. } => {
                 match status_code {
-                    Some(500..=599) => ErrorSeverity::High, // Server errors
+                    Some(500..=599) => ErrorSeverity::High,   // Server errors
                     Some(400..=499) => ErrorSeverity::Medium, // Client errors
                     _ => ErrorSeverity::Medium,
                 }
-            },
+            }
             IOError::Encoding { .. } => ErrorSeverity::Medium,
             IOError::Compression { .. } => ErrorSeverity::Medium,
             IOError::Database { .. } => ErrorSeverity::High,
@@ -192,11 +190,14 @@ impl IOError {
             IOError::Network { status_code, .. } => {
                 // Temporary network issues
                 matches!(status_code, Some(429) | Some(500..=503) | Some(504) | None)
-            },
+            }
             IOError::FileOperation { io_error_kind, .. } => {
                 // Some file operations might be transient
-                matches!(io_error_kind, Some(std::io::ErrorKind::Interrupted) | Some(std::io::ErrorKind::TimedOut))
-            },
+                matches!(
+                    io_error_kind,
+                    Some(std::io::ErrorKind::Interrupted) | Some(std::io::ErrorKind::TimedOut)
+                )
+            }
             IOError::Database { .. } => true, // Database connections can be transient
             IOError::TemporaryResource { .. } => true,
             _ => false,
@@ -206,9 +207,14 @@ impl IOError {
     /// Get suggested recovery actions
     pub fn recovery_suggestions(&self) -> Vec<String> {
         match self {
-            IOError::FileOperation { operation, path, io_error_kind, .. } => {
+            IOError::FileOperation {
+                operation,
+                path,
+                io_error_kind,
+                ..
+            } => {
                 let mut suggestions = vec![];
-                
+
                 match io_error_kind {
                     Some(std::io::ErrorKind::NotFound) => {
                         suggestions.push(format!("Check if file exists: {}", path.display()));
@@ -216,29 +222,41 @@ impl IOError {
                         if operation == "read" {
                             suggestions.push("Create the file if it should exist".to_string());
                         }
-                    },
+                    }
                     Some(std::io::ErrorKind::PermissionDenied) => {
                         suggestions.push("Check file permissions".to_string());
                         suggestions.push("Run with appropriate privileges".to_string());
-                        suggestions.push(format!("Ensure write access to directory: {}", 
-                            path.parent().map(|p| p.display().to_string()).unwrap_or_default()));
-                    },
+                        suggestions.push(format!(
+                            "Ensure write access to directory: {}",
+                            path.parent()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default()
+                        ));
+                    }
                     Some(std::io::ErrorKind::StorageFull) => {
                         suggestions.push("Free up disk space".to_string());
                         suggestions.push("Use a different storage location".to_string());
                         suggestions.push("Consider compression or data cleanup".to_string());
-                    },
+                    }
                     _ => {
                         suggestions.push(format!("Retry the {} operation", operation));
                         suggestions.push("Check system resources and file locks".to_string());
                     }
                 }
                 suggestions
-            },
-            IOError::InvalidFormat { format, expected_format, file_path, .. } => {
+            }
+            IOError::InvalidFormat {
+                format,
+                expected_format,
+                file_path,
+                ..
+            } => {
                 vec![
                     if let Some(expected) = expected_format {
-                        format!("Convert file to {} format (currently: {})", expected, format)
+                        format!(
+                            "Convert file to {} format (currently: {})",
+                            expected, format
+                        )
                     } else {
                         format!("Verify the file format (detected: {})", format)
                     },
@@ -249,27 +267,34 @@ impl IOError {
                     },
                     "Use appropriate loader for the file type".to_string(),
                 ]
-            },
-            IOError::Network { status_code, url, .. } => {
+            }
+            IOError::Network {
+                status_code, url, ..
+            } => {
                 let mut suggestions = vec!["Check network connectivity".to_string()];
-                
+
                 if let Some(code) = status_code {
                     match *code {
-                        429 => suggestions.push("Rate limited - reduce request frequency".to_string()),
-                        400..=499 => suggestions.push("Check request parameters and authentication".to_string()),
+                        429 => {
+                            suggestions.push("Rate limited - reduce request frequency".to_string())
+                        }
+                        400..=499 => suggestions
+                            .push("Check request parameters and authentication".to_string()),
                         500..=599 => suggestions.push("Server error - retry later".to_string()),
-                        _ => {},
+                        _ => {}
                     }
                 }
-                
+
                 if let Some(url_str) = url {
                     suggestions.push(format!("Verify URL is accessible: {}", url_str));
                 }
-                
+
                 suggestions.push("Consider using offline data if available".to_string());
                 suggestions
-            },
-            IOError::Serialization { format, data_type, .. } => {
+            }
+            IOError::Serialization {
+                format, data_type, ..
+            } => {
                 vec![
                     format!("Check data compatibility with {} format", format),
                     if let Some(dtype) = data_type {
@@ -280,8 +305,13 @@ impl IOError {
                     "Use alternative serialization format".to_string(),
                     "Implement custom serialization if needed".to_string(),
                 ]
-            },
-            IOError::Deserialization { format, file_path, data_size, .. } => {
+            }
+            IOError::Deserialization {
+                format,
+                file_path,
+                data_size,
+                ..
+            } => {
                 vec![
                     format!("Verify file was created with compatible {} version", format),
                     if let Some(path) = file_path {
@@ -296,8 +326,13 @@ impl IOError {
                     },
                     "Try alternative deserialization method".to_string(),
                 ]
-            },
-            IOError::Validation { validation_type, expected_value, actual_value, .. } => {
+            }
+            IOError::Validation {
+                validation_type,
+                expected_value,
+                actual_value,
+                ..
+            } => {
                 vec![
                     format!("Data {} validation failed", validation_type),
                     if let (Some(expected), Some(actual)) = (expected_value, actual_value) {
@@ -308,8 +343,12 @@ impl IOError {
                     "Re-download or regenerate the data".to_string(),
                     "Use data without validation if corruption is acceptable".to_string(),
                 ]
-            },
-            IOError::MemoryMapping { file_path, mapping_size, .. } => {
+            }
+            IOError::MemoryMapping {
+                file_path,
+                mapping_size,
+                ..
+            } => {
                 vec![
                     format!("Check file accessibility: {}", file_path.display()),
                     if let Some(size) = mapping_size {
@@ -320,8 +359,13 @@ impl IOError {
                     "Ensure sufficient virtual memory available".to_string(),
                     "Use regular file I/O instead of memory mapping".to_string(),
                 ]
-            },
-            IOError::AccessDenied { operation, resource, required_permissions, .. } => {
+            }
+            IOError::AccessDenied {
+                operation,
+                resource,
+                required_permissions,
+                ..
+            } => {
                 vec![
                     format!("Grant {} permissions for {}", operation, resource),
                     if let Some(perms) = required_permissions {
@@ -332,7 +376,7 @@ impl IOError {
                     "Run with administrator/root privileges if necessary".to_string(),
                     "Move files to accessible location".to_string(),
                 ]
-            },
+            }
             _ => vec!["Check I/O operation parameters and retry".to_string()],
         }
     }
@@ -476,15 +520,20 @@ mod tests {
             context: OperationContext::default(),
         };
         let suggestions = err.recovery_suggestions();
-        assert!(suggestions.iter().any(|s| s.contains("Check if file exists")));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.contains("Check if file exists")));
     }
 
     #[test]
     fn test_invalid_format_error() {
         let err = IOError::invalid_format("NPY", "Invalid magic bytes");
         assert_eq!(err.severity(), ErrorSeverity::Medium);
-        
-        if let IOError::InvalidFormat { format, details, .. } = &err {
+
+        if let IOError::InvalidFormat {
+            format, details, ..
+        } = &err
+        {
             assert_eq!(*format, "NPY");
             assert_eq!(*details, "Invalid magic bytes");
         } else {
@@ -503,14 +552,16 @@ mod tests {
         };
 
         let suggestions = err.recovery_suggestions();
-        assert!(suggestions.iter().any(|s| s.contains("Expected: abc123, Got: def456")));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.contains("Expected: abc123, Got: def456")));
     }
 
     #[test]
     fn test_from_std_io_error() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
         let numrs_err = IOError::from(io_err);
-        
+
         if let IOError::FileOperation { io_error_kind, .. } = &numrs_err {
             assert_eq!(*io_error_kind, Some(std::io::ErrorKind::NotFound));
         } else {

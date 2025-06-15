@@ -24,7 +24,9 @@ pub enum CoreError {
     },
 
     /// Invalid array index
-    #[error("Index out of bounds: index {index} is out of bounds for axis {axis} with size {size}")]
+    #[error(
+        "Index out of bounds: index {index} is out of bounds for axis {axis} with size {size}"
+    )]
     IndexOutOfBounds {
         index: isize,
         axis: usize,
@@ -148,52 +150,72 @@ impl CoreError {
 
     /// Check if this error suggests a programming mistake vs runtime condition
     pub fn is_programming_error(&self) -> bool {
-        matches!(self, 
-            CoreError::ShapeMismatch { .. } |
-            CoreError::DimensionMismatch { .. } |
-            CoreError::BroadcastError { .. } |
-            CoreError::InvalidAxis { .. } |
-            CoreError::StrideError { .. }
+        matches!(
+            self,
+            CoreError::ShapeMismatch { .. }
+                | CoreError::DimensionMismatch { .. }
+                | CoreError::BroadcastError { .. }
+                | CoreError::InvalidAxis { .. }
+                | CoreError::StrideError { .. }
         )
     }
 
     /// Get suggested recovery actions
     pub fn recovery_suggestions(&self) -> Vec<String> {
         match self {
-            CoreError::ShapeMismatch { expected, actual, .. } => {
+            CoreError::ShapeMismatch {
+                expected, actual, ..
+            } => {
                 vec![
-                    format!("Reshape one of the arrays to match: expected {:?}", expected),
+                    format!(
+                        "Reshape one of the arrays to match: expected {:?}",
+                        expected
+                    ),
                     format!("Current shape is {:?}, use .reshape() or .view()", actual),
                     "Check array dimensions before the operation".to_string(),
                 ]
-            },
-            CoreError::IndexOutOfBounds { index, axis, size, .. } => {
+            }
+            CoreError::IndexOutOfBounds {
+                index, axis, size, ..
+            } => {
                 vec![
                     format!("Use index in range [0, {}) for axis {}", size, axis),
-                    format!("Index {} is invalid, maximum valid index is {}", index, size - 1),
+                    format!(
+                        "Index {} is invalid, maximum valid index is {}",
+                        index,
+                        size - 1
+                    ),
                     "Consider using .get() method for safe indexing".to_string(),
                 ]
-            },
+            }
             CoreError::BroadcastError { shape1, shape2, .. } => {
                 vec![
-                    format!("Reshape arrays to compatible shapes (current: {:?} vs {:?})", shape1, shape2),
+                    format!(
+                        "Reshape arrays to compatible shapes (current: {:?} vs {:?})",
+                        shape1, shape2
+                    ),
                     "Use explicit broadcasting with .broadcast_to()".to_string(),
                     "Check NumPy broadcasting rules".to_string(),
                 ]
-            },
+            }
             CoreError::FeatureNotEnabled { feature_flag, .. } => {
                 vec![
                     format!("Recompile with --features {}", feature_flag),
                     "Check Cargo.toml for available features".to_string(),
                 ]
-            },
-            CoreError::TypeConversion { from_type, to_type, .. } => {
+            }
+            CoreError::TypeConversion {
+                from_type, to_type, ..
+            } => {
                 vec![
-                    format!("Use explicit conversion methods from {} to {}", from_type, to_type),
+                    format!(
+                        "Use explicit conversion methods from {} to {}",
+                        from_type, to_type
+                    ),
                     "Check if the conversion is mathematically valid".to_string(),
                     "Consider using .try_into() for fallible conversions".to_string(),
                 ]
-            },
+            }
             _ => vec!["Check function documentation for valid parameters".to_string()],
         }
     }
@@ -202,11 +224,7 @@ impl CoreError {
 /// Convenience constructors for common core errors
 impl CoreError {
     /// Create a shape mismatch error
-    pub fn shape_mismatch(
-        expected: Vec<usize>, 
-        actual: Vec<usize>, 
-        operation: &str
-    ) -> Self {
+    pub fn shape_mismatch(expected: Vec<usize>, actual: Vec<usize>, operation: &str) -> Self {
         CoreError::ShapeMismatch {
             expected,
             actual,
@@ -215,12 +233,7 @@ impl CoreError {
     }
 
     /// Create an index out of bounds error
-    pub fn index_out_of_bounds(
-        index: isize, 
-        axis: usize, 
-        size: usize, 
-        operation: &str
-    ) -> Self {
+    pub fn index_out_of_bounds(index: isize, axis: usize, size: usize, operation: &str) -> Self {
         CoreError::IndexOutOfBounds {
             index,
             axis,
@@ -231,9 +244,9 @@ impl CoreError {
 
     /// Create a dimension mismatch error
     pub fn dimension_mismatch(
-        message: &str, 
-        expected: Option<usize>, 
-        actual: Option<usize>
+        message: &str,
+        expected: Option<usize>,
+        actual: Option<usize>,
     ) -> Self {
         CoreError::DimensionMismatch {
             message: message.to_string(),
@@ -290,7 +303,7 @@ mod tests {
         let err = CoreError::shape_mismatch(vec![2, 3], vec![3, 2], "matrix_multiply");
         assert_eq!(err.severity(), ErrorSeverity::High);
         assert!(err.is_programming_error());
-        
+
         let suggestions = err.recovery_suggestions();
         assert!(!suggestions.is_empty());
         assert!(suggestions[0].contains("Reshape"));
@@ -300,7 +313,7 @@ mod tests {
     fn test_index_out_of_bounds_error() {
         let err = CoreError::index_out_of_bounds(5, 0, 3, "array_access");
         assert_eq!(err.severity(), ErrorSeverity::Medium);
-        
+
         let suggestions = err.recovery_suggestions();
         assert!(suggestions[0].contains("range [0, 3)"));
     }
@@ -309,7 +322,7 @@ mod tests {
     fn test_broadcast_error() {
         let err = CoreError::broadcast_error(vec![2, 3], vec![4, 5], "element_wise_add");
         assert_eq!(err.severity(), ErrorSeverity::High);
-        
+
         if let CoreError::BroadcastError { shape1, shape2, .. } = &err {
             assert_eq!(*shape1, vec![2, 3]);
             assert_eq!(*shape2, vec![4, 5]);
@@ -322,7 +335,7 @@ mod tests {
     fn test_feature_not_enabled() {
         let err = CoreError::feature_not_enabled("GPU acceleration", "gpu");
         assert_eq!(err.severity(), ErrorSeverity::Low);
-        
+
         let suggestions = err.recovery_suggestions();
         assert!(suggestions[0].contains("--features gpu"));
     }

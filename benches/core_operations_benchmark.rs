@@ -6,11 +6,11 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use numrs2::array::Array;
 use numrs2::array_ops;
+use numrs2::linalg::LinAlg;
 use numrs2::memory_optimize::cache_layout::{
     calculate_optimal_block_size, optimize_layout, LayoutStrategy,
 };
 use numrs2::simd::SimdOps;
-use numrs2::linalg::LinAlg;
 use numrs2::stats::Statistics;
 use std::time::Duration;
 

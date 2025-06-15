@@ -4,8 +4,8 @@
 //! tuning capabilities to any existing allocator.
 
 use crate::error::{NumRs2Error, Result};
-use crate::traits::{AllocationStrategy, MemoryAllocator, SpecializedAllocator};
 use crate::memory_alloc::performance_tuning::{PerformanceTuner, TuningConfig};
+use crate::traits::{AllocationStrategy, MemoryAllocator, SpecializedAllocator};
 use std::alloc::Layout;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
@@ -77,7 +77,9 @@ where
     }
 
     /// Get the current performance metrics
-    pub fn get_performance_metrics(&self) -> crate::memory_alloc::performance_tuning::PerformanceMetrics {
+    pub fn get_performance_metrics(
+        &self,
+    ) -> crate::memory_alloc::performance_tuning::PerformanceMetrics {
         self.tuner.lock().unwrap().get_current_metrics()
     }
 
@@ -87,7 +89,9 @@ where
     }
 
     /// Get optimization recommendations
-    pub fn get_optimization_recommendations(&self) -> Vec<crate::memory_alloc::performance_tuning::OptimizationRecommendation> {
+    pub fn get_optimization_recommendations(
+        &self,
+    ) -> Vec<crate::memory_alloc::performance_tuning::OptimizationRecommendation> {
         self.tuner.lock().unwrap().analyze_performance()
     }
 
@@ -112,7 +116,12 @@ where
     }
 
     /// Record allocation metrics if monitoring is enabled
-    fn record_allocation_metrics(&self, layout: Layout, duration: std::time::Duration, success: bool) {
+    fn record_allocation_metrics(
+        &self,
+        layout: Layout,
+        duration: std::time::Duration,
+        success: bool,
+    ) {
         if !self.should_monitor_allocation(layout) {
             return;
         }
@@ -129,7 +138,7 @@ where
         if metrics.total_allocations % self.config.report_frequency == 0 {
             println!("=== Allocation Performance Report ===");
             println!("{}", tuner.generate_performance_report());
-            
+
             if self.config.auto_optimization {
                 let recommendations = tuner.analyze_performance();
                 if !recommendations.is_empty() {
@@ -199,8 +208,10 @@ where
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<u8>> {
-        let start_time = if self.config.detailed_timing && 
-            (self.should_monitor_allocation(old_layout) || self.should_monitor_allocation(new_layout)) {
+        let start_time = if self.config.detailed_timing
+            && (self.should_monitor_allocation(old_layout)
+                || self.should_monitor_allocation(new_layout))
+        {
             Some(Instant::now())
         } else {
             None
@@ -244,7 +255,10 @@ impl<A> AllocationStrategy for MonitoredAllocator<A>
 where
     A: SpecializedAllocator<Error = NumRs2Error> + AllocationStrategy,
 {
-    fn select_allocator(&self, _requirements: &crate::traits::AllocationRequirements) -> Box<dyn SpecializedAllocator<Error = NumRs2Error>> {
+    fn select_allocator(
+        &self,
+        _requirements: &crate::traits::AllocationRequirements,
+    ) -> Box<dyn SpecializedAllocator<Error = NumRs2Error>> {
         // For monitored allocators, delegate to the underlying strategy would require
         // wrapping the result in monitoring, which is complex
         // For now, return the numerical array allocator which supports most use cases
@@ -281,26 +295,39 @@ impl MonitoredAllocatorFactory {
     where
         A: SpecializedAllocator<Error = NumRs2Error>,
     {
-        MonitoredAllocator::new(allocator, self.monitoring_config.clone(), self.tuning_config.clone())
+        MonitoredAllocator::new(
+            allocator,
+            self.monitoring_config.clone(),
+            self.tuning_config.clone(),
+        )
     }
 
     /// Create a monitored numerical array allocator
-    pub fn create_monitored_numerical(&self) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
-        let numerical_allocator = crate::memory_alloc::enhanced_traits::NumericalArrayAllocator::new();
+    pub fn create_monitored_numerical(
+        &self,
+    ) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
+        let numerical_allocator =
+            crate::memory_alloc::enhanced_traits::NumericalArrayAllocator::new();
         self.wrap(numerical_allocator)
     }
 
     /// Create a monitored enhanced allocator bridge
-    pub fn create_monitored_enhanced<T>(&self, inner: T) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::EnhancedAllocatorBridge<T>>
+    pub fn create_monitored_enhanced<T>(
+        &self,
+        inner: T,
+    ) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::EnhancedAllocatorBridge<T>>
     where
         T: crate::memory_alloc::strategy::MemoryAllocator + std::fmt::Debug,
     {
-        let enhanced_allocator = crate::memory_alloc::enhanced_traits::EnhancedAllocatorBridge::new(inner);
+        let enhanced_allocator =
+            crate::memory_alloc::enhanced_traits::EnhancedAllocatorBridge::new(inner);
         self.wrap(enhanced_allocator)
     }
 
     /// Create a monitored allocator optimized for SIMD operations
-    pub fn create_monitored_simd_optimized(&self) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
+    pub fn create_monitored_simd_optimized(
+        &self,
+    ) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
         // Use the numerical array allocator which is optimized for SIMD
         self.create_monitored_numerical()
     }
@@ -311,7 +338,8 @@ pub mod presets {
     use super::*;
 
     /// Create a high-performance monitored allocator for numerical computing
-    pub fn numerical_computing_allocator() -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
+    pub fn numerical_computing_allocator(
+    ) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
         let monitoring_config = MonitoringConfig {
             detailed_timing: true,
             auto_optimization: true,
@@ -333,7 +361,8 @@ pub mod presets {
     }
 
     /// Create a monitored allocator optimized for small temporary objects
-    pub fn temporary_object_allocator() -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
+    pub fn temporary_object_allocator(
+    ) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
         let monitoring_config = MonitoringConfig {
             detailed_timing: false, // Less overhead for small allocations
             auto_optimization: true,
@@ -355,7 +384,9 @@ pub mod presets {
     }
 
     /// Create a monitored allocator for large matrix operations
-    pub fn matrix_allocator(_typical_matrix_size: usize) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
+    pub fn matrix_allocator(
+        _typical_matrix_size: usize,
+    ) -> MonitoredAllocator<crate::memory_alloc::enhanced_traits::NumericalArrayAllocator> {
         let monitoring_config = MonitoringConfig {
             detailed_timing: true,
             auto_optimization: false, // Matrix allocations have predictable patterns
@@ -380,7 +411,7 @@ mod tests {
     fn test_monitored_allocator_creation() {
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = MonitoredAllocator::with_defaults(base_allocator);
-        
+
         let metrics = monitored.get_performance_metrics();
         assert_eq!(metrics.total_allocations, 0);
     }
@@ -389,18 +420,18 @@ mod tests {
     fn test_allocation_monitoring() {
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = MonitoredAllocator::with_defaults(base_allocator);
-        
+
         let layout = Layout::from_size_align(1024, 16).unwrap();
         let ptr = monitored.allocate(layout).unwrap();
-        
+
         let metrics = monitored.get_performance_metrics();
         assert_eq!(metrics.total_allocations, 1);
         assert_eq!(metrics.total_bytes_allocated, 1024);
-        
+
         unsafe {
             monitored.deallocate(ptr, layout).unwrap();
         }
-        
+
         let metrics = monitored.get_performance_metrics();
         assert_eq!(metrics.total_deallocations, 1);
         assert_eq!(metrics.current_memory_usage, 0);
@@ -412,14 +443,14 @@ mod tests {
             min_monitored_size: 1000,
             ..MonitoringConfig::default()
         };
-        
+
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = MonitoredAllocator::new(base_allocator, config, TuningConfig::default());
-        
+
         // Small allocation should not be monitored
         let small_layout = Layout::from_size_align(64, 16).unwrap();
         let _ptr = monitored.allocate(small_layout).unwrap();
-        
+
         let metrics = monitored.get_performance_metrics();
         assert_eq!(metrics.total_allocations, 0);
     }
@@ -428,13 +459,13 @@ mod tests {
     fn test_performance_report_generation() {
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = MonitoredAllocator::with_defaults(base_allocator);
-        
+
         // Perform some allocations
         for _ in 0..10 {
             let layout = Layout::from_size_align(1024, 16).unwrap();
             let _ptr = monitored.allocate(layout).unwrap();
         }
-        
+
         let report = monitored.generate_performance_report();
         assert!(report.contains("Memory Allocator Performance Report"));
         assert!(report.contains("Total allocations: 10"));
@@ -445,7 +476,7 @@ mod tests {
         let factory = MonitoredAllocatorFactory::default();
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = factory.wrap(base_allocator);
-        
+
         assert!(monitored.preferred_alignment() >= 8);
     }
 
@@ -453,10 +484,10 @@ mod tests {
     fn test_preset_allocators() {
         let numerical = presets::numerical_computing_allocator();
         assert!(numerical.preferred_alignment() >= 8);
-        
+
         let temp_obj = presets::temporary_object_allocator();
         assert!(temp_obj.supports_layout(Layout::from_size_align(64, 8).unwrap()));
-        
+
         let matrix = presets::matrix_allocator(4096);
         assert!(matrix.supports_layout(Layout::from_size_align(4096, 8).unwrap()));
     }
@@ -465,7 +496,7 @@ mod tests {
     fn test_optimization_recommendations() {
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = MonitoredAllocator::with_defaults(base_allocator);
-        
+
         // Perform many small allocations to trigger recommendations
         for _ in 0..2000 {
             let layout = Layout::from_size_align(128, 8).unwrap();
@@ -474,7 +505,7 @@ mod tests {
                 monitored.deallocate(ptr, layout).unwrap();
             }
         }
-        
+
         let recommendations = monitored.get_optimization_recommendations();
         assert!(!recommendations.is_empty());
     }
@@ -483,17 +514,17 @@ mod tests {
     fn test_metrics_reset() {
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = MonitoredAllocator::with_defaults(base_allocator);
-        
+
         // Perform allocation
         let layout = Layout::from_size_align(1024, 8).unwrap();
         let _ptr = monitored.allocate(layout).unwrap();
-        
+
         let metrics_before = monitored.get_performance_metrics();
         assert_eq!(metrics_before.total_allocations, 1);
-        
+
         // Reset metrics
         monitored.reset_metrics();
-        
+
         let metrics_after = monitored.get_performance_metrics();
         assert_eq!(metrics_after.total_allocations, 0);
     }

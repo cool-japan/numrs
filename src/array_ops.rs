@@ -1813,7 +1813,7 @@ pub fn block<T: Clone>(blocks: &[Vec<&Array<T>>]) -> Result<Array<T>> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use numrs2::prelude::*;
 ///
 /// // Create a 2x6 array
@@ -1827,7 +1827,7 @@ pub fn block<T: Clone>(blocks: &[Vec<&Array<T>>]) -> Result<Array<T>> {
 /// assert_eq!(splits[2].shape(), vec![2, 2]);
 ///
 /// // Split at specific indices
-/// let splits2 = hsplit(&a, &vec![2, 4]).unwrap();
+/// let splits2 = hsplit(&a, vec![2, 4]).unwrap();
 /// assert_eq!(splits2.len(), 3);
 /// ```
 pub fn hsplit<T: Clone>(
@@ -1883,7 +1883,7 @@ pub fn hsplit<T: Clone>(
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use numrs2::prelude::*;
 ///
 /// // Create a 6x2 array
@@ -1897,7 +1897,7 @@ pub fn hsplit<T: Clone>(
 /// assert_eq!(splits[2].shape(), vec![2, 2]);
 ///
 /// // Split at specific indices
-/// let splits2 = vsplit(&a, &vec![2, 4]).unwrap();
+/// let splits2 = vsplit(&a, vec![2, 4]).unwrap();
 /// assert_eq!(splits2.len(), 3);
 /// ```
 pub fn vsplit<T: Clone>(
@@ -2257,7 +2257,7 @@ pub fn r_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
@@ -2265,7 +2265,7 @@ pub fn r_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// let c = c_(&[&a, &b]).unwrap();
 /// // With 1D arrays, c_ reshapes them to [n, 1] and concatenates along axis 1
 /// assert_eq!(c.shape(), vec![3, 2]);
-/// assert_eq!(c.to_vec(), vec![1, 4, 2, 5, 3, 6]);
+/// assert_eq!(c.to_vec(), vec![1, 2, 3, 4, 5, 6]);
 ///
 /// // With 2D arrays
 /// let a2 = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
@@ -3330,13 +3330,15 @@ pub fn where_cond<T: Clone + Display>(
         .iter()
         .zip(x_data.iter())
         .zip(y_data.iter())
-        .map(|((&cond, x_val), y_val)| {
-            if cond {
-                x_val.clone()
-            } else {
-                y_val.clone()
-            }
-        })
+        .map(
+            |((&cond, x_val), y_val)| {
+                if cond {
+                    x_val.clone()
+                } else {
+                    y_val.clone()
+                }
+            },
+        )
         .collect();
 
     Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
@@ -3433,11 +3435,18 @@ pub fn select<T: Clone + num_traits::Zero>(
         }
 
         // Check conditions in order
-        for (cond_broadcast, choice_broadcast) in 
-            cond_broadcasts.iter().zip(choice_broadcasts.iter()) {
-            let cond_val = cond_broadcast.array().get(ndarray::IxDyn(&indices)).unwrap();
+        for (cond_broadcast, choice_broadcast) in
+            cond_broadcasts.iter().zip(choice_broadcasts.iter())
+        {
+            let cond_val = cond_broadcast
+                .array()
+                .get(ndarray::IxDyn(&indices))
+                .unwrap();
             if *cond_val {
-                let choice_val = choice_broadcast.array().get(ndarray::IxDyn(&indices)).unwrap();
+                let choice_val = choice_broadcast
+                    .array()
+                    .get(ndarray::IxDyn(&indices))
+                    .unwrap();
                 result.set(&indices, choice_val.clone())?;
                 break; // Take the first matching condition
             }
@@ -3570,7 +3579,8 @@ pub fn frombuffer<T: Clone + Default>(
     if offset >= buffer.len() {
         return Err(NumRs2Error::IndexOutOfBounds(format!(
             "Offset {} is beyond buffer size {}",
-            offset, buffer.len()
+            offset,
+            buffer.len()
         )));
     }
 
@@ -3584,7 +3594,7 @@ pub fn frombuffer<T: Clone + Default>(
 
     let available_bytes = buffer.len() - offset;
     let max_elements = available_bytes / dtype_size;
-    
+
     let num_elements = if count < 0 {
         max_elements
     } else {
@@ -3604,16 +3614,14 @@ pub fn frombuffer<T: Clone + Default>(
 
     // Create vector by copying bytes and converting to T
     let mut result = Vec::with_capacity(num_elements);
-    
+
     for i in 0..num_elements {
         let byte_offset = offset + i * dtype_size;
         let element_bytes = &buffer[byte_offset..byte_offset + dtype_size];
-        
+
         // Safety: We've checked the size matches T and bounds are valid
-        let element = unsafe {
-            std::ptr::read(element_bytes.as_ptr() as *const T)
-        };
-        
+        let element = unsafe { std::ptr::read(element_bytes.as_ptr() as *const T) };
+
         result.push(element);
     }
 
@@ -3650,7 +3658,7 @@ pub fn fromiter<T: Clone, I: Iterator<Item = T>>(
     shape: Option<&[usize]>,
 ) -> Result<Array<T>> {
     let data: Vec<T> = iter.collect();
-    
+
     match shape {
         Some(s) => {
             let expected_size: usize = s.iter().product();

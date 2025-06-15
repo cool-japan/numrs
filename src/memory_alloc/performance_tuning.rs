@@ -4,8 +4,8 @@
 //! based on runtime characteristics and workload patterns.
 
 use crate::error::{NumRs2Error, Result};
-use crate::traits::SpecializedAllocator;
 use crate::memory_alloc::benchmarking::{AllocatorBenchmark, BenchmarkConfig, BenchmarkResults};
+use crate::traits::SpecializedAllocator;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -148,7 +148,7 @@ impl PerformanceTuner {
         metrics.total_allocations += 1;
         metrics.total_bytes_allocated += size as u64;
         metrics.current_memory_usage += size as u64;
-        
+
         if metrics.current_memory_usage > metrics.peak_memory_usage {
             metrics.peak_memory_usage = metrics.current_memory_usage;
         }
@@ -158,9 +158,9 @@ impl PerformanceTuner {
         if metrics.total_allocations == 1 {
             metrics.avg_allocation_time_ns = new_time_ns;
         } else {
-            metrics.avg_allocation_time_ns = 
-                (metrics.avg_allocation_time_ns * (metrics.total_allocations - 1) + new_time_ns) 
-                / metrics.total_allocations;
+            metrics.avg_allocation_time_ns =
+                (metrics.avg_allocation_time_ns * (metrics.total_allocations - 1) + new_time_ns)
+                    / metrics.total_allocations;
         }
 
         metrics.last_updated = Instant::now();
@@ -178,8 +178,9 @@ impl PerformanceTuner {
         if metrics.total_deallocations == 1 {
             metrics.avg_deallocation_time_ns = new_time_ns;
         } else {
-            metrics.avg_deallocation_time_ns = 
-                (metrics.avg_deallocation_time_ns * (metrics.total_deallocations - 1) + new_time_ns) 
+            metrics.avg_deallocation_time_ns = (metrics.avg_deallocation_time_ns
+                * (metrics.total_deallocations - 1)
+                + new_time_ns)
                 / metrics.total_deallocations;
         }
 
@@ -221,13 +222,13 @@ impl PerformanceTuner {
 
         // Analyze allocation patterns
         recommendations.extend(self.analyze_allocation_patterns(&current));
-        
+
         // Analyze timing performance
         recommendations.extend(self.analyze_timing_performance(&current));
-        
+
         // Analyze memory efficiency
         recommendations.extend(self.analyze_memory_efficiency(&current));
-        
+
         // Analyze failure rates
         recommendations.extend(self.analyze_failure_rates(&current));
 
@@ -235,7 +236,10 @@ impl PerformanceTuner {
     }
 
     /// Analyze allocation size and frequency patterns
-    fn analyze_allocation_patterns(&self, metrics: &PerformanceMetrics) -> Vec<OptimizationRecommendation> {
+    fn analyze_allocation_patterns(
+        &self,
+        metrics: &PerformanceMetrics,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
 
         // Calculate average allocation size
@@ -249,7 +253,8 @@ impl PerformanceTuner {
         if avg_allocation_size < 1024 && metrics.total_allocations > 1000 {
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::UseArenaAllocation,
-                description: "Switch to arena allocation for small, frequent allocations".to_string(),
+                description: "Switch to arena allocation for small, frequent allocations"
+                    .to_string(),
                 estimated_improvement: 0.2,
                 difficulty: 2,
                 parameters: {
@@ -281,14 +286,19 @@ impl PerformanceTuner {
     }
 
     /// Analyze allocation and deallocation timing
-    fn analyze_timing_performance(&self, metrics: &PerformanceMetrics) -> Vec<OptimizationRecommendation> {
+    fn analyze_timing_performance(
+        &self,
+        metrics: &PerformanceMetrics,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
 
         // Check if allocation times are too high
-        if metrics.avg_allocation_time_ns > 10_000 { // 10 microseconds
+        if metrics.avg_allocation_time_ns > 10_000 {
+            // 10 microseconds
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::EnablePreallocation,
-                description: "Enable memory pre-allocation to reduce allocation overhead".to_string(),
+                description: "Enable memory pre-allocation to reduce allocation overhead"
+                    .to_string(),
                 estimated_improvement: 0.3,
                 difficulty: 3,
                 parameters: {
@@ -318,7 +328,10 @@ impl PerformanceTuner {
     }
 
     /// Analyze memory usage efficiency
-    fn analyze_memory_efficiency(&self, metrics: &PerformanceMetrics) -> Vec<OptimizationRecommendation> {
+    fn analyze_memory_efficiency(
+        &self,
+        metrics: &PerformanceMetrics,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
 
         // Check memory utilization
@@ -355,7 +368,10 @@ impl PerformanceTuner {
     }
 
     /// Analyze allocation failure patterns
-    fn analyze_failure_rates(&self, metrics: &PerformanceMetrics) -> Vec<OptimizationRecommendation> {
+    fn analyze_failure_rates(
+        &self,
+        metrics: &PerformanceMetrics,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
 
         let failure_rate = if metrics.total_allocations > 0 {
@@ -365,7 +381,8 @@ impl PerformanceTuner {
         };
 
         // High failure rate indicates memory pressure
-        if failure_rate > 0.01 { // 1% failure rate
+        if failure_rate > 0.01 {
+            // 1% failure rate
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::EnablePreallocation,
                 description: "Pre-allocate memory to reduce allocation failures".to_string(),
@@ -373,7 +390,10 @@ impl PerformanceTuner {
                 difficulty: 2,
                 parameters: {
                     let mut params = HashMap::new();
-                    params.insert("reserve_size".to_string(), (metrics.peak_memory_usage * 2).to_string());
+                    params.insert(
+                        "reserve_size".to_string(),
+                        (metrics.peak_memory_usage * 2).to_string(),
+                    );
                     params
                 },
             });
@@ -403,19 +423,24 @@ impl PerformanceTuner {
     }
 
     /// Benchmark an allocator and cache the results
-    pub fn benchmark_allocator<A>(&mut self, allocator: &A, name: &str, config: BenchmarkConfig) -> Result<BenchmarkResults>
+    pub fn benchmark_allocator<A>(
+        &mut self,
+        allocator: &A,
+        name: &str,
+        config: BenchmarkConfig,
+    ) -> Result<BenchmarkResults>
     where
         A: SpecializedAllocator<Error = NumRs2Error>,
     {
         let cache_key = format!("{}_{:?}", name, config.iterations);
-        
+
         if let Some(cached_result) = self.benchmark_cache.get(&cache_key) {
             return Ok(cached_result.clone());
         }
 
         let mut benchmark = AllocatorBenchmark::new(config);
         let results = benchmark.benchmark_allocator(allocator, name)?;
-        
+
         self.benchmark_cache.insert(cache_key, results.clone());
         Ok(results)
     }
@@ -423,7 +448,9 @@ impl PerformanceTuner {
     /// Apply optimization recommendations automatically
     pub fn apply_optimization(&self, recommendation: &OptimizationRecommendation) -> Result<()> {
         if !self.config.auto_tuning_enabled {
-            return Err(NumRs2Error::InvalidOperation("Auto-tuning is disabled".to_string()));
+            return Err(NumRs2Error::InvalidOperation(
+                "Auto-tuning is disabled".to_string(),
+            ));
         }
 
         match recommendation.optimization_type {
@@ -431,26 +458,24 @@ impl PerformanceTuner {
                 // Apply alignment optimization
                 // This would modify allocator settings
                 Ok(())
-            },
+            }
             OptimizationType::UseArenaAllocation => {
                 // Switch to arena allocation
                 // This would require changing the global allocator
                 Ok(())
-            },
+            }
             OptimizationType::UsePoolAllocation => {
                 // Switch to pool allocation
                 Ok(())
-            },
+            }
             OptimizationType::EnablePreallocation => {
                 // Enable pre-allocation
                 Ok(())
-            },
-            _ => {
-                Err(NumRs2Error::NotImplemented(format!(
-                    "Optimization type {:?} not yet implemented", 
-                    recommendation.optimization_type
-                )))
             }
+            _ => Err(NumRs2Error::NotImplemented(format!(
+                "Optimization type {:?} not yet implemented",
+                recommendation.optimization_type
+            ))),
         }
     }
 
@@ -464,15 +489,42 @@ impl PerformanceTuner {
 
         // Current metrics
         report.push_str("Current Performance Metrics:\n");
-        report.push_str(&format!("  Total allocations: {}\n", current.total_allocations));
-        report.push_str(&format!("  Total deallocations: {}\n", current.total_deallocations));
-        report.push_str(&format!("  Bytes allocated: {} MB\n", current.total_bytes_allocated / 1024 / 1024));
-        report.push_str(&format!("  Bytes deallocated: {} MB\n", current.total_bytes_deallocated / 1024 / 1024));
-        report.push_str(&format!("  Average allocation time: {} ns\n", current.avg_allocation_time_ns));
-        report.push_str(&format!("  Average deallocation time: {} ns\n", current.avg_deallocation_time_ns));
-        report.push_str(&format!("  Allocation failures: {}\n", current.allocation_failures));
-        report.push_str(&format!("  Peak memory usage: {} MB\n", current.peak_memory_usage / 1024 / 1024));
-        report.push_str(&format!("  Current memory usage: {} MB\n", current.current_memory_usage / 1024 / 1024));
+        report.push_str(&format!(
+            "  Total allocations: {}\n",
+            current.total_allocations
+        ));
+        report.push_str(&format!(
+            "  Total deallocations: {}\n",
+            current.total_deallocations
+        ));
+        report.push_str(&format!(
+            "  Bytes allocated: {} MB\n",
+            current.total_bytes_allocated / 1024 / 1024
+        ));
+        report.push_str(&format!(
+            "  Bytes deallocated: {} MB\n",
+            current.total_bytes_deallocated / 1024 / 1024
+        ));
+        report.push_str(&format!(
+            "  Average allocation time: {} ns\n",
+            current.avg_allocation_time_ns
+        ));
+        report.push_str(&format!(
+            "  Average deallocation time: {} ns\n",
+            current.avg_deallocation_time_ns
+        ));
+        report.push_str(&format!(
+            "  Allocation failures: {}\n",
+            current.allocation_failures
+        ));
+        report.push_str(&format!(
+            "  Peak memory usage: {} MB\n",
+            current.peak_memory_usage / 1024 / 1024
+        ));
+        report.push_str(&format!(
+            "  Current memory usage: {} MB\n",
+            current.current_memory_usage / 1024 / 1024
+        ));
 
         // Performance characteristics
         report.push_str("\nPerformance Characteristics:\n");
@@ -481,7 +533,10 @@ impl PerformanceTuner {
         } else {
             0.0
         };
-        report.push_str(&format!("  Allocation rate: {:.0} ops/sec\n", allocation_rate));
+        report.push_str(&format!(
+            "  Allocation rate: {:.0} ops/sec\n",
+            allocation_rate
+        ));
 
         let failure_rate = if current.total_allocations > 0 {
             current.allocation_failures as f64 / current.total_allocations as f64 * 100.0
@@ -495,14 +550,22 @@ impl PerformanceTuner {
         } else {
             0
         };
-        report.push_str(&format!("  Average allocation size: {} bytes\n", avg_allocation_size));
+        report.push_str(&format!(
+            "  Average allocation size: {} bytes\n",
+            avg_allocation_size
+        ));
 
         // Recommendations
         if !recommendations.is_empty() {
             report.push_str("\nOptimization Recommendations:\n");
             for (i, rec) in recommendations.iter().enumerate() {
-                report.push_str(&format!("  {}. {} (Est. improvement: {:.1}%, Difficulty: {})\n", 
-                    i + 1, rec.description, rec.estimated_improvement * 100.0, rec.difficulty));
+                report.push_str(&format!(
+                    "  {}. {} (Est. improvement: {:.1}%, Difficulty: {})\n",
+                    i + 1,
+                    rec.description,
+                    rec.estimated_improvement * 100.0,
+                    rec.difficulty
+                ));
             }
         } else {
             report.push_str("\nNo optimization recommendations at this time.\n");
@@ -532,9 +595,9 @@ pub fn with_global_tuner<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&PerformanceTuner) -> R,
 {
-    GLOBAL_TUNER.get().and_then(|tuner| {
-        tuner.lock().ok().map(|guard| f(&*guard))
-    })
+    GLOBAL_TUNER
+        .get()
+        .and_then(|tuner| tuner.lock().ok().map(|guard| f(&*guard)))
 }
 
 /// Get mutable reference to the global performance tuner
@@ -542,9 +605,9 @@ pub fn with_global_tuner_mut<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&mut PerformanceTuner) -> R,
 {
-    GLOBAL_TUNER.get().and_then(|tuner| {
-        tuner.lock().ok().map(|mut guard| f(&mut *guard))
-    })
+    GLOBAL_TUNER
+        .get()
+        .and_then(|tuner| tuner.lock().ok().map(|mut guard| f(&mut *guard)))
 }
 
 #[cfg(test)]
@@ -565,10 +628,10 @@ mod tests {
     #[test]
     fn test_metrics_recording() {
         let tuner = PerformanceTuner::default();
-        
+
         tuner.record_allocation(1024, Duration::from_nanos(1000));
         tuner.record_allocation(2048, Duration::from_nanos(1500));
-        
+
         let metrics = tuner.get_current_metrics();
         assert_eq!(metrics.total_allocations, 2);
         assert_eq!(metrics.total_bytes_allocated, 3072);
@@ -579,10 +642,10 @@ mod tests {
     #[test]
     fn test_deallocation_tracking() {
         let tuner = PerformanceTuner::default();
-        
+
         tuner.record_allocation(1024, Duration::from_nanos(1000));
         tuner.record_deallocation(1024, Duration::from_nanos(500));
-        
+
         let metrics = tuner.get_current_metrics();
         assert_eq!(metrics.total_allocations, 1);
         assert_eq!(metrics.total_deallocations, 1);
@@ -592,10 +655,10 @@ mod tests {
     #[test]
     fn test_failure_recording() {
         let tuner = PerformanceTuner::default();
-        
+
         tuner.record_allocation_failure();
         tuner.record_allocation_failure();
-        
+
         let metrics = tuner.get_current_metrics();
         assert_eq!(metrics.allocation_failures, 2);
     }
@@ -603,16 +666,16 @@ mod tests {
     #[test]
     fn test_performance_analysis() {
         let tuner = PerformanceTuner::default();
-        
+
         // Not enough data yet
         let recommendations = tuner.analyze_performance();
         assert!(recommendations.is_empty());
-        
+
         // Add sufficient data
         for _ in 0..150 {
             tuner.record_allocation(64, Duration::from_nanos(500));
         }
-        
+
         let recommendations = tuner.analyze_performance();
         assert!(!recommendations.is_empty());
     }
@@ -633,24 +696,31 @@ mod tests {
         };
 
         // First benchmark
-        let result1 = tuner.benchmark_allocator(&allocator, "TestAllocator", config.clone()).unwrap();
-        
+        let result1 = tuner
+            .benchmark_allocator(&allocator, "TestAllocator", config.clone())
+            .unwrap();
+
         // Second benchmark should be cached
-        let result2 = tuner.benchmark_allocator(&allocator, "TestAllocator", config).unwrap();
-        
+        let result2 = tuner
+            .benchmark_allocator(&allocator, "TestAllocator", config)
+            .unwrap();
+
         assert_eq!(result1.allocator_name, result2.allocator_name);
-        assert_eq!(result1.successful_allocations, result2.successful_allocations);
+        assert_eq!(
+            result1.successful_allocations,
+            result2.successful_allocations
+        );
     }
 
     #[test]
     fn test_performance_report_generation() {
         let tuner = PerformanceTuner::default();
-        
+
         // Add some metrics
         for i in 0..200 {
             tuner.record_allocation(1024 + i, Duration::from_nanos(1000 + i as u64));
         }
-        
+
         let report = tuner.generate_performance_report();
         assert!(report.contains("Memory Allocator Performance Report"));
         assert!(report.contains("Total allocations: 200"));
@@ -659,27 +729,26 @@ mod tests {
     #[test]
     fn test_global_tuner_initialization() {
         init_global_tuner(TuningConfig::default());
-        
-        let result = with_global_tuner(|tuner| {
-            tuner.get_current_metrics().total_allocations
-        });
-        
+
+        let result = with_global_tuner(|tuner| tuner.get_current_metrics().total_allocations);
+
         assert_eq!(result, Some(0));
     }
 
     #[test]
     fn test_optimization_recommendations() {
         let tuner = PerformanceTuner::default();
-        
+
         // Simulate small, frequent allocations
         for _ in 0..2000 {
             tuner.record_allocation(128, Duration::from_nanos(800));
         }
-        
+
         let recommendations = tuner.analyze_performance();
-        let has_arena_recommendation = recommendations.iter()
+        let has_arena_recommendation = recommendations
+            .iter()
             .any(|r| r.optimization_type == OptimizationType::UseArenaAllocation);
-        
+
         assert!(has_arena_recommendation);
     }
 }

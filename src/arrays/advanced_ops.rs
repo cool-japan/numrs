@@ -28,7 +28,9 @@ impl Shape {
 
     /// Create a 2D shape
     pub fn from_2d(rows: usize, cols: usize) -> Self {
-        Self { dims: vec![rows, cols] }
+        Self {
+            dims: vec![rows, cols],
+        }
     }
 
     /// Get the number of dimensions
@@ -44,7 +46,7 @@ impl Shape {
     /// Check if shapes are compatible for broadcasting
     pub fn is_broadcastable_with(&self, other: &Shape) -> bool {
         let max_ndim = std::cmp::max(self.ndim(), other.ndim());
-        
+
         for i in 0..max_ndim {
             let dim1 = if i < self.ndim() {
                 self.dims[self.ndim() - i - 1]
@@ -56,21 +58,22 @@ impl Shape {
             } else {
                 1
             };
-            
+
             if dim1 != dim2 && dim1 != 1 && dim2 != 1 {
                 return false;
             }
         }
-        
+
         true
     }
 
     /// Compute the broadcasted shape
     pub fn broadcast_with(&self, other: &Shape) -> Result<Shape> {
         if !self.is_broadcastable_with(other) {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Cannot broadcast shapes {:?} and {:?}", self.dims, other.dims)
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Cannot broadcast shapes {:?} and {:?}",
+                self.dims, other.dims
+            )));
         }
 
         let max_ndim = std::cmp::max(self.ndim(), other.ndim());
@@ -116,9 +119,11 @@ impl Shape {
     pub fn reshape(&self, new_dims: Vec<usize>) -> Result<Shape> {
         let new_size: usize = new_dims.iter().product();
         if new_size != self.size() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Cannot reshape size {} to size {}", self.size(), new_size)
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Cannot reshape size {} to size {}",
+                self.size(),
+                new_size
+            )));
         }
         Ok(Shape::new(new_dims))
     }
@@ -126,28 +131,30 @@ impl Shape {
     /// Transpose the shape by swapping dimensions
     pub fn transpose(&self, axes: Option<Vec<usize>>) -> Result<Shape> {
         let axes = axes.unwrap_or_else(|| (0..self.ndim()).rev().collect());
-        
+
         if axes.len() != self.ndim() {
             return Err(NumRs2Error::DimensionMismatch(
-                "Number of axes must match number of dimensions".to_string()
+                "Number of axes must match number of dimensions".to_string(),
             ));
         }
-        
+
         // Check for duplicate axes
         let mut seen = HashSet::new();
         for &axis in &axes {
             if axis >= self.ndim() {
-                return Err(NumRs2Error::DimensionMismatch(
-                    format!("Axis {} is out of bounds for array of dimension {}", axis, self.ndim())
-                ));
+                return Err(NumRs2Error::DimensionMismatch(format!(
+                    "Axis {} is out of bounds for array of dimension {}",
+                    axis,
+                    self.ndim()
+                )));
             }
             if !seen.insert(axis) {
                 return Err(NumRs2Error::DimensionMismatch(
-                    "Duplicate axis in transpose".to_string()
+                    "Duplicate axis in transpose".to_string(),
                 ));
             }
         }
-        
+
         let new_dims = axes.iter().map(|&i| self.dims[i]).collect();
         Ok(Shape::new(new_dims))
     }
@@ -197,35 +204,52 @@ impl IndexSpec {
                 } else {
                     *idx as usize
                 };
-                
+
                 if resolved_idx >= axis_size {
-                    return Err(NumRs2Error::IndexOutOfBounds(
-                        format!("Index {} is out of bounds for axis of size {}", idx, axis_size)
-                    ));
+                    return Err(NumRs2Error::IndexOutOfBounds(format!(
+                        "Index {} is out of bounds for axis of size {}",
+                        idx, axis_size
+                    )));
                 }
-                
+
                 Ok(ResolvedIndex::Single(resolved_idx))
-            },
+            }
             IndexSpec::Slice(start, stop, step) => {
                 let step = step.unwrap_or(1);
                 if step == 0 {
-                    return Err(NumRs2Error::InvalidOperation("Slice step cannot be zero".to_string()));
+                    return Err(NumRs2Error::InvalidOperation(
+                        "Slice step cannot be zero".to_string(),
+                    ));
                 }
 
-                let start_resolved = start.map(|s| if s < 0 { 
-                    axis_size.saturating_sub((-s) as usize) 
-                } else { 
-                    s as usize 
-                }).unwrap_or(if step > 0 { 0 } else { axis_size.saturating_sub(1) });
-                
-                let stop_resolved = stop.map(|s| if s < 0 { 
-                    axis_size.saturating_sub((-s) as usize) 
-                } else { 
-                    s as usize 
-                }).unwrap_or(if step > 0 { axis_size } else { 0 });
+                let start_resolved = start
+                    .map(|s| {
+                        if s < 0 {
+                            axis_size.saturating_sub((-s) as usize)
+                        } else {
+                            s as usize
+                        }
+                    })
+                    .unwrap_or(if step > 0 {
+                        0
+                    } else {
+                        axis_size.saturating_sub(1)
+                    });
+
+                let stop_resolved = stop
+                    .map(|s| {
+                        if s < 0 {
+                            axis_size.saturating_sub((-s) as usize)
+                        } else {
+                            s as usize
+                        }
+                    })
+                    .unwrap_or(if step > 0 { axis_size } else { 0 });
 
                 let indices = if step > 0 {
-                    (start_resolved..stop_resolved.min(axis_size)).step_by(step as usize).collect()
+                    (start_resolved..stop_resolved.min(axis_size))
+                        .step_by(step as usize)
+                        .collect()
                 } else {
                     let mut indices = Vec::new();
                     let mut current = start_resolved.min(axis_size);
@@ -240,34 +264,39 @@ impl IndexSpec {
                 };
 
                 Ok(ResolvedIndex::Multiple(indices))
-            },
+            }
             IndexSpec::Array(indices) | IndexSpec::Indices(indices) => {
                 // Validate all indices are in bounds
                 for &idx in indices {
                     if idx >= axis_size {
-                        return Err(NumRs2Error::IndexOutOfBounds(
-                            format!("Index {} is out of bounds for axis of size {}", idx, axis_size)
-                        ));
+                        return Err(NumRs2Error::IndexOutOfBounds(format!(
+                            "Index {} is out of bounds for axis of size {}",
+                            idx, axis_size
+                        )));
                     }
                 }
                 Ok(ResolvedIndex::Multiple(indices.clone()))
-            },
+            }
             IndexSpec::BoolMask(mask) | IndexSpec::Mask(mask) => {
                 if mask.len() != axis_size {
-                    return Err(NumRs2Error::DimensionMismatch(
-                        format!("Boolean mask length {} doesn't match axis size {}", mask.len(), axis_size)
-                    ));
+                    return Err(NumRs2Error::DimensionMismatch(format!(
+                        "Boolean mask length {} doesn't match axis size {}",
+                        mask.len(),
+                        axis_size
+                    )));
                 }
-                let indices = mask.iter().enumerate()
+                let indices = mask
+                    .iter()
+                    .enumerate()
                     .filter_map(|(i, &b)| if b { Some(i) } else { None })
                     .collect();
                 Ok(ResolvedIndex::Multiple(indices))
-            },
+            }
             IndexSpec::All => {
                 // Select all elements (equivalent to 0..axis_size)
                 let indices = (0..axis_size).collect();
                 Ok(ResolvedIndex::Multiple(indices))
-            },
+            }
             IndexSpec::Ellipsis | IndexSpec::NewAxis => {
                 // These are handled at a higher level during index processing
                 Ok(ResolvedIndex::Multiple(vec![]))
@@ -366,10 +395,10 @@ impl<'a, T> ArrayView<'a, T> {
     pub fn new(data: &'a [T], shape: Shape, strides: Vec<usize>, offset: usize) -> Result<Self> {
         if strides.len() != shape.ndim() {
             return Err(NumRs2Error::DimensionMismatch(
-                "Strides length must match number of dimensions".to_string()
+                "Strides length must match number of dimensions".to_string(),
             ));
         }
-        
+
         Ok(Self {
             data,
             shape,
@@ -397,27 +426,30 @@ impl<'a, T> ArrayView<'a, T> {
     /// Get element at given indices
     pub fn get(&self, indices: &[usize]) -> Result<&T> {
         if indices.len() != self.shape.ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Expected {} indices, got {}", self.shape.ndim(), indices.len())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Expected {} indices, got {}",
+                self.shape.ndim(),
+                indices.len()
+            )));
         }
 
         let mut flat_index = self.offset;
         for (i, (&idx, &stride)) in indices.iter().zip(self.strides.iter()).enumerate() {
             if idx >= self.shape.dims[i] {
-                return Err(NumRs2Error::IndexOutOfBounds(
-                    format!("Index {} is out of bounds for dimension {} of size {}", 
-                           idx, i, self.shape.dims[i])
-                ));
+                return Err(NumRs2Error::IndexOutOfBounds(format!(
+                    "Index {} is out of bounds for dimension {} of size {}",
+                    idx, i, self.shape.dims[i]
+                )));
             }
             flat_index += idx * stride;
         }
 
         if flat_index >= self.data.len() {
-            return Err(NumRs2Error::IndexOutOfBounds(
-                format!("Computed index {} is out of bounds for data of size {}", 
-                       flat_index, self.data.len())
-            ));
+            return Err(NumRs2Error::IndexOutOfBounds(format!(
+                "Computed index {} is out of bounds for data of size {}",
+                flat_index,
+                self.data.len()
+            )));
         }
 
         Ok(&self.data[flat_index])
@@ -427,7 +459,7 @@ impl<'a, T> ArrayView<'a, T> {
     pub fn slice(&self, indices: &[IndexSpec]) -> Result<ArrayView<'a, T>> {
         if indices.len() > self.shape.ndim() {
             return Err(NumRs2Error::DimensionMismatch(
-                "Too many indices for array".to_string()
+                "Too many indices for array".to_string(),
             ));
         }
 
@@ -442,15 +474,15 @@ impl<'a, T> ArrayView<'a, T> {
                 IndexSpec::Ellipsis => {
                     if ellipsis_used {
                         return Err(NumRs2Error::InvalidOperation(
-                            "Only one ellipsis allowed".to_string()
+                            "Only one ellipsis allowed".to_string(),
                         ));
                     }
                     ellipsis_used = true;
-                    
+
                     // Calculate how many axes to skip
                     let remaining_specs = indices.len() - new_shape_dims.len() - 1;
                     let axes_to_add = self.shape.ndim().saturating_sub(remaining_specs);
-                    
+
                     for _ in 0..axes_to_add {
                         if axis < self.shape.ndim() {
                             new_shape_dims.push(self.shape.dims[axis]);
@@ -458,15 +490,15 @@ impl<'a, T> ArrayView<'a, T> {
                             axis += 1;
                         }
                     }
-                },
+                }
                 IndexSpec::NewAxis => {
                     new_shape_dims.push(1);
                     new_strides.push(0); // Stride of 0 for new axis
-                },
+                }
                 _ => {
                     if axis >= self.shape.ndim() {
                         return Err(NumRs2Error::DimensionMismatch(
-                            "Index beyond array dimensions".to_string()
+                            "Index beyond array dimensions".to_string(),
                         ));
                     }
 
@@ -475,7 +507,7 @@ impl<'a, T> ArrayView<'a, T> {
                         ResolvedIndex::Single(idx) => {
                             new_offset += idx * self.strides[axis];
                             // Single index removes the dimension
-                        },
+                        }
                         ResolvedIndex::Multiple(indices) => {
                             if let IndexSpec::Slice(start, _, step) = index_spec {
                                 let start = start.unwrap_or(0) as usize;
@@ -510,9 +542,9 @@ impl<'a, T> ArrayView<'a, T> {
     pub fn transpose(&self, axes: Option<Vec<usize>>) -> Result<ArrayView<'a, T>> {
         let new_shape = self.shape.transpose(axes.clone())?;
         let axes = axes.unwrap_or_else(|| (0..self.shape.ndim()).rev().collect());
-        
+
         let new_strides = axes.iter().map(|&i| self.strides[i]).collect();
-        
+
         Self::new(self.data, new_shape, new_strides, self.offset)
     }
 
@@ -520,14 +552,14 @@ impl<'a, T> ArrayView<'a, T> {
     pub fn reshape(&self, new_shape: Shape) -> Result<ArrayView<'a, T>> {
         if new_shape.size() != self.shape.size() {
             return Err(NumRs2Error::DimensionMismatch(
-                "Cannot reshape: size mismatch".to_string()
+                "Cannot reshape: size mismatch".to_string(),
             ));
         }
 
         // Check if the view is C-contiguous
         if !self.is_c_contiguous() {
             return Err(NumRs2Error::InvalidOperation(
-                "Can only reshape C-contiguous views".to_string()
+                "Can only reshape C-contiguous views".to_string(),
             ));
         }
 
@@ -564,7 +596,7 @@ impl<'a, T: Clone> ArrayView<'a, T> {
             if let Ok(element) = self.get(&indices) {
                 result.push(element.clone());
             }
-            
+
             // Advance indices
             let mut carry = 1;
             for i in (0..indices.len()).rev() {
@@ -577,7 +609,7 @@ impl<'a, T: Clone> ArrayView<'a, T> {
                     carry = 1;
                 }
             }
-            
+
             if carry == 1 {
                 break;
             }
@@ -622,9 +654,7 @@ impl<T> ArrayViewIterator<T> {
             flat_index += idx * stride;
         }
 
-        unsafe {
-            Some(&*self.data.add(flat_index))
-        }
+        unsafe { Some(&*self.data.add(flat_index)) }
     }
 }
 
@@ -680,28 +710,28 @@ impl BroadcastOp {
         F: Fn(T, T) -> T,
     {
         let broadcast_shape = a.shape().broadcast_with(b.shape())?;
-        
+
         if output.len() != broadcast_shape.size() {
             return Err(NumRs2Error::DimensionMismatch(
-                "Output buffer size doesn't match broadcast shape".to_string()
+                "Output buffer size doesn't match broadcast shape".to_string(),
             ));
         }
 
         // Simple implementation - could be optimized with SIMD
         let mut output_idx = 0;
         let mut indices = vec![0; broadcast_shape.ndim()];
-        
+
         loop {
             // Map broadcast indices to original array indices
             let a_indices = Self::map_broadcast_indices(&indices, a.shape(), &broadcast_shape);
             let b_indices = Self::map_broadcast_indices(&indices, b.shape(), &broadcast_shape);
-            
+
             let a_val = *a.get(&a_indices)?;
             let b_val = *b.get(&b_indices)?;
             output[output_idx] = op(a_val, b_val);
-            
+
             output_idx += 1;
-            
+
             // Advance indices
             if !Self::advance_indices(&mut indices, &broadcast_shape.dims) {
                 break;
@@ -724,26 +754,26 @@ impl BroadcastOp {
     {
         if !input.shape().is_broadcastable_with(target_shape) {
             return Err(NumRs2Error::DimensionMismatch(
-                "Input shape is not broadcastable to target shape".to_string()
+                "Input shape is not broadcastable to target shape".to_string(),
             ));
         }
 
         if output.len() != target_shape.size() {
             return Err(NumRs2Error::DimensionMismatch(
-                "Output buffer size doesn't match target shape".to_string()
+                "Output buffer size doesn't match target shape".to_string(),
             ));
         }
 
         let mut output_idx = 0;
         let mut indices = vec![0; target_shape.ndim()];
-        
+
         loop {
             let input_indices = Self::map_broadcast_indices(&indices, input.shape(), target_shape);
             let input_val = *input.get(&input_indices)?;
             output[output_idx] = op(input_val);
-            
+
             output_idx += 1;
-            
+
             if !Self::advance_indices(&mut indices, &target_shape.dims) {
                 break;
             }
@@ -752,19 +782,23 @@ impl BroadcastOp {
         Ok(())
     }
 
-    fn map_broadcast_indices(broadcast_indices: &[usize], original_shape: &Shape, broadcast_shape: &Shape) -> Vec<usize> {
+    fn map_broadcast_indices(
+        broadcast_indices: &[usize],
+        original_shape: &Shape,
+        broadcast_shape: &Shape,
+    ) -> Vec<usize> {
         let mut result = Vec::with_capacity(original_shape.ndim());
         let ndim_diff = broadcast_shape.ndim() - original_shape.ndim();
-        
+
         for i in 0..original_shape.ndim() {
             let broadcast_idx = broadcast_indices[i + ndim_diff];
             let original_dim = original_shape.dims[i];
-            
+
             // If original dimension is 1, use index 0 (broadcasting)
             let mapped_idx = if original_dim == 1 { 0 } else { broadcast_idx };
             result.push(mapped_idx);
         }
-        
+
         result
     }
 
@@ -796,9 +830,9 @@ mod tests {
     fn test_shape_broadcasting() {
         let shape1 = Shape::new(vec![3, 1, 4]);
         let shape2 = Shape::new(vec![2, 4]);
-        
+
         assert!(shape1.is_broadcastable_with(&shape2));
-        
+
         let broadcast_shape = shape1.broadcast_with(&shape2).unwrap();
         assert_eq!(broadcast_shape.dims, vec![3, 2, 4]);
     }
@@ -807,7 +841,7 @@ mod tests {
     fn test_shape_broadcasting_incompatible() {
         let shape1 = Shape::new(vec![3, 4]);
         let shape2 = Shape::new(vec![5, 4]);
-        
+
         assert!(!shape1.is_broadcastable_with(&shape2));
         assert!(shape1.broadcast_with(&shape2).is_err());
     }
@@ -815,10 +849,10 @@ mod tests {
     #[test]
     fn test_shape_strides() {
         let shape = Shape::new(vec![2, 3, 4]);
-        
+
         let c_strides = shape.c_strides();
         assert_eq!(c_strides, vec![12, 4, 1]);
-        
+
         let f_strides = shape.f_strides();
         assert_eq!(f_strides, vec![1, 2, 6]);
     }
@@ -826,11 +860,11 @@ mod tests {
     #[test]
     fn test_shape_transpose() {
         let shape = Shape::new(vec![2, 3, 4]);
-        
+
         // Default transpose (reverse axes)
         let transposed = shape.transpose(None).unwrap();
         assert_eq!(transposed.dims, vec![4, 3, 2]);
-        
+
         // Custom transpose
         let transposed = shape.transpose(Some(vec![1, 0, 2])).unwrap();
         assert_eq!(transposed.dims, vec![3, 2, 4]);
@@ -842,12 +876,12 @@ mod tests {
         let spec = IndexSpec::Int(2);
         let resolved = spec.resolve(5).unwrap();
         assert!(matches!(resolved, ResolvedIndex::Single(2)));
-        
+
         // Test negative index
         let spec = IndexSpec::Int(-1);
         let resolved = spec.resolve(5).unwrap();
         assert!(matches!(resolved, ResolvedIndex::Single(4)));
-        
+
         // Test slice
         let spec = IndexSpec::Slice(Some(1), Some(4), Some(2));
         let resolved = spec.resolve(5).unwrap();
@@ -863,7 +897,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_2d(2, 3);
         let view = ArrayView::from_data(&data, shape).unwrap();
-        
+
         assert_eq!(view.shape().dims, vec![2, 3]);
         assert_eq!(view.get(&[0, 0]).unwrap(), &1);
         assert_eq!(view.get(&[1, 2]).unwrap(), &6);
@@ -874,9 +908,11 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
         let shape = Shape::new(vec![3, 4]);
         let view = ArrayView::from_data(&data, shape).unwrap();
-        
+
         // Slice first row
-        let row_slice = view.slice(&[IndexSpec::Int(0), IndexSpec::Slice(None, None, None)]).unwrap();
+        let row_slice = view
+            .slice(&[IndexSpec::Int(0), IndexSpec::Slice(None, None, None)])
+            .unwrap();
         assert_eq!(row_slice.shape().dims, vec![4]);
         assert_eq!(row_slice.get(&[0]).unwrap(), &1);
         assert_eq!(row_slice.get(&[3]).unwrap(), &4);
@@ -887,7 +923,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_2d(2, 3);
         let view = ArrayView::from_data(&data, shape).unwrap();
-        
+
         let transposed = view.transpose(None).unwrap();
         assert_eq!(transposed.shape().dims, vec![3, 2]);
         assert_eq!(transposed.get(&[0, 0]).unwrap(), &1);
@@ -899,7 +935,7 @@ mod tests {
         let data = vec![1, 2, 3, 4];
         let shape = Shape::from_2d(2, 2);
         let view = ArrayView::from_data(&data, shape).unwrap();
-        
+
         // Test that we can access elements manually
         assert_eq!(view.get(&[0, 0]).unwrap(), &1);
         assert_eq!(view.get(&[0, 1]).unwrap(), &2);
@@ -912,14 +948,14 @@ mod tests {
         let data_a = vec![1.0, 2.0, 3.0];
         let shape_a = Shape::from_1d(3);
         let view_a = ArrayView::from_data(&data_a, shape_a).unwrap();
-        
+
         let data_b = vec![10.0];
         let shape_b = Shape::from_1d(1);
         let view_b = ArrayView::from_data(&data_b, shape_b).unwrap();
-        
+
         let mut output = vec![0.0; 3];
         BroadcastOp::binary_op(&view_a, &view_b, &mut output, |a, b| a + b).unwrap();
-        
+
         assert_eq!(output, vec![11.0, 12.0, 13.0]);
     }
 
@@ -928,10 +964,10 @@ mod tests {
         let data = vec![1.0, 2.0];
         let shape = Shape::from_1d(2);
         let view = ArrayView::from_data(&data, shape).unwrap();
-        
+
         let target_shape = Shape::from_2d(2, 2);
         let mut output = vec![0.0; 4];
-        
+
         BroadcastOp::unary_op(&view, &mut output, &target_shape, |x| x * 2.0).unwrap();
         assert_eq!(output, vec![2.0, 4.0, 2.0, 4.0]);
     }
@@ -941,7 +977,7 @@ mod tests {
         let _data = vec![10, 20, 30, 40, 50];
         let indices = vec![0, 2, 4];
         let spec = IndexSpec::Array(indices);
-        
+
         let resolved = spec.resolve(5).unwrap();
         if let ResolvedIndex::Multiple(indices) = resolved {
             assert_eq!(indices, vec![0, 2, 4]);
@@ -954,7 +990,7 @@ mod tests {
     fn test_boolean_indexing() {
         let mask = vec![true, false, true, false, true];
         let spec = IndexSpec::BoolMask(mask);
-        
+
         let resolved = spec.resolve(5).unwrap();
         if let ResolvedIndex::Multiple(indices) = resolved {
             assert_eq!(indices, vec![0, 2, 4]);

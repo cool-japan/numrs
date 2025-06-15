@@ -7,7 +7,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::traits::{
     AllocationFrequency, AllocationLifetime, AllocationRequirements, AllocationStats,
-    AllocationStrategy, ArrayAllocator, MemoryAllocator as NewMemoryAllocator, 
+    AllocationStrategy, ArrayAllocator, MemoryAllocator as NewMemoryAllocator,
     SpecializedAllocator, StrategyStats, ThreadingRequirements,
 };
 use std::alloc::Layout;
@@ -16,9 +16,7 @@ use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
 // Bridge the old and new allocator traits
-use super::strategy::{
-    MemoryAllocator as OldMemoryAllocator, StandardAllocator,
-};
+use super::strategy::{MemoryAllocator as OldMemoryAllocator, StandardAllocator};
 use super::{AlignedAllocator, ArenaAllocator, PoolAllocator};
 
 // =============================================================================
@@ -45,9 +43,10 @@ impl<T: OldMemoryAllocator + std::fmt::Debug> NewMemoryAllocator for EnhancedAll
     type Error = NumRs2Error;
 
     fn allocate(&self, layout: Layout) -> Result<NonNull<u8>> {
-        let ptr = self.inner.allocate_layout(layout)
-            .ok_or_else(|| NumRs2Error::AllocationFailed(format!("Failed to allocate {} bytes", layout.size())))?;
-        
+        let ptr = self.inner.allocate_layout(layout).ok_or_else(|| {
+            NumRs2Error::AllocationFailed(format!("Failed to allocate {} bytes", layout.size()))
+        })?;
+
         // Update statistics
         if let Ok(mut stats) = self.stats.lock() {
             stats.bytes_allocated += layout.size();
@@ -57,20 +56,20 @@ impl<T: OldMemoryAllocator + std::fmt::Debug> NewMemoryAllocator for EnhancedAll
                 stats.peak_usage = stats.bytes_allocated - stats.bytes_deallocated;
             }
         }
-        
+
         Ok(ptr)
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) -> Result<()> {
         self.inner.deallocate(ptr, layout);
-        
+
         // Update statistics
         if let Ok(mut stats) = self.stats.lock() {
             stats.bytes_deallocated += layout.size();
             stats.active_allocations = stats.active_allocations.saturating_sub(1);
             stats.deallocation_count += 1;
         }
-        
+
         Ok(())
     }
 
@@ -82,12 +81,12 @@ impl<T: OldMemoryAllocator + std::fmt::Debug> NewMemoryAllocator for EnhancedAll
     ) -> Result<NonNull<u8>> {
         // Simple implementation: allocate new, copy, deallocate old
         let new_ptr = self.allocate(new_layout)?;
-        
+
         let copy_size = std::cmp::min(old_layout.size(), new_layout.size());
         std::ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr(), copy_size);
-        
+
         self.deallocate(ptr, old_layout)?;
-        
+
         Ok(new_ptr)
     }
 
@@ -151,8 +150,11 @@ impl NewMemoryAllocator for NumericalArrayAllocator {
         let aligned_layout = Layout::from_size_align(
             layout.size(),
             std::cmp::max(layout.align(), self.alignment_preference),
-        ).map_err(|_| NumRs2Error::AllocationFailed("Invalid layout for numerical array".to_string()))?;
-        
+        )
+        .map_err(|_| {
+            NumRs2Error::AllocationFailed("Invalid layout for numerical array".to_string())
+        })?;
+
         self.inner.allocate(aligned_layout)
     }
 
@@ -191,21 +193,25 @@ impl SpecializedAllocator for NumericalArrayAllocator {
 
 impl ArrayAllocator for NumericalArrayAllocator {
     type Error = NumRs2Error;
-    
+
     fn allocate_array<T>(&self, len: usize) -> std::result::Result<NonNull<T>, Self::Error> {
         let size = len * std::mem::size_of::<T>();
         let alignment = std::cmp::max(std::mem::align_of::<T>(), self.alignment_preference);
         let layout = Layout::from_size_align(size, alignment)
             .map_err(|_| NumRs2Error::AllocationFailed("Invalid array layout".to_string()))?;
-        
+
         self.allocate(layout).map(|ptr| ptr.cast::<T>())
     }
 
-    fn allocate_simd_aligned<T>(&self, len: usize, alignment: usize) -> std::result::Result<NonNull<T>, Self::Error> {
+    fn allocate_simd_aligned<T>(
+        &self,
+        len: usize,
+        alignment: usize,
+    ) -> std::result::Result<NonNull<T>, Self::Error> {
         let size = len * std::mem::size_of::<T>();
         let layout = Layout::from_size_align(size, alignment)
             .map_err(|_| NumRs2Error::AllocationFailed("Invalid SIMD layout".to_string()))?;
-        
+
         self.allocate(layout).map(|ptr| ptr.cast::<T>())
     }
 }
@@ -218,7 +224,8 @@ impl ArrayAllocator for NumericalArrayAllocator {
 #[derive(Debug)]
 pub struct IntelligentAllocationStrategy {
     stats: Arc<Mutex<StrategyStats>>,
-    allocator_cache: Arc<Mutex<HashMap<String, Box<dyn SpecializedAllocator<Error = NumRs2Error>>>>>,
+    allocator_cache:
+        Arc<Mutex<HashMap<String, Box<dyn SpecializedAllocator<Error = NumRs2Error>>>>>,
 }
 
 impl Default for IntelligentAllocationStrategy {
@@ -237,40 +244,61 @@ impl IntelligentAllocationStrategy {
 
     fn select_allocator_type(&self, requirements: &AllocationRequirements) -> String {
         // Intelligent selection based on requirements
-        match (requirements.size, requirements.frequency, requirements.simd_usage, requirements.lifetime) {
+        match (
+            requirements.size,
+            requirements.frequency,
+            requirements.simd_usage,
+            requirements.lifetime,
+        ) {
             // Large allocations with standard system allocator
             (size, _, _, _) if size > 1_000_000 => "standard".to_string(),
-            
+
             // Very small, frequent allocations work well with pool
-            (size, AllocationFrequency::VeryHigh, _, AllocationLifetime::Temporary) if size < 8192 => "pool".to_string(),
-            
+            (size, AllocationFrequency::VeryHigh, _, AllocationLifetime::Temporary)
+                if size < 8192 =>
+            {
+                "pool".to_string()
+            }
+
             // Medium, frequent allocations work well with arena
-            (size, AllocationFrequency::High, _, lifetime) if size < 65536 && 
-                matches!(lifetime, AllocationLifetime::Temporary | AllocationLifetime::ShortTerm) => "arena".to_string(),
-            
+            (size, AllocationFrequency::High, _, lifetime)
+                if size < 65536
+                    && matches!(
+                        lifetime,
+                        AllocationLifetime::Temporary | AllocationLifetime::ShortTerm
+                    ) =>
+            {
+                "arena".to_string()
+            }
+
             // SIMD operations need aligned memory
             (_, _, true, _) => "aligned".to_string(),
-            
+
             // Numerical arrays get specialized treatment
-            (size, freq, _, _) if size > 1024 && !matches!(freq, AllocationFrequency::VeryHigh) => "numerical".to_string(),
-            
+            (size, freq, _, _) if size > 1024 && !matches!(freq, AllocationFrequency::VeryHigh) => {
+                "numerical".to_string()
+            }
+
             // Default to standard allocator
             _ => "standard".to_string(),
         }
     }
 
-    fn create_allocator(&self, allocator_type: &str) -> Box<dyn SpecializedAllocator<Error = NumRs2Error>> {
+    fn create_allocator(
+        &self,
+        allocator_type: &str,
+    ) -> Box<dyn SpecializedAllocator<Error = NumRs2Error>> {
         match allocator_type {
             "standard" => Box::new(EnhancedAllocatorBridge::new(StandardAllocator)),
-            "pool" => Box::new(EnhancedAllocatorBridge::new(
-                PoolAllocator::new(super::pool::PoolConfig::default())
-            )),
-            "arena" => Box::new(EnhancedAllocatorBridge::new(
-                ArenaAllocator::new(super::arena::ArenaConfig::default())
-            )),
-            "aligned" => Box::new(EnhancedAllocatorBridge::new(
-                AlignedAllocator::new(super::aligned::AlignmentConfig::default())
-            )),
+            "pool" => Box::new(EnhancedAllocatorBridge::new(PoolAllocator::new(
+                super::pool::PoolConfig::default(),
+            ))),
+            "arena" => Box::new(EnhancedAllocatorBridge::new(ArenaAllocator::new(
+                super::arena::ArenaConfig::default(),
+            ))),
+            "aligned" => Box::new(EnhancedAllocatorBridge::new(AlignedAllocator::new(
+                super::aligned::AlignmentConfig::default(),
+            ))),
             "numerical" => Box::new(NumericalArrayAllocator::new()),
             _ => Box::new(EnhancedAllocatorBridge::new(StandardAllocator)),
         }
@@ -278,28 +306,37 @@ impl IntelligentAllocationStrategy {
 }
 
 impl AllocationStrategy for IntelligentAllocationStrategy {
-    fn select_allocator(&self, requirements: &AllocationRequirements) -> Box<dyn SpecializedAllocator<Error = NumRs2Error>> {
+    fn select_allocator(
+        &self,
+        requirements: &AllocationRequirements,
+    ) -> Box<dyn SpecializedAllocator<Error = NumRs2Error>> {
         let allocator_type = self.select_allocator_type(requirements);
-        
+
         // Update statistics
         if let Ok(mut stats) = self.stats.lock() {
-            *stats.allocator_selections.entry(allocator_type.clone()).or_insert(0) += 1;
+            *stats
+                .allocator_selections
+                .entry(allocator_type.clone())
+                .or_insert(0) += 1;
             stats.total_requests += 1;
         }
-        
+
         // Check cache first
         if let Ok(mut cache) = self.allocator_cache.lock() {
             if let Some(allocator) = cache.remove(&allocator_type) {
                 return allocator;
             }
         }
-        
+
         // Create new allocator
         self.create_allocator(&allocator_type)
     }
 
     fn strategy_stats(&self) -> StrategyStats {
-        self.stats.lock().map(|stats| stats.clone()).unwrap_or_default()
+        self.stats
+            .lock()
+            .map(|stats| stats.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -314,7 +351,11 @@ impl AllocationRequirements {
         Self {
             size,
             alignment: std::mem::align_of::<T>(),
-            frequency: if size < 1024 { AllocationFrequency::High } else { AllocationFrequency::Medium },
+            frequency: if size < 1024 {
+                AllocationFrequency::High
+            } else {
+                AllocationFrequency::Medium
+            },
             simd_usage: std::mem::align_of::<T>() >= 16, // Assume SIMD for well-aligned types
             lifetime: AllocationLifetime::MediumTerm,
             threading: ThreadingRequirements::MultiThreadedRead,
@@ -355,19 +396,23 @@ mod tests {
     #[test]
     fn test_enhanced_allocator_bridge() {
         let allocator = EnhancedAllocatorBridge::new(StandardAllocator);
-        
+
         let layout = Layout::from_size_align(1024, 8).unwrap();
-        let ptr = allocator.allocate(layout).expect("Allocation should succeed");
-        
+        let ptr = allocator
+            .allocate(layout)
+            .expect("Allocation should succeed");
+
         // Check statistics
         let stats = allocator.statistics().unwrap();
         assert_eq!(stats.bytes_allocated, 1024);
         assert_eq!(stats.active_allocations, 1);
-        
+
         unsafe {
-            allocator.deallocate(ptr, layout).expect("Deallocation should succeed");
+            allocator
+                .deallocate(ptr, layout)
+                .expect("Deallocation should succeed");
         }
-        
+
         let stats = allocator.statistics().unwrap();
         assert_eq!(stats.bytes_deallocated, 1024);
         assert_eq!(stats.active_allocations, 0);
@@ -376,32 +421,36 @@ mod tests {
     #[test]
     fn test_numerical_array_allocator() {
         let allocator = NumericalArrayAllocator::new();
-        
+
         // Test array allocation
-        let ptr = allocator.allocate_array::<f64>(100).expect("Array allocation should succeed");
-        
+        let ptr = allocator
+            .allocate_array::<f64>(100)
+            .expect("Array allocation should succeed");
+
         // Verify alignment
         assert_eq!(ptr.as_ptr() as usize % 32, 0, "Should be 32-byte aligned");
-        
+
         let layout = Layout::array::<f64>(100).unwrap();
         unsafe {
-            allocator.deallocate(ptr.cast(), layout).expect("Deallocation should succeed");
+            allocator
+                .deallocate(ptr.cast(), layout)
+                .expect("Deallocation should succeed");
         }
     }
 
     #[test]
     fn test_intelligent_allocation_strategy() {
         let strategy = IntelligentAllocationStrategy::new();
-        
+
         // Test different requirement scenarios
         let array_req = AllocationRequirements::for_array::<f64>(1000);
         let allocator = strategy.select_allocator(&array_req);
         assert!(allocator.supports_layout(Layout::from_size_align(8000, 8).unwrap()));
-        
+
         let simd_req = AllocationRequirements::for_simd_operation::<f32>(256, 32);
         let allocator = strategy.select_allocator(&simd_req);
         assert!(allocator.preferred_alignment() >= 8);
-        
+
         // Check statistics
         let stats = strategy.strategy_stats();
         assert!(stats.total_requests >= 2);
@@ -412,12 +461,12 @@ mod tests {
         let array_req = AllocationRequirements::for_array::<f64>(1000);
         assert_eq!(array_req.size, 8000);
         assert_eq!(array_req.alignment, 8);
-        
+
         let simd_req = AllocationRequirements::for_simd_operation::<f32>(64, 32);
         assert_eq!(simd_req.size, 256);
         assert_eq!(simd_req.alignment, 32);
         assert!(simd_req.simd_usage);
-        
+
         let temp_req = AllocationRequirements::for_temporary_buffer(512);
         assert_eq!(temp_req.size, 512);
         assert_eq!(temp_req.lifetime, AllocationLifetime::Temporary);

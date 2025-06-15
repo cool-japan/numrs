@@ -7,6 +7,6 @@ pub mod cache_aware;
 
 // Re-export main types and functions
 pub use cache_aware::{
-    CacheAwareArrayOps, CacheAwareFFT, CacheAwareConvolution, BandwidthOptimizer,
-    MemoryOperation, BandwidthEstimate,
+    BandwidthEstimate, BandwidthOptimizer, CacheAwareArrayOps, CacheAwareConvolution,
+    CacheAwareFFT, MemoryOperation,
 };

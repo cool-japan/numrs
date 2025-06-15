@@ -953,7 +953,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Test takes too long to run"]
     fn test_truncated_normal_distribution() {
         let low = -2.0;
         let high = 2.0;
@@ -974,8 +973,10 @@ mod tests {
 
         // Create a rotation matrix for 45 degrees
         let rotation_data = vec![
-            std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2, // cos(45°), sin(45°)
-            -std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2, // -sin(45°), cos(45°)
+            std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2, // cos(45°), sin(45°)
+            -std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2, // -sin(45°), cos(45°)
         ];
         let rotation = Array::from_vec(rotation_data).reshape(&[2, 2]);
 

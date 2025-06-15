@@ -3,9 +3,9 @@
 //! This maintains the original NumRS2Error enum structure to ensure
 //! existing code continues to work without modification.
 
+use super::{ErrorCategory, ErrorContext, ErrorLocation, ErrorSeverity, OperationContext};
 use std::io;
 use thiserror::Error;
-use super::{ErrorCategory, ErrorSeverity, OperationContext, ErrorContext, ErrorLocation};
 
 /// NumRS2 error types (legacy structure for backward compatibility)
 #[derive(Error, Debug)]
@@ -63,7 +63,7 @@ pub enum NumRs2Error {
 
     #[error("Memory allocation failed: {0}")]
     AllocationFailed(String),
-    
+
     #[error("Feature not enabled: {0}")]
     FeatureNotEnabled(String),
 
@@ -106,48 +106,51 @@ impl NumRs2Error {
             NumRs2Error::Computation(_) => ErrorCategory::Computation,
             NumRs2Error::Memory(_) => ErrorCategory::Memory,
             NumRs2Error::IO(_) => ErrorCategory::IO,
-            
+
             // Legacy variants mapped to categories
-            NumRs2Error::DimensionMismatch(_) | 
-            NumRs2Error::InvalidOperation(_) |
-            NumRs2Error::ValueError(_) |
-            NumRs2Error::IndexError(_) |
-            NumRs2Error::IndexOutOfBounds(_) |
-            NumRs2Error::ConversionError(_) |
-            NumRs2Error::TypeCastError(_) |
-            NumRs2Error::ShapeMismatch { .. } => ErrorCategory::Core,
-            
-            NumRs2Error::ComputationError(_) |
-            NumRs2Error::BlasError(_) |
-            NumRs2Error::LapackError(_) => ErrorCategory::Computation,
-            
+            NumRs2Error::DimensionMismatch(_)
+            | NumRs2Error::InvalidOperation(_)
+            | NumRs2Error::ValueError(_)
+            | NumRs2Error::IndexError(_)
+            | NumRs2Error::IndexOutOfBounds(_)
+            | NumRs2Error::ConversionError(_)
+            | NumRs2Error::TypeCastError(_)
+            | NumRs2Error::ShapeMismatch { .. } => ErrorCategory::Core,
+
+            NumRs2Error::ComputationError(_)
+            | NumRs2Error::BlasError(_)
+            | NumRs2Error::LapackError(_) => ErrorCategory::Computation,
+
             NumRs2Error::AllocationFailed(_) => ErrorCategory::Memory,
-            
-            NumRs2Error::SerializationError(_) |
-            NumRs2Error::DeserializationError(_) |
-            NumRs2Error::IOError(_) => ErrorCategory::IO,
-            
-            NumRs2Error::NotImplemented(_) |
-            NumRs2Error::RuntimeError(_) |
-            NumRs2Error::FeatureNotEnabled(_) => ErrorCategory::Core,
+
+            NumRs2Error::SerializationError(_)
+            | NumRs2Error::DeserializationError(_)
+            | NumRs2Error::IOError(_) => ErrorCategory::IO,
+
+            NumRs2Error::NotImplemented(_)
+            | NumRs2Error::RuntimeError(_)
+            | NumRs2Error::FeatureNotEnabled(_) => ErrorCategory::Core,
         }
     }
 
     /// Get the severity level of this error
     pub fn severity(&self) -> ErrorSeverity {
-        
         match self {
             NumRs2Error::Core(e) => e.severity(),
             NumRs2Error::Computation(e) => e.severity(),
             NumRs2Error::Memory(e) => e.severity(),
             NumRs2Error::IO(e) => e.severity(),
-            
+
             // Legacy variants with default severities
             NumRs2Error::AllocationFailed(_) => ErrorSeverity::Critical,
             NumRs2Error::LapackError(_) | NumRs2Error::BlasError(_) => ErrorSeverity::High,
-            NumRs2Error::DimensionMismatch(_) | NumRs2Error::ShapeMismatch { .. } => ErrorSeverity::High,
+            NumRs2Error::DimensionMismatch(_) | NumRs2Error::ShapeMismatch { .. } => {
+                ErrorSeverity::High
+            }
             NumRs2Error::IndexOutOfBounds(_) | NumRs2Error::IndexError(_) => ErrorSeverity::Medium,
-            NumRs2Error::NotImplemented(_) | NumRs2Error::FeatureNotEnabled(_) => ErrorSeverity::Low,
+            NumRs2Error::NotImplemented(_) | NumRs2Error::FeatureNotEnabled(_) => {
+                ErrorSeverity::Low
+            }
             _ => ErrorSeverity::Medium,
         }
     }
@@ -163,21 +166,12 @@ impl NumRs2Error {
     }
 
     /// Create a new error with context information
-    pub fn with_context<C: Into<OperationContext>>(
-        self, 
-        context: C
-    ) -> ErrorContext<Self> {
+    pub fn with_context<C: Into<OperationContext>>(self, context: C) -> ErrorContext<Self> {
         ErrorContext::new(self, context.into())
     }
 
     /// Create a new error with location information
-    pub fn at_location(
-        self, 
-        location: ErrorLocation
-    ) -> ErrorContext<Self> {
-        ErrorContext::new(
-            self, 
-            OperationContext::default()
-        ).with_location(location)
+    pub fn at_location(self, location: ErrorLocation) -> ErrorContext<Self> {
+        ErrorContext::new(self, OperationContext::default()).with_location(location)
     }
 }

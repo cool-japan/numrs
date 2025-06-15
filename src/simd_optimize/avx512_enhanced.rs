@@ -2,14 +2,14 @@
 //!
 //! This module provides cutting-edge vectorization using stable AVX2 instructions
 //! for maximum performance on modern Intel and AMD processors.
-//! 
+//!
 //! Note: AVX-512 features are currently unstable in Rust, so this module
 //! provides production-ready implementations using stable AVX2 instructions.
 
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
 
 /// AVX2 vectorization constants for production stability
 const AVX2_F32_LANES: usize = 8;
@@ -29,16 +29,21 @@ impl Avx2EnhancedOps {
         tile_size: usize,
     ) -> Result<()> {
         let [m, k] = a.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix A must be 2D".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix A must be 2D".to_string(),
+            ));
         };
         let [k2, n] = b.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix B must be 2D".to_string()));
-        };
-        
-        if k != k2 {
             return Err(NumRs2Error::DimensionMismatch(
-                format!("Matrix dimensions mismatch: A is {}x{}, B is {}x{}", m, k, k2, n)
+                "Matrix B must be 2D".to_string(),
             ));
+        };
+
+        if k != k2 {
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Matrix dimensions mismatch: A is {}x{}, B is {}x{}",
+                m, k, k2, n
+            )));
         }
 
         let a_data = a.to_vec();
@@ -70,8 +75,13 @@ impl Avx2EnhancedOps {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     unsafe fn tiled_matmul_avx2_f32(
-        a: &[f32], b: &[f32], c: &mut [f32],
-        m: usize, n: usize, k: usize, tile_size: usize
+        a: &[f32],
+        b: &[f32],
+        c: &mut [f32],
+        m: usize,
+        n: usize,
+        k: usize,
+        tile_size: usize,
     ) {
         for ii in (0..m).step_by(tile_size) {
             for jj in (0..n).step_by(tile_size) {
@@ -83,7 +93,7 @@ impl Avx2EnhancedOps {
                     for i in ii..i_end {
                         for j in (jj..j_end).step_by(AVX2_F32_LANES) {
                             let lanes = (j_end - j).min(AVX2_F32_LANES);
-                            
+
                             // Load C values using AVX2
                             let mut vc = if lanes == AVX2_F32_LANES {
                                 _mm256_loadu_ps(c.as_ptr().add(i * n + j))
@@ -107,7 +117,7 @@ impl Avx2EnhancedOps {
                                     }
                                     _mm256_loadu_ps(values.as_ptr())
                                 };
-                                
+
                                 vc = _mm256_fmadd_ps(va, vb, vc);
                             }
 
@@ -132,7 +142,9 @@ impl Avx2EnhancedOps {
     #[cfg(target_arch = "x86_64")]
     pub fn avx2_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
         if a.shape() != b.shape() {
-            return Err(NumRs2Error::DimensionMismatch("Arrays must have the same shape".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Arrays must have the same shape".to_string(),
+            ));
         }
 
         let a_data = a.to_vec();
@@ -176,16 +188,16 @@ impl Avx2EnhancedOps {
     #[cfg(target_arch = "x86_64")]
     pub fn avx2_dot_f32(a: &Array<f32>, b: &Array<f32>) -> Result<f32> {
         if a.shape() != b.shape() {
-            return Err(NumRs2Error::DimensionMismatch("Arrays must have the same shape".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Arrays must have the same shape".to_string(),
+            ));
         }
 
         let a_data = a.to_vec();
         let b_data = b.to_vec();
 
         if is_x86_feature_detected!("avx2") {
-            unsafe {
-                Ok(Self::vectorized_dot_avx2(&a_data, &b_data))
-            }
+            unsafe { Ok(Self::vectorized_dot_avx2(&a_data, &b_data)) }
         } else {
             let mut sum = 0.0f32;
             for i in 0..a_data.len() {
@@ -208,7 +220,7 @@ impl Avx2EnhancedOps {
 
         // Process 4 AVX2 vectors at a time for better ILP
         let unroll_len = vectorizable_len & !(4 * AVX2_F32_LANES - 1);
-        
+
         for i in (0..unroll_len).step_by(4 * AVX2_F32_LANES) {
             let va0 = _mm256_loadu_ps(a.as_ptr().add(i));
             let vb0 = _mm256_loadu_ps(b.as_ptr().add(i));
@@ -262,9 +274,11 @@ impl Avx2EnhancedOps {
         let kernel_data = kernel.to_vec();
         let signal_len = signal_data.len();
         let kernel_len = kernel_data.len();
-        
+
         if kernel_len > signal_len {
-            return Err(NumRs2Error::DimensionMismatch("Kernel cannot be larger than signal".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Kernel cannot be larger than signal".to_string(),
+            ));
         }
 
         let output_len = signal_len - kernel_len + 1;
@@ -305,9 +319,10 @@ impl Avx2EnhancedOps {
             let vectorizable_len = (end_k - start_k) & !(AVX2_F32_LANES - 1);
 
             for k in (start_k..start_k + vectorizable_len).step_by(AVX2_F32_LANES) {
-                let sig_vals = std::slice::from_raw_parts(signal.as_ptr().add(i + k), AVX2_F32_LANES);
+                let sig_vals =
+                    std::slice::from_raw_parts(signal.as_ptr().add(i + k), AVX2_F32_LANES);
                 let sig_vec = _mm256_loadu_ps(sig_vals.as_ptr());
-                
+
                 let kern_vec = _mm256_loadu_ps(kernel.as_ptr().add(k));
                 sum = _mm256_fmadd_ps(sig_vec, kern_vec, sum);
             }
@@ -339,14 +354,14 @@ mod tests {
     fn test_avx2_matrix_multiplication() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let a = Array::from_vec(a_data).reshape(&[2, 3]);
-        
+
         let b_data = vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0];
         let b = Array::from_vec(b_data).reshape(&[3, 2]);
-        
+
         let mut c = Array::zeros(&[2, 2]);
-        
+
         Avx2EnhancedOps::avx2_matmul_f32(&a, &b, &mut c, 32).unwrap();
-        
+
         // Expected result: [[58, 64], [139, 154]]
         let c_data = c.to_vec();
         assert_relative_eq!(c_data[0], 58.0, epsilon = 1e-5);
@@ -359,13 +374,13 @@ mod tests {
     fn test_avx2_add() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let a = Array::from_vec(a_data).reshape(&[3, 3]);
-        
+
         let b_data = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let b = Array::from_vec(b_data).reshape(&[3, 3]);
-        
+
         let result = Avx2EnhancedOps::avx2_add_f32(&a, &b).unwrap();
         let result_data = result.to_vec();
-        
+
         for val in result_data {
             assert_relative_eq!(val, 10.0, epsilon = 1e-5);
         }
@@ -375,12 +390,12 @@ mod tests {
     fn test_avx2_dot_product() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0];
         let a = Array::from_vec(a_data).reshape(&[4]);
-        
+
         let b_data = vec![5.0, 6.0, 7.0, 8.0];
         let b = Array::from_vec(b_data).reshape(&[4]);
-        
+
         let result = Avx2EnhancedOps::avx2_dot_f32(&a, &b).unwrap();
-        
+
         // Expected: 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
         assert_relative_eq!(result, 70.0, epsilon = 1e-5);
     }
@@ -389,13 +404,13 @@ mod tests {
     fn test_avx2_convolution() {
         let signal_data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let signal = Array::from_vec(signal_data).reshape(&[5]);
-        
+
         let kernel_data = vec![0.5, 0.5];
         let kernel = Array::from_vec(kernel_data).reshape(&[2]);
-        
+
         let result = Avx2EnhancedOps::avx2_convolution_f32(&signal, &kernel).unwrap();
         let result_data = result.to_vec();
-        
+
         // Expected: [1.5, 2.5, 3.5, 4.5]
         assert_eq!(result_data.len(), 4);
         assert_relative_eq!(result_data[0], 1.5, epsilon = 1e-5);

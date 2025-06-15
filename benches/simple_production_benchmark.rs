@@ -1,6 +1,6 @@
 //! Simple production readiness benchmarks for NumRS2
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::prelude::*;
 use std::time::Duration;
 
@@ -8,7 +8,7 @@ use std::time::Duration;
 pub fn basic_operations_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("basic_operations");
     group.measurement_time(Duration::from_secs(3));
-    
+
     for size in [1000usize, 10000, 100000].iter() {
         group.bench_with_input(
             BenchmarkId::new("array_addition", size),
@@ -16,33 +16,27 @@ pub fn basic_operations_benchmark(c: &mut Criterion) {
             |bench, &size| {
                 let a: Array<f32> = Array::ones(&[size]);
                 let b: Array<f32> = Array::ones(&[size]);
-                bench.iter(|| {
-                    black_box(a.add(&b))
-                });
+                bench.iter(|| black_box(a.add(&b)));
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("array_multiplication", size),
             size,
             |bench, &size| {
                 let a: Array<f32> = Array::ones(&[size]);
                 let b: Array<f32> = Array::ones(&[size]);
-                bench.iter(|| {
-                    black_box(a.multiply(&b))
-                });
+                bench.iter(|| black_box(a.multiply(&b)));
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("dot_product", size),
             size,
             |bench, &size| {
                 let a: Array<f32> = Array::ones(&[size]);
                 let b: Array<f32> = Array::ones(&[size]);
-                bench.iter(|| {
-                    black_box(a.dot(&b).unwrap())
-                });
+                bench.iter(|| black_box(a.dot(&b).unwrap()));
             },
         );
     }
@@ -53,7 +47,7 @@ pub fn basic_operations_benchmark(c: &mut Criterion) {
 pub fn matrix_operations_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("matrix_operations");
     group.measurement_time(Duration::from_secs(5));
-    
+
     for size in [64usize, 128, 256].iter() {
         group.bench_with_input(
             BenchmarkId::new("matrix_multiplication", size),
@@ -61,20 +55,16 @@ pub fn matrix_operations_benchmark(c: &mut Criterion) {
             |bench, &size| {
                 let a: Array<f32> = Array::ones(&[size, size]);
                 let b: Array<f32> = Array::ones(&[size, size]);
-                bench.iter(|| {
-                    black_box(a.matmul(&b).unwrap())
-                });
+                bench.iter(|| black_box(a.matmul(&b).unwrap()));
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("matrix_transpose", size),
             size,
             |bench, &size| {
                 let matrix: Array<f32> = Array::ones(&[size, size]);
-                bench.iter(|| {
-                    black_box(matrix.transpose())
-                });
+                bench.iter(|| black_box(matrix.transpose()));
             },
         );
     }
@@ -85,38 +75,28 @@ pub fn matrix_operations_benchmark(c: &mut Criterion) {
 pub fn memory_allocation_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_allocation");
     group.measurement_time(Duration::from_secs(3));
-    
+
     for size in [1000usize, 10000, 100000].iter() {
         group.bench_with_input(
             BenchmarkId::new("zeros_creation", size),
             size,
             |bench, &size| {
-                bench.iter(|| {
-                    black_box(Array::<f32>::zeros(&[size]))
-                });
+                bench.iter(|| black_box(Array::<f32>::zeros(&[size])));
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("ones_creation", size),
             size,
             |bench, &size| {
-                bench.iter(|| {
-                    black_box(Array::<f32>::ones(&[size]))
-                });
+                bench.iter(|| black_box(Array::<f32>::ones(&[size])));
             },
         );
-        
-        group.bench_with_input(
-            BenchmarkId::new("from_vec", size),
-            size,
-            |bench, &size| {
-                let data = vec![1.0f32; size];
-                bench.iter(|| {
-                    black_box(Array::from_vec(data.clone()))
-                });
-            },
-        );
+
+        group.bench_with_input(BenchmarkId::new("from_vec", size), size, |bench, &size| {
+            let data = vec![1.0f32; size];
+            bench.iter(|| black_box(Array::from_vec(data.clone())));
+        });
     }
     group.finish();
 }
@@ -125,38 +105,32 @@ pub fn memory_allocation_benchmark(c: &mut Criterion) {
 pub fn statistical_operations_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("statistical_operations");
     group.measurement_time(Duration::from_secs(3));
-    
+
     for size in [10000usize, 100000].iter() {
         group.bench_with_input(
             BenchmarkId::new("sum_calculation", size),
             size,
             |bench, &size| {
                 let data: Array<f32> = Array::ones(&[size]);
-                bench.iter(|| {
-                    black_box(data.sum())
-                });
+                bench.iter(|| black_box(data.sum()));
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("mean_calculation", size),
             size,
             |bench, &size| {
                 let data: Array<f32> = Array::ones(&[size]);
-                bench.iter(|| {
-                    black_box(data.mean())
-                });
+                bench.iter(|| black_box(data.mean()));
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("variance_calculation", size),
             size,
             |bench, &size| {
                 let data: Array<f32> = Array::ones(&[size]);
-                bench.iter(|| {
-                    black_box(data.var())
-                });
+                bench.iter(|| black_box(data.var()));
             },
         );
     }
@@ -167,7 +141,7 @@ pub fn statistical_operations_benchmark(c: &mut Criterion) {
 pub fn linear_algebra_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("linear_algebra");
     group.measurement_time(Duration::from_secs(5));
-    
+
     for size in [32usize, 64, 128].iter() {
         group.bench_with_input(
             BenchmarkId::new("matrix_inverse", size),
@@ -185,13 +159,11 @@ pub fn linear_algebra_benchmark(c: &mut Criterion) {
                     }
                 }
                 let matrix = Array::from_vec(data).reshape(&[size, size]);
-                
-                bench.iter(|| {
-                    black_box(matrix.inv().unwrap())
-                });
+
+                bench.iter(|| black_box(matrix.inv().unwrap()));
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("solve_linear_system", size),
             size,
@@ -209,10 +181,8 @@ pub fn linear_algebra_benchmark(c: &mut Criterion) {
                 }
                 let a = Array::from_vec(a_data).reshape(&[size, size]);
                 let b: Array<f32> = Array::ones(&[size]);
-                
-                bench.iter(|| {
-                    black_box(numrs2::linalg::solve(&a, &b).unwrap())
-                });
+
+                bench.iter(|| black_box(numrs2::linalg::solve(&a, &b).unwrap()));
             },
         );
     }

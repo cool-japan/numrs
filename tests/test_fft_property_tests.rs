@@ -1,7 +1,9 @@
+#![allow(deprecated)] // Allow deprecated warnings during API transition
+
 use num_complex::Complex64;
 use numrs2::array::Array;
-use numrs2::prelude::FFT;
 use numrs2::random;
+use numrs2::signal::FFT;
 use std::f64::consts::PI;
 
 /// This file implements property-based testing for FFT operations in NumRS2.

@@ -66,7 +66,11 @@ impl ErrorLocation {
 impl fmt::Display for ErrorLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ref module) = self.module_path {
-            write!(f, "{}::{} ({}:{})", module, self.function, self.file, self.line)
+            write!(
+                f,
+                "{}::{} ({}:{})",
+                module, self.function, self.file, self.line
+            )
         } else {
             write!(f, "{} ({}:{})", self.function, self.file, self.line)
         }
@@ -241,7 +245,7 @@ impl<E> ErrorContext<E> {
     }
 
     /// Add a parent error to the chain
-    pub fn with_source<S>(mut self, source: S) -> Self 
+    pub fn with_source<S>(mut self, source: S) -> Self
     where
         S: std::error::Error + Send + Sync + 'static,
     {
@@ -312,7 +316,9 @@ impl<E: fmt::Display> fmt::Display for ErrorContext<E> {
 
 impl<E: std::error::Error + 'static> std::error::Error for ErrorContext<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.chain.first().map(|e| e.as_ref() as &(dyn std::error::Error + 'static))
+        self.chain
+            .first()
+            .map(|e| e.as_ref() as &(dyn std::error::Error + 'static))
     }
 }
 
@@ -321,19 +327,14 @@ impl<E: std::error::Error + 'static> std::error::Error for ErrorContext<E> {
 macro_rules! error_location {
     () => {
         $crate::error::ErrorLocation::with_module(
-            file!(), 
-            line!(), 
+            file!(),
+            line!(),
             stringify!($crate::error::error_location),
-            module_path!()
+            module_path!(),
         )
     };
     ($func:expr) => {
-        $crate::error::ErrorLocation::with_module(
-            file!(), 
-            line!(), 
-            $func,
-            module_path!()
-        )
+        $crate::error::ErrorLocation::with_module(file!(), line!(), $func, module_path!())
     };
 }
 

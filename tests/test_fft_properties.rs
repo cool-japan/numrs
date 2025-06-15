@@ -1,3 +1,5 @@
+#![allow(deprecated)] // Allow deprecated warnings during API transition
+
 use approx::assert_abs_diff_eq;
 use num_complex::Complex64;
 /// Property-based tests for Fast Fourier Transform (FFT) operations

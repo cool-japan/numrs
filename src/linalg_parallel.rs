@@ -39,8 +39,16 @@ impl ParallelLinAlg {
             ));
         }
 
-        let (m, k_a) = if trans_a { (a_shape[1], a_shape[0]) } else { (a_shape[0], a_shape[1]) };
-        let (k_b, n) = if trans_b { (b_shape[1], b_shape[0]) } else { (b_shape[0], b_shape[1]) };
+        let (m, k_a) = if trans_a {
+            (a_shape[1], a_shape[0])
+        } else {
+            (a_shape[0], a_shape[1])
+        };
+        let (k_b, n) = if trans_b {
+            (b_shape[1], b_shape[0])
+        } else {
+            (b_shape[0], b_shape[1])
+        };
 
         if k_a != k_b || c_shape[0] != m || c_shape[1] != n {
             return Err(NumRs2Error::DimensionMismatch(
@@ -57,8 +65,12 @@ impl ParallelLinAlg {
             return OptimizedBlas::gemm(a, b, c, alpha, beta, trans_a, trans_b);
         }
 
-        let _threads = num_threads.unwrap_or_else(|| std::thread::available_parallelism().map(|p| p.get()).unwrap_or(4));
-        
+        let _threads = num_threads.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|p| p.get())
+                .unwrap_or(4)
+        });
+
         // For now, fall back to the optimized sequential version
         // In a full implementation, we would use proper parallel decomposition
         // This avoids the complex lifetime issues while maintaining the interface
@@ -83,8 +95,12 @@ impl ParallelLinAlg {
         }
 
         let n = shape[0];
-        let _threads = num_threads.unwrap_or_else(|| std::thread::available_parallelism().map(|p| p.get()).unwrap_or(4));
-        
+        let _threads = num_threads.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|p| p.get())
+                .unwrap_or(4)
+        });
+
         // For small matrices or for safety, use sequential implementation
         if n < 1000 {
             return crate::linalg_optimized::lu_optimized(a);
@@ -98,10 +114,7 @@ impl ParallelLinAlg {
     /// Parallel QR decomposition with Householder reflections
     ///
     /// Uses parallel application of Householder reflections for improved performance.
-    pub fn parallel_qr<T>(
-        a: &Array<T>,
-        num_threads: Option<usize>,
-    ) -> Result<(Array<T>, Array<T>)>
+    pub fn parallel_qr<T>(a: &Array<T>, num_threads: Option<usize>) -> Result<(Array<T>, Array<T>)>
     where
         T: Float + Clone + Debug + Send + Sync + 'static,
     {
@@ -114,18 +127,18 @@ impl ParallelLinAlg {
 
         let m = shape[0];
         let n = shape[1];
-        let _threads = num_threads.unwrap_or_else(|| std::thread::available_parallelism().map(|p| p.get()).unwrap_or(4));
+        let _threads = num_threads.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|p| p.get())
+                .unwrap_or(4)
+        });
 
         // For now, provide a simplified QR implementation
         Self::parallel_qr_householder(a, m, n)
     }
 
     /// Simplified parallel QR using Householder reflections
-    fn parallel_qr_householder<T>(
-        a: &Array<T>,
-        m: usize,
-        n: usize,
-    ) -> Result<(Array<T>, Array<T>)>
+    fn parallel_qr_householder<T>(a: &Array<T>, m: usize, n: usize) -> Result<(Array<T>, Array<T>)>
     where
         T: Float + Clone + Debug,
     {
@@ -151,9 +164,9 @@ impl ParallelLinAlg {
                 for i in k..m {
                     col_j.push(r.get(&[i, j])?);
                 }
-                
+
                 let reflected = Self::apply_householder(&col_j, &v, beta)?;
-                
+
                 for (idx, &val) in reflected.iter().enumerate() {
                     r.set(&[k + idx, j], val)?;
                 }
@@ -165,9 +178,9 @@ impl ParallelLinAlg {
                 for i in k..m {
                     col_j.push(q.get(&[i, j])?);
                 }
-                
+
                 let reflected = Self::apply_householder(&col_j, &v, beta)?;
-                
+
                 for (idx, &val) in reflected.iter().enumerate() {
                     q.set(&[k + idx, j], val)?;
                 }
@@ -203,12 +216,17 @@ impl ParallelLinAlg {
         }
 
         let (m, n) = (a_shape[0], a_shape[1]);
-        let _threads = num_threads.unwrap_or_else(|| std::thread::available_parallelism().map(|p| p.get()).unwrap_or(4));
+        let _threads = num_threads.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|p| p.get())
+                .unwrap_or(4)
+        });
 
         if trans {
             if n != y_shape[0] || m != x_shape[0] {
                 return Err(NumRs2Error::DimensionMismatch(
-                    "Incompatible dimensions for transposed matrix-vector multiplication".to_string(),
+                    "Incompatible dimensions for transposed matrix-vector multiplication"
+                        .to_string(),
                 ));
             }
         } else if m != y_shape[0] || n != x_shape[0] {
@@ -227,11 +245,11 @@ impl ParallelLinAlg {
         // Simple heuristic for block sizing
         let total_elements = m * n;
         let elements_per_thread = total_elements / num_threads;
-        
+
         // Aim for roughly square blocks
         let block_size = (elements_per_thread as f64).sqrt() as usize;
         let block_size = block_size.max(32).min(512); // Reasonable bounds
-        
+
         (block_size.min(m), block_size.min(n))
     }
 
@@ -262,14 +280,14 @@ impl ParallelLinAlg {
                 } else {
                     "block_wise".to_string()
                 }
-            },
+            }
             "matvec" => {
                 if density > 0.5 {
                     "dense_optimized".to_string()
                 } else {
                     "sparse_optimized".to_string()
                 }
-            },
+            }
             _ => "sequential".to_string(),
         }
     }
@@ -288,13 +306,13 @@ impl ParallelLinAlg {
         let m = shape[0];
         let n = shape[1];
         let sample_size = (m * n / 100).max(100).min(1000);
-        
+
         let mut non_zero_count = 0;
         for i in 0..sample_size {
             let row = (i * m) / sample_size;
             let col = (i * n) / sample_size;
-            
-            if let Ok(val) = a.get(&[row.min(m-1), col.min(n-1)]) {
+
+            if let Ok(val) = a.get(&[row.min(m - 1), col.min(n - 1)]) {
                 if val != T::zero() {
                     non_zero_count += 1;
                 }
@@ -314,22 +332,29 @@ impl ParallelLinAlg {
             return Err(NumRs2Error::InvalidOperation("Empty vector".to_string()));
         }
 
-        let x_norm = x.iter().map(|&xi| xi * xi).fold(T::zero(), |acc, xi| acc + xi).sqrt();
-        
+        let x_norm = x
+            .iter()
+            .map(|&xi| xi * xi)
+            .fold(T::zero(), |acc, xi| acc + xi)
+            .sqrt();
+
         if x_norm == T::zero() {
             return Ok((vec![T::zero(); n], T::zero()));
         }
 
         let alpha = if x[0] >= T::zero() { -x_norm } else { x_norm };
-        
+
         let mut v = vec![T::zero(); n];
         v[0] = x[0] - alpha;
         for i in 1..n {
             v[i] = x[i];
         }
 
-        let v_norm_sq = v.iter().map(|&vi| vi * vi).fold(T::zero(), |acc, vi| acc + vi);
-        
+        let v_norm_sq = v
+            .iter()
+            .map(|&vi| vi * vi)
+            .fold(T::zero(), |acc, vi| acc + vi);
+
         if v_norm_sq == T::zero() {
             return Ok((v, T::zero()));
         }
@@ -344,11 +369,17 @@ impl ParallelLinAlg {
         T: Float + Clone,
     {
         if x.len() != v.len() {
-            return Err(NumRs2Error::DimensionMismatch("Vector length mismatch".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Vector length mismatch".to_string(),
+            ));
         }
 
-        let dot_product = x.iter().zip(v.iter()).map(|(&xi, &vi)| xi * vi).fold(T::zero(), |acc, prod| acc + prod);
-        
+        let dot_product = x
+            .iter()
+            .zip(v.iter())
+            .map(|(&xi, &vi)| xi * vi)
+            .fold(T::zero(), |acc, prod| acc + prod);
+
         let mut result = Vec::with_capacity(x.len());
         for (&xi, &vi) in x.iter().zip(v.iter()) {
             result.push(xi - beta * dot_product * vi);
@@ -424,7 +455,7 @@ mod tests {
     #[test]
     fn test_optimal_block_size() {
         let (block_m, block_n) = ParallelLinAlg::optimal_block_size(1000, 1000, 4);
-        
+
         // Should be reasonable block sizes
         assert!(block_m >= 32);
         assert!(block_n >= 32);
@@ -435,10 +466,10 @@ mod tests {
     #[test]
     fn test_load_balance_strategy() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
-        
+
         let strategy = ParallelLinAlg::compute_load_balance_strategy(&a, "gemm", 4);
         assert!(strategy == "row_wise" || strategy == "col_wise" || strategy == "block_wise");
-        
+
         let strategy = ParallelLinAlg::compute_load_balance_strategy(&a, "matvec", 4);
         assert!(strategy == "dense_optimized" || strategy == "sparse_optimized");
     }
@@ -453,11 +484,11 @@ mod tests {
 
         // Verify that applying the Householder reflection gives correct result
         let result = ParallelLinAlg::apply_householder(&x, &v, beta).unwrap();
-        
+
         // First component should have the opposite sign and same magnitude as original norm
         let x_norm = (1.0 + 4.0 + 9.0_f64).sqrt();
         assert_relative_eq!(result[0].abs(), x_norm, epsilon = 1e-10);
-        
+
         // Other components should be zero
         assert_relative_eq!(result[1], 0.0, epsilon = 1e-10);
         assert_relative_eq!(result[2], 0.0, epsilon = 1e-10);

@@ -5,27 +5,30 @@
 
 use crate::error::{NumRs2Error, Result};
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, Condvar, atomic::{AtomicBool, AtomicUsize, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Condvar, Mutex,
+};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 /// A task that can be executed by the work-stealing pool
 pub trait Task: Send + 'static {
     type Output: Send + 'static;
-    
+
     /// Execute the task
     fn execute(self: Box<Self>) -> Self::Output;
-    
+
     /// Estimate the computational cost of this task (optional)
     fn estimated_cost(&self) -> Option<u64> {
         None
     }
-    
+
     /// Check if this task can be split for better load balancing
     fn can_split(&self) -> bool {
         false
     }
-    
+
     /// Split the task into smaller tasks (if supported)
     fn split(self: Box<Self>) -> Vec<Box<dyn Task<Output = Self::Output>>>
     where
@@ -159,7 +162,9 @@ pub struct WorkStealingConfig {
 impl Default for WorkStealingConfig {
     fn default() -> Self {
         Self {
-            num_threads: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4),
+            num_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4),
             max_steal_attempts: 3,
             steal_interval: Duration::from_millis(1),
             idle_timeout: Duration::from_millis(10),
@@ -262,33 +267,35 @@ impl WorkStealingPool {
         T: Task<Output = TaskResult<()>> + 'static,
     {
         if self.shutdown.load(Ordering::Relaxed) {
-            return Err(NumRs2Error::RuntimeError("Pool is shutting down".to_string()));
+            return Err(NumRs2Error::RuntimeError(
+                "Pool is shutting down".to_string(),
+            ));
         }
 
         let boxed_task: BoxedTask = Box::new(task);
 
         // Try to find the least loaded worker
         let target_worker = self.find_least_loaded_worker();
-        
+
         if let Some(worker_id) = target_worker {
             let worker = &self.workers[worker_id];
             let mut queue = worker.queue.lock().unwrap();
-            
+
             if queue.len() < self.config.max_queue_size {
                 queue.push_back(boxed_task);
                 drop(queue);
-                
+
                 // Wake up the worker if it's idle
                 if worker.is_idle() {
                     self.notify_worker(worker_id);
                 }
-                
+
                 // Update stats
                 {
                     let mut stats = self.stats.lock().unwrap();
                     stats.tasks_submitted += 1;
                 }
-                
+
                 return Ok(());
             }
         }
@@ -298,13 +305,13 @@ impl WorkStealingPool {
             let mut global = self.global_queue.lock().unwrap();
             if global.len() < self.config.max_queue_size * 2 {
                 global.push_back(boxed_task);
-                
+
                 // Notify any idle worker
                 self.notify_idle_workers();
-                
+
                 let mut stats = self.stats.lock().unwrap();
                 stats.tasks_submitted += 1;
-                
+
                 Ok(())
             } else {
                 Err(NumRs2Error::RuntimeError("All queues are full".to_string()))
@@ -318,7 +325,9 @@ impl WorkStealingPool {
         T: Task<Output = TaskResult<()>> + 'static,
     {
         if self.shutdown.load(Ordering::Relaxed) {
-            return Err(NumRs2Error::RuntimeError("Pool is shutting down".to_string()));
+            return Err(NumRs2Error::RuntimeError(
+                "Pool is shutting down".to_string(),
+            ));
         }
 
         let boxed_task: BoxedTask = Box::new(task);
@@ -327,9 +336,9 @@ impl WorkStealingPool {
         {
             let mut global = self.global_queue.lock().unwrap();
             global.push_front(boxed_task);
-            
+
             self.notify_idle_workers();
-            
+
             let mut stats = self.stats.lock().unwrap();
             stats.tasks_submitted += 1;
         }
@@ -340,23 +349,24 @@ impl WorkStealingPool {
     /// Get current pool statistics
     pub fn statistics(&self) -> PoolStats {
         let mut stats = self.stats.lock().unwrap();
-        
+
         // Update worker utilization
-        stats.worker_utilization = self.workers.iter()
-            .map(|worker| {
-                if worker.is_idle() { 0.0 } else { 1.0 }
-            })
+        stats.worker_utilization = self
+            .workers
+            .iter()
+            .map(|worker| if worker.is_idle() { 0.0 } else { 1.0 })
             .collect();
-        
+
         // Calculate queue imbalance
         stats.queue_imbalance = self.calculate_queue_imbalance();
-        
+
         stats.clone()
     }
 
     /// Get number of active workers
     pub fn active_workers(&self) -> usize {
-        self.workers.iter()
+        self.workers
+            .iter()
             .filter(|worker| !worker.is_idle())
             .count()
     }
@@ -364,32 +374,35 @@ impl WorkStealingPool {
     /// Get total number of pending tasks
     pub fn pending_tasks(&self) -> usize {
         let global_count = self.global_queue.lock().unwrap().len();
-        let worker_count: usize = self.workers.iter()
+        let worker_count: usize = self
+            .workers
+            .iter()
             .map(|worker| worker.queue_length())
             .sum();
-        
+
         global_count + worker_count
     }
 
     /// Shutdown the pool gracefully
     pub fn shutdown(&self) -> Result<()> {
         self.shutdown.store(true, Ordering::Relaxed);
-        
+
         // Wake up all workers
         let (idle_lock, condvar) = &*self.idle_workers;
         let _idle = idle_lock.lock().unwrap();
         condvar.notify_all();
-        
+
         // Note: In a real implementation, we'd need to join the threads
         // but that requires consuming self, which isn't possible here
-        
+
         Ok(())
     }
 
     // Private helper methods
 
     fn find_least_loaded_worker(&self) -> Option<usize> {
-        self.workers.iter()
+        self.workers
+            .iter()
             .enumerate()
             .min_by_key(|(_, worker)| worker.queue_length())
             .map(|(idx, _)| idx)
@@ -398,7 +411,7 @@ impl WorkStealingPool {
     fn notify_worker(&self, worker_id: usize) {
         let (idle_lock, condvar) = &*self.idle_workers;
         let mut idle = idle_lock.lock().unwrap();
-        
+
         if let Some(pos) = idle.iter().position(|&id| id == worker_id) {
             idle.remove(pos);
             condvar.notify_one();
@@ -411,7 +424,9 @@ impl WorkStealingPool {
     }
 
     fn calculate_queue_imbalance(&self) -> f64 {
-        let queue_lengths: Vec<usize> = self.workers.iter()
+        let queue_lengths: Vec<usize> = self
+            .workers
+            .iter()
             .map(|worker| worker.queue_length())
             .collect();
 
@@ -440,7 +455,7 @@ impl WorkStealingPool {
         config: WorkStealingConfig,
     ) {
         let worker_id = worker.id;
-        
+
         while !shutdown.load(Ordering::Relaxed) {
             let mut task_found = false;
 
@@ -475,37 +490,33 @@ impl WorkStealingPool {
             // 4. No work found, become idle
             if !task_found {
                 worker.set_idle(true);
-                
+
                 let (idle_lock, condvar) = &*idle_workers;
                 let mut idle = idle_lock.lock().unwrap();
                 idle.push(worker_id);
-                
+
                 // Wait for work or timeout
                 let _result = condvar.wait_timeout(idle, config.idle_timeout);
-                
+
                 worker.set_idle(false);
             }
         }
     }
 
-    fn execute_task(
-        task: BoxedTask,
-        worker: &Arc<WorkerState>,
-        stats: &Arc<Mutex<PoolStats>>,
-    ) {
+    fn execute_task(task: BoxedTask, worker: &Arc<WorkerState>, stats: &Arc<Mutex<PoolStats>>) {
         let start_time = Instant::now();
-        
+
         let result = Box::new(task).execute();
-        
+
         let execution_time = start_time.elapsed();
-        
+
         // Update worker stats
         worker.tasks_executed.fetch_add(1, Ordering::Relaxed);
         {
             let mut total_time = worker.total_execution_time.lock().unwrap();
             *total_time += execution_time;
         }
-        
+
         // Update global stats
         {
             let mut global_stats = stats.lock().unwrap();
@@ -516,12 +527,12 @@ impl WorkStealingPool {
                     global_stats.tasks_completed += 1;
                 }
             }
-            
+
             // Update average execution time (exponential moving average)
             let alpha = 0.1;
             global_stats.average_execution_time = Duration::from_secs_f64(
-                alpha * execution_time.as_secs_f64() + 
-                (1.0 - alpha) * global_stats.average_execution_time.as_secs_f64()
+                alpha * execution_time.as_secs_f64()
+                    + (1.0 - alpha) * global_stats.average_execution_time.as_secs_f64(),
             );
         }
     }
@@ -533,7 +544,7 @@ impl WorkStealingPool {
     ) -> Option<BoxedTask> {
         let now = Instant::now();
         let mut last_steal = worker.last_steal_attempt.lock().unwrap();
-        
+
         // Check if enough time has passed since last steal attempt
         if now.duration_since(*last_steal) < config.steal_interval {
             return None;
@@ -544,7 +555,8 @@ impl WorkStealingPool {
         // Try stealing from multiple workers
         for _ in 0..config.max_steal_attempts {
             // Find a victim (worker with most tasks)
-            let victim = workers.iter()
+            let victim = workers
+                .iter()
                 .filter(|w| w.id != worker.id)
                 .max_by_key(|w| w.queue_length())?;
 
@@ -625,21 +637,21 @@ mod tests {
     fn test_task_submission() {
         let pool = WorkStealingPool::new(2).unwrap();
         let counter = Arc::new(AtomicU32::new(0));
-        
+
         for _ in 0..5 {
             let counter_clone = Arc::clone(&counter);
             let task = task(move || {
                 counter_clone.fetch_add(1, Ordering::SeqCst);
             });
-            
+
             pool.submit(task).unwrap();
         }
 
         // Wait for tasks to complete
         std::thread::sleep(Duration::from_millis(100));
-        
+
         assert_eq!(counter.load(Ordering::SeqCst), 5);
-        
+
         let stats = pool.statistics();
         assert_eq!(stats.tasks_submitted, 5);
         assert!(stats.tasks_completed <= 5); // Some might still be running
@@ -649,7 +661,7 @@ mod tests {
     fn test_urgent_task_submission() {
         let pool = WorkStealingPool::new(1).unwrap();
         let execution_order = Arc::new(Mutex::new(Vec::new()));
-        
+
         // Submit normal task
         {
             let order_clone = Arc::clone(&execution_order);
@@ -659,7 +671,7 @@ mod tests {
             });
             pool.submit(task).unwrap();
         }
-        
+
         // Submit urgent task (should execute first)
         {
             let order_clone = Arc::clone(&execution_order);
@@ -670,7 +682,7 @@ mod tests {
         }
 
         std::thread::sleep(Duration::from_millis(200));
-        
+
         let order = execution_order.lock().unwrap();
         assert!(order.len() >= 1);
         // Note: In this simple test, the exact order depends on timing
@@ -679,7 +691,7 @@ mod tests {
     #[test]
     fn test_pool_statistics() {
         let pool = WorkStealingPool::new(2).unwrap();
-        
+
         // Submit some tasks
         for i in 0..3 {
             let task = task(move || {
@@ -689,7 +701,7 @@ mod tests {
         }
 
         std::thread::sleep(Duration::from_millis(100));
-        
+
         let stats = pool.statistics();
         assert_eq!(stats.tasks_submitted, 3);
         assert!(stats.worker_utilization.len() == 2);
@@ -699,7 +711,7 @@ mod tests {
     #[test]
     fn test_queue_imbalance_calculation() {
         let pool = WorkStealingPool::new(3).unwrap();
-        
+
         // Add tasks to create imbalance
         for _ in 0..10 {
             let task = task(|| {
@@ -719,7 +731,7 @@ mod tests {
         assert_eq!(worker.queue_length(), 0);
         assert!(worker.is_idle());
         assert_eq!(worker.tasks_executed.load(Ordering::Relaxed), 0);
-        
+
         worker.set_idle(false);
         assert!(!worker.is_idle());
     }
@@ -728,11 +740,11 @@ mod tests {
     fn test_closure_task() {
         let executed = Arc::new(AtomicU32::new(0));
         let executed_clone = Arc::clone(&executed);
-        
+
         let task = ClosureTask::new(move || {
             executed_clone.store(42, Ordering::SeqCst);
         });
-        
+
         let result = Box::new(task).execute();
         assert!(matches!(result, TaskResult::Success(())));
         assert_eq!(executed.load(Ordering::SeqCst), 42);
@@ -741,13 +753,13 @@ mod tests {
     #[test]
     fn test_pool_shutdown() {
         let pool = WorkStealingPool::new(2).unwrap();
-        
+
         // Submit a task
         let task = task(|| {
             std::thread::sleep(Duration::from_millis(10));
         });
         pool.submit(task).unwrap();
-        
+
         // Shutdown should succeed
         assert!(pool.shutdown().is_ok());
     }

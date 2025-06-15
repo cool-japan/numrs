@@ -66,10 +66,10 @@ impl Default for OptimizationHints {
     fn default() -> Self {
         Self {
             cache_line_size: 64,
-            l1_cache_size: 32 * 1024,    // 32KB
-            l2_cache_size: 256 * 1024,   // 256KB
-            simd_width: 8,               // AVX2 double precision
-            alignment: 32,               // AVX2 alignment
+            l1_cache_size: 32 * 1024,  // 32KB
+            l2_cache_size: 256 * 1024, // 256KB
+            simd_width: 8,             // AVX2 double precision
+            alignment: 32,             // AVX2 alignment
             optimize_bandwidth: true,
             optimize_locality: true,
         }
@@ -91,7 +91,11 @@ impl StrideCalculator {
     }
 
     /// Compute optimal strides for given shape and access pattern
-    pub fn compute_optimal_strides(&mut self, shape: &[usize], access_pattern: AccessPattern) -> Vec<usize> {
+    pub fn compute_optimal_strides(
+        &mut self,
+        shape: &[usize],
+        access_pattern: AccessPattern,
+    ) -> Vec<usize> {
         let layout = self.determine_optimal_layout(shape, &access_pattern);
         let cache_key = StrideKey {
             shape: shape.to_vec(),
@@ -108,7 +112,9 @@ impl StrideCalculator {
             AccessPattern::Random => self.compute_random_access_strides(shape),
             AccessPattern::RowWise => self.compute_row_wise_strides(shape),
             AccessPattern::ColumnWise => self.compute_column_wise_strides(shape),
-            AccessPattern::Block { ref block_size } => self.compute_block_strides(shape, block_size),
+            AccessPattern::Block { ref block_size } => {
+                self.compute_block_strides(shape, block_size)
+            }
             AccessPattern::SIMD { vector_width } => self.compute_simd_strides(shape, vector_width),
             AccessPattern::Tiled { ref tile_size } => self.compute_tiled_strides(shape, tile_size),
             AccessPattern::Broadcast => self.compute_broadcast_strides(shape),
@@ -119,13 +125,17 @@ impl StrideCalculator {
     }
 
     /// Determine optimal memory layout for access pattern
-    fn determine_optimal_layout(&self, shape: &[usize], access_pattern: &AccessPattern) -> MemoryLayout {
+    fn determine_optimal_layout(
+        &self,
+        shape: &[usize],
+        access_pattern: &AccessPattern,
+    ) -> MemoryLayout {
         match access_pattern {
             AccessPattern::RowWise | AccessPattern::Sequential => MemoryLayout::C,
             AccessPattern::ColumnWise => MemoryLayout::Fortran,
-            AccessPattern::SIMD { .. } | AccessPattern::Block { .. } | AccessPattern::Tiled { .. } => {
-                MemoryLayout::Custom
-            },
+            AccessPattern::SIMD { .. }
+            | AccessPattern::Block { .. }
+            | AccessPattern::Tiled { .. } => MemoryLayout::Custom,
             AccessPattern::Random | AccessPattern::Broadcast => {
                 // Choose based on shape characteristics
                 if shape.len() <= 2 && shape.iter().all(|&s| s <= 1000) {
@@ -140,32 +150,34 @@ impl StrideCalculator {
     /// Compute strides for sequential access
     fn compute_sequential_strides(&self, shape: &[usize]) -> Vec<usize> {
         let mut strides = vec![1; shape.len()];
-        
+
         for i in (0..shape.len().saturating_sub(1)).rev() {
             strides[i] = strides[i + 1] * shape[i + 1];
         }
-        
+
         strides
     }
 
     /// Compute strides optimized for random access
     fn compute_random_access_strides(&self, shape: &[usize]) -> Vec<usize> {
         // For random access, minimize memory footprint while maintaining reasonable locality
-        let mut dim_priorities: Vec<(usize, usize)> = shape.iter().enumerate()
+        let mut dim_priorities: Vec<(usize, usize)> = shape
+            .iter()
+            .enumerate()
             .map(|(i, &size)| (i, size))
             .collect();
-        
+
         // Sort by size (smaller dimensions get larger strides to improve locality)
         dim_priorities.sort_by_key(|&(_, size)| size);
-        
+
         let mut strides = vec![0; shape.len()];
         let mut current_stride = 1;
-        
+
         for &(dim_idx, dim_size) in &dim_priorities {
             strides[dim_idx] = current_stride;
             current_stride *= dim_size;
         }
-        
+
         strides
     }
 
@@ -177,11 +189,11 @@ impl StrideCalculator {
     /// Compute strides for column-wise access (Fortran-style)
     fn compute_column_wise_strides(&self, shape: &[usize]) -> Vec<usize> {
         let mut strides = vec![1; shape.len()];
-        
+
         for i in 1..shape.len() {
             strides[i] = strides[i - 1] * shape[i - 1];
         }
-        
+
         strides
     }
 
@@ -211,7 +223,7 @@ impl StrideCalculator {
     /// Compute strides optimized for SIMD operations
     fn compute_simd_strides(&self, shape: &[usize], vector_width: usize) -> Vec<usize> {
         let mut strides = self.compute_sequential_strides(shape);
-        
+
         if shape.is_empty() {
             return strides;
         }
@@ -219,15 +231,19 @@ impl StrideCalculator {
         // Ensure the innermost dimension is SIMD-friendly
         let innermost_dim = shape.len() - 1;
         let innermost_size = shape[innermost_dim];
-        
+
         // If the innermost dimension is not SIMD-aligned, adjust strides
         if innermost_size % vector_width != 0 {
             let padded_size = ((innermost_size + vector_width - 1) / vector_width) * vector_width;
-            
+
             // Recalculate strides with padding
             strides[innermost_dim] = 1;
             for i in (0..innermost_dim).rev() {
-                let next_size = if i == innermost_dim - 1 { padded_size } else { shape[i + 1] };
+                let next_size = if i == innermost_dim - 1 {
+                    padded_size
+                } else {
+                    shape[i + 1]
+                };
                 strides[i] = strides[i + 1] * next_size;
             }
         }
@@ -243,7 +259,7 @@ impl StrideCalculator {
 
         // Calculate optimal tile ordering based on cache efficiency
         let cache_line_elements = self.hints.cache_line_size / std::mem::size_of::<f64>();
-        
+
         let mut strides = vec![1; shape.len()];
         let mut current_stride = 1;
 
@@ -273,19 +289,21 @@ impl StrideCalculator {
         // For broadcasting, optimize for the most common case where
         // smaller arrays are broadcast against larger ones
         let mut strides = vec![1; shape.len()];
-        
+
         if shape.len() <= 1 {
             return strides;
         }
 
         // Sort dimensions by size and assign strides accordingly
-        let mut dim_sizes: Vec<(usize, usize)> = shape.iter().enumerate()
+        let mut dim_sizes: Vec<(usize, usize)> = shape
+            .iter()
+            .enumerate()
             .map(|(i, &size)| (i, size))
             .collect();
-        
+
         // For broadcasting, prioritize larger dimensions (they're less likely to be broadcast)
         dim_sizes.sort_by_key(|&(_, size)| std::cmp::Reverse(size));
-        
+
         let mut current_stride = 1;
         for &(dim_idx, dim_size) in &dim_sizes {
             strides[dim_idx] = current_stride;
@@ -303,7 +321,7 @@ impl StrideCalculator {
 
         let element_size = std::mem::size_of::<f64>(); // Assume f64 for analysis
         let cache_line_elements = self.hints.cache_line_size / element_size;
-        
+
         // Calculate cache utilization for each dimension
         let mut cache_utilizations = Vec::new();
         for (_, (&stride, &dim_size)) in strides.iter().zip(shape.iter()).enumerate() {
@@ -317,8 +335,9 @@ impl StrideCalculator {
         }
 
         // Calculate overall efficiency metrics
-        let avg_cache_utilization = cache_utilizations.iter().sum::<f64>() / cache_utilizations.len() as f64;
-        
+        let avg_cache_utilization =
+            cache_utilizations.iter().sum::<f64>() / cache_utilizations.len() as f64;
+
         // Calculate memory bandwidth efficiency
         let total_elements: usize = shape.iter().product();
         let memory_span = self.calculate_memory_span(shape, strides);
@@ -435,8 +454,12 @@ impl StrideCalculator {
     }
 
     /// Optimize strides for specific hardware characteristics
-    pub fn optimize_for_hardware(&mut self, shape: &[usize], access_pattern: AccessPattern, 
-                                target_arch: TargetArchitecture) -> Vec<usize> {
+    pub fn optimize_for_hardware(
+        &mut self,
+        shape: &[usize],
+        access_pattern: AccessPattern,
+        target_arch: TargetArchitecture,
+    ) -> Vec<usize> {
         // Update hints based on target architecture
         self.hints = match target_arch {
             TargetArchitecture::X86_64Avx2 => OptimizationHints {
@@ -578,8 +601,9 @@ mod tests {
     fn test_simd_strides() {
         let mut calculator = StrideCalculator::default();
         let shape = [2, 7]; // 7 is not SIMD-aligned
-        let strides = calculator.compute_optimal_strides(&shape, AccessPattern::SIMD { vector_width: 4 });
-        
+        let strides =
+            calculator.compute_optimal_strides(&shape, AccessPattern::SIMD { vector_width: 4 });
+
         // Should pad to next multiple of 4
         assert!(strides[0] >= 8); // 8 is next multiple of 4 after 7
     }
@@ -589,7 +613,7 @@ mod tests {
         let calculator = StrideCalculator::default();
         let shape = [3, 4];
         let strides = [4, 1]; // C-contiguous
-        
+
         let analysis = calculator.analyze_stride_efficiency(&shape, &strides);
         assert_eq!(analysis.pattern, StridePattern::UnitStride);
         assert!(analysis.simd_efficiency > 0.9); // Unit stride in last dimension
@@ -600,9 +624,13 @@ mod tests {
         let mut calculator = StrideCalculator::default();
         let shape = [4, 4];
         let block_size = [2, 2];
-        let strides = calculator.compute_optimal_strides(&shape, 
-            AccessPattern::Block { block_size: block_size.to_vec() });
-        
+        let strides = calculator.compute_optimal_strides(
+            &shape,
+            AccessPattern::Block {
+                block_size: block_size.to_vec(),
+            },
+        );
+
         // Block access should optimize for the given block size
         assert!(strides.len() == 2);
     }
@@ -611,13 +639,19 @@ mod tests {
     fn test_hardware_optimization() {
         let mut calculator = StrideCalculator::default();
         let shape = [2, 8];
-        
-        let strides_avx2 = calculator.optimize_for_hardware(&shape, 
-            AccessPattern::SIMD { vector_width: 4 }, TargetArchitecture::X86_64Avx2);
-        
-        let strides_avx512 = calculator.optimize_for_hardware(&shape, 
-            AccessPattern::SIMD { vector_width: 8 }, TargetArchitecture::X86_64Avx512);
-        
+
+        let strides_avx2 = calculator.optimize_for_hardware(
+            &shape,
+            AccessPattern::SIMD { vector_width: 4 },
+            TargetArchitecture::X86_64Avx2,
+        );
+
+        let strides_avx512 = calculator.optimize_for_hardware(
+            &shape,
+            AccessPattern::SIMD { vector_width: 8 },
+            TargetArchitecture::X86_64Avx512,
+        );
+
         // Different architectures should potentially give different results
         assert!(strides_avx2.len() == strides_avx512.len());
     }
@@ -626,16 +660,16 @@ mod tests {
     fn test_cache_functionality() {
         let mut calculator = StrideCalculator::default();
         let shape = [2, 3];
-        
+
         // First call should miss cache
         let _strides1 = calculator.compute_optimal_strides(&shape, AccessPattern::Sequential);
-        
+
         // Second call should hit cache
         let _strides2 = calculator.compute_optimal_strides(&shape, AccessPattern::Sequential);
-        
+
         let (cache_size, _) = calculator.get_cache_stats();
         assert!(cache_size > 0);
-        
+
         calculator.clear_cache();
         let (cache_size_after_clear, _) = calculator.get_cache_stats();
         assert_eq!(cache_size_after_clear, 0);

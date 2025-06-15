@@ -4,15 +4,15 @@
 //! compatibility with the existing flat error structure.
 
 // Submodules for hierarchical error system
+pub mod computation;
 pub mod context;
 pub mod core;
-pub mod computation;
-pub mod memory;
 pub mod io;
+pub mod memory;
 
 // Integration modules
-mod legacy;
 mod hierarchical;
+mod legacy;
 
 use std::fmt;
 
@@ -23,11 +23,11 @@ pub use self::hierarchical::*;
 pub use legacy::{NumRs2Error, Result};
 
 // Re-export core types for convenience
+pub use computation::ComputationError;
 pub use context::{ErrorContext, ErrorLocation, ErrorSeverity, OperationContext};
 pub use core::CoreError;
-pub use computation::ComputationError;
-pub use memory::MemoryError;
 pub use io::IOError;
+pub use memory::MemoryError;
 
 // Error category classification for hierarchical system
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,8 +59,7 @@ pub type ContextResult<T> = std::result::Result<T, ErrorContext<NumRs2Error>>;
 // For new code, recommend using the hierarchical system
 pub mod prelude {
     pub use super::{
-        CoreError, ComputationError, MemoryError, IOError,
-        ErrorContext, ErrorLocation, ErrorSeverity, OperationContext,
-        NumRs2Error, Result, ErrorCategory, ContextResult
+        ComputationError, ContextResult, CoreError, ErrorCategory, ErrorContext, ErrorLocation,
+        ErrorSeverity, IOError, MemoryError, NumRs2Error, OperationContext, Result,
     };
 }

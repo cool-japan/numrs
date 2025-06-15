@@ -57,7 +57,7 @@ impl StableDecompositions {
             // Find column with maximum norm for pivoting
             let mut max_norm = T::zero();
             let mut pivot_col = k;
-            
+
             for j in k..n {
                 if col_norms[j] > max_norm {
                     max_norm = col_norms[j];
@@ -73,7 +73,7 @@ impl StableDecompositions {
                     r.set(&[i, k], r.get(&[i, pivot_col])?)?;
                     r.set(&[i, pivot_col], temp)?;
                 }
-                
+
                 // Update permutation and norms
                 p.swap(k, pivot_col);
                 col_norms.swap(k, pivot_col);
@@ -82,12 +82,12 @@ impl StableDecompositions {
             // Householder reflection
             let x_k = Self::extract_column_slice(&r, k, k, m)?;
             let (v, beta) = Self::householder_vector(&x_k)?;
-            
+
             // Apply reflection to R (from column k onwards)
             for j in k..n {
                 let x_j = Self::extract_column_slice(&r, j, k, m)?;
                 let y_j = Self::apply_householder(&x_j, &v, beta)?;
-                
+
                 for (idx, &val) in y_j.iter().enumerate() {
                     r.set(&[k + idx, j], val)?;
                 }
@@ -97,7 +97,7 @@ impl StableDecompositions {
             for j in 0..m {
                 let x_j = Self::extract_column_slice(&q, j, k, m)?;
                 let y_j = Self::apply_householder(&x_j, &v, beta)?;
-                
+
                 for (idx, &val) in y_j.iter().enumerate() {
                     q.set(&[k + idx, j], val)?;
                 }
@@ -119,7 +119,7 @@ impl StableDecompositions {
         // Estimate condition number and rank
         let mut r_diag_min = T::infinity();
         let mut r_diag_max = T::zero();
-        
+
         for i in 0..min_mn {
             let diag_val = num_traits::Float::abs(r.get(&[i, i])?);
             r_diag_min = r_diag_min.min(diag_val);
@@ -136,7 +136,7 @@ impl StableDecompositions {
         let eps = T::epsilon();
         let threshold = eps * <T as num_traits::NumCast>::from(m.max(n)).unwrap() * r_diag_max;
         let mut rank = 0;
-        
+
         for i in 0..min_mn {
             if num_traits::Float::abs(r.get(&[i, i])?) > threshold {
                 rank += 1;
@@ -171,7 +171,7 @@ impl StableDecompositions {
         }
 
         let n = shape[0];
-        
+
         // Check for positive definiteness by attempting standard Cholesky
         let mut l = Array::zeros(&[n, n]);
         let mut is_positive_definite = true;
@@ -183,15 +183,15 @@ impl StableDecompositions {
                 let l_ik = l.get(&[i, k])?;
                 sum = sum + l_ik * l_ik;
             }
-            
+
             let a_ii = a.get(&[i, i])?;
             let l_ii_sq = a_ii - sum;
-            
+
             if l_ii_sq <= T::zero() {
                 is_positive_definite = false;
                 break;
             }
-            
+
             let l_ii = l_ii_sq.sqrt();
             l.set(&[i, i], l_ii)?;
 
@@ -201,7 +201,7 @@ impl StableDecompositions {
                 for k in 0..i {
                     sum = sum + l.get(&[i, k])? * l.get(&[j, k])?;
                 }
-                
+
                 let a_ji = a.get(&[j, i])?;
                 let l_ji = (a_ji - sum) / l_ii;
                 l.set(&[j, i], l_ji)?;
@@ -216,7 +216,7 @@ impl StableDecompositions {
         // Estimate condition number
         let mut l_diag_min = T::infinity();
         let mut l_diag_max = T::zero();
-        
+
         for i in 0..n {
             let diag_val = l.get(&[i, i])?;
             l_diag_min = l_diag_min.min(diag_val);
@@ -247,7 +247,7 @@ impl StableDecompositions {
     {
         let shape = a.shape();
         let n = shape[0];
-        
+
         let mut l = Array::eye(n, n, 0);
         let mut d = Array::zeros(&[n, n]);
         let mut p: Vec<usize> = (0..n).collect();
@@ -257,7 +257,7 @@ impl StableDecompositions {
             // Find pivot
             let mut max_val = T::zero();
             let mut pivot_idx = k;
-            
+
             for i in k..n {
                 let abs_val = num_traits::Float::abs(a_work.get(&[i, k])?);
                 if abs_val > max_val {
@@ -273,12 +273,12 @@ impl StableDecompositions {
                     let temp = a_work.get(&[k, j])?;
                     a_work.set(&[k, j], a_work.get(&[pivot_idx, j])?)?;
                     a_work.set(&[pivot_idx, j], temp)?;
-                    
+
                     let temp = a_work.get(&[j, k])?;
                     a_work.set(&[j, k], a_work.get(&[j, pivot_idx])?)?;
                     a_work.set(&[j, pivot_idx], temp)?;
                 }
-                
+
                 p.swap(k, pivot_idx);
             }
 
@@ -294,7 +294,7 @@ impl StableDecompositions {
             for i in (k + 1)..n {
                 let l_ik = a_work.get(&[i, k])? / d_kk;
                 l.set(&[i, k], l_ik)?;
-                
+
                 for j in (k + 1)..n {
                     let old_val = a_work.get(&[i, j])?;
                     let update = l_ik * a_work.get(&[k, j])?;
@@ -306,7 +306,7 @@ impl StableDecompositions {
         // Estimate condition number from D
         let mut d_min = T::infinity();
         let mut d_max = T::zero();
-        
+
         for i in 0..n {
             let d_val = num_traits::Float::abs(d.get(&[i, i])?);
             if d_val > T::zero() {
@@ -382,7 +382,11 @@ impl StableDecompositions {
         // Extract singular values (square roots of eigenvalues)
         let mut singular_values = Vec::with_capacity(eigenvalues.len());
         for &lambda in &eigenvalues {
-            singular_values.push(if lambda >= T::zero() { lambda.sqrt() } else { T::zero() });
+            singular_values.push(if lambda >= T::zero() {
+                lambda.sqrt()
+            } else {
+                T::zero()
+            });
         }
 
         // Sort singular values in descending order
@@ -391,7 +395,7 @@ impl StableDecompositions {
 
         let mut s_sorted = Vec::with_capacity(singular_values.len());
         let mut vt_cols = Vec::with_capacity(n);
-        
+
         for &idx in &indices {
             s_sorted.push(singular_values[idx]);
             let mut col = Vec::with_capacity(n);
@@ -427,7 +431,11 @@ impl StableDecompositions {
 
         // Estimate condition number and rank
         let s_max = s_sorted[0];
-        let s_min = if min_mn > 0 { s_sorted[min_mn - 1] } else { s_sorted[0] };
+        let s_min = if min_mn > 0 {
+            s_sorted[min_mn - 1]
+        } else {
+            s_sorted[0]
+        };
         let condition_number = if s_min > T::zero() {
             s_max / s_min
         } else {
@@ -455,7 +463,7 @@ impl StableDecompositions {
         // This is a simplified implementation
         // A full implementation would use Golub-Kahan bidiagonalization
         // followed by QR algorithm on the bidiagonal matrix
-        
+
         // For now, fall back to the small matrix method
         Self::svd_small_stable(a)
     }
@@ -515,7 +523,7 @@ impl StableDecompositions {
 
             // Compute eigenvectors
             let mut eigenvectors = Array::zeros(&[2, 2]);
-            
+
             // First eigenvector
             if num_traits::Float::abs(a12) > T::epsilon() {
                 let v1_x = a12;
@@ -560,7 +568,7 @@ impl StableDecompositions {
         // 1. Householder tridiagonalization
         // 2. QR algorithm with Wilkinson shifts
         // 3. Deflation for convergence acceleration
-        
+
         // For now, fall back to a simplified approach
         Self::symmetric_eigen_small(a)
     }
@@ -576,22 +584,29 @@ impl StableDecompositions {
             return Err(NumRs2Error::InvalidOperation("Empty vector".to_string()));
         }
 
-        let x_norm = x.iter().map(|&xi| xi * xi).fold(T::zero(), |acc, xi| acc + xi).sqrt();
-        
+        let x_norm = x
+            .iter()
+            .map(|&xi| xi * xi)
+            .fold(T::zero(), |acc, xi| acc + xi)
+            .sqrt();
+
         if x_norm == T::zero() {
             return Ok((vec![T::zero(); n], T::zero()));
         }
 
         let alpha = if x[0] >= T::zero() { -x_norm } else { x_norm };
-        
+
         let mut v = vec![T::zero(); n];
         v[0] = x[0] - alpha;
         for i in 1..n {
             v[i] = x[i];
         }
 
-        let v_norm_sq = v.iter().map(|&vi| vi * vi).fold(T::zero(), |acc, vi| acc + vi);
-        
+        let v_norm_sq = v
+            .iter()
+            .map(|&vi| vi * vi)
+            .fold(T::zero(), |acc, vi| acc + vi);
+
         if v_norm_sq == T::zero() {
             return Ok((v, T::zero()));
         }
@@ -607,11 +622,17 @@ impl StableDecompositions {
         T: Float + Clone,
     {
         if x.len() != v.len() {
-            return Err(NumRs2Error::DimensionMismatch("Vector length mismatch".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Vector length mismatch".to_string(),
+            ));
         }
 
-        let dot_product = x.iter().zip(v.iter()).map(|(&xi, &vi)| xi * vi).fold(T::zero(), |acc, prod| acc + prod);
-        
+        let dot_product = x
+            .iter()
+            .zip(v.iter())
+            .map(|(&xi, &vi)| xi * vi)
+            .fold(T::zero(), |acc, prod| acc + prod);
+
         let mut result = Vec::with_capacity(x.len());
         for (&xi, &vi) in x.iter().zip(v.iter()) {
             result.push(xi - beta * dot_product * vi);
@@ -620,7 +641,12 @@ impl StableDecompositions {
         Ok(result)
     }
 
-    fn extract_column_slice<T>(matrix: &Array<T>, col: usize, start_row: usize, end_row: usize) -> Result<Vec<T>>
+    fn extract_column_slice<T>(
+        matrix: &Array<T>,
+        col: usize,
+        start_row: usize,
+        end_row: usize,
+    ) -> Result<Vec<T>>
     where
         T: Float + Clone,
     {
@@ -637,7 +663,9 @@ impl StableDecompositions {
     {
         let shape = a.shape();
         if shape.len() != 2 {
-            return Err(NumRs2Error::DimensionMismatch("Transpose requires 2D matrix".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Transpose requires 2D matrix".to_string(),
+            ));
         }
 
         let m = shape[0];
@@ -661,7 +689,9 @@ impl StableDecompositions {
         let b_shape = b.shape();
 
         if a_shape.len() != 2 || b_shape.len() != 2 || a_shape[1] != b_shape[0] {
-            return Err(NumRs2Error::DimensionMismatch("Invalid matrix multiplication dimensions".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Invalid matrix multiplication dimensions".to_string(),
+            ));
         }
 
         let m = a_shape[0];
@@ -725,7 +755,7 @@ mod tests {
         // Verify Q is orthogonal (Q^T * Q = I)
         let qt = StableDecompositions::transpose(&result.q).unwrap();
         let qtq = StableDecompositions::matrix_multiply(&qt, &result.q).unwrap();
-        
+
         for i in 0..2 {
             for j in 0..2 {
                 let expected = if i == j { 1.0 } else { 0.0 };
@@ -750,7 +780,11 @@ mod tests {
 
         for i in 0..2 {
             for j in 0..2 {
-                assert_relative_eq!(llt.get(&[i, j]).unwrap(), a.get(&[i, j]).unwrap(), epsilon = 1e-10);
+                assert_relative_eq!(
+                    llt.get(&[i, j]).unwrap(),
+                    a.get(&[i, j]).unwrap(),
+                    epsilon = 1e-10
+                );
             }
         }
     }
@@ -759,7 +793,8 @@ mod tests {
     fn test_symmetric_eigendecomposition_2x2() {
         let a = Array::from_vec(vec![3.0, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
 
-        let (eigenvalues, eigenvectors) = StableDecompositions::symmetric_eigendecomposition(&a).unwrap();
+        let (eigenvalues, eigenvectors) =
+            StableDecompositions::symmetric_eigendecomposition(&a).unwrap();
 
         assert_eq!(eigenvalues.len(), 2);
         assert_eq!(eigenvectors.shape(), vec![2, 2]);
@@ -767,7 +802,7 @@ mod tests {
         // For this matrix, eigenvalues should be 4 and 2
         let mut sorted_eigenvalues = eigenvalues.clone();
         sorted_eigenvalues.sort_by(|a, b| b.partial_cmp(a).unwrap());
-        
+
         assert_relative_eq!(sorted_eigenvalues[0], 4.0, epsilon = 1e-10);
         assert_relative_eq!(sorted_eigenvalues[1], 2.0, epsilon = 1e-10);
     }
@@ -799,11 +834,11 @@ mod tests {
 
         // Verify that applying the Householder reflection gives correct result
         let result = StableDecompositions::apply_householder(&x, &v, beta).unwrap();
-        
+
         // First component should have the opposite sign and same magnitude as original norm
         let x_norm = (1.0 + 4.0 + 9.0_f64).sqrt();
         assert_relative_eq!(result[0].abs(), x_norm, epsilon = 1e-10);
-        
+
         // Other components should be zero
         assert_relative_eq!(result[1], 0.0, epsilon = 1e-10);
         assert_relative_eq!(result[2], 0.0, epsilon = 1e-10);

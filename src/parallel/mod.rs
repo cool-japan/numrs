@@ -4,18 +4,18 @@
 //! work-stealing schedulers, dynamic load balancing, and parallel algorithms
 //! optimized for numerical computations.
 
-pub mod scheduler;
 pub mod load_balancer;
 pub mod parallel_algorithms;
-pub mod work_stealing;
 pub mod parallel_allocator;
+pub mod scheduler;
+pub mod work_stealing;
 
 // Re-export main types
+pub use load_balancer::{BalancingStrategy, LoadBalancer, WorkloadMetrics};
+pub use parallel_algorithms::{ParallelArrayOps, ParallelConfig, ParallelFFT, ParallelMatrixOps};
+pub use parallel_allocator::{ParallelAllocator, ParallelAllocatorConfig, ThreadLocalAllocator};
 pub use scheduler::{ParallelScheduler, SchedulerConfig, TaskPriority};
-pub use load_balancer::{LoadBalancer, WorkloadMetrics, BalancingStrategy};
-pub use parallel_algorithms::{ParallelArrayOps, ParallelMatrixOps, ParallelFFT, ParallelConfig};
-pub use work_stealing::{WorkStealingPool, Task, TaskResult, task};
-pub use parallel_allocator::{ParallelAllocator, ThreadLocalAllocator, ParallelAllocatorConfig};
+pub use work_stealing::{task, Task, TaskResult, WorkStealingPool};
 
 use crate::error::{NumRs2Error, Result};
 use std::sync::Arc;
@@ -37,10 +37,7 @@ impl ParallelContext {
         let scheduler_config = SchedulerConfig::optimal_for_cores(num_cores);
         let scheduler = Arc::new(ParallelScheduler::new(scheduler_config)?);
 
-        let load_balancer = Arc::new(LoadBalancer::new(
-            BalancingStrategy::Adaptive,
-            num_cores,
-        )?);
+        let load_balancer = Arc::new(LoadBalancer::new(BalancingStrategy::Adaptive, num_cores)?);
 
         let work_stealing_pool = Arc::new(WorkStealingPool::new(num_cores)?);
 
@@ -104,7 +101,7 @@ impl Default for ParallelContext {
 
 lazy_static::lazy_static! {
     /// Thread-safe global parallel context instance
-    static ref GLOBAL_PARALLEL_CONTEXT: std::sync::Mutex<Option<Arc<ParallelContext>>> = 
+    static ref GLOBAL_PARALLEL_CONTEXT: std::sync::Mutex<Option<Arc<ParallelContext>>> =
         std::sync::Mutex::new(None);
 }
 

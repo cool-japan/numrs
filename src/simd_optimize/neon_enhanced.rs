@@ -3,10 +3,10 @@
 //! This module provides optimized vectorization using ARM NEON instructions
 //! for high performance on ARM-based systems including Apple Silicon and ARM servers.
 
-#[cfg(target_arch = "aarch64")]
-use std::arch::aarch64::*;
 use crate::array::Array;
 use crate::error::Result;
+#[cfg(target_arch = "aarch64")]
+use std::arch::aarch64::*;
 
 /// NEON vectorization constants
 #[allow(dead_code)]
@@ -29,12 +29,16 @@ impl NeonEnhancedOps {
         block_size: usize,
     ) -> Result<()> {
         let [m, k] = a.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix A must be 2D".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix A must be 2D".to_string(),
+            ));
         };
         let [k2, n] = b.shape()[..] else {
-            return Err(NumRs2Error::DimensionMismatch("Matrix B must be 2D".to_string()));
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix B must be 2D".to_string(),
+            ));
         };
-        
+
         if k != k2 {
             return Err(NumRs2Error::ShapeMismatch {
                 expected: vec![k],
@@ -47,10 +51,7 @@ impl NeonEnhancedOps {
         let mut c_data = c.to_vec();
 
         unsafe {
-            Self::blocked_matmul_neon_f32(
-                &a_data, &b_data, &mut c_data,
-                m, n, k, block_size
-            );
+            Self::blocked_matmul_neon_f32(&a_data, &b_data, &mut c_data, m, n, k, block_size);
         }
 
         *c = Array::from_vec(c_data).reshape(&[m, n]);
@@ -60,8 +61,13 @@ impl NeonEnhancedOps {
     /// Blocked matrix multiplication with NEON optimization
     #[cfg(target_arch = "aarch64")]
     unsafe fn blocked_matmul_neon_f32(
-        a: &[f32], b: &[f32], c: &mut [f32],
-        m: usize, n: usize, k: usize, block_size: usize
+        a: &[f32],
+        b: &[f32],
+        c: &mut [f32],
+        m: usize,
+        n: usize,
+        k: usize,
+        block_size: usize,
     ) {
         for ii in (0..m).step_by(block_size) {
             for jj in (0..n).step_by(block_size) {
@@ -73,7 +79,7 @@ impl NeonEnhancedOps {
                     for i in ii..i_end {
                         for j in (jj..j_end).step_by(NEON_F32_LANES) {
                             let lanes = (j_end - j).min(NEON_F32_LANES);
-                            
+
                             // Load C values
                             let mut vc = if lanes == NEON_F32_LANES {
                                 vld1q_f32(c.as_ptr().add(i * n + j))
@@ -147,29 +153,27 @@ impl NeonEnhancedOps {
 
         for i in (0..simd_len).step_by(NEON_F32_LANES) {
             let x = vld1q_f32(input.as_ptr().add(i));
-            
+
             // Range reduction: x = n*ln(2) + r
             let n_float = vmulq_f32(x, log2_e);
             let n = vcvtq_s32_f32(n_float);
             let n_f = vcvtq_f32_s32(n);
-            
+
             // r = x - n*ln(2)
             let r = vfmsq_f32(x, n_f, ln2_hi);
             let r = vfmsq_f32(r, n_f, ln2_lo);
-            
+
             // Taylor series: exp(r) ≈ 1 + r + r²/2! + r³/3! + r⁴/4!
             let r2 = vmulq_f32(r, r);
             let r3 = vmulq_f32(r2, r);
             let r4 = vmulq_f32(r3, r);
-            
+
             let poly = vfmaq_f32(
-                vfmaq_f32(
-                    vfmaq_f32(
-                        vfmaq_f32(c1, c2, r),
-                        c3, r2),
-                    c4, r3),
-                c5, r4);
-            
+                vfmaq_f32(vfmaq_f32(vfmaq_f32(c1, c2, r), c3, r2), c4, r3),
+                c5,
+                r4,
+            );
+
             // Scale by 2^n (simplified - would need proper implementation)
             let mut temp = [0.0f32; NEON_F32_LANES];
             vst1q_f32(temp.as_mut_ptr(), poly);
@@ -178,7 +182,7 @@ impl NeonEnhancedOps {
                 temp[j] *= (2.0f32).powi(n_val);
             }
             let result = vld1q_f32(temp.as_ptr());
-            
+
             vst1q_f32(output.as_mut_ptr().add(i), result);
         }
 
@@ -216,43 +220,41 @@ impl NeonEnhancedOps {
 
         for i in (0..simd_len).step_by(NEON_F32_LANES) {
             let x = vld1q_f32(input.as_ptr().add(i));
-            
+
             // Extract exponent and mantissa (simplified approach)
             let mut temp = [0.0f32; NEON_F32_LANES];
             vst1q_f32(temp.as_mut_ptr(), x);
-            
+
             let mut exp_vals = [0.0f32; NEON_F32_LANES];
             let mut mantissa_vals = [0.0f32; NEON_F32_LANES];
-            
+
             for j in 0..NEON_F32_LANES {
                 let bits = temp[j].to_bits();
                 let exp = ((bits >> 23) & 0xFF) as i32 - 127;
                 exp_vals[j] = exp as f32;
-                
+
                 let mantissa_bits = (bits & 0x007FFFFF) | 0x3F800000;
                 mantissa_vals[j] = f32::from_bits(mantissa_bits);
             }
-            
+
             let exp_f = vld1q_f32(exp_vals.as_ptr());
             let mantissa = vld1q_f32(mantissa_vals.as_ptr());
-            
+
             // Polynomial approximation for log(mantissa)
             let u = vsubq_f32(mantissa, one);
             let u2 = vmulq_f32(u, u);
             let u3 = vmulq_f32(u2, u);
             let u4 = vmulq_f32(u3, u);
-            
+
             let poly = vfmaq_f32(
-                vfmaq_f32(
-                    vfmaq_f32(
-                        vfmaq_f32(u, c1, u2),
-                        c2, u2),
-                    c3, u3),
-                c4, u4);
-            
+                vfmaq_f32(vfmaq_f32(vfmaq_f32(u, c1, u2), c2, u2), c3, u3),
+                c4,
+                u4,
+            );
+
             // log(x) = exp * ln(2) + log(mantissa)
             let result = vfmaq_f32(poly, exp_f, ln2);
-            
+
             vst1q_f32(output.as_mut_ptr().add(i), result);
         }
 
@@ -275,16 +277,16 @@ impl NeonEnhancedOps {
 
         (
             Array::from_vec(sin_result).reshape(&input.shape()),
-            Array::from_vec(cos_result).reshape(&input.shape())
+            Array::from_vec(cos_result).reshape(&input.shape()),
         )
     }
 
     /// NEON simultaneous sin/cos computation
     #[cfg(target_arch = "aarch64")]
     unsafe fn vectorized_sin_cos_neon_f32(
-        input: &[f32], 
-        sin_output: &mut [f32], 
-        cos_output: &mut [f32]
+        input: &[f32],
+        sin_output: &mut [f32],
+        cos_output: &mut [f32],
     ) {
         let len = input.len();
         let simd_len = len & !(NEON_F32_LANES - 1);
@@ -306,20 +308,20 @@ impl NeonEnhancedOps {
 
         for i in (0..simd_len).step_by(NEON_F32_LANES) {
             let mut x = vld1q_f32(input.as_ptr().add(i));
-            
+
             // Range reduction (simplified)
             let mut temp_x = [0.0f32; NEON_F32_LANES];
             vst1q_f32(temp_x.as_mut_ptr(), x);
-            
+
             for j in 0..NEON_F32_LANES {
                 temp_x[j] = temp_x[j] % (2.0 * std::f32::consts::PI);
                 if temp_x[j] > std::f32::consts::PI {
                     temp_x[j] -= 2.0 * std::f32::consts::PI;
                 }
             }
-            
+
             x = vld1q_f32(temp_x.as_ptr());
-            
+
             // Compute powers of x
             let x2 = vmulq_f32(x, x);
             let x3 = vmulq_f32(x2, x);
@@ -329,18 +331,14 @@ impl NeonEnhancedOps {
             let x7 = vmulq_f32(x6, x);
 
             // Taylor series for sin(x)
-            let sin_poly = vfmaq_f32(
-                vfmaq_f32(
-                    vfmaq_f32(x, sin_c3, x3),
-                    sin_c5, x5),
-                sin_c7, x7);
+            let sin_poly = vfmaq_f32(vfmaq_f32(vfmaq_f32(x, sin_c3, x3), sin_c5, x5), sin_c7, x7);
 
             // Taylor series for cos(x)
             let cos_poly = vfmaq_f32(
-                vfmaq_f32(
-                    vfmaq_f32(one, cos_c2, x2),
-                    cos_c4, x4),
-                cos_c6, x6);
+                vfmaq_f32(vfmaq_f32(one, cos_c2, x2), cos_c4, x4),
+                cos_c6,
+                x6,
+            );
 
             vst1q_f32(sin_output.as_mut_ptr().add(i), sin_poly);
             vst1q_f32(cos_output.as_mut_ptr().add(i), cos_poly);
@@ -415,9 +413,7 @@ impl NeonEnhancedOps {
         let a_data = a.to_vec();
         let b_data = b.to_vec();
 
-        unsafe {
-            Ok(Self::dot_product_neon_f32(&a_data, &b_data))
-        }
+        unsafe { Ok(Self::dot_product_neon_f32(&a_data, &b_data)) }
     }
 
     /// NEON dot product implementation
@@ -501,12 +497,12 @@ impl NeonFeatureDetector {
     /// Detect available NEON features
     pub fn detect_neon_features() -> NeonFeatures {
         let features = NeonFeatures::default();
-        
+
         #[cfg(target_arch = "aarch64")]
         {
             // NEON is standard on AArch64
             features.neon = true;
-            
+
             if is_aarch64_feature_detected!("asimd") {
                 features.asimd = true;
             }
@@ -514,7 +510,7 @@ impl NeonFeatureDetector {
                 features.fp = true;
             }
         }
-        
+
         features
     }
 
@@ -527,9 +523,9 @@ impl NeonFeatureDetector {
 
 #[derive(Debug, Default, Clone)]
 pub struct NeonFeatures {
-    pub neon: bool,      // Basic NEON support
-    pub asimd: bool,     // Advanced SIMD
-    pub fp: bool,        // Floating point support
+    pub neon: bool,  // Basic NEON support
+    pub asimd: bool, // Advanced SIMD
+    pub fp: bool,    // Floating point support
 }
 
 impl NeonFeatures {
@@ -539,7 +535,7 @@ impl NeonFeatures {
 
     pub fn recommended_operations(&self) -> Vec<&'static str> {
         let mut ops = Vec::new();
-        
+
         if self.neon {
             ops.push("Basic vectorization");
             ops.push("Integer operations");
@@ -552,7 +548,7 @@ impl NeonFeatures {
             ops.push("Floating point operations");
             ops.push("Vector math");
         }
-        
+
         ops
     }
 }
@@ -607,13 +603,13 @@ mod tests {
     fn test_neon_feature_detection() {
         let features = NeonFeatureDetector::detect_neon_features();
         println!("NEON features: {:?}", features);
-        
+
         let ops = features.recommended_operations();
-        
+
         // On x86_64, NEON won't be available, so ops might be empty
         #[cfg(target_arch = "aarch64")]
         assert!(!ops.is_empty());
-        
+
         #[cfg(not(target_arch = "aarch64"))]
         println!("NEON not available on this architecture: {}", ops.len());
     }
@@ -622,11 +618,19 @@ mod tests {
     fn test_neon_exp() {
         let input = Array::from_vec(vec![0.0, 1.0, 2.0, -1.0]);
         let result = NeonEnhancedOps::neon_exp_f32(&input);
-        
+
         assert_relative_eq!(result.to_vec()[0], 1.0, epsilon = 1e-6);
         assert_relative_eq!(result.to_vec()[1], std::f32::consts::E, epsilon = 1e-5);
-        assert_relative_eq!(result.to_vec()[2], std::f32::consts::E.powi(2), epsilon = 1e-4);
-        assert_relative_eq!(result.to_vec()[3], 1.0 / std::f32::consts::E, epsilon = 1e-6);
+        assert_relative_eq!(
+            result.to_vec()[2],
+            std::f32::consts::E.powi(2),
+            epsilon = 1e-4
+        );
+        assert_relative_eq!(
+            result.to_vec()[3],
+            1.0 / std::f32::consts::E,
+            epsilon = 1e-6
+        );
     }
 
     #[test]

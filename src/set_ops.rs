@@ -35,10 +35,7 @@ type UniqueResult<T> = (Array<T>, Array<usize>, Array<usize>, Array<usize>);
 /// let result = intersect1d(&a, &b).unwrap();
 /// assert_eq!(result.to_vec(), vec![1, 3]);
 /// ```
-pub fn intersect1d<T: Clone + Eq + Hash + Ord>(
-    ar1: &Array<T>,
-    ar2: &Array<T>,
-) -> Result<Array<T>> {
+pub fn intersect1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
     let set1: HashSet<T> = ar1.to_vec().into_iter().collect();
     let set2: HashSet<T> = ar2.to_vec().into_iter().collect();
 
@@ -308,10 +305,8 @@ pub fn unique_with_options<T: Clone + Eq + Hash + Ord + Debug>(
     let unique_array = Array::from_vec(sorted_unique.clone());
 
     let indices_array = if return_index {
-        let sorted_first_indices: Vec<usize> = sorted_indices
-            .iter()
-            .map(|&i| first_indices[i])
-            .collect();
+        let sorted_first_indices: Vec<usize> =
+            sorted_indices.iter().map(|&i| first_indices[i]).collect();
         Array::from_vec(sorted_first_indices)
     } else {
         Array::from_vec(vec![])
@@ -402,20 +397,21 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
             if ax >= ar.ndim() {
                 return Err(NumRs2Error::DimensionMismatch(format!(
                     "Axis {} is out of bounds for array with {} dimensions",
-                    ax, ar.ndim()
+                    ax,
+                    ar.ndim()
                 )));
             }
 
             let shape = ar.shape();
             let axis_dim = shape[ax];
-            
+
             // Extract slices along the specified axis
             let mut slices = Vec::with_capacity(axis_dim);
             for i in 0..axis_dim {
                 // Create index specs to select along the axis
                 let mut index_specs = vec![crate::indexing::IndexSpec::All; ar.ndim()];
                 index_specs[ax] = crate::indexing::IndexSpec::Index(i);
-                
+
                 // Get the slice at this index
                 let slice = ar.index(&index_specs)?;
                 slices.push(slice);
@@ -423,12 +419,12 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
 
             // Convert slices to comparable form (vectors)
             let slice_vecs: Vec<Vec<T>> = slices.iter().map(|s| s.to_vec()).collect();
-            
+
             // Track unique slices and their metadata
             let mut seen = std::collections::HashMap::new();
             let mut unique_slices = Vec::new();
             let mut first_indices = Vec::new();
-            
+
             // Find unique slices
             for (i, slice_vec) in slice_vecs.iter().enumerate() {
                 if let Some((_first_idx, count)) = seen.get_mut::<Vec<T>>(slice_vec) {
@@ -455,10 +451,7 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
 
             // Build the unique array by stacking unique slices
             let unique_array = if !sorted_unique_slices.is_empty() {
-                crate::array_ops::stack(
-                    &sorted_unique_slices.iter().collect::<Vec<_>>(),
-                    ax
-                )?
+                crate::array_ops::stack(&sorted_unique_slices.iter().collect::<Vec<_>>(), ax)?
             } else {
                 // Handle empty case
                 let mut empty_shape = shape.clone();
@@ -468,10 +461,8 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
 
             // Build indices array
             let indices_array = if return_index {
-                let sorted_first_indices: Vec<usize> = sorted_indices
-                    .iter()
-                    .map(|&i| first_indices[i])
-                    .collect();
+                let sorted_first_indices: Vec<usize> =
+                    sorted_indices.iter().map(|&i| first_indices[i]).collect();
                 Array::from_vec(sorted_first_indices)
             } else {
                 Array::from_vec(vec![])

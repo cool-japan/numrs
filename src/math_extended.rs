@@ -22,5 +22,5 @@ pub mod polynomial {
 }
 
 // Re-export key functionality at module level for convenience
-pub use special::*;
 pub use polynomial::*;
+pub use special::*;

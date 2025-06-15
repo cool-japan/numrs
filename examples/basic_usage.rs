@@ -81,7 +81,10 @@ fn main() -> Result<()> {
     println!("\nCondition Number Examples:");
     println!("Well-conditioned matrix:");
     println!("{}", well_conditioned);
-    println!("Condition number: {}", condition_number(&well_conditioned).unwrap());
+    println!(
+        "Condition number: {}",
+        condition_number(&well_conditioned).unwrap()
+    );
     println!(
         "Is well-conditioned: {}",
         condition_number(&well_conditioned).unwrap() < 1e6

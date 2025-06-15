@@ -3,39 +3,39 @@
 //! This module provides trait implementations that leverage SIMD optimizations
 //! for better performance while maintaining compatibility with the existing trait system.
 
+use super::unified_dispatcher::global_dispatcher;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use super::unified_dispatcher::global_dispatcher;
 
 /// SIMD-optimized extension methods for Array<f32>
-/// 
+///
 /// These methods provide high-performance SIMD implementations that can be used
 /// to accelerate numerical computations on x86_64 and ARM architectures.
 pub trait SimdArrayOps {
     /// SIMD-optimized element-wise addition
     fn simd_add(&self, other: &Self) -> Result<Array<f32>>;
-    
+
     /// SIMD-optimized element-wise multiplication
     fn simd_mul(&self, other: &Self) -> Result<Array<f32>>;
-    
+
     /// SIMD-optimized sum reduction
     fn simd_sum(&self) -> f32;
-    
+
     /// SIMD-optimized exponential function
     fn simd_exp(&self) -> Array<f32>;
-    
+
     /// SIMD-optimized logarithm function
     fn simd_log(&self) -> Array<f32>;
-    
+
     /// SIMD-optimized trigonometric functions
     fn simd_sin_cos(&self) -> (Array<f32>, Array<f32>);
-    
+
     /// SIMD-optimized matrix multiplication
     fn simd_matmul(&self, other: &Self) -> Result<Array<f32>>;
-    
+
     /// SIMD-optimized dot product
     fn simd_dot(&self, other: &Self) -> Result<f32>;
-    
+
     /// SIMD-optimized memory copy
     fn simd_copy(&self) -> Result<Array<f32>>;
 }
@@ -48,7 +48,7 @@ impl SimdArrayOps for Array<f32> {
                 actual: other.shape(),
             });
         }
-        
+
         // Use SIMD optimization where available
         let self_data = self.to_vec();
         let other_data = other.to_vec();
@@ -102,7 +102,7 @@ impl SimdArrayOps for Array<f32> {
                 actual: other.shape(),
             });
         }
-        
+
         let self_data = self.to_vec();
         let other_data = other.to_vec();
         let mut result_data = vec![0.0f32; self_data.len()];
@@ -196,7 +196,7 @@ impl SimdPerformanceHints {
             128 => 4,  // NEON f32
             _ => 4,    // Conservative default
         };
-        
+
         size % vector_elements == 0 && size >= vector_elements * 2
     }
 
@@ -210,9 +210,9 @@ impl SimdPerformanceHints {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::assert_relative_eq;
-    use crate::stats::Statistics;
     use crate::math::ElementWiseMath;
+    use crate::stats::Statistics;
+    use approx::assert_relative_eq;
 
     #[test]
     fn test_simd_array_ops() {

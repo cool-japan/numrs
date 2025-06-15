@@ -4,9 +4,9 @@
 //! with support for advanced indexing patterns, optimized access, and efficient
 //! memory operations.
 
+use super::advanced_ops::{ArrayView, IndexSpec, ResolvedIndex, Shape};
 use crate::error::{NumRs2Error, Result};
 use crate::traits::NumericElement;
-use super::advanced_ops::{Shape, ArrayView, IndexSpec, ResolvedIndex};
 use std::collections::HashMap;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
 
@@ -65,7 +65,11 @@ impl IndexingEngine {
     }
 
     /// Index array with multiple index specifications (advanced indexing)
-    pub fn advanced_index<T>(&mut self, array: &ArrayView<T>, indices: &[IndexSpec]) -> Result<Vec<T>>
+    pub fn advanced_index<T>(
+        &mut self,
+        array: &ArrayView<T>,
+        indices: &[IndexSpec],
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -73,7 +77,7 @@ impl IndexingEngine {
 
         // Generate cache key
         let cache_key = self.generate_cache_key(array.shape(), indices);
-        
+
         // Check cache first
         if let Some(compiled_pattern) = self.index_cache.get(&cache_key) {
             self.stats.cache_hits += 1;
@@ -84,29 +88,33 @@ impl IndexingEngine {
 
         // Compile the index pattern
         let compiled_pattern = self.compile_index_pattern(array.shape(), indices)?;
-        
+
         // Apply the pattern
         let result = self.apply_compiled_pattern(array, &compiled_pattern)?;
-        
+
         // Cache the pattern for future use
         self.index_cache.insert(cache_key, compiled_pattern);
-        
+
         Ok(result)
     }
 
     /// Slice array with extended slicing syntax
-    pub fn enhanced_slice<'a, T>(&mut self, array: &ArrayView<'a, T>, slices: &[SliceSpec]) -> Result<ArrayView<'a, T>>
+    pub fn enhanced_slice<'a, T>(
+        &mut self,
+        array: &ArrayView<'a, T>,
+        slices: &[SliceSpec],
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
         // Convert slice specifications to index specifications
         let mut index_specs = Vec::with_capacity(slices.len());
-        
+
         for slice_spec in slices {
             let index_spec = self.convert_slice_to_index(slice_spec, array.shape())?;
             index_specs.push(index_spec);
         }
-        
+
         // Create sliced view
         array.slice(&index_specs)
     }
@@ -117,15 +125,16 @@ impl IndexingEngine {
         T: NumericElement + Copy,
     {
         if ranges.len() != array.shape().ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Number of ranges ({}) must match array dimensions ({})", 
-                       ranges.len(), array.shape().ndim())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Number of ranges ({}) must match array dimensions ({})",
+                ranges.len(),
+                array.shape().ndim()
+            )));
         }
 
         let mut result = Vec::new();
         let mut current_indices = vec![0; array.shape().ndim()];
-        
+
         // Initialize indices to range starts
         for (i, range_spec) in ranges.iter().enumerate() {
             current_indices[i] = range_spec.start;
@@ -136,8 +145,14 @@ impl IndexingEngine {
     }
 
     /// Recursive function to iterate through multi-dimensional ranges
-    fn iterate_ranges<T>(&self, array: &ArrayView<T>, ranges: &[RangeSpec], 
-                        current_indices: &mut [usize], depth: usize, result: &mut Vec<T>) -> Result<()>
+    fn iterate_ranges<T>(
+        &self,
+        array: &ArrayView<T>,
+        ranges: &[RangeSpec],
+        current_indices: &mut [usize],
+        depth: usize,
+        result: &mut Vec<T>,
+    ) -> Result<()>
     where
         T: NumericElement + Copy,
     {
@@ -162,13 +177,17 @@ impl IndexingEngine {
     }
 
     /// Index with coordinate arrays (similar to np.ix_)
-    pub fn coordinate_index<T>(&self, array: &ArrayView<T>, coordinates: &[Vec<usize>]) -> Result<Vec<T>>
+    pub fn coordinate_index<T>(
+        &self,
+        array: &ArrayView<T>,
+        coordinates: &[Vec<usize>],
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         if coordinates.len() != array.shape().ndim() {
             return Err(NumRs2Error::DimensionMismatch(
-                "Number of coordinate arrays must match array dimensions".to_string()
+                "Number of coordinate arrays must match array dimensions".to_string(),
             ));
         }
 
@@ -176,10 +195,12 @@ impl IndexingEngine {
         for (axis, coord_array) in coordinates.iter().enumerate() {
             for &coord in coord_array {
                 if coord >= array.shape().dims[axis] {
-                    return Err(NumRs2Error::IndexOutOfBounds(
-                        format!("Coordinate {} is out of bounds for axis {} of size {}", 
-                               coord, axis, array.shape().dims[axis])
-                    ));
+                    return Err(NumRs2Error::IndexOutOfBounds(format!(
+                        "Coordinate {} is out of bounds for axis {} of size {}",
+                        coord,
+                        axis,
+                        array.shape().dims[axis]
+                    )));
                 }
             }
         }
@@ -198,7 +219,11 @@ impl IndexingEngine {
     }
 
     /// Convert combination index to multi-dimensional indices
-    fn combination_to_indices(&self, combination_idx: usize, coordinates: &[Vec<usize>]) -> Vec<usize> {
+    fn combination_to_indices(
+        &self,
+        combination_idx: usize,
+        coordinates: &[Vec<usize>],
+    ) -> Vec<usize> {
         let mut multi_index = Vec::with_capacity(coordinates.len());
         let mut remaining = combination_idx;
 
@@ -218,10 +243,11 @@ impl IndexingEngine {
         T: NumericElement + Copy,
     {
         if mask.len() != array.shape().size() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Mask length ({}) must match array size ({})", 
-                       mask.len(), array.shape().size())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Mask length ({}) must match array size ({})",
+                mask.len(),
+                array.shape().size()
+            )));
         }
 
         let mut result = Vec::new();
@@ -248,7 +274,11 @@ impl IndexingEngine {
     }
 
     /// Conditional indexing with predicate function
-    pub fn conditional_index<T, F>(&self, array: &ArrayView<T>, predicate: F) -> Result<Vec<(Vec<usize>, T)>>
+    pub fn conditional_index<T, F>(
+        &self,
+        array: &ArrayView<T>,
+        predicate: F,
+    ) -> Result<Vec<(Vec<usize>, T)>>
     where
         T: NumericElement + Copy,
         F: Fn(T) -> bool,
@@ -277,14 +307,17 @@ impl IndexingEngine {
         T: NumericElement + Copy,
     {
         if indices.len() != array.shape().ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Number of indices ({}) must match array dimensions ({})", 
-                       indices.len(), array.shape().ndim())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Number of indices ({}) must match array dimensions ({})",
+                indices.len(),
+                array.shape().ndim()
+            )));
         }
 
         // Convert to circular indices
-        let circular_indices: Vec<usize> = indices.iter().zip(array.shape().dims.iter())
+        let circular_indices: Vec<usize> = indices
+            .iter()
+            .zip(array.shape().dims.iter())
             .map(|(&idx, &dim_size)| {
                 let positive_idx = if idx < 0 {
                     (dim_size as isize + (idx % dim_size as isize)) as usize
@@ -304,18 +337,25 @@ impl IndexingEngine {
         T: NumericElement + Copy,
     {
         // Validate block specification
-        if block_spec.start.len() != array.shape().ndim() || 
-           block_spec.size.len() != array.shape().ndim() {
+        if block_spec.start.len() != array.shape().ndim()
+            || block_spec.size.len() != array.shape().ndim()
+        {
             return Err(NumRs2Error::DimensionMismatch(
-                "Block specification dimensions must match array dimensions".to_string()
+                "Block specification dimensions must match array dimensions".to_string(),
             ));
         }
 
-        for (axis, (&start, &size)) in block_spec.start.iter().zip(block_spec.size.iter()).enumerate() {
+        for (axis, (&start, &size)) in block_spec
+            .start
+            .iter()
+            .zip(block_spec.size.iter())
+            .enumerate()
+        {
             if start + size > array.shape().dims[axis] {
-                return Err(NumRs2Error::IndexOutOfBounds(
-                    format!("Block extends beyond array bounds in axis {}", axis)
-                ));
+                return Err(NumRs2Error::IndexOutOfBounds(format!(
+                    "Block extends beyond array bounds in axis {}",
+                    axis
+                )));
             }
         }
 
@@ -327,8 +367,14 @@ impl IndexingEngine {
     }
 
     /// Recursive function to extract block elements
-    fn extract_block<T>(&self, array: &ArrayView<T>, block_spec: &BlockSpec,
-                       current_indices: &mut [usize], depth: usize, result: &mut Vec<T>) -> Result<()>
+    fn extract_block<T>(
+        &self,
+        array: &ArrayView<T>,
+        block_spec: &BlockSpec,
+        current_indices: &mut [usize],
+        depth: usize,
+        result: &mut Vec<T>,
+    ) -> Result<()>
     where
         T: NumericElement + Copy,
     {
@@ -352,15 +398,21 @@ impl IndexingEngine {
     }
 
     /// Diagonal indexing for extracting diagonals
-    pub fn diagonal_index<T>(&self, array: &ArrayView<T>, offset: isize, axis1: Option<usize>, axis2: Option<usize>) -> Result<Vec<T>>
+    pub fn diagonal_index<T>(
+        &self,
+        array: &ArrayView<T>,
+        offset: isize,
+        axis1: Option<usize>,
+        axis2: Option<usize>,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         let ndim = array.shape().ndim();
-        
+
         if ndim < 2 {
             return Err(NumRs2Error::DimensionMismatch(
-                "Diagonal indexing requires at least 2 dimensions".to_string()
+                "Diagonal indexing requires at least 2 dimensions".to_string(),
             ));
         }
 
@@ -369,7 +421,7 @@ impl IndexingEngine {
 
         if ax1 >= ndim || ax2 >= ndim || ax1 == ax2 {
             return Err(NumRs2Error::DimensionMismatch(
-                "Invalid axis specification for diagonal".to_string()
+                "Invalid axis specification for diagonal".to_string(),
             ));
         }
 
@@ -395,16 +447,34 @@ impl IndexingEngine {
         let mut indices = vec![0; ndim];
 
         // Extract other dimensions (all combinations)
-        self.extract_diagonal_recursive(array, &mut indices, 0, ax1, ax2, start1, start2, diag_length, &mut result)?;
+        self.extract_diagonal_recursive(
+            array,
+            &mut indices,
+            0,
+            ax1,
+            ax2,
+            start1,
+            start2,
+            diag_length,
+            &mut result,
+        )?;
 
         Ok(result)
     }
 
     /// Recursive extraction of diagonal elements
-    fn extract_diagonal_recursive<T>(&self, array: &ArrayView<T>, indices: &mut [usize], 
-                                    depth: usize, axis1: usize, axis2: usize,
-                                    start1: usize, start2: usize, diag_length: usize,
-                                    result: &mut Vec<T>) -> Result<()>
+    fn extract_diagonal_recursive<T>(
+        &self,
+        array: &ArrayView<T>,
+        indices: &mut [usize],
+        depth: usize,
+        axis1: usize,
+        axis2: usize,
+        start1: usize,
+        start2: usize,
+        diag_length: usize,
+        result: &mut Vec<T>,
+    ) -> Result<()>
     where
         T: NumericElement + Copy,
     {
@@ -422,14 +492,32 @@ impl IndexingEngine {
 
         if depth == axis1 || depth == axis2 {
             // Skip diagonal axes
-            self.extract_diagonal_recursive(array, indices, depth + 1, axis1, axis2, 
-                                          start1, start2, diag_length, result)?;
+            self.extract_diagonal_recursive(
+                array,
+                indices,
+                depth + 1,
+                axis1,
+                axis2,
+                start1,
+                start2,
+                diag_length,
+                result,
+            )?;
         } else {
             // Iterate through all indices for this dimension
             for idx in 0..array.shape().dims[depth] {
                 indices[depth] = idx;
-                self.extract_diagonal_recursive(array, indices, depth + 1, axis1, axis2, 
-                                              start1, start2, diag_length, result)?;
+                self.extract_diagonal_recursive(
+                    array,
+                    indices,
+                    depth + 1,
+                    axis1,
+                    axis2,
+                    start1,
+                    start2,
+                    diag_length,
+                    result,
+                )?;
             }
         }
 
@@ -437,24 +525,28 @@ impl IndexingEngine {
     }
 
     /// Compile index pattern for optimized repeated access
-    fn compile_index_pattern(&self, shape: &Shape, indices: &[IndexSpec]) -> Result<CompiledIndexPattern> {
+    fn compile_index_pattern(
+        &self,
+        shape: &Shape,
+        indices: &[IndexSpec],
+    ) -> Result<CompiledIndexPattern> {
         let mut output_shape = Vec::new();
         let mut pattern_type = IndexPatternType::Sequential;
 
         // For simplicity, this is a basic implementation
         // A full implementation would analyze the pattern more thoroughly
-        
+
         // Process each index specification
         for (axis, index_spec) in indices.iter().enumerate().take(shape.ndim()) {
             let resolved = index_spec.resolve(shape.dims[axis])?;
-            
+
             match resolved {
                 ResolvedIndex::Single(_) => {
                     // Single index removes dimension
-                },
+                }
                 ResolvedIndex::Multiple(idx_vec) => {
                     output_shape.push(idx_vec.len());
-                    
+
                     // Analyze pattern
                     if self.is_strided_pattern(&idx_vec) {
                         pattern_type = IndexPatternType::Strided;
@@ -484,10 +576,12 @@ impl IndexingEngine {
 
         // This is a simplified implementation
         // A full implementation would handle all index combinations
-        
+
         let mut current_indices = vec![0; shape.ndim()];
         loop {
-            let flat_idx = current_indices.iter().zip(strides.iter())
+            let flat_idx = current_indices
+                .iter()
+                .zip(strides.iter())
                 .map(|(&idx, &stride)| idx * stride)
                 .sum();
             flat_indices.push(flat_idx);
@@ -501,13 +595,21 @@ impl IndexingEngine {
     }
 
     /// Apply compiled pattern to extract data
-    fn apply_compiled_pattern<T>(&self, array: &ArrayView<T>, pattern: &CompiledIndexPattern) -> Result<Vec<T>>
+    fn apply_compiled_pattern<T>(
+        &self,
+        array: &ArrayView<T>,
+        pattern: &CompiledIndexPattern,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         // This is a simplified implementation
         // A full implementation would use the flat indices directly
-        Ok(array.to_vec().into_iter().take(pattern.flat_indices.len()).collect::<Vec<_>>())
+        Ok(array
+            .to_vec()
+            .into_iter()
+            .take(pattern.flat_indices.len())
+            .collect::<Vec<_>>())
     }
 
     /// Check if indices form a strided pattern
@@ -518,7 +620,7 @@ impl IndexingEngine {
 
         let stride = indices[1] - indices[0];
         for i in 2..indices.len() {
-            if indices[i] - indices[i-1] != stride {
+            if indices[i] - indices[i - 1] != stride {
                 return false;
             }
         }
@@ -533,7 +635,7 @@ impl IndexingEngine {
 
         // Check if indices are consecutive
         for i in 1..indices.len() {
-            if indices[i] != indices[i-1] + 1 {
+            if indices[i] != indices[i - 1] + 1 {
                 return false;
             }
         }
@@ -548,31 +650,17 @@ impl IndexingEngine {
     /// Convert slice specification to index specification
     fn convert_slice_to_index(&self, slice_spec: &SliceSpec, _shape: &Shape) -> Result<IndexSpec> {
         match slice_spec {
-            SliceSpec::Range(range_spec) => {
-                Ok(IndexSpec::Slice(
-                    Some(range_spec.start as isize),
-                    Some(range_spec.stop as isize),
-                    Some(range_spec.step as isize),
-                ))
-            },
-            SliceSpec::Index(idx) => {
-                Ok(IndexSpec::Int(*idx as isize))
-            },
-            SliceSpec::Mask(mask) => {
-                Ok(IndexSpec::BoolMask(mask.clone()))
-            },
-            SliceSpec::Array(indices) => {
-                Ok(IndexSpec::Array(indices.clone()))
-            },
-            SliceSpec::All => {
-                Ok(IndexSpec::All)
-            },
-            SliceSpec::NewAxis => {
-                Ok(IndexSpec::NewAxis)
-            },
-            SliceSpec::Ellipsis => {
-                Ok(IndexSpec::Ellipsis)
-            },
+            SliceSpec::Range(range_spec) => Ok(IndexSpec::Slice(
+                Some(range_spec.start as isize),
+                Some(range_spec.stop as isize),
+                Some(range_spec.step as isize),
+            )),
+            SliceSpec::Index(idx) => Ok(IndexSpec::Int(*idx as isize)),
+            SliceSpec::Mask(mask) => Ok(IndexSpec::BoolMask(mask.clone())),
+            SliceSpec::Array(indices) => Ok(IndexSpec::Array(indices.clone())),
+            SliceSpec::All => Ok(IndexSpec::All),
+            SliceSpec::NewAxis => Ok(IndexSpec::NewAxis),
+            SliceSpec::Ellipsis => Ok(IndexSpec::Ellipsis),
         }
     }
 
@@ -693,7 +781,8 @@ impl IndexBuilder {
     }
 
     pub fn range(mut self, start: usize, stop: usize, step: usize) -> Self {
-        self.specs.push(SliceSpec::Range(RangeSpec::new(start, stop, step)));
+        self.specs
+            .push(SliceSpec::Range(RangeSpec::new(start, stop, step)));
         self
     }
 
@@ -741,7 +830,7 @@ impl Default for IndexBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arrays::advanced_ops::{Shape, ArrayView};
+    use crate::arrays::advanced_ops::{ArrayView, Shape};
 
     #[test]
     fn test_indexing_engine_creation() {
@@ -771,10 +860,7 @@ mod tests {
         let shape = Shape::new(vec![2, 4]);
         let view = ArrayView::from_data(&data, shape).unwrap();
 
-        let ranges = vec![
-            RangeSpec::new(0, 2, 1),
-            RangeSpec::new(1, 3, 1),
-        ];
+        let ranges = vec![RangeSpec::new(0, 2, 1), RangeSpec::new(1, 3, 1)];
 
         let result = engine.multidim_slice(&view, &ranges).unwrap();
         assert_eq!(result.len(), 4); // 2 * 2 elements
@@ -805,7 +891,7 @@ mod tests {
 
         let block_spec = BlockSpec::new(vec![1, 1], vec![2, 2]);
         let result = engine.block_index(&view, &block_spec).unwrap();
-        
+
         // Should extract a 2x2 block starting at (1,1)
         assert_eq!(result.len(), 4);
     }
@@ -819,7 +905,7 @@ mod tests {
 
         let mask = vec![true, false, true, false, true, false];
         let result = engine.masked_index(&view, &mask).unwrap();
-        
+
         assert_eq!(result, vec![1, 3, 5]);
     }
 
@@ -831,7 +917,7 @@ mod tests {
         let view = ArrayView::from_data(&data, shape).unwrap();
 
         let result = engine.conditional_index(&view, |x| x > 3).unwrap();
-        
+
         assert_eq!(result.len(), 3); // Elements 4, 5, 6
         assert_eq!(result[0].1, 4);
         assert_eq!(result[1].1, 5);
@@ -851,30 +937,26 @@ mod tests {
 
     #[test]
     fn test_index_builder() {
-        let specs = IndexBuilder::new()
-            .index(0)
-            .range(1, 3, 1)
-            .all()
-            .build();
+        let specs = IndexBuilder::new().index(0).range(1, 3, 1).all().build();
 
         assert_eq!(specs.len(), 3);
-        
+
         match &specs[0] {
             SliceSpec::Index(idx) => assert_eq!(*idx, 0),
             _ => panic!("Expected Index"),
         }
-        
+
         match &specs[1] {
             SliceSpec::Range(range) => {
                 assert_eq!(range.start, 1);
                 assert_eq!(range.stop, 3);
                 assert_eq!(range.step, 1);
-            },
+            }
             _ => panic!("Expected Range"),
         }
-        
+
         match &specs[2] {
-            SliceSpec::All => {},
+            SliceSpec::All => {}
             _ => panic!("Expected All"),
         }
     }

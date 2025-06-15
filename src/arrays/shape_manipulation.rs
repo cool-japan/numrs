@@ -3,9 +3,9 @@
 //! This module provides comprehensive shape manipulation capabilities including
 //! advanced reshaping, view system, stride calculations, and layout optimization.
 
+use super::advanced_ops::{ArrayView, Shape};
 use crate::error::{NumRs2Error, Result};
 use crate::traits::NumericElement;
-use super::advanced_ops::{Shape, ArrayView};
 use std::collections::HashMap;
 
 /// Memory layout for arrays
@@ -38,7 +38,7 @@ impl ShapeEngine {
     /// Compute optimal strides for a given shape and layout
     pub fn compute_strides(&mut self, shape: &[usize], layout: MemoryLayout) -> Vec<usize> {
         let cache_key = (shape.to_vec(), layout);
-        
+
         if let Some(cached_strides) = self.stride_cache.get(&cache_key) {
             return cached_strides.clone();
         }
@@ -57,29 +57,33 @@ impl ShapeEngine {
     /// Compute C-style (row-major) strides
     fn compute_c_strides(&self, shape: &[usize]) -> Vec<usize> {
         let mut strides = vec![1; shape.len()];
-        
+
         for i in (0..shape.len().saturating_sub(1)).rev() {
             strides[i] = strides[i + 1] * shape[i + 1];
         }
-        
+
         strides
     }
 
     /// Compute Fortran-style (column-major) strides
     fn compute_fortran_strides(&self, shape: &[usize]) -> Vec<usize> {
         let mut strides = vec![1; shape.len()];
-        
+
         for i in 1..shape.len() {
             strides[i] = strides[i - 1] * shape[i - 1];
         }
-        
+
         strides
     }
 
     /// Compute optimal strides for cache efficiency
     fn compute_optimal_strides(&self, shape: &[usize]) -> Vec<usize> {
         // For optimal cache performance, order dimensions by size (smallest stride for largest dimension)
-        let mut dim_sizes: Vec<(usize, usize)> = shape.iter().enumerate().map(|(i, &size)| (i, size)).collect();
+        let mut dim_sizes: Vec<(usize, usize)> = shape
+            .iter()
+            .enumerate()
+            .map(|(i, &size)| (i, size))
+            .collect();
         dim_sizes.sort_by_key(|&(_, size)| std::cmp::Reverse(size));
 
         let mut strides = vec![0; shape.len()];
@@ -106,21 +110,26 @@ impl ShapeEngine {
     }
 
     /// Create a reshaped view if possible
-    pub fn reshape_view<'a, T>(&self, view: &ArrayView<'a, T>, new_shape: &[usize]) -> Result<ArrayView<'a, T>>
+    pub fn reshape_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        new_shape: &[usize],
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
         if !self.can_reshape(&view.shape().dims, new_shape) {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Cannot reshape array from {:?} to {:?}: incompatible sizes", 
-                       view.shape().dims, new_shape)
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Cannot reshape array from {:?} to {:?}: incompatible sizes",
+                view.shape().dims,
+                new_shape
+            )));
         }
 
         // Check if the view is C-contiguous (required for simple reshape)
         if !view.is_c_contiguous() {
             return Err(NumRs2Error::InvalidOperation(
-                "Cannot reshape non-contiguous view. Use copy() first.".to_string()
+                "Cannot reshape non-contiguous view. Use copy() first.".to_string(),
             ));
         }
 
@@ -129,7 +138,11 @@ impl ShapeEngine {
     }
 
     /// Transpose an array view with specified axes
-    pub fn transpose_view<'a, T>(&self, view: &ArrayView<'a, T>, axes: Option<Vec<usize>>) -> Result<ArrayView<'a, T>>
+    pub fn transpose_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axes: Option<Vec<usize>>,
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
@@ -137,48 +150,63 @@ impl ShapeEngine {
     }
 
     /// Create a view with swapped axes
-    pub fn swapaxes_view<'a, T>(&self, view: &ArrayView<'a, T>, axis1: usize, axis2: usize) -> Result<ArrayView<'a, T>>
+    pub fn swapaxes_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axis1: usize,
+        axis2: usize,
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
         let ndim = view.shape().ndim();
-        
+
         if axis1 >= ndim || axis2 >= ndim {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Axes {} and {} are out of bounds for array of dimension {}", 
-                       axis1, axis2, ndim)
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Axes {} and {} are out of bounds for array of dimension {}",
+                axis1, axis2, ndim
+            )));
         }
 
         let mut axes: Vec<usize> = (0..ndim).collect();
         axes.swap(axis1, axis2);
-        
+
         self.transpose_view(view, Some(axes))
     }
 
     /// Move axis to a new position
-    pub fn moveaxis_view<'a, T>(&self, view: &ArrayView<'a, T>, source: usize, destination: usize) -> Result<ArrayView<'a, T>>
+    pub fn moveaxis_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        source: usize,
+        destination: usize,
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
         let ndim = view.shape().ndim();
-        
+
         if source >= ndim || destination >= ndim {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Source axis {} or destination axis {} is out of bounds for array of dimension {}", 
-                       source, destination, ndim)
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Source axis {} or destination axis {} is out of bounds for array of dimension {}",
+                source, destination, ndim
+            )));
         }
 
         let mut axes: Vec<usize> = (0..ndim).collect();
         let removed = axes.remove(source);
         axes.insert(destination, removed);
-        
+
         self.transpose_view(view, Some(axes))
     }
 
     /// Roll array elements along a given axis
-    pub fn roll_view<'a, T>(&self, view: &ArrayView<'a, T>, shift: isize, axis: Option<usize>) -> Result<Vec<T>>
+    pub fn roll_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        shift: isize,
+        axis: Option<usize>,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -189,43 +217,50 @@ impl ShapeEngine {
     }
 
     /// Roll elements along a specific axis
-    fn roll_along_axis<'a, T>(&self, view: &ArrayView<'a, T>, shift: isize, axis: usize) -> Result<Vec<T>>
+    fn roll_along_axis<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        shift: isize,
+        axis: usize,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         if axis >= view.shape().ndim() {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Axis {} is out of bounds for array of dimension {}", 
-                       axis, view.shape().ndim())
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Axis {} is out of bounds for array of dimension {}",
+                axis,
+                view.shape().ndim()
+            )));
         }
 
         let axis_size = view.shape().dims[axis];
-        let effective_shift = ((shift % axis_size as isize) + axis_size as isize) as usize % axis_size;
-        
+        let effective_shift =
+            ((shift % axis_size as isize) + axis_size as isize) as usize % axis_size;
+
         let mut result = Vec::with_capacity(view.shape().size());
         let mut indices = vec![0; view.shape().ndim()];
-        
+
         loop {
             // Calculate rolled index for the specified axis
             let original_axis_idx = indices[axis];
             let rolled_axis_idx = (original_axis_idx + effective_shift) % axis_size;
-            
+
             // Create rolled indices
             let mut rolled_indices = indices.clone();
             rolled_indices[axis] = rolled_axis_idx;
-            
+
             // Get element at rolled position
             if let Ok(element) = view.get(&rolled_indices) {
                 result.push(*element);
             }
-            
+
             // Advance indices
             if !self.advance_indices(&mut indices, &view.shape().dims) {
                 break;
             }
         }
-        
+
         Ok(result)
     }
 
@@ -236,25 +271,29 @@ impl ShapeEngine {
     {
         let flat_data = view.to_vec();
         let size = flat_data.len();
-        
+
         if size == 0 {
             return Ok(flat_data);
         }
-        
+
         let effective_shift = ((shift % size as isize) + size as isize) as usize % size;
         let mut result = Vec::with_capacity(size);
-        
+
         // Roll the flattened array
         for i in 0..size {
             let src_idx = (i + size - effective_shift) % size;
             result.push(flat_data[src_idx]);
         }
-        
+
         Ok(result)
     }
 
     /// Flip array along specified axes
-    pub fn flip_view<'a, T>(&self, view: &ArrayView<'a, T>, axes: Option<Vec<usize>>) -> Result<Vec<T>>
+    pub fn flip_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axes: Option<Vec<usize>>,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -266,59 +305,65 @@ impl ShapeEngine {
         // Validate axes
         for &axis in &axes_to_flip {
             if axis >= view.shape().ndim() {
-                return Err(NumRs2Error::DimensionMismatch(
-                    format!("Axis {} is out of bounds for array of dimension {}", 
-                           axis, view.shape().ndim())
-                ));
+                return Err(NumRs2Error::DimensionMismatch(format!(
+                    "Axis {} is out of bounds for array of dimension {}",
+                    axis,
+                    view.shape().ndim()
+                )));
             }
         }
 
         let mut result = Vec::with_capacity(view.shape().size());
         let mut indices = vec![0; view.shape().ndim()];
-        
+
         loop {
             // Create flipped indices
             let mut flipped_indices = indices.clone();
             for &axis in &axes_to_flip {
                 flipped_indices[axis] = view.shape().dims[axis] - 1 - indices[axis];
             }
-            
+
             // Get element at flipped position
             if let Ok(element) = view.get(&flipped_indices) {
                 result.push(*element);
             }
-            
+
             // Advance indices
             if !self.advance_indices(&mut indices, &view.shape().dims) {
                 break;
             }
         }
-        
+
         Ok(result)
     }
 
     /// Rotate array by 90 degrees
-    pub fn rot90_view<'a, T>(&self, view: &ArrayView<'a, T>, k: i32, axes: Option<(usize, usize)>) -> Result<Vec<T>>
+    pub fn rot90_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        k: i32,
+        axes: Option<(usize, usize)>,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         if view.shape().ndim() < 2 {
             return Err(NumRs2Error::DimensionMismatch(
-                "rot90 requires at least 2 dimensions".to_string()
+                "rot90 requires at least 2 dimensions".to_string(),
             ));
         }
 
         let (axis1, axis2) = axes.unwrap_or((0, 1));
-        
+
         if axis1 >= view.shape().ndim() || axis2 >= view.shape().ndim() || axis1 == axis2 {
             return Err(NumRs2Error::DimensionMismatch(
-                "Invalid rotation axes".to_string()
+                "Invalid rotation axes".to_string(),
             ));
         }
 
         // Normalize k to range [0, 4)
         let k_norm = ((k % 4) + 4) % 4;
-        
+
         match k_norm {
             0 => Ok(view.to_vec()), // No rotation
             1 => self.rotate_90_once(view, axis1, axis2),
@@ -329,91 +374,110 @@ impl ShapeEngine {
     }
 
     /// Rotate by 90 degrees once
-    fn rotate_90_once<'a, T>(&self, view: &ArrayView<'a, T>, axis1: usize, axis2: usize) -> Result<Vec<T>>
+    fn rotate_90_once<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axis1: usize,
+        axis2: usize,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         let mut result = Vec::with_capacity(view.shape().size());
         let mut indices = vec![0; view.shape().ndim()];
-        
+
         loop {
             // For 90-degree rotation: (i, j) -> (j, -i-1) = (j, rows-1-i)
             let mut rotated_indices = indices.clone();
             let old_i = indices[axis1];
             let old_j = indices[axis2];
-            
+
             rotated_indices[axis1] = old_j;
             rotated_indices[axis2] = view.shape().dims[axis1] - 1 - old_i;
-            
+
             if let Ok(element) = view.get(&rotated_indices) {
                 result.push(*element);
             }
-            
+
             if !self.advance_indices(&mut indices, &view.shape().dims) {
                 break;
             }
         }
-        
+
         Ok(result)
     }
 
     /// Rotate by 180 degrees
-    fn rotate_180<'a, T>(&self, view: &ArrayView<'a, T>, axis1: usize, axis2: usize) -> Result<Vec<T>>
+    fn rotate_180<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axis1: usize,
+        axis2: usize,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         let mut result = Vec::with_capacity(view.shape().size());
         let mut indices = vec![0; view.shape().ndim()];
-        
+
         loop {
             // For 180-degree rotation: (i, j) -> (-i-1, -j-1) = (rows-1-i, cols-1-j)
             let mut rotated_indices = indices.clone();
             rotated_indices[axis1] = view.shape().dims[axis1] - 1 - indices[axis1];
             rotated_indices[axis2] = view.shape().dims[axis2] - 1 - indices[axis2];
-            
+
             if let Ok(element) = view.get(&rotated_indices) {
                 result.push(*element);
             }
-            
+
             if !self.advance_indices(&mut indices, &view.shape().dims) {
                 break;
             }
         }
-        
+
         Ok(result)
     }
 
     /// Rotate by 270 degrees (or -90 degrees)
-    fn rotate_270<'a, T>(&self, view: &ArrayView<'a, T>, axis1: usize, axis2: usize) -> Result<Vec<T>>
+    fn rotate_270<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axis1: usize,
+        axis2: usize,
+    ) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
         let mut result = Vec::with_capacity(view.shape().size());
         let mut indices = vec![0; view.shape().ndim()];
-        
+
         loop {
             // For 270-degree rotation: (i, j) -> (-j-1, i) = (cols-1-j, i)
             let mut rotated_indices = indices.clone();
             let old_i = indices[axis1];
             let old_j = indices[axis2];
-            
+
             rotated_indices[axis1] = view.shape().dims[axis2] - 1 - old_j;
             rotated_indices[axis2] = old_i;
-            
+
             if let Ok(element) = view.get(&rotated_indices) {
                 result.push(*element);
             }
-            
+
             if !self.advance_indices(&mut indices, &view.shape().dims) {
                 break;
             }
         }
-        
+
         Ok(result)
     }
 
     /// Squeeze array dimensions (remove dimensions of size 1)
-    pub fn squeeze_view<'a, T>(&self, view: &ArrayView<'a, T>, axes: Option<Vec<usize>>) -> Result<ArrayView<'a, T>>
+    pub fn squeeze_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axes: Option<Vec<usize>>,
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
@@ -422,30 +486,44 @@ impl ShapeEngine {
                 // Validate specified axes
                 for &axis in &ax {
                     if axis >= view.shape().ndim() {
-                        return Err(NumRs2Error::DimensionMismatch(
-                            format!("Axis {} is out of bounds", axis)
-                        ));
+                        return Err(NumRs2Error::DimensionMismatch(format!(
+                            "Axis {} is out of bounds",
+                            axis
+                        )));
                     }
                     if view.shape().dims[axis] != 1 {
-                        return Err(NumRs2Error::DimensionMismatch(
-                            format!("Cannot squeeze axis {} with size {}", axis, view.shape().dims[axis])
-                        ));
+                        return Err(NumRs2Error::DimensionMismatch(format!(
+                            "Cannot squeeze axis {} with size {}",
+                            axis,
+                            view.shape().dims[axis]
+                        )));
                     }
                 }
                 ax
-            },
+            }
             None => {
                 // Find all axes with size 1
-                view.shape().dims.iter().enumerate()
+                view.shape()
+                    .dims
+                    .iter()
+                    .enumerate()
                     .filter_map(|(i, &size)| if size == 1 { Some(i) } else { None })
                     .collect()
             }
         };
 
         // Create new shape by removing squeezed dimensions
-        let new_dims: Vec<usize> = view.shape().dims.iter().enumerate()
+        let new_dims: Vec<usize> = view
+            .shape()
+            .dims
+            .iter()
+            .enumerate()
             .filter_map(|(i, &size)| {
-                if axes_to_squeeze.contains(&i) { None } else { Some(size) }
+                if axes_to_squeeze.contains(&i) {
+                    None
+                } else {
+                    Some(size)
+                }
             })
             .collect();
 
@@ -460,7 +538,11 @@ impl ShapeEngine {
     }
 
     /// Expand array dimensions (add dimensions of size 1)
-    pub fn expand_dims_view<'a, T>(&self, view: &ArrayView<'a, T>, axes: Vec<usize>) -> Result<ArrayView<'a, T>>
+    pub fn expand_dims_view<'a, T>(
+        &self,
+        view: &ArrayView<'a, T>,
+        axes: Vec<usize>,
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
@@ -471,9 +553,10 @@ impl ShapeEngine {
         // Validate axes
         for &axis in &sorted_axes {
             if axis > new_dims.len() {
-                return Err(NumRs2Error::DimensionMismatch(
-                    format!("Axis {} is out of bounds for expansion", axis)
-                ));
+                return Err(NumRs2Error::DimensionMismatch(format!(
+                    "Axis {} is out of bounds for expansion",
+                    axis
+                )));
             }
         }
 
@@ -489,7 +572,7 @@ impl ShapeEngine {
     /// Check if array is broadcastable to a target shape
     pub fn is_broadcastable(&self, source_shape: &[usize], target_shape: &[usize]) -> bool {
         let max_ndim = std::cmp::max(source_shape.len(), target_shape.len());
-        
+
         for i in 0..max_ndim {
             let src_dim = if i < source_shape.len() {
                 source_shape[source_shape.len() - i - 1]
@@ -501,12 +584,12 @@ impl ShapeEngine {
             } else {
                 1
             };
-            
+
             if src_dim != tgt_dim && src_dim != 1 && tgt_dim != 1 {
                 return false;
             }
         }
-        
+
         true
     }
 
@@ -514,11 +597,11 @@ impl ShapeEngine {
     pub fn analyze_layout_efficiency(&self, shape: &[usize], strides: &[usize]) -> LayoutAnalysis {
         let c_strides = self.compute_c_strides(shape);
         let f_strides = self.compute_fortran_strides(shape);
-        
+
         let is_c_contiguous = strides == c_strides;
         let is_f_contiguous = strides == f_strides;
         let is_contiguous = is_c_contiguous || is_f_contiguous;
-        
+
         // Calculate stride efficiency (how close to optimal)
         let total_elements: usize = shape.iter().product();
         let memory_span = self.calculate_memory_span(shape, strides);
@@ -588,15 +671,15 @@ impl ShapeEngine {
 
         // Check if strides are in geometric progression
         for i in 1..strides.len() {
-            if strides[i] == 0 || strides[i-1] == 0 {
+            if strides[i] == 0 || strides[i - 1] == 0 {
                 continue;
             }
             // Simple regularity check - more sophisticated analysis could be added
-            if strides[i] > strides[i-1] * 10 || strides[i-1] > strides[i] * 10 {
+            if strides[i] > strides[i - 1] * 10 || strides[i - 1] > strides[i] * 10 {
                 return false;
             }
         }
-        
+
         true
     }
 
@@ -604,10 +687,10 @@ impl ShapeEngine {
     fn recommend_layout(&self, shape: &[usize], current_strides: &[usize]) -> MemoryLayout {
         let c_strides = self.compute_c_strides(shape);
         let f_strides = self.compute_fortran_strides(shape);
-        
+
         let is_c_contiguous = current_strides == c_strides;
         let is_f_contiguous = current_strides == f_strides;
-        
+
         // Calculate simple efficiency metric without recursion
         let total_elements: usize = shape.iter().product();
         let memory_span = self.calculate_memory_span(shape, current_strides);
@@ -616,7 +699,7 @@ impl ShapeEngine {
         } else {
             0.0
         };
-        
+
         if efficiency > 0.9 {
             if is_c_contiguous {
                 MemoryLayout::C
@@ -702,19 +785,28 @@ impl ViewSystem {
     }
 
     /// Create an optimized view with the best layout for the given operations
-    pub fn create_optimized_view<'a, T>(&mut self, data: &'a [T], shape: &[usize], intended_operations: &[ViewOperation]) -> Result<ArrayView<'a, T>>
+    pub fn create_optimized_view<'a, T>(
+        &mut self,
+        data: &'a [T],
+        shape: &[usize],
+        intended_operations: &[ViewOperation],
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement,
     {
         let optimal_layout = self.determine_optimal_layout(shape, intended_operations);
         let strides = self.shape_engine.compute_strides(shape, optimal_layout);
-        
+
         let shape_obj = Shape::new(shape.to_vec());
         ArrayView::new(data, shape_obj, strides, 0)
     }
 
     /// Determine optimal layout based on intended operations
-    fn determine_optimal_layout(&self, shape: &[usize], operations: &[ViewOperation]) -> MemoryLayout {
+    fn determine_optimal_layout(
+        &self,
+        shape: &[usize],
+        operations: &[ViewOperation],
+    ) -> MemoryLayout {
         let mut score_c = 0;
         let mut score_fortran = 0;
         let mut score_custom = 0;
@@ -729,7 +821,7 @@ impl ViewSystem {
                 ViewOperation::MatrixMultiply => {
                     score_c += 1;
                     score_fortran += 1;
-                },
+                }
                 ViewOperation::Reduction => score_c += 1,
                 ViewOperation::Broadcasting => score_custom += 2,
             }
@@ -750,7 +842,11 @@ impl ViewSystem {
     }
 
     /// Create a view chain for complex operations
-    pub fn create_view_chain<'a, T>(&mut self, initial_view: ArrayView<'a, T>, operations: &[ViewChainOperation]) -> Result<ArrayView<'a, T>>
+    pub fn create_view_chain<'a, T>(
+        &mut self,
+        initial_view: ArrayView<'a, T>,
+        operations: &[ViewChainOperation],
+    ) -> Result<ArrayView<'a, T>>
     where
         T: NumericElement + Copy,
     {
@@ -760,22 +856,22 @@ impl ViewSystem {
             current_view = match operation {
                 ViewChainOperation::Reshape(new_shape) => {
                     self.shape_engine.reshape_view(&current_view, new_shape)?
-                },
-                ViewChainOperation::Transpose(axes) => {
-                    self.shape_engine.transpose_view(&current_view, axes.clone())?
-                },
+                }
+                ViewChainOperation::Transpose(axes) => self
+                    .shape_engine
+                    .transpose_view(&current_view, axes.clone())?,
                 ViewChainOperation::SwapAxes(ax1, ax2) => {
                     self.shape_engine.swapaxes_view(&current_view, *ax1, *ax2)?
-                },
+                }
                 ViewChainOperation::MoveAxis(src, dst) => {
                     self.shape_engine.moveaxis_view(&current_view, *src, *dst)?
-                },
-                ViewChainOperation::Squeeze(axes) => {
-                    self.shape_engine.squeeze_view(&current_view, axes.clone())?
-                },
-                ViewChainOperation::ExpandDims(axes) => {
-                    self.shape_engine.expand_dims_view(&current_view, axes.clone())?
-                },
+                }
+                ViewChainOperation::Squeeze(axes) => self
+                    .shape_engine
+                    .squeeze_view(&current_view, axes.clone())?,
+                ViewChainOperation::ExpandDims(axes) => self
+                    .shape_engine
+                    .expand_dims_view(&current_view, axes.clone())?,
             };
         }
 
@@ -830,7 +926,7 @@ pub enum ViewChainOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arrays::advanced_ops::{Shape, ArrayView};
+    use crate::arrays::advanced_ops::{ArrayView, Shape};
 
     #[test]
     fn test_shape_engine_creation() {
@@ -875,7 +971,7 @@ mod tests {
         let mut engine = ShapeEngine::new();
         let shape = [3, 4];
         let c_strides = engine.compute_strides(&shape, MemoryLayout::C);
-        
+
         let analysis = engine.analyze_layout_efficiency(&shape, &c_strides);
         assert!(analysis.is_c_contiguous);
         assert!(analysis.is_contiguous);
@@ -888,8 +984,10 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = [2, 3];
         let operations = vec![ViewOperation::RowAccess];
-        
-        let view = view_system.create_optimized_view(&data, &shape, &operations).unwrap();
+
+        let view = view_system
+            .create_optimized_view(&data, &shape, &operations)
+            .unwrap();
         assert_eq!(view.shape().dims, vec![2, 3]);
     }
 
@@ -899,7 +997,7 @@ mod tests {
         let data = vec![1, 2, 3, 4];
         let shape = Shape::new(vec![1, 2, 1, 2]);
         let view = ArrayView::from_data(&data, shape).unwrap();
-        
+
         let squeezed = engine.squeeze_view(&view, None).unwrap();
         assert_eq!(squeezed.shape().dims, vec![2, 2]);
     }
@@ -910,7 +1008,7 @@ mod tests {
         let data = vec![1, 2, 3, 4];
         let shape = Shape::new(vec![2, 2]);
         let view = ArrayView::from_data(&data, shape).unwrap();
-        
+
         let expanded = engine.expand_dims_view(&view, vec![1]).unwrap();
         assert_eq!(expanded.shape().dims, vec![2, 1, 2]);
     }
