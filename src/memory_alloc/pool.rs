@@ -36,6 +36,7 @@ impl Default for PoolConfig {
 }
 
 /// A memory block in the pool
+#[derive(Debug)]
 struct MemoryBlock {
     ptr: NonNull<u8>,
     layout: Layout,
@@ -64,6 +65,7 @@ impl Drop for MemoryBlock {
 }
 
 /// Internal pool state
+#[derive(Debug)]
 struct PoolState {
     /// Configuration for this pool
     config: PoolConfig,
@@ -81,6 +83,7 @@ struct PoolState {
 ///
 /// Provides efficient allocation and deallocation of fixed-size memory blocks,
 /// optimized for the frequent allocation patterns found in numerical computing.
+#[derive(Debug)]
 pub struct PoolAllocator {
     /// Internal state wrapped in thread-safe containers
     state: Arc<Mutex<UnsafeCell<PoolState>>>,

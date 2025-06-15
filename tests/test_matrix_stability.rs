@@ -1,11 +1,11 @@
 //! Tests for numerical stability of matrix decompositions
 
+#![allow(deprecated)] // Allow deprecated warnings during API transition
+
 use approx::assert_relative_eq;
 use num_traits::Float;
 use numrs2::array::Array;
-use numrs2::new_modules::matrix_decomp::{
-    cholesky, condition_number, lu, pivoted_cholesky, qr, svd,
-};
+use numrs2::linalg_extended::{cholesky, condition_number, lu, pivoted_cholesky, qr, svd};
 
 /// Generate a Hilbert matrix of size n x n
 /// Hilbert matrices are famously ill-conditioned and provide a good stress test
@@ -186,7 +186,6 @@ fn test_decomposition_stability_well_conditioned() {
 }
 
 #[test]
-#[ignore = "Temporarily ignored due to QR decomposition orthogonality improvements affecting reconstruction accuracy"]
 fn test_decomposition_stability_ill_conditioned() {
     // Test decompositions on ill-conditioned matrices
     // For these tests, we use more generous error bounds
@@ -433,7 +432,7 @@ fn test_decompositions_with_scaling() {
 }
 
 #[test]
-#[ignore = "Temporarily ignored due to numerical stability improvements causing divergence in decomposition errors"]
+// Previously ignored, now passes
 fn test_relative_errors_between_decompositions() {
     // Compare accuracy of different decompositions on the same ill-conditioned matrix
     let n = 5;

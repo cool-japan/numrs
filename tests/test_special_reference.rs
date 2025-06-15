@@ -1,3 +1,5 @@
+#![allow(deprecated)] // Allow deprecated warnings during API transition
+
 use approx::assert_abs_diff_eq;
 /// Reference tests for special functions
 ///

@@ -887,11 +887,11 @@ mod tests {
         assert!(!isclose(1.0, 1.001, 1e-7, 0.0));
 
         // Test NaN handling
-        assert!(isclose(std::f64::NAN, std::f64::NAN, 1e-7, 0.0));
+        assert!(isclose(f64::NAN, f64::NAN, 1e-7, 0.0));
 
         // Test infinity handling
-        assert!(isclose(std::f64::INFINITY, std::f64::INFINITY, 1e-7, 0.0));
-        assert!(!isclose(std::f64::INFINITY, 1.0, 1e-7, 0.0));
+        assert!(isclose(f64::INFINITY, f64::INFINITY, 1e-7, 0.0));
+        assert!(!isclose(f64::INFINITY, 1.0, 1e-7, 0.0));
     }
 
     #[test]

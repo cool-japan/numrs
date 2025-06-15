@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 // Example demonstrating the `unique` function in NumRS2
 //
 // This example shows how to use the `unique` function to find unique elements in arrays,

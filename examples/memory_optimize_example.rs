@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use numrs2::memory_optimize::{
     align_data, optimize_layout, optimize_memory, optimize_placement, AlignmentStrategy,
     LayoutStrategy, PlacementStrategy,

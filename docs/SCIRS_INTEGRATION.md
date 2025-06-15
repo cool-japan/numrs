@@ -24,7 +24,7 @@ To enable SciRS2 integration:
 1. Add SciRS2 dependencies to your `Cargo.toml`:
    ```toml
    [dependencies]
-   numrs2 = { version = "0.1.0-alpha.3", features = ["scirs"] }
+   numrs2 = { version = "0.1.0-alpha.4", features = ["scirs"] }
    ```
 
 2. Or, when building NumRS2 directly:
@@ -102,9 +102,9 @@ The SciRS2 integration includes:
 
 ## Current Status
 
-The SciRS2 integration has been updated to work with version 0.1.0-alpha.2:
+The SciRS2 integration has been updated to work with version 0.1.0-alpha.4:
 
-1. **Module imports fixed**: The imports in `src/interop/scirs_compat.rs` have been updated to match the actual SciRS2 module structure in version 0.1.0-alpha.2:
+1. **Module imports fixed**: The imports in `src/interop/scirs_compat.rs` have been updated to match the actual SciRS2 module structure in version 0.1.0-alpha.4:
    - `scirs2_stats::distributions::continuous` for most continuous distributions
    - `scirs2_core::array::Array` for array types
    - `scirs2_core::random::Generator` for random generators
@@ -141,7 +141,7 @@ Common issues and solutions:
 
 2. **Version compatibility issues**:
    If you encounter errors related to SciRS2 versions, ensure you're using compatible versions.
-   NumRS2 is tested with SciRS2 v0.1.0-alpha.2 or newer.
+   NumRS2 is tested with SciRS2 v0.1.0-alpha.4 or newer.
 
 ## Contributing
 

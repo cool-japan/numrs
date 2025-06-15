@@ -14,10 +14,21 @@ use rand::SeedableRng;
 use rand_distr::uniform::SampleUniform;
 use rand_distr::{Bernoulli, Distribution, Exp as Exponential, Gamma, LogNormal, Normal, Uniform};
 use rand_distr::{Beta, Binomial, Cauchy, ChiSquared as ChiSquare, Poisson, StudentT, Weibull};
-use rand_distr::{Pareto, Pert, StandardNormal, Triangular};
+use rand_distr::{Pareto, Pert, StandardNormal};
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
+
+/// Sample from a triangular distribution using inverse CDF
+fn sample_triangular(low: f64, mode: f64, high: f64, u: f64) -> f64 {
+    let fc = (mode - low) / (high - low);
+
+    if u < fc {
+        low + ((high - low) * (mode - low) * u).sqrt()
+    } else {
+        high - ((high - low) * (high - mode) * (1.0 - u)).sqrt()
+    }
+}
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// RandomState for managing the state of random number generators
@@ -855,17 +866,13 @@ impl RandomState {
             NumRs2Error::InvalidOperation("Failed to convert high parameter to f64".to_string())
         })?;
 
-        let dist = Triangular::new(low_f64, mode_f64, high_f64).map_err(|e| {
-            NumRs2Error::InvalidOperation(format!(
-                "Failed to create triangular distribution: {}",
-                e
-            ))
-        })?;
-
+        // Implement triangular distribution using inverse CDF method
+        // This avoids issues with rand_distr::Triangular
         let mut rng = self.get_rng()?;
 
         for _ in 0..size {
-            let val_f64 = dist.sample(&mut *rng);
+            let u = rng.random::<f64>();
+            let val_f64 = sample_triangular(low_f64, mode_f64, high_f64, u);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert triangular sample to target type".to_string(),
@@ -1784,7 +1791,7 @@ mod tests {
 
         // Beta values should be between 0 and 1
         for val in arr.to_vec() {
-            assert!(val >= 0.0 && val <= 1.0);
+            assert!((0.0..=1.0).contains(&val));
         }
     }
 

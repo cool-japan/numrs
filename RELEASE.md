@@ -92,6 +92,25 @@ Before beginning a release, ensure you have:
 - [ ] Create an issue to track any follow-up tasks from the release
 - [ ] Bump version numbers to next development version (X.Y.Z+1-dev) in the main branch
 
+## Current Release Status
+
+### Version 0.1.0-alpha.4 (Released: June 15, 2025)
+
+This release focuses on comprehensive NumPy parity roadmap and enhanced documentation:
+
+**Key Features:**
+- Comprehensive NumPy parity roadmap in TODO.md
+- Detailed implementation plan for complete NumPy compatibility
+- Phase-based development strategy for systematic feature implementation
+- Enhanced documentation of current implementation status (80-85% NumPy parity)
+- Success metrics and quality standards for NumPy parity achievement
+
+**Architecture Improvements:**
+- Complete restructuring of TODO.md into comprehensive NumPy parity initiative
+- Improved development priorities with focus on missing 15-20% of NumPy functionality
+- Enhanced contribution guidelines for NumPy compatibility
+- Improved technical implementation documentation
+
 ## Release Cadence
 
 NumRS2 aims for a regular release schedule:

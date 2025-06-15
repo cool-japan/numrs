@@ -1019,9 +1019,9 @@ mod tests {
 
         assert_eq!(fft_data.len(), 4);
 
-        for i in 0..4 {
-            assert_relative_eq!(fft_data[i].re, 1.0, epsilon = 1e-10);
-            assert_relative_eq!(fft_data[i].im, 0.0, epsilon = 1e-10);
+        for item in fft_data.iter().take(4) {
+            assert_relative_eq!(item.re, 1.0, epsilon = 1e-10);
+            assert_relative_eq!(item.im, 0.0, epsilon = 1e-10);
         }
     }
 
@@ -1038,9 +1038,10 @@ mod tests {
         let ifft_data = ifft_result.to_vec();
 
         // Original signal should be recovered
-        for i in 0..x.size() {
-            assert_relative_eq!(ifft_data[i].re, x.to_vec()[i], epsilon = 1e-10);
-            assert_relative_eq!(ifft_data[i].im, 0.0, epsilon = 1e-10);
+        let x_vec = x.to_vec();
+        for (i, item) in ifft_data.iter().enumerate().take(x.size()) {
+            assert_relative_eq!(item.re, x_vec[i], epsilon = 1e-10);
+            assert_relative_eq!(item.im, 0.0, epsilon = 1e-10);
         }
     }
 
@@ -1064,6 +1065,7 @@ mod tests {
         let mut max_power = 0.0;
         let mut max_idx = 0;
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             if power_data[i] > max_power {
                 max_power = power_data[i];
@@ -1112,6 +1114,7 @@ mod tests {
         let fft2_result = FFT::fft2(&x).unwrap();
         let fft2_data = fft2_result.to_vec();
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..16 {
             if i == 0 {
                 assert_relative_eq!(fft2_data[i].re, 16.0, epsilon = 1e-10);
@@ -1202,6 +1205,7 @@ mod tests {
 
         // Original signal should be recovered
         assert_eq!(irfft_data.len(), 8);
+        #[allow(clippy::needless_range_loop)]
         for i in 0..8 {
             assert_relative_eq!(irfft_data[i], x.to_vec()[i], epsilon = 1e-10);
         }

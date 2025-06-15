@@ -6,7 +6,6 @@ use numrs2::random::{self, set_seed};
 /// 1. Testing relationships between distributions
 /// 2. Testing distribution-specific properties
 /// 3. Testing edge cases and parameter boundaries
-
 const SAMPLE_SIZE: usize = 5000;
 const _CONFIDENCE_LEVEL: f64 = 0.05; // 95% confidence
 
@@ -74,7 +73,7 @@ fn test_standard_normal_conformance(samples: &Array<f64>) -> bool {
             sign * y
         };
 
-        0.5 * (1.0 + erf_approx(x / 1.414213562))
+        0.5 * (1.0 + erf_approx(x / std::f64::consts::SQRT_2))
     };
 
     let ks = ks_statistic(&data, normal_cdf);

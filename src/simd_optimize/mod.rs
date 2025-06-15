@@ -3,9 +3,15 @@
 //! This module provides functionality for detecting available CPU features
 //! and selecting the most efficient SIMD implementation for the current hardware.
 
+pub mod avx2_enhanced;
 pub mod avx2_ops;
+#[cfg(feature = "unstable")]
+pub mod avx512_enhanced;
 pub mod feature_detect;
+pub mod neon_enhanced;
 pub mod simd_select;
+pub mod simd_traits;
+pub mod unified_dispatcher;
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
@@ -13,6 +19,8 @@ use crate::error::{NumRs2Error, Result};
 // Re-export the main functions for convenience
 pub use feature_detect::{detect_cpu_features, CpuFeatures};
 pub use simd_select::{select_simd_implementation, SimdImplementation};
+pub use simd_traits::SimdPerformanceHints;
+pub use unified_dispatcher::{global_dispatcher, optimized, UnifiedSimdDispatcher};
 
 /// CPU feature detection and SIMD implementation selection in one step
 ///

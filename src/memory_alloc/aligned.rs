@@ -87,6 +87,7 @@ impl AlignmentConfig {
 }
 
 /// An allocator for aligned memory
+#[derive(Debug)]
 pub struct AlignedAllocator {
     config: AlignmentConfig,
 }

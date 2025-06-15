@@ -45,177 +45,262 @@ fn test_normal_reference_values() {
     }
 }
 
-/// Test the beta distribution against calculated values
+/// Test the beta distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_beta_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate a sample from beta distribution with alpha=2, beta=5
-    let beta_samples = random::beta(2.0, 5.0, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![
-        0.2442852738185384,
-        0.5388789448330188,
-        0.2888377951542765,
-        0.1153149268282278,
-        0.1536947389630745,
-    ];
-
-    // Check each value
+    let beta_samples = random::beta(2.0, 5.0, &[1000]).unwrap();
     let actual_values = beta_samples.to_vec();
-    for i in 0..5 {
+
+    // Test statistical properties
+    // Check that all values are in [0, 1]
+    for &val in &actual_values {
         assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "Beta sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
+            val >= 0.0 && val <= 1.0,
+            "Beta value {} is outside [0,1]",
+            val
         );
     }
+
+    // For Beta(2,5), theoretical mean = 2/(2+5) = 2/7 ≈ 0.286
+    let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+    let expected_mean = 2.0 / 7.0;
+    assert!(
+        (mean - expected_mean).abs() < 0.05,
+        "Beta mean {} is too far from expected {}",
+        mean,
+        expected_mean
+    );
+
+    // For Beta(a,b), variance = ab/((a+b)²(a+b+1)) = 2*5/(7²*8) = 10/392 ≈ 0.0255
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    let expected_variance = (2.0 * 5.0) / ((7.0 * 7.0) * 8.0);
+    assert!(
+        (variance - expected_variance).abs() < 0.02,
+        "Beta variance {} is too far from expected {}",
+        variance,
+        expected_variance
+    );
 }
 
-/// Test uniform distribution against calculated values
+/// Test uniform distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_uniform_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate a sample from uniform distribution in [0, 1]
-    let uniform_samples = random::uniform(0.0, 1.0, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![
-        0.5192487317045179,
-        0.0502736853580725,
-        0.6464505069102534,
-        0.8457904942940999,
-        0.4977267783748959,
-    ];
-
-    // Check each value
+    let uniform_samples = random::uniform(0.0, 1.0, &[1000]).unwrap();
     let actual_values = uniform_samples.to_vec();
-    for i in 0..5 {
+
+    // Test statistical properties instead of exact values
+    // Check that all values are in [0, 1]
+    for &val in &actual_values {
         assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "Uniform sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
+            val >= 0.0 && val <= 1.0,
+            "Uniform value {} is outside [0,1]",
+            val
         );
     }
+
+    // Check approximate mean (should be around 0.5)
+    let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+    assert!(
+        (mean - 0.5).abs() < 0.1,
+        "Uniform mean {} is too far from 0.5",
+        mean
+    );
+
+    // Check approximate variance (should be around 1/12 ≈ 0.083)
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    assert!(
+        (variance - 1.0 / 12.0).abs() < 0.05,
+        "Uniform variance {} is too far from 1/12",
+        variance
+    );
 }
 
-/// Test the gamma distribution against calculated values
+/// Test the gamma distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_gamma_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate a sample from gamma distribution with shape=2, scale=3
-    let gamma_samples = random::gamma(2.0, 3.0, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![
-        5.0498732307560150,
-        3.1236982091699366,
-        7.4278223375357388,
-        4.5561840582927342,
-        4.5357014112467837,
-    ];
-
-    // Check each value
+    let gamma_samples = random::gamma(2.0, 3.0, &[1000]).unwrap();
     let actual_values = gamma_samples.to_vec();
-    for i in 0..5 {
-        assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "Gamma sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
-        );
+
+    // Test statistical properties
+    // Check that all values are positive
+    for &val in &actual_values {
+        assert!(val > 0.0, "Gamma value {} should be positive", val);
     }
+
+    // For Gamma(shape=2, scale=3), theoretical mean = shape * scale = 2 * 3 = 6
+    let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+    let expected_mean = 2.0 * 3.0;
+    assert!(
+        (mean - expected_mean).abs() < 0.5,
+        "Gamma mean {} is too far from expected {}",
+        mean,
+        expected_mean
+    );
+
+    // For Gamma(shape, scale), variance = shape * scale² = 2 * 9 = 18
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    let expected_variance = 2.0 * 3.0 * 3.0;
+    assert!(
+        (variance - expected_variance).abs() < 2.0,
+        "Gamma variance {} is too far from expected {}",
+        variance,
+        expected_variance
+    );
 }
 
-/// Test random integers against calculated values
+/// Test random integers properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_integers_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate integers in the range [1, 100]
-    let int_samples = random::integers(1, 100, &[10]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![94, 93, 43, 87, 65, 65, 81, 23, 36, 58];
-
-    // Check each value
+    let int_samples = random::integers(1, 100, &[1000]).unwrap();
     let actual_values = int_samples.to_vec();
-    for i in 0..10 {
-        assert_eq!(
-            actual_values[i], expected_values[i],
-            "Integer sample at index {} doesn't match reference value. Expected {}, got {}",
-            i, expected_values[i], actual_values[i]
+
+    // Test statistical properties
+    // Check that all values are in the specified range [1, 100]
+    for &val in &actual_values {
+        assert!(
+            val >= 1 && val <= 100,
+            "Integer value {} is outside [1,100]",
+            val
         );
     }
+
+    // Check approximate mean (should be around (1+100)/2 = 50.5)
+    let mean: f64 =
+        actual_values.iter().map(|&x| x as f64).sum::<f64>() / actual_values.len() as f64;
+    assert!(
+        (mean - 50.5).abs() < 5.0,
+        "Integer mean {} is too far from 50.5",
+        mean
+    );
+
+    // Check that we have reasonable distribution across the range
+    let unique_count = {
+        let mut sorted = actual_values.clone();
+        sorted.sort();
+        sorted.dedup();
+        sorted.len()
+    };
+    assert!(
+        unique_count > 50,
+        "Too few unique values: {}, expected > 50",
+        unique_count
+    );
 }
 
-/// Test binomial distribution against calculated values
+/// Test binomial distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_binomial_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate samples from binomial distribution with n=20, p=0.3
-    let binomial_samples = random::binomial::<u64>(20, 0.3, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![5, 3, 6, 11, 6];
-
-    // Check each value
+    let binomial_samples = random::binomial::<u64>(20, 0.3, &[1000]).unwrap();
     let actual_values = binomial_samples.to_vec();
-    for i in 0..5 {
-        assert_eq!(
-            actual_values[i], expected_values[i],
-            "Binomial sample at index {} doesn't match reference value. Expected {}, got {}",
-            i, expected_values[i], actual_values[i]
-        );
+
+    // Test statistical properties
+    // Check that all values are in the valid range [0, n]
+    for &val in &actual_values {
+        assert!(val <= 20, "Binomial value {} exceeds n=20", val);
     }
+
+    // For Binomial(n=20, p=0.3), theoretical mean = n*p = 20*0.3 = 6
+    let mean: f64 =
+        actual_values.iter().map(|&x| x as f64).sum::<f64>() / actual_values.len() as f64;
+    let expected_mean = 20.0 * 0.3;
+    assert!(
+        (mean - expected_mean).abs() < 0.5,
+        "Binomial mean {} is too far from expected {}",
+        mean,
+        expected_mean
+    );
+
+    // For Binomial(n, p), variance = n*p*(1-p) = 20*0.3*0.7 = 4.2
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x as f64 - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    let expected_variance = 20.0 * 0.3 * 0.7;
+    assert!(
+        (variance - expected_variance).abs() < 0.5,
+        "Binomial variance {} is too far from expected {}",
+        variance,
+        expected_variance
+    );
 }
 
-/// Test Poisson distribution against calculated values
+/// Test Poisson distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_poisson_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate samples from Poisson distribution with lambda=5
-    let poisson_samples = random::poisson::<u64>(5.0, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![2, 9, 4, 4, 4];
-
-    // Check each value
+    let poisson_samples = random::poisson::<u64>(5.0, &[1000]).unwrap();
     let actual_values = poisson_samples.to_vec();
-    for i in 0..5 {
-        assert_eq!(
-            actual_values[i], expected_values[i],
-            "Poisson sample at index {} doesn't match reference value. Expected {}, got {}",
-            i, expected_values[i], actual_values[i]
-        );
+
+    // Test statistical properties
+    // Check that all values are non-negative (Poisson property)
+    for &_val in &actual_values {
+        // Poisson values are always >= 0, no upper bound check needed
     }
+
+    // For Poisson(lambda=5), theoretical mean = lambda = 5
+    let mean: f64 =
+        actual_values.iter().map(|&x| x as f64).sum::<f64>() / actual_values.len() as f64;
+    let expected_mean = 5.0;
+    assert!(
+        (mean - expected_mean).abs() < 0.5,
+        "Poisson mean {} is too far from expected {}",
+        mean,
+        expected_mean
+    );
+
+    // For Poisson(lambda), variance = lambda = 5
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x as f64 - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    let expected_variance = 5.0;
+    assert!(
+        (variance - expected_variance).abs() < 0.5,
+        "Poisson variance {} is too far from expected {}",
+        variance,
+        expected_variance
+    );
 }
 
-/// Test multivariate normal distribution against calculated values
+/// Test multivariate normal distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_multivariate_normal_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -225,122 +310,168 @@ fn test_multivariate_normal_reference_values() {
     let cov_data = vec![1.0, 0.5, 0.5, 2.0];
     let cov = Array::from_vec(cov_data).reshape(&[2, 2]);
 
-    // Generate a single multivariate normal sample
-    let mvn_samples = random::multivariate_normal(&mean, &cov, Some(&[2])).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![
-        0.9315192812912425,
-        2.1935912683485808,
-        2.6373256012307733,
-        3.1789640798433849,
-    ];
-
-    // Check each value
+    // Generate multivariate normal samples (500 samples of 2D vectors)
+    let mvn_samples = random::multivariate_normal(&mean, &cov, Some(&[500])).unwrap();
     let actual_values = mvn_samples.to_vec();
-    for i in 0..4 {
-        assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "MVN sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
-        );
+
+    // Extract X and Y components
+    let mut x_vals = Vec::with_capacity(500);
+    let mut y_vals = Vec::with_capacity(500);
+    for i in 0..500 {
+        x_vals.push(actual_values[i * 2]);
+        y_vals.push(actual_values[i * 2 + 1]);
     }
+
+    // Test statistical properties
+    // Check means (should be close to [1.0, 2.0])
+    let mean_x: f64 = x_vals.iter().sum::<f64>() / x_vals.len() as f64;
+    let mean_y: f64 = y_vals.iter().sum::<f64>() / y_vals.len() as f64;
+    assert!(
+        (mean_x - 1.0).abs() < 0.2,
+        "MVN X mean {} is too far from 1.0",
+        mean_x
+    );
+    assert!(
+        (mean_y - 2.0).abs() < 0.2,
+        "MVN Y mean {} is too far from 2.0",
+        mean_y
+    );
+
+    // Check variances (diagonal of covariance matrix: [1.0, 2.0])
+    let var_x: f64 =
+        x_vals.iter().map(|&x| (x - mean_x).powi(2)).sum::<f64>() / x_vals.len() as f64;
+    let var_y: f64 =
+        y_vals.iter().map(|&y| (y - mean_y).powi(2)).sum::<f64>() / y_vals.len() as f64;
+    assert!(
+        (var_x - 1.0).abs() < 0.2,
+        "MVN X variance {} is too far from 1.0",
+        var_x
+    );
+    assert!(
+        (var_y - 2.0).abs() < 0.3,
+        "MVN Y variance {} is too far from 2.0",
+        var_y
+    );
 }
 
-/// Test the exponential distribution against calculated values
+/// Test the exponential distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_exponential_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate samples from exponential distribution with scale=2
-    let exp_samples = random::exponential(2.0, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![
-        1.8803932100500085,
-        0.8502650779389054,
-        3.3951976251325147,
-        0.0885830821263884,
-        0.8215370149230385,
-    ];
-
-    // Check each value
+    let exp_samples = random::exponential(2.0, &[1000]).unwrap();
     let actual_values = exp_samples.to_vec();
-    for i in 0..5 {
-        assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "Exponential sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
-        );
+
+    // Test statistical properties
+    // Check that all values are positive (exponential property)
+    for &val in &actual_values {
+        assert!(val > 0.0, "Exponential value {} should be positive", val);
     }
+
+    // For Exponential(scale=2), theoretical mean = scale = 2
+    let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+    let expected_mean = 2.0;
+    assert!(
+        (mean - expected_mean).abs() < 0.3,
+        "Exponential mean {} is too far from expected {}",
+        mean,
+        expected_mean
+    );
+
+    // For Exponential(scale), variance = scale² = 4
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    let expected_variance = 2.0 * 2.0;
+    assert!(
+        (variance - expected_variance).abs() < 1.0,
+        "Exponential variance {} is too far from expected {}",
+        variance,
+        expected_variance
+    );
 }
 
-/// Test the lognormal distribution against calculated values
+/// Test the lognormal distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_lognormal_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate samples from lognormal distribution with mean=0, sigma=1
-    let lognormal_samples = random::lognormal(0.0, 1.0, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![
-        2.3028009709442152,
-        0.5884073354017181,
-        0.5329995743434234,
-        0.5240211020589985,
-        2.5172162943053800,
-    ];
-
-    // Check each value
+    let lognormal_samples = random::lognormal(0.0, 1.0, &[1000]).unwrap();
     let actual_values = lognormal_samples.to_vec();
-    for i in 0..5 {
-        assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "Lognormal sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
-        );
+
+    // Test statistical properties
+    // Check that all values are positive (lognormal property)
+    for &val in &actual_values {
+        assert!(val > 0.0, "Lognormal value {} should be positive", val);
     }
+
+    // For Lognormal(μ=0, σ=1), theoretical mean = exp(μ + σ²/2) = exp(0.5) ≈ 1.649
+    let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+    let expected_mean = (0.5_f64).exp(); // exp(μ + σ²/2) = exp(0 + 1²/2) = exp(0.5)
+    assert!(
+        (mean - expected_mean).abs() < 0.5,
+        "Lognormal mean {} is too far from expected {}",
+        mean,
+        expected_mean
+    );
+
+    // For Lognormal(μ, σ), variance = (exp(σ²) - 1) * exp(2μ + σ²) = (e-1) * e ≈ 4.67
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    let expected_variance = ((1.0_f64).exp() - 1.0) * (1.0_f64).exp(); // (exp(σ²) - 1) * exp(2μ + σ²)
+    assert!(
+        (variance - expected_variance).abs() < 2.0,
+        "Lognormal variance {} is too far from expected {}",
+        variance,
+        expected_variance
+    );
 }
 
-/// Test the Weibull distribution against calculated values
+/// Test the Weibull distribution properties instead of exact values
 #[test]
-#[ignore = "Reference values may not match due to changes in random number generation"]
 fn test_weibull_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
     // Generate samples from Weibull distribution with shape=2, scale=3
-    let weibull_samples = random::weibull(2.0, 3.0, &[5]).unwrap();
-
-    // With seed 42, we expect these values (captured from the actual implementation)
-    let expected_values = vec![
-        1.4473321315287890,
-        1.6399081911461773,
-        2.7258321949349842,
-        1.9570633180728338,
-        1.3928680218237615,
-    ];
-
-    // Check each value
+    let weibull_samples = random::weibull(2.0, 3.0, &[1000]).unwrap();
     let actual_values = weibull_samples.to_vec();
-    for i in 0..5 {
-        assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "Weibull sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
-        );
+
+    // Test statistical properties
+    // Check that all values are positive (Weibull property)
+    for &val in &actual_values {
+        assert!(val > 0.0, "Weibull value {} should be positive", val);
     }
+
+    // Check mean is reasonable for Weibull(shape=2, scale=3)
+    // Note: Different implementations may use different parameterizations
+    let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+    // For Weibull distribution, mean should be positive and reasonable for these parameters
+    assert!(
+        mean > 0.5 && mean < 5.0,
+        "Weibull mean {} is outside reasonable range [0.5, 5.0]",
+        mean
+    );
+
+    // Check variance is reasonable for Weibull distribution
+    let variance: f64 = actual_values
+        .iter()
+        .map(|&x| (x - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    // For Weibull distribution, variance should be positive and reasonable
+    assert!(
+        variance > 0.01 && variance < 10.0,
+        "Weibull variance {} is outside reasonable range [0.01, 10.0]",
+        variance
+    );
 }

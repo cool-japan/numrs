@@ -55,6 +55,19 @@ impl SimdImplementation {
     pub fn is_neon_or_better(&self) -> bool {
         matches!(self, SimdImplementation::NEON | SimdImplementation::SVE)
     }
+
+    /// Get the vector width in bits for this implementation
+    pub fn vector_width(&self) -> usize {
+        match self {
+            SimdImplementation::Scalar => 0,
+            SimdImplementation::SSE => 128,
+            SimdImplementation::AVX => 256,
+            SimdImplementation::AVX2 => 256,
+            SimdImplementation::AVX512 => 512,
+            SimdImplementation::NEON => 128,
+            SimdImplementation::SVE => 128, // Simplified - SVE can be variable
+        }
+    }
 }
 
 /// Select the most efficient SIMD implementation based on CPU features
@@ -163,55 +176,67 @@ mod tests {
         );
 
         // Test with SSE2 only
-        let mut features = CpuFeatures::default();
-        features.sse2 = true;
+        let features = CpuFeatures {
+            sse2: true,
+            ..Default::default()
+        };
         assert_eq!(
             select_simd_implementation(&features),
             SimdImplementation::SSE
         );
 
         // Test with AVX
-        let mut features = CpuFeatures::default();
-        features.sse2 = true;
-        features.avx = true;
+        let features = CpuFeatures {
+            sse2: true,
+            avx: true,
+            ..Default::default()
+        };
         assert_eq!(
             select_simd_implementation(&features),
             SimdImplementation::AVX
         );
 
         // Test with AVX2
-        let mut features = CpuFeatures::default();
-        features.sse2 = true;
-        features.avx = true;
-        features.avx2 = true;
+        let features = CpuFeatures {
+            sse2: true,
+            avx: true,
+            avx2: true,
+            ..Default::default()
+        };
         assert_eq!(
             select_simd_implementation(&features),
             SimdImplementation::AVX2
         );
 
         // Test with all x86_64 features
-        let mut features = CpuFeatures::default();
-        features.sse2 = true;
-        features.avx = true;
-        features.avx2 = true;
-        features.avx512f = true;
+        let features = CpuFeatures {
+            sse2: true,
+            avx: true,
+            avx2: true,
+            avx512f: true,
+            ..Default::default()
+        };
         assert_eq!(
             select_simd_implementation(&features),
             SimdImplementation::AVX512
         );
 
         // Test with NEON
-        let mut features = CpuFeatures::default();
-        features.neon = true;
+        let features = CpuFeatures {
+            neon: true,
+            ..Default::default()
+        };
         assert_eq!(
             select_simd_implementation(&features),
             SimdImplementation::NEON
         );
 
         // Test with SVE
-        let mut features = CpuFeatures::default();
-        features.neon = true;
-        features.sve = true;
+        let features = CpuFeatures {
+            neon: true,
+            sve: true,
+            ..Default::default()
+        };
         assert_eq!(
             select_simd_implementation(&features),
             SimdImplementation::SVE
@@ -239,21 +264,27 @@ mod tests {
         assert_eq!(apply_test(&features), "scalar");
 
         // Test with SSE2 only
-        let mut features = CpuFeatures::default();
-        features.sse2 = true;
+        let features = CpuFeatures {
+            sse2: true,
+            ..Default::default()
+        };
         assert_eq!(apply_test(&features), "sse");
 
         // Test with AVX
-        let mut features = CpuFeatures::default();
-        features.sse2 = true;
-        features.avx = true;
+        let features = CpuFeatures {
+            sse2: true,
+            avx: true,
+            ..Default::default()
+        };
         assert_eq!(apply_test(&features), "avx");
 
         // Test with AVX2
-        let mut features = CpuFeatures::default();
-        features.sse2 = true;
-        features.avx = true;
-        features.avx2 = true;
+        let features = CpuFeatures {
+            sse2: true,
+            avx: true,
+            avx2: true,
+            ..Default::default()
+        };
         assert_eq!(apply_test(&features), "avx2");
     }
 }

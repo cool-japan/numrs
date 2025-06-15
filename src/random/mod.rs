@@ -84,6 +84,7 @@ pub mod advanced_distributions;
 pub mod distributions;
 pub mod distributions_enhanced;
 pub mod generator;
+pub mod legacy;
 pub mod state;
 
 // Re-export essential items from the modules
@@ -109,10 +110,7 @@ pub use distributions_enhanced::{
 
 // Use SciRS2 integration when the feature is enabled
 #[cfg(feature = "scirs")]
-pub use crate::interop::scirs_compat::{
-    maxwell, multivariate_normal_with_rotation, noncentral_chisquare, noncentral_f,
-    truncated_normal, vonmises,
-};
+pub use crate::interop::scirs_compat::{noncentral_chisquare, noncentral_f};
 
 /// Create a new RandomState with the given seed.
 ///
@@ -140,6 +138,14 @@ pub use crate::interop::scirs_compat::{
 pub fn seed_rng(seed: u64) -> RandomState {
     RandomState::with_seed(seed)
 }
+
+/// Legacy backward compatibility module (re-exports from random_base.rs)
+pub mod random_base {
+    pub use super::legacy::*;
+}
+
+// Direct re-exports for legacy compatibility
+pub use legacy::{choice, rand, randn, seed, shuffle, uniform, Generator as LegacyGenerator};
 
 #[cfg(test)]
 mod tests {

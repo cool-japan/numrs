@@ -422,69 +422,68 @@ where
     T::one() - erf_scalar(x)
 }
 
-/// Inverse error function for a scalar value
+/// Robust inverse error function using Newton-Raphson iteration
+/// Based on a simple but reliable algorithm
 fn erfinv_scalar<T>(x: T) -> T
 where
     T: Float + Debug,
 {
     // Check input range
-    if x <= T::from(-1.0).unwrap() {
+    if x < T::from(-1.0).unwrap() {
         return T::neg_infinity();
     }
-    if x >= T::one() {
+    if x > T::one() {
         return T::infinity();
     }
-
-    // Rational approximation for central range
-    if x.abs() <= T::from(0.7).unwrap() {
-        // Rational approximation for central region
-        let x2 = x * x;
-
-        let c1 = T::from(1.0).unwrap();
-        let c2 = T::from(0.47047).unwrap();
-        let c3 = T::from(0.06532).unwrap();
-        let c4 = T::from(0.44693).unwrap();
-
-        let d1 = T::from(1.0).unwrap();
-        let d2 = T::from(0.56418).unwrap();
-        let d3 = T::from(1.21837).unwrap();
-        let d4 = T::from(1.00000).unwrap();
-
-        let num = c1 * x * (c2 + x2 * (c3 + x2 * c4));
-        let den = d1 + x2 * (d2 + x2 * (d3 + x2 * d4));
-
-        return num / den;
+    if x == T::zero() {
+        return T::zero();
     }
 
-    // For tail regions
-    let y = if x < T::zero() {
-        T::from(-1.0).unwrap() * (T::one() + x).sqrt()
-    } else {
-        T::from(1.0).unwrap() * (T::one() - x).sqrt()
-    };
-
-    // More accurate approximation for the tails
+    // Use symmetry: erfinv(-x) = -erfinv(x)
     let sign = if x < T::zero() {
         T::from(-1.0).unwrap()
     } else {
         T::one()
     };
+    let abs_x = x.abs();
 
-    // Constants from Winitzki (2008)
-    let c1 = T::from(2.515517).unwrap();
-    let c2 = T::from(0.802853).unwrap();
-    let c3 = T::from(0.010328).unwrap();
+    // Initial guess using a simple rational approximation
+    let mut y = if abs_x <= T::from(0.7).unwrap() {
+        // For central region, use simple polynomial approximation
+        let t = abs_x * abs_x;
+        abs_x * (T::from(0.8862269254527579).unwrap() + t * T::from(0.23201607781175).unwrap())
+    } else {
+        // For tail region, use logarithmic approximation
+        let w = (-((T::one() - abs_x) * (T::one() + abs_x)).ln()).sqrt();
+        if abs_x < T::from(0.97).unwrap() {
+            w * (T::from(1.641345311).unwrap() - T::from(0.329912874).unwrap() * w)
+        } else {
+            w * (T::from(1.641345311).unwrap() - T::from(0.329912874).unwrap() * w
+                + T::from(0.012229801).unwrap() * w * w)
+        }
+    };
 
-    let d1 = T::from(1.432788).unwrap();
-    let d2 = T::from(0.189269).unwrap();
-    let d3 = T::from(0.001308).unwrap();
+    // Newton-Raphson iteration to refine the result
+    let sqrt_pi = T::from(std::f64::consts::PI).unwrap().sqrt();
+    let two_over_sqrt_pi = T::from(2.0).unwrap() / sqrt_pi;
 
-    let z = (T::one() / y.abs()).ln().sqrt();
+    for _ in 0..3 {
+        // Calculate erf(y) and the error
+        let erf_y = erf_scalar(y);
+        let error = erf_y - abs_x;
 
-    let num = c1 + z * (c2 + z * c3);
-    let den = T::one() + z * (d1 + z * (d2 + z * d3));
+        // Check convergence
+        if error.abs() < T::epsilon() * T::from(100.0).unwrap() {
+            break;
+        }
 
-    sign * (z - num / den)
+        // Newton-Raphson step: y_{n+1} = y_n - f(y_n)/f'(y_n)
+        // where f(y) = erf(y) - target and f'(y) = (2/√π) * exp(-y²)
+        let derivative = two_over_sqrt_pi * (-y * y).exp();
+        y = y - error / derivative;
+    }
+
+    sign * y
 }
 
 /// Inverse complementary error function for a scalar value

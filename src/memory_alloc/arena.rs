@@ -35,6 +35,7 @@ impl Default for ArenaConfig {
 }
 
 /// A memory chunk in the arena
+#[derive(Debug)]
 struct ArenaChunk {
     /// Pointer to the memory
     ptr: NonNull<u8>,
@@ -103,6 +104,7 @@ impl Drop for ArenaChunk {
 }
 
 /// Internal state for the arena allocator
+#[derive(Debug)]
 struct ArenaState {
     /// Configuration for this arena
     config: ArenaConfig,
@@ -117,6 +119,7 @@ struct ArenaState {
 /// Provides efficient allocation from pre-allocated memory chunks,
 /// with minimal overhead. Ideal for algorithms that need many small,
 /// temporary allocations.
+#[derive(Debug)]
 pub struct ArenaAllocator {
     /// Internal state wrapped in thread-safe containers
     state: Arc<Mutex<UnsafeCell<ArenaState>>>,
@@ -511,7 +514,11 @@ mod tests {
             .expect("Allocation should succeed");
 
         // Check alignments
-        assert_eq!(ptr1.as_ptr() as usize % 1, 0);
+        // Note: Any alignment of 1 is always satisfied, verify pointers are valid
+        #[allow(useless_ptr_null_checks)]
+        {
+            assert!(!ptr1.as_ptr().is_null());
+        }
         assert_eq!(ptr2.as_ptr() as usize % 4, 0);
         assert_eq!(ptr3.as_ptr() as usize % 8, 0);
         assert_eq!(ptr4.as_ptr() as usize % 16, 0);

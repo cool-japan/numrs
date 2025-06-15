@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 edition = "2021"
 authors = ["NumRS Contributors"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -14,6 +14,7 @@ categories = ["science"]
 default = ["matrix_decomp"]
 matrix_decomp = []
 validation = []
+unstable = []
 scirs = ["dep:scirs2-stats", "dep:scirs2-core", "dep:scirs2-linalg"]
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
 

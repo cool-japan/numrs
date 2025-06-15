@@ -304,9 +304,9 @@ fn test_permutation() {
     let mut perm_vec = perm.to_vec();
     perm_vec.sort();
 
-    for i in 0..10 {
+    for (i, &value) in perm_vec.iter().enumerate().take(10) {
         assert_eq!(
-            perm_vec[i], i,
+            value, i,
             "Permutation should contain each value from 0 to n-1"
         );
     }
@@ -344,7 +344,7 @@ fn test_dirichlet_distribution() {
     }
 
     // Calculate means
-    let mut means = vec![0.0; 3];
+    let mut means = [0.0; 3];
     for i in 0..1000 {
         means[0] += data[i * 3] / 1000.0;
         means[1] += data[i * 3 + 1] / 1000.0;
@@ -393,14 +393,14 @@ fn test_multivariate_normal_distribution() {
 
     // Calculate sample mean
     let data = samples.to_vec();
-    let mut sample_mean = vec![0.0; 2];
+    let mut sample_mean = [0.0; 2];
     for i in 0..1000 {
         sample_mean[0] += data[i * 2] / 1000.0;
         sample_mean[1] += data[i * 2 + 1] / 1000.0;
     }
 
     // Calculate sample covariance
-    let mut sample_cov = vec![0.0; 4];
+    let mut sample_cov = [0.0; 4];
     for i in 0..1000 {
         let diff0 = data[i * 2] - sample_mean[0];
         let diff1 = data[i * 2 + 1] - sample_mean[1];

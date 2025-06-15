@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use numrs2::io::SerializeFormat;
 use numrs2::prelude::*;
 use std::fs;

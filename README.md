@@ -1,18 +1,26 @@
-<h1 align="center">
-NumRS2: High-Performance Numerical Computing in Rust
-</h1><br>
+# NumRS2 - High-Performance Numerical Computing for Rust
 
-[![Rust CI](https://github.com/cool-japan/numrs/actions/workflows/rust.yml/badge.svg)](https://github.com/cool-japan/numrs/actions/workflows/rust.yml)
+[![Build Status](https://github.com/cool-japan/numrs/workflows/CI/badge.svg)](https://github.com/cool-japan/numrs/actions)
+[![Crates.io](https://img.shields.io/crates/v/numrs2.svg)](https://crates.io/crates/numrs2)
+[![Documentation](https://docs.rs/numrs2/badge.svg)](https://docs.rs/numrs2)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Crate](https://img.shields.io/crates/v/numrs2.svg)](https://crates.io/crates/numrs2)
 
-NumRS2 is the fundamental package for scientific computing with Rust. It provides:
+NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-- A powerful N-dimensional array object with broadcasting capabilities
-- Sophisticated mathematical functions that operate on arrays
-- Advanced linear algebra, statistical, and random number functionality
-- High-performance SIMD and parallel computation abstractions
-- Memory-optimized data structures for scientific computing
+## ✨ Architecture Highlights
+
+### 🏗️ Enhanced Design (v0.1.0-alpha.4)
+- **Trait-based architecture** for extensibility and generic programming
+- **Hierarchical error system** with rich context and recovery suggestions  
+- **Memory management** with pluggable allocators (Arena, Pool, NUMA-aware)
+- **Comprehensive documentation** with migration guides and best practices
+
+### 🔧 Core Features
+- **N-dimensional arrays** with efficient memory layout and broadcasting
+- **Advanced linear algebra** with BLAS/LAPACK integration and matrix decompositions
+- **SIMD optimization** with automatic vectorization and CPU feature detection
+- **Thread safety** with parallel processing support via Rayon
+- **Python interoperability** for easy migration from NumPy
 
 ## Main Features
 
@@ -43,7 +51,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.3", features = ["scirs"] }
+numrs2 = { version = "0.1.0-alpha.4", features = ["scirs"] }
 ```
 
 Or, when building:
@@ -165,7 +173,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-alpha.3"
+numrs2 = "0.1.0-alpha.4"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
@@ -268,21 +276,23 @@ For more details, see [Numerical Stability Enhancements](docs/NUMERICAL_STABILIT
 - Performance benchmarking and optimization
 - Advanced NumPy/SciPy compatibility features
 
-## Documentation
+## 📖 Documentation
 
-For detailed documentation, examples, and API reference:
+### 📚 Comprehensive Guides
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - System design and core concepts
+- **[Migration Guide](docs/MIGRATION_GUIDE.md)** - Upgrading from previous versions
+- **[Trait System Guide](docs/TRAIT_GUIDE.md)** - Generic programming with NumRS2
+- **[Error Handling Guide](docs/ERROR_HANDLING.md)** - Robust error management
+- **[Memory Management Guide](docs/MEMORY_MANAGEMENT.md)** - Optimizing memory usage
 
-- [Official API Documentation](https://docs.rs/numrs2)
+### 🔗 Additional Resources
+- [Official API Documentation](https://docs.rs/numrs2) - Complete API reference
 - [Getting Started Guide](GETTING_STARTED.md) - Essential information for beginners
 - [Installation Guide](INSTALL.md) - Detailed installation instructions
 - [User Guide](GUIDE.md) - Comprehensive guide to all NumRS features
 - [NumPy Migration Guide](NUMPY_MIGRATION.md) - Guide for NumPy users transitioning to NumRS2
 - [Implementation Status](IMPLEMENTATION_STATUS.md) - Current status and next steps
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute to NumRS2
-- [Benchmarking Guide](BENCHMARKING.md) - How to run and write benchmarks
-- [Release Process](RELEASE.md) - Instructions for creating releases
-- [Code of Conduct](CODE_OF_CONDUCT.md) - Community standards and expectations
-- [Governance](GOVERNANCE.md) - Project governance model
 
 Module-specific documentation:
   - [Random Module Guide](examples/README_RANDOM.md) - Random number generation

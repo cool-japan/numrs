@@ -1,9 +1,11 @@
+#![allow(deprecated)]
+
 use numrs2::prelude::*;
-use numrs2::random_base;
+use numrs2::random;
 
 fn main() -> Result<()> {
-    println!("NumRS2 Basic Usage Example");
-    println!("========================");
+    println!("NumRS2 v0.1.0-alpha.4 Basic Usage Example");
+    println!("==========================================");
 
     // Create arrays
     let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
@@ -61,7 +63,7 @@ fn main() -> Result<()> {
     println!("\nParallel sqrt: {}", parallel_sqrt);
 
     // Random arrays
-    let rand_arr = random_base::rand::<f64>(&[2, 3])?;
+    let rand_arr = random::rand::<f64>(&[2, 3])?;
     println!("\nrandom(2, 3) = {}", rand_arr);
 
     // Vector operations
@@ -79,17 +81,20 @@ fn main() -> Result<()> {
     println!("\nCondition Number Examples:");
     println!("Well-conditioned matrix:");
     println!("{}", well_conditioned);
-    println!("Condition number: {}", well_conditioned.cond().unwrap());
+    println!(
+        "Condition number: {}",
+        condition_number(&well_conditioned).unwrap()
+    );
     println!(
         "Is well-conditioned: {}",
-        well_conditioned.is_well_conditioned().unwrap()
+        condition_number(&well_conditioned).unwrap() < 1e6
     );
 
     println!("\nModerately ill-conditioned matrix:");
     println!("{}", moderately_ill_conditioned);
     println!(
         "Condition number: {}",
-        moderately_ill_conditioned.cond().unwrap()
+        condition_number(&moderately_ill_conditioned).unwrap()
     );
     println!(
         "Is well-conditioned: {}",

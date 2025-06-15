@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 // Benchmark for the `unique` function in NumRS2
 //
 // This example measures the performance of the unique function on arrays of

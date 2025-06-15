@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 // NumRS2 Type Conversion Example
 //
 // This example demonstrates the type conversion functionality in NumRS2,

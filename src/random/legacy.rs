@@ -1,7 +1,7 @@
-//! Basic random number generation
+//! Legacy random number generation interface
 //!
-//! This module provides basic functionality for random number generation.
-//! It's kept for backward compatibility.
+//! This module provides backward compatibility for the original random_base.rs functionality.
+//! It maintains the same API while being integrated into the unified random module structure.
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
@@ -15,7 +15,7 @@ use rand_distr::{Bernoulli, Distribution, Exp as Exponential, Gamma, LogNormal, 
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// A Generator for random number streams
+/// A Generator for random number streams (legacy interface)
 pub struct Generator {
     rng: Arc<Mutex<StdRng>>,
 }
