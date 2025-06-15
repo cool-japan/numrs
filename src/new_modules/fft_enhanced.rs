@@ -12,7 +12,7 @@ use std::f64::consts::PI;
 /// 2. Additional window functions
 /// 3. Optimized implementation for real-valued inputs
 /// 4. Implementation of the Stockwell transform (S-transform)
-
+/// 
 /// FFTEnhanced provides extended FFT functionality
 pub struct FFTEnhanced;
 
@@ -601,7 +601,7 @@ where
     for k in 0..m {
         let idx = if k < n {
             k * k
-        } else if k >= m - n + 1 {
+        } else if k > m - n {
             // This computes (m-k)*(m-k) which is equivalent to
             // the square of the "negative" frequency
             (m - k) * (m - k)

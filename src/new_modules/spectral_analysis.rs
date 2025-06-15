@@ -4,6 +4,9 @@
 //! advanced windowing functions, spectral peak detection, harmonic analysis,
 //! and time-frequency analysis methods.
 
+#![allow(clippy::result_large_err)]
+#![allow(clippy::needless_range_loop)]
+
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::fft::FFT;

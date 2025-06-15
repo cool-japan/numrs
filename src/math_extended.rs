@@ -13,25 +13,11 @@
 
 /// Special mathematical functions
 pub mod special {
-    //! Special functions from mathematical physics and engineering
-    //! 
-    //! Provides implementations similar to scipy.special, including:
-    //! - Error functions (erf, erfc)
-    //! - Gamma and related functions
-    //! - Bessel functions
-    //! - Hypergeometric functions
     pub use crate::new_modules::special::*;
 }
 
 /// Polynomial operations and utilities
 pub mod polynomial {
-    //! Polynomial manipulation and evaluation functions
-    //!
-    //! Provides functionality for:
-    //! - Polynomial evaluation and arithmetic
-    //! - Root finding
-    //! - Interpolation
-    //! - Polynomial fitting
     pub use crate::new_modules::polynomial::*;
 }
 

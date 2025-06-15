@@ -143,11 +143,6 @@ pub fn seed_rng(seed: u64) -> RandomState {
 
 /// Legacy backward compatibility module (re-exports from random_base.rs)
 pub mod random_base {
-    //! Legacy random number generation interface
-    //!
-    //! This module provides backward compatibility for the original random_base.rs functionality.
-    //! All functionality has been moved to the unified random module structure.
-    
     pub use super::legacy::*;
 }
 

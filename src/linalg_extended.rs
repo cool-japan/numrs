@@ -13,13 +13,11 @@
 
 /// Matrix decomposition operations
 pub mod decomposition {
-    //! Matrix decomposition algorithms (SVD, QR, Cholesky, LU)
     pub use crate::new_modules::matrix_decomp::*;
 }
 
 /// Eigenvalue and eigenvector operations  
 pub mod eigenvalue {
-    //! Eigenvalue and eigenvector computation for various matrix types
     pub use crate::new_modules::eigenvalues::*;
 }
 

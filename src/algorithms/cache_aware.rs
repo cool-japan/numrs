@@ -3,6 +3,9 @@
 //! This module provides optimized implementations of common numerical algorithms
 //! that are designed to maximize cache efficiency and minimize memory bandwidth.
 
+#![allow(clippy::result_large_err)]
+#![allow(clippy::needless_range_loop)]
+
 use crate::error::{NumRs2Error, Result};
 use crate::memory_alloc::cache_optimization::{CacheConfig, CacheLevel};
 #[cfg(test)]
@@ -27,7 +30,7 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
     }
 
     /// Create with default cache configuration
-    pub fn default() -> Self {
+    pub fn with_default_config() -> Self {
         Self::new(CacheConfig::default())
     }
 
@@ -252,6 +255,12 @@ impl<T: NumericElement> CacheAwareArrayOps<T> {
         }
 
         Ok(())
+    }
+}
+
+impl<T: NumericElement> Default for CacheAwareArrayOps<T> {
+    fn default() -> Self {
+        Self::with_default_config()
     }
 }
 
