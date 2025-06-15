@@ -505,12 +505,12 @@ impl SignalProcessor {
             // DC (index 0) and Nyquist (index n/2) remain unchanged
         } else {
             // Odd length: DC, positive frequencies, negative frequencies
-            for i in 1..(n + 1) / 2 {
+            for i in 1..n.div_ceil(2) {
                 fft_data[i] =
                     fft_data[i] * Complex::new(<T as NumCast>::from(2.0).unwrap(), T::zero());
             }
             // Zero out negative frequencies
-            for i in (n + 1) / 2..n {
+            for i in n.div_ceil(2)..n {
                 fft_data[i] = Complex::zero();
             }
             // Only DC (index 0) remains unchanged

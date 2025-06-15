@@ -248,7 +248,7 @@ impl ParallelLinAlg {
 
         // Aim for roughly square blocks
         let block_size = (elements_per_thread as f64).sqrt() as usize;
-        let block_size = block_size.max(32).min(512); // Reasonable bounds
+        let block_size = block_size.clamp(32, 512); // Reasonable bounds
 
         (block_size.min(m), block_size.min(n))
     }
@@ -305,7 +305,7 @@ impl ParallelLinAlg {
 
         let m = shape[0];
         let n = shape[1];
-        let sample_size = (m * n / 100).max(100).min(1000);
+        let sample_size = (m * n / 100).clamp(100, 1000);
 
         let mut non_zero_count = 0;
         for i in 0..sample_size {
@@ -346,9 +346,7 @@ impl ParallelLinAlg {
 
         let mut v = vec![T::zero(); n];
         v[0] = x[0] - alpha;
-        for i in 1..n {
-            v[i] = x[i];
-        }
+        v[1..n].copy_from_slice(&x[1..n]);
 
         let v_norm_sq = v
             .iter()

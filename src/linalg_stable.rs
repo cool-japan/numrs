@@ -598,9 +598,7 @@ impl StableDecompositions {
 
         let mut v = vec![T::zero(); n];
         v[0] = x[0] - alpha;
-        for i in 1..n {
-            v[i] = x[i];
-        }
+        v[1..n].copy_from_slice(&x[1..n]);
 
         let v_norm_sq = v
             .iter()

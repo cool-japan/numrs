@@ -234,7 +234,7 @@ impl StrideCalculator {
 
         // If the innermost dimension is not SIMD-aligned, adjust strides
         if innermost_size % vector_width != 0 {
-            let padded_size = ((innermost_size + vector_width - 1) / vector_width) * vector_width;
+            let padded_size = innermost_size.div_ceil(vector_width) * vector_width;
 
             // Recalculate strides with padding
             strides[innermost_dim] = 1;
@@ -324,7 +324,7 @@ impl StrideCalculator {
 
         // Calculate cache utilization for each dimension
         let mut cache_utilizations = Vec::new();
-        for (_, (&stride, &dim_size)) in strides.iter().zip(shape.iter()).enumerate() {
+        for (&stride, &dim_size) in strides.iter().zip(shape.iter()) {
             let utilization = if stride == 0 {
                 0.0
             } else {

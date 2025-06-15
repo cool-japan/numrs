@@ -597,7 +597,7 @@ where
 {
     GLOBAL_TUNER
         .get()
-        .and_then(|tuner| tuner.lock().ok().map(|guard| f(&*guard)))
+        .and_then(|tuner| tuner.lock().ok().map(|guard| f(&guard)))
 }
 
 /// Get mutable reference to the global performance tuner
@@ -607,7 +607,7 @@ where
 {
     GLOBAL_TUNER
         .get()
-        .and_then(|tuner| tuner.lock().ok().map(|mut guard| f(&mut *guard)))
+        .and_then(|tuner| tuner.lock().ok().map(|mut guard| f(&mut guard)))
 }
 
 #[cfg(test)]

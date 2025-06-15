@@ -150,7 +150,7 @@ impl SparseOpsAdvanced {
             if i < m && j < n {
                 let x_val = x.get(&[j])?;
                 let current = y.get(&[i])?;
-                y.set(&[i], current + alpha * value.clone() * x_val)?;
+                y.set(&[i], current + alpha * *value * x_val)?;
             }
         }
 
@@ -464,9 +464,9 @@ impl SparseOpsAdvanced {
             let j = indices[1];
 
             if i <= j {
-                u.set(i, j, value.clone())?;
+                u.set(i, j, *value)?;
             } else {
-                l.set(i, j, value.clone())?;
+                l.set(i, j, *value)?;
             }
         }
 

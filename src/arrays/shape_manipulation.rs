@@ -362,7 +362,7 @@ impl ShapeEngine {
         }
 
         // Normalize k to range [0, 4)
-        let k_norm = ((k % 4) + 4) % 4;
+        let k_norm = k.rem_euclid(4);
 
         match k_norm {
             0 => Ok(view.to_vec()), // No rotation
@@ -644,7 +644,7 @@ impl ShapeEngine {
         let mut min_offset = 0;
         let mut max_offset = 0;
 
-        for (_, (&dim_size, &stride)) in shape.iter().zip(strides.iter()).enumerate() {
+        for (&dim_size, &stride) in shape.iter().zip(strides.iter()) {
             if dim_size > 1 {
                 let offset = (dim_size - 1) * stride;
                 if stride > 0 {

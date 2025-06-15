@@ -449,7 +449,7 @@ impl AllocatorBenchmark {
             // Higher values indicate more fragmentation
             results.fragmentation_level =
                 1.0 - (results.total_bytes_allocated as f64 / results.peak_memory_usage as f64);
-            results.fragmentation_level = results.fragmentation_level.max(0.0).min(1.0);
+            results.fragmentation_level = results.fragmentation_level.clamp(0.0, 1.0);
         }
     }
 

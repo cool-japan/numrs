@@ -9,11 +9,12 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 /// Load balancing strategies
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BalancingStrategy {
     /// Round-robin task distribution
     RoundRobin,
     /// Least-loaded worker gets next task
+    #[default]
     LeastLoaded,
     /// Weighted distribution based on worker capacity
     WeightedCapacity,
@@ -465,6 +466,12 @@ pub struct LoadBalancingAdvisor {
     analysis_window: Duration,
 }
 
+impl Default for LoadBalancingAdvisor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LoadBalancingAdvisor {
     pub fn new() -> Self {
         Self {
@@ -568,7 +575,7 @@ impl LoadBalancingAdvisor {
         let cv = variance.sqrt() / mean_throughput;
 
         // Convert CV to stability score (lower CV = higher stability)
-        (1.0 / (1.0 + cv)).max(0.0).min(1.0)
+        (1.0 / (1.0 + cv)).clamp(0.0, 1.0)
     }
 }
 
@@ -580,12 +587,6 @@ pub struct LoadBalancingAnalysis {
     pub response_time_trend: f64,
     pub stability_score: f64,
     pub recommendation: BalancingStrategy,
-}
-
-impl Default for BalancingStrategy {
-    fn default() -> Self {
-        BalancingStrategy::LeastLoaded
-    }
 }
 
 #[cfg(test)]

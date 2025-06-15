@@ -217,9 +217,7 @@ impl OptimizedBlas {
         let target_block_elements = l1_cache_size / (3 * element_size);
 
         // Calculate block dimensions
-        let block_size = ((target_block_elements as f64).cbrt() as usize)
-            .max(32)
-            .min(256);
+        let block_size = ((target_block_elements as f64).cbrt() as usize).clamp(32, 256);
 
         let block_m = block_size.min(m);
         let block_n = block_size.min(n);
@@ -227,10 +225,8 @@ impl OptimizedBlas {
 
         // Adjust for cache line alignment (64 bytes typical)
         let cache_line_elements = 64 / element_size;
-        let aligned_block_m =
-            ((block_m + cache_line_elements - 1) / cache_line_elements) * cache_line_elements;
-        let aligned_block_n =
-            ((block_n + cache_line_elements - 1) / cache_line_elements) * cache_line_elements;
+        let aligned_block_m = block_m.div_ceil(cache_line_elements) * cache_line_elements;
+        let aligned_block_n = block_n.div_ceil(cache_line_elements) * cache_line_elements;
 
         (aligned_block_m.min(m), aligned_block_n.min(n), block_k)
     }
@@ -578,8 +574,8 @@ where
             }
 
             // Update permutation
-            let temp = p.get(&[k])? as usize;
-            p.set(&[k], p.get(&[pivot_row])? as usize)?;
+            let temp = p.get(&[k])?;
+            p.set(&[k], p.get(&[pivot_row])?)?;
             p.set(&[pivot_row], temp)?;
         }
 

@@ -774,12 +774,12 @@ impl RandomState {
 
         // Optimized approach: generate component selections and normal samples separately
         let mut component_selections = Vec::with_capacity(size);
-        
+
         // Generate all component selections at once
         for _ in 0..size {
             let u = <T as NumCast>::from(rng.random::<f64>()).unwrap_or(T::zero());
             let mut selected_component = 0;
-            
+
             for (i, &cw) in cumulative_weights.iter().enumerate() {
                 if u <= cw {
                     selected_component = i;
@@ -788,13 +788,13 @@ impl RandomState {
             }
             component_selections.push(selected_component);
         }
-        
+
         // Count how many samples we need from each component
         let mut component_counts = vec![0usize; n_components];
         for &comp in &component_selections {
             component_counts[comp] += 1;
         }
-        
+
         // Generate all normal samples for each component in batches
         let mut component_samples = Vec::with_capacity(n_components);
         for i in 0..n_components {
@@ -805,7 +805,7 @@ impl RandomState {
                 component_samples.push(Vec::new());
             }
         }
-        
+
         // Assign samples in the original order
         let mut component_indices = vec![0usize; n_components];
         for &selected_component in &component_selections {

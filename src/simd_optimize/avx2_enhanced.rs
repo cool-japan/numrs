@@ -510,9 +510,7 @@ impl EnhancedSimdOps {
         }
 
         // Handle remaining elements
-        for i in simd_len..len {
-            dst[i] = src[i];
-        }
+        dst[simd_len..len].copy_from_slice(&src[simd_len..len]);
     }
 }
 
@@ -522,6 +520,12 @@ pub struct SimdPerformanceMonitor {
     pub total_elements: u64,
     pub cache_misses: u64,
     pub vectorization_ratio: f64,
+}
+
+impl Default for SimdPerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SimdPerformanceMonitor {

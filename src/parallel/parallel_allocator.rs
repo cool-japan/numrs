@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 thread_local! {
     /// Thread-local allocator for reduced contention
-    static LOCAL_ALLOCATOR: RefCell<Option<ThreadLocalState>> = RefCell::new(None);
+    static LOCAL_ALLOCATOR: RefCell<Option<ThreadLocalState>> = const { RefCell::new(None) };
 }
 
 /// Thread-local allocation state
@@ -513,6 +513,14 @@ impl ThreadLocalAllocator {
     }
 
     /// Deallocate using thread-local allocator
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - `ptr` was allocated with this allocator using the same `layout`
+    /// - `ptr` is not used after this call
+    /// - The memory region pointed to by `ptr` is not accessed concurrently
+    /// - The layout matches exactly the layout used during allocation
     pub unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) -> Result<()> {
         LOCAL_ALLOCATOR.with(|local| {
             let mut local_ref = local.borrow_mut();

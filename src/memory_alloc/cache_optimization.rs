@@ -669,13 +669,13 @@ impl CacheOptimizedBuilder {
 
         let recommended_block_size = if total_size <= self.config.l1_cache_size {
             // Fits in L1, use small blocks
-            (self.config.l1_cache_size / 4 / element_size) as usize
+            self.config.l1_cache_size / 4 / element_size
         } else if total_size <= self.config.l2_cache_size {
             // Fits in L2, use medium blocks
-            (self.config.l2_cache_size / 8 / element_size) as usize
+            self.config.l2_cache_size / 8 / element_size
         } else {
             // Large data, use L3-optimized blocks
-            (self.config.l3_cache_size / 16 / element_size) as usize
+            self.config.l3_cache_size / 16 / element_size
         };
 
         CacheOptimizationParams {

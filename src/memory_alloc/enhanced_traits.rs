@@ -19,6 +19,10 @@ use std::sync::{Arc, Mutex};
 use super::strategy::{MemoryAllocator as OldMemoryAllocator, StandardAllocator};
 use super::{AlignedAllocator, ArenaAllocator, PoolAllocator};
 
+// Type alias for complex allocator cache type
+type AllocatorCache =
+    Arc<Mutex<HashMap<String, Box<dyn SpecializedAllocator<Error = NumRs2Error>>>>>;
+
 // =============================================================================
 // BRIDGE IMPLEMENTATIONS FOR EXISTING ALLOCATORS
 // =============================================================================
@@ -224,8 +228,7 @@ impl ArrayAllocator for NumericalArrayAllocator {
 #[derive(Debug)]
 pub struct IntelligentAllocationStrategy {
     stats: Arc<Mutex<StrategyStats>>,
-    allocator_cache:
-        Arc<Mutex<HashMap<String, Box<dyn SpecializedAllocator<Error = NumRs2Error>>>>>,
+    allocator_cache: AllocatorCache,
 }
 
 impl Default for IntelligentAllocationStrategy {

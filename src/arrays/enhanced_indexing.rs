@@ -319,16 +319,15 @@ impl IndexingEngine {
             .iter()
             .zip(array.shape().dims.iter())
             .map(|(&idx, &dim_size)| {
-                let positive_idx = if idx < 0 {
+                if idx < 0 {
                     (dim_size as isize + (idx % dim_size as isize)) as usize
                 } else {
                     (idx as usize) % dim_size
-                };
-                positive_idx
+                }
             })
             .collect();
 
-        array.get(&circular_indices).map(|x| *x)
+        array.get(&circular_indices).copied()
     }
 
     /// Block indexing for accessing rectangular sub-arrays

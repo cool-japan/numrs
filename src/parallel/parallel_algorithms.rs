@@ -117,7 +117,7 @@ impl ParallelArrayOps {
         }
 
         let num_threads = self.config.num_threads.unwrap_or(4);
-        let _chunk_size = (data.len() + num_threads - 1) / num_threads;
+        let _chunk_size = data.len().div_ceil(num_threads);
 
         // For now, use sequential processing to avoid complex parallel reduction
         // In a production implementation, we'd use proper parallel reduction techniques
