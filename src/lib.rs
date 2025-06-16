@@ -44,9 +44,11 @@
 pub mod algorithms;
 pub mod array;
 pub mod array_ops;
+pub mod array_ops_legacy;
 pub mod arrays;
 pub mod axis_ops;
 pub mod blas;
+pub mod char;
 pub mod comparisons;
 pub mod conversions;
 pub mod error;
@@ -118,10 +120,11 @@ pub mod doctests {}
 pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
-    pub use crate::array_ops::{
-        atleast_1d, atleast_2d, atleast_3d, flatten, frombuffer, fromfunction, fromiter, moveaxis,
-        ravel, select, swapaxes, where_cond,
-    };
+    // Import specific non-conflicting functions from legacy module  
+    pub use crate::array_ops_legacy::rollaxis;
+    // String and character operations
+    pub use crate::char;
+    pub use crate::char::{StringArray, StringElement, array_from_strings};
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
     pub use crate::comparisons::{
@@ -256,7 +259,7 @@ pub mod prelude {
 
     // Re-export advanced types
     pub use crate::types::custom::CustomDType;
-    pub use crate::types::datetime::{DateTime64, DateTimeUnit, DateUnit, TimeDelta64};
+    pub use crate::types::datetime::{DateTime64, DateTimeUnit, DateUnit, TimeDelta64, Timezone, TimezoneDateTime, datetime_array, business_days};
     pub use crate::types::structured::{DType, Field, RecordArray, StructuredArray};
 
     // Re-export ndarray types for convenience
@@ -444,6 +447,22 @@ mod tests {
         };
         assert_relative_eq!(b_check.to_vec()[0], b.to_vec()[0], epsilon = 1e-10);
         assert_relative_eq!(b_check.to_vec()[1], b.to_vec()[1], epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_tensor_operations() {
+        // Test Kronecker product via prelude
+        let a = Array::<f64>::from_vec(vec![1.0, 2.0]).reshape(&[1, 2]);
+        let b = Array::<f64>::from_vec(vec![3.0, 4.0]).reshape(&[2, 1]);
+        
+        let kron_result = kron(&a, &b).unwrap();
+        assert_eq!(kron_result.shape(), &[2, 2]);
+        assert_eq!(kron_result.to_vec(), vec![3.0, 6.0, 4.0, 8.0]);
+        
+        // Test tensordot via prelude
+        let tensordot_result = tensordot(&a, &b, &[1, 0]).unwrap();
+        assert_eq!(tensordot_result.shape(), &[1, 1]);
+        assert_relative_eq!(tensordot_result.to_vec()[0], 11.0, epsilon = 1e-10);
     }
 
     #[test]

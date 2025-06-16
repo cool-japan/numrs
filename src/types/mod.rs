@@ -9,5 +9,5 @@ pub mod structured;
 
 // Re-export the most commonly used types
 pub use custom::CustomDType;
-pub use datetime::{DateTime64, DateTimeUnit, DateUnit, TimeDelta64};
+pub use datetime::{DateTime64, DateTimeUnit, DateUnit, TimeDelta64, Timezone, TimezoneDateTime, datetime_array, business_days};
 pub use structured::{DType, Field, RecordArray, StructuredArray};
