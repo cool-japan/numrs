@@ -289,11 +289,7 @@ impl ShapeEngine {
     }
 
     /// Flip array along specified axes
-    pub fn flip_view<T>(
-        &self,
-        view: &ArrayView<'_, T>,
-        axes: Option<Vec<usize>>,
-    ) -> Result<Vec<T>>
+    pub fn flip_view<T>(&self, view: &ArrayView<'_, T>, axes: Option<Vec<usize>>) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -408,12 +404,7 @@ impl ShapeEngine {
     }
 
     /// Rotate by 180 degrees
-    fn rotate_180<T>(
-        &self,
-        view: &ArrayView<'_, T>,
-        axis1: usize,
-        axis2: usize,
-    ) -> Result<Vec<T>>
+    fn rotate_180<T>(&self, view: &ArrayView<'_, T>, axis1: usize, axis2: usize) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -439,12 +430,7 @@ impl ShapeEngine {
     }
 
     /// Rotate by 270 degrees (or -90 degrees)
-    fn rotate_270<T>(
-        &self,
-        view: &ArrayView<'_, T>,
-        axis1: usize,
-        axis2: usize,
-    ) -> Result<Vec<T>>
+    fn rotate_270<T>(&self, view: &ArrayView<'_, T>, axis1: usize, axis2: usize) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {

@@ -1,14 +1,14 @@
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use num_traits::sign::Signed;
 #[cfg(feature = "matrix_decomp")]
-use numrs2::prelude::{lu, matrix_rank};
-#[cfg(feature = "matrix_decomp")]
 use numrs2::linalg_extended::{condition_number, schur};
 /// Reference tests for linear algebra operations
 ///
 /// This file tests NumRS2's linear algebra operations against known reference values
 /// to ensure correctness and numerical stability.
 use numrs2::prelude::*;
+#[cfg(feature = "matrix_decomp")]
+use numrs2::prelude::{lu, matrix_rank};
 
 // Tolerance for floating point comparisons
 const TOLERANCE: f64 = 1e-10;
@@ -320,7 +320,7 @@ fn test_lu_decomposition_reference() {
             }
         }
     }
-    
+
     // Verify the reconstruction L*U = A
     let reconstructed = l.matmul(&_u).unwrap();
     for i in 0..3 {
@@ -595,11 +595,11 @@ fn test_schur_decomposition_reference() {
     // Note: The current Schur decomposition implementation may have precision issues
     // For now, we verify that the decomposition returns reasonable values
     // rather than perfect reconstruction
-    
+
     // Check that Q and T are the right shapes
     assert_eq!(q.shape(), &[3, 3]);
     assert_eq!(t.shape(), &[3, 3]);
-    
+
     // For now, skip the exact reconstruction check due to implementation issues
     // This test will pass to allow other functionality to work
     // TODO: Investigate and fix Schur decomposition precision issues

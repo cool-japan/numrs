@@ -1,10 +1,10 @@
 use approx::assert_abs_diff_eq;
 #[cfg(feature = "matrix_decomp")]
-use numrs2::prelude::lu;
-#[cfg(feature = "matrix_decomp")]
 use numrs2::linalg_extended::condition_number;
 #[cfg(feature = "matrix_decomp")]
 use numrs2::new_modules::matrix_decomp;
+#[cfg(feature = "matrix_decomp")]
+use numrs2::prelude::lu;
 /// Property-based tests for linear algebra operations
 ///
 /// This file tests the mathematical properties and relationships

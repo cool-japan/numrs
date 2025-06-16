@@ -78,10 +78,12 @@ where
             let s_data = s.to_vec();
             let max_s = s_data.iter().fold(
                 <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero(),
-                |max, &val| if val > max { val } else { max }
+                |max, &val| if val > max { val } else { max },
             );
 
-            <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(max_dim).unwrap() * eps * max_s
+            <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(max_dim).unwrap()
+                * eps
+                * max_s
         }
     };
 

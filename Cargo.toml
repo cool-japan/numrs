@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.1.0"
+version = "0.1.0-alpha.5"
 edition = "2021"
 authors = ["cool-japan/NumRS2 (KitaSan) Team"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
