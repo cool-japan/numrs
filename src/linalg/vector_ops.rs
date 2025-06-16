@@ -272,6 +272,30 @@ pub fn vdot<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<T> {
     a.dot(b)
 }
 
+/// Trait for real types that support vectorized dot product (vdot)
+pub trait RealVectorDotProduct<T> {
+    fn vdot(&self, other: &Array<T>) -> Result<T>;
+}
+
+/// Trait for complex types that support vectorized dot product (vdot)
+pub trait ComplexVectorDotProduct<T> {
+    fn vdot(&self, other: &Array<Complex<T>>) -> Result<Complex<T>>;
+}
+
+/// Implementation for real types
+impl<T: Float + Clone + Debug> RealVectorDotProduct<T> for Array<T> {
+    fn vdot(&self, other: &Array<T>) -> Result<T> {
+        vdot(self, other)
+    }
+}
+
+/// Implementation for complex types  
+impl<T: Float + Clone + Debug> ComplexVectorDotProduct<T> for Array<Complex<T>> {
+    fn vdot(&self, other: &Array<Complex<T>>) -> Result<Complex<T>> {
+        complex_vdot(self, other)
+    }
+}
+
 /// Compute the vectorized dot product for complex arrays
 pub fn complex_vdot<T: Float + Clone + Debug>(
     a: &Array<Complex<T>>,

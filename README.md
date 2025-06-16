@@ -9,7 +9,7 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
 
 ## ✨ Architecture Highlights
 
-### 🏗️ Enhanced Design (v0.1.0-alpha.4)
+### 🏗️ Enhanced Design
 - **Trait-based architecture** for extensibility and generic programming
 - **Hierarchical error system** with rich context and recovery suggestions  
 - **Memory management** with pluggable allocators (Arena, Pool, NUMA-aware)
@@ -51,7 +51,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.4", features = ["scirs"] }
+numrs2 = { version = "0.1.0", features = ["scirs"] }
 ```
 
 Or, when building:
@@ -173,7 +173,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-alpha.4"
+numrs2 = "0.1.0"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
@@ -197,84 +197,35 @@ NumRS is built on top of several battle-tested libraries:
 - **Rayon**: Enables parallel computation capabilities
 - **num-traits**: Provides generic numeric traits for numerical operations
 
-## Current Status
+## Features
 
-NumRS is currently under active development. The current implementation includes:
+NumRS2 provides a comprehensive suite of numerical computing capabilities:
 
-✅ Complete:
-- Basic array operations with broadcasting
-- Integration with BLAS for fundamental operations
-- SIMD optimization with CPU feature detection
-- Memory layout optimization for cache efficiency
-- Optimized data placement strategies
-- Enhanced parallel processing with optimized thresholds
-- Fine-grained parallelization strategies
-- Adaptive scheduling for parallel computations
-- Foundational mathematical functions
-- Numerically stable matrix decompositions (SVD, QR, Cholesky, LU, Schur, COD)
-- Condition number calculation and numerical stability assessment
-- Eigenvalue and eigenvector computation
-- Fast Fourier Transform (FFT) implementation:
-  - Optimized 1D and 2D transforms with efficient transpose operations
-  - Real FFT specialization for better memory usage
-  - Frequency domain manipulation (fftshift/ifftshift)
-  - Window functions for spectral analysis
-  - Numerically stable implementation with code quality improvements
-- Polynomial operations and interpolation
-- Sparse matrix representations
-- Memory-mapped arrays for large datasets
-- Support for datetime64 and timedelta64 data types
-- Structured arrays and record arrays with custom dtypes
+### Core Functionality
+- **N-dimensional arrays** with efficient memory layout and broadcasting
+- **Linear algebra operations** with BLAS/LAPACK integration
+- **Matrix decompositions** (SVD, QR, Cholesky, LU, Schur, COD)
+- **Eigenvalue and eigenvector computation**
+- **Mathematical functions** with numerical stability optimizations
 
-## Numerical Stability and Code Quality Enhancements
+### Performance Optimizations
+- **SIMD acceleration** with automatic CPU feature detection
+- **Parallel processing** with adaptive scheduling and load balancing  
+- **Memory optimization** with cache-friendly data structures
+- **Vectorized operations** for improved computational efficiency
 
-NumRS includes advanced numerical stability features and code quality improvements to handle challenging computational scenarios:
+### Advanced Features
+- **Fast Fourier Transform** with 1D/2D transforms and windowing functions
+- **Polynomial operations** and interpolation methods
+- **Sparse matrix support** for memory-efficient computations
+- **Random number generation** with multiple distribution support
+- **Statistical analysis** functions and descriptive statistics
 
-### Numerical Stability
-
-- **Enhanced Cholesky Decomposition**: Improved stability for ill-conditioned matrices using:
-  - Dynamic scaling to improve conditioning
-  - Gershgorin circle-based eigenvalue estimation
-  - Intelligent diagonal perturbation
-  - Special case detection for 2×2 matrices
-
-- **Robust QR Decomposition**: Enhanced orthogonality preservation with:
-  - Comprehensive orthogonality verification with multiple metrics
-  - Modified Gram-Schmidt reorthogonalization for severe cases
-  - Matrix consistency enforcement through QR = A verification
-  - Adaptive tolerance thresholds based on matrix condition
-
-- **Stable Special Functions**: Numerically stable implementations including:
-  - Bessel K function with guaranteed monotonicity
-  - Specialized algorithms for different argument ranges
-  - Recurrence relation accuracy for higher orders
-  - Asymptotic expansions with correction terms
-
-### Code Quality Improvements
-
-- **Optimized FFT Implementation**: Enhanced FFT module with:
-  - Improved matrix transpose operations using iterators and enumeration
-  - Better memory management with pre-allocation of result vectors
-  - More efficient and cleaner transpose operations in 2D transforms
-  - Enhanced documentation and comments for complex operations
-  - Clearer handling of odd-sized array operations in frequency shifting
-
-- **Zero-Warnings Approach**: Systematic elimination of compiler and clippy warnings:
-  - Improved code patterns and idioms throughout the codebase
-  - Better type safety with appropriate trait constraints
-  - More consistent naming and code organization
-
-For more details, see [Numerical Stability Enhancements](docs/NUMERICAL_STABILITY_ENHANCEMENTS.md)
-
-🚧 In Progress:
-- Custom memory allocators for numerical workloads
-- GPU acceleration for applicable operations
-- PyO3 bindings for Python interoperability
-- Comprehensive test suite expansion
-  - Property testing for numerical operations
-  - Reference testing against NumPy
-- Performance benchmarking and optimization
-- Advanced NumPy/SciPy compatibility features
+### Integration & Interoperability
+- **GPU acceleration** support via WGPU (optional)
+- **SciRS2 integration** for advanced statistical distributions (optional)
+- **Memory-mapped arrays** for large dataset handling
+- **Serialization support** for data persistence
 
 ## 📖 Documentation
 

@@ -3,7 +3,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, ToPrimitive};
+use num_traits::Float;
 use std::fmt::Debug;
 
 // Matrix decomposition submodule
@@ -20,8 +20,14 @@ pub mod matrix_ops;
 pub mod tensor_ops;
 
 // Re-export all functions for backward compatibility
-pub use decomposition::{cholesky, eig, matrix_rank, qr, svd};
-pub use solve::{inv, pinv, solve};
+pub use decomposition::{cholesky, eig, qr, svd};
+pub use solve::{inv, solve};
+
+// Re-export conditional features
+#[cfg(feature = "matrix_decomp")]
+pub use decomposition::matrix_rank;
+#[cfg(feature = "matrix_decomp")]
+pub use solve::pinv;
 pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
 pub use matrix_ops::{det, matrix_power};
 pub use tensor_ops::{kron, tensordot};
@@ -846,7 +852,7 @@ where
 #[cfg(not(feature = "matrix_decomp"))]
 impl<T> Array<T>
 where
-    T: Float + Clone + Debug,
+    T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display,
 {
     /// Compute the determinant of a matrix using LU decomposition for large matrices
     /// and direct formula for small matrices.

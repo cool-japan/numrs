@@ -72,6 +72,7 @@ where
     };
 
     // Convert to Array types
+    #[allow(unused_mut)] // q_array is only modified in debug builds for orthogonality correction
     let mut q_array = Array::from_ndarray(q.into_dyn());
     let mut r_array = Array::from_ndarray(r.into_dyn());
 

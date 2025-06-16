@@ -514,7 +514,7 @@ impl RecordArray {
         let mut new_array = StructuredArray::new(self.array.shape(), new_dtype);
 
         // Copy existing data to the new array
-        for (existing_field_name, _) in &self.field_cache {
+        for existing_field_name in self.field_cache.keys() {
             if existing_field_name != field_name {
                 let size = self.array.size();
                 for i in 0..size {
@@ -722,7 +722,11 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 // Find the null terminator or use the full length
                 let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
                 let value = String::from_utf8_lossy(&bytes[0..end]).to_string();
-                Ok(unsafe { std::mem::transmute_copy(&value) })
+                // SAFETY: We've verified T is String, using ptr casting instead of transmute_copy
+                let ptr = &value as *const String as *const T;
+                let result = unsafe { std::ptr::read(ptr) };
+                std::mem::forget(value); // Prevent double free for non-Copy types
+                Ok(result)
             } else {
                 Err(NumRs2Error::TypeCastError("Type mismatch for String".to_string()))
             }
@@ -736,7 +740,11 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let real = f32::from_le_bytes(real_buf);
                 let imag = f32::from_le_bytes(imag_buf);
                 let value = Complex::new(real, imag);
-                Ok(unsafe { std::mem::transmute_copy(&value) })
+                // SAFETY: We've verified T is Complex<f32>, using ptr casting instead of transmute_copy
+                let ptr = &value as *const Complex<f32> as *const T;
+                let result = unsafe { std::ptr::read(ptr) };
+                let _ = value; // Prevent double free
+                Ok(result)
             } else {
                 Err(NumRs2Error::TypeCastError("Type mismatch for Complex32".to_string()))
             }
@@ -750,7 +758,11 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let real = f64::from_le_bytes(real_buf);
                 let imag = f64::from_le_bytes(imag_buf);
                 let value = Complex::new(real, imag);
-                Ok(unsafe { std::mem::transmute_copy(&value) })
+                // SAFETY: We've verified T is Complex<f64>, using ptr casting instead of transmute_copy
+                let ptr = &value as *const Complex<f64> as *const T;
+                let result = unsafe { std::ptr::read(ptr) };
+                let _ = value; // Prevent double free
+                Ok(result)
             } else {
                 Err(NumRs2Error::TypeCastError("Type mismatch for Complex64".to_string()))
             }
@@ -865,10 +877,10 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let mut bytes = string_value.as_bytes().to_vec();
                 
                 // Pad with zeros or truncate to the specified length
-                if bytes.len() < *max_len {
-                    bytes.resize(*max_len, 0);
-                } else if bytes.len() > *max_len {
-                    bytes.truncate(*max_len);
+                match bytes.len().cmp(max_len) {
+                    std::cmp::Ordering::Less => bytes.resize(*max_len, 0),
+                    std::cmp::Ordering::Greater => bytes.truncate(*max_len),
+                    std::cmp::Ordering::Equal => {},
                 }
                 
                 Ok(bytes)

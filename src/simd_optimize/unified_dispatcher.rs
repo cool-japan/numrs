@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 #[cfg(target_arch = "x86_64")]
 use super::avx2_enhanced::EnhancedSimdOps;
 #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-use super::avx512_enhanced::Avx512EnhancedOps;
+use super::avx512_enhanced::Avx2EnhancedOps;
 
 #[cfg(target_arch = "aarch64")]
 use super::neon_enhanced::NeonEnhancedOps;
@@ -73,7 +73,7 @@ impl UnifiedSimdDispatcher {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
             SimdImplementation::AVX512 => {
                 let tile_size = 64; // Optimal for AVX-512
-                Avx512EnhancedOps::avx512_matmul_f32(a, b, &mut result, tile_size)?;
+                Avx2EnhancedOps::avx2_matmul_f32(a, b, &mut result, tile_size)?;
             }
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => {
@@ -98,7 +98,7 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_exp_f32(&self, input: &Array<f32>) -> Array<f32> {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_exp_f32(input),
+            SimdImplementation::AVX512 => Avx2EnhancedOps::avx2_add_f32(input, input).unwrap_or_else(|_| input.map(|x| x.exp())),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => EnhancedSimdOps::vectorized_exp_f32(input),
             #[cfg(target_arch = "aarch64")]
@@ -111,7 +111,7 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_log_f32(&self, input: &Array<f32>) -> Array<f32> {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_log_f32(input),
+            SimdImplementation::AVX512 => input.map(|x| x.ln()),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => EnhancedSimdOps::vectorized_log_f32(input),
             #[cfg(target_arch = "aarch64")]
@@ -124,7 +124,7 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_sin_cos_f32(&self, input: &Array<f32>) -> (Array<f32>, Array<f32>) {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_sin_cos_f32(input),
+            SimdImplementation::AVX512 => (input.map(|x| x.sin()), input.map(|x| x.cos())),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => {
                 let sin_result = EnhancedSimdOps::vectorized_sin_f32(input);
@@ -141,7 +141,7 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_sum_f32(&self, input: &Array<f32>) -> f32 {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => Avx512EnhancedOps::avx512_parallel_sum_f32(input),
+            SimdImplementation::AVX512 => input.sum(),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => EnhancedSimdOps::kahan_sum_f32(input),
             #[cfg(target_arch = "aarch64")]

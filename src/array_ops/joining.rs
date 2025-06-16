@@ -275,5 +275,27 @@ pub fn r_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 
 /// Translate slice objects to concatenation along the second axis  
 pub fn c_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
-    concatenate(arrays, 1)
+    if arrays.is_empty() {
+        return Err(NumRs2Error::InvalidOperation("No arrays to concatenate".into()));
+    }
+
+    // Check if all arrays are 1D
+    let all_1d = arrays.iter().all(|arr| arr.ndim() == 1);
+    
+    if all_1d {
+        // For 1D arrays, convert them to column vectors and then concatenate along axis 1
+        let mut column_vectors = Vec::with_capacity(arrays.len());
+        for &arr in arrays {
+            let shape = arr.shape();
+            let new_shape = vec![shape[0], 1]; // Convert [n] to [n, 1]
+            column_vectors.push(arr.reshape(&new_shape));
+        }
+        
+        // Create references for concatenation
+        let column_refs: Vec<&Array<T>> = column_vectors.iter().collect();
+        concatenate(&column_refs, 1)
+    } else {
+        // For arrays with 2+ dimensions, concatenate directly along axis 1
+        concatenate(arrays, 1)
+    }
 }

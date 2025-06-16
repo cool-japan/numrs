@@ -13,6 +13,9 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::str::FromStr;
 
+/// Type alias for converter functions used in genfromtxt
+pub type ConverterFn = Box<dyn Fn(&str) -> Result<String>>;
+
 /// Options for loading text files
 #[derive(Debug, Clone)]
 pub struct LoadTxtOptions {
@@ -86,7 +89,7 @@ pub struct GenFromTxtOptions {
     /// Number of rows to skip at end (default: 0)
     pub skip_footer: usize,
     /// Dictionary of converter functions for columns
-    pub converters: HashMap<usize, Box<dyn Fn(&str) -> Result<String>>>,
+    pub converters: HashMap<usize, ConverterFn>,
     /// Values representing missing data
     pub missing_values: HashMap<usize, Vec<String>>,
     /// Value to substitute for missing data
@@ -115,14 +118,15 @@ pub struct GenFromTxtOptions {
 
 impl Default for GenFromTxtOptions {
     fn default() -> Self {
-        let mut default_missing = Vec::new();
-        default_missing.push("".to_string());
-        default_missing.push("N/A".to_string());
-        default_missing.push("NA".to_string());
-        default_missing.push("NULL".to_string());
-        default_missing.push("nan".to_string());
-        default_missing.push("NaN".to_string());
-        default_missing.push("NAN".to_string());
+        let default_missing = vec![
+            "".to_string(),
+            "N/A".to_string(),
+            "NA".to_string(),
+            "NULL".to_string(),
+            "nan".to_string(),
+            "NaN".to_string(),
+            "NAN".to_string(),
+        ];
         
         Self {
             dtype: "f64".to_string(),

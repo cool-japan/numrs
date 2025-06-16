@@ -1,5 +1,3 @@
-#![allow(deprecated)] // Allow deprecated warnings during API transition
-#![allow(dead_code)] // Allow dead code during API transition
 
 use approx::assert_abs_diff_eq;
 #[cfg(feature = "matrix_decomp")]
@@ -9,6 +7,10 @@ use numrs2::new_modules::matrix_decomp;
 /// This file tests the mathematical properties and relationships
 /// that should be satisfied by linear algebra operations.
 use numrs2::prelude::*;
+#[cfg(feature = "matrix_decomp")]
+use numrs2::linalg::lu;
+#[cfg(feature = "matrix_decomp")]
+use numrs2::linalg_extended::condition_number;
 
 // Constants for testing
 // Tolerance for floating point comparisons
@@ -135,7 +137,6 @@ fn test_matmul_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_transpose_properties() {
     // Test matrix transpose properties
     for &size in MATRIX_SIZES.iter() {
@@ -181,7 +182,6 @@ fn test_transpose_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_inverse_properties() {
     // Test matrix inverse properties
     for &size in MATRIX_SIZES.iter() {
@@ -263,7 +263,6 @@ fn test_determinant_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_eigendecomposition_properties() {
     // Test eigendecomposition properties using symmetric matrices
     // Use fixed matrices instead of random ones to avoid numerical issues
@@ -350,7 +349,6 @@ fn test_eigendecomposition_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_svd_properties() {
     // Test SVD properties
     for &rows in MATRIX_SIZES.iter() {
@@ -440,7 +438,6 @@ fn test_qr_decomposition_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_cholesky_decomposition_properties() {
     // Test Cholesky decomposition properties
     for &size in MATRIX_SIZES.iter() {
@@ -478,8 +475,8 @@ fn test_cholesky_decomposition_properties() {
     }
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
-// Previously ignored, now passes
 fn test_lu_decomposition_properties() {
     // Test LU decomposition properties
     // Use fixed matrices instead of random ones to avoid numerical issues
@@ -553,6 +550,7 @@ fn test_lu_decomposition_properties() {
     }
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
 fn test_condition_number_properties() {
     // Test condition number properties
@@ -586,7 +584,6 @@ fn test_condition_number_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_norm_properties() {
     // Test matrix norm properties
     for &size in MATRIX_SIZES.iter() {
@@ -668,7 +665,6 @@ fn test_trace_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_rank_properties() {
     // Test matrix rank properties using fixed matrices to avoid numerical issues
     let test_matrices = vec![
@@ -736,7 +732,6 @@ fn test_rank_properties() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_solve_properties() {
     // Test properties of linear system solving
     for &size in MATRIX_SIZES.iter() {

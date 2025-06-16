@@ -162,10 +162,44 @@ fn test_fft_linearity() {
 
 #[test]
 fn test_fft_shift_property() {
-    // Skipping test due to precision issues in FFT implementation
-    // This test validates that if y[n] = x[n-m], then Y[k] = X[k] * e^(-j*2π*k*m/N)
-    // TODO: Fix precision issues in the FFT implementation and re-enable this test
-    return;
+    // Test the time shift property: if y[n] = x[n-m], then Y[k] = X[k] * e^(-j*2π*k*m/N)
+    use std::f64::consts::PI;
+    
+    let n = 16;
+    let shift = 3; // Shift by 3 samples
+    
+    // Create a simple test signal (impulse at position 2)
+    let mut x = vec![0.0; n];
+    x[2] = 1.0;
+    let x_array = Array::from_vec(x);
+    
+    // Create shifted version y[n] = x[n-shift] (circular shift)
+    let mut y = vec![0.0; n];
+    for i in 0..n {
+        // y[i] = x[i-shift], with wrapping: if i-shift < 0, wrap to i-shift+n
+        let shifted_idx = (i + n - shift) % n;
+        y[i] = x_array.get(&[shifted_idx]).unwrap();
+    }
+    let y_array = Array::from_vec(y);
+    
+    // Compute FFTs
+    let fft_x = FFT::fft(&x_array).unwrap();
+    let fft_y = FFT::fft(&y_array).unwrap();
+    
+    // Compute expected Y[k] = X[k] * e^(-j*2π*k*shift/N)
+    let mut expected_y = vec![Complex::new(0.0, 0.0); n];
+    for k in 0..n {
+        let phase = -2.0 * PI * (k as f64) * (shift as f64) / (n as f64);
+        let phase_factor = Complex::new(phase.cos(), phase.sin());
+        expected_y[k] = fft_x.get(&[k]).unwrap() * phase_factor;
+    }
+    let expected_y_array = Array::from_vec(expected_y);
+    
+    // Compare with tolerance appropriate for numerical precision
+    assert!(
+        complex_arrays_approx_equal(&fft_y, &expected_y_array, TOLERANCE_HIGH),
+        "FFT shift property failed: Y[k] should equal X[k] * e^(-j*2π*k*m/N)"
+    );
 }
 
 #[test]

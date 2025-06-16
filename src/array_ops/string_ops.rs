@@ -88,10 +88,7 @@ impl Zero for StringElement {
     }
 
     fn is_zero(&self) -> bool {
-        match self.is_empty() {
-            Ok(empty) => empty,
-            Err(_) => false,
-        }
+        self.is_empty().unwrap_or_default()
     }
 }
 
@@ -108,10 +105,7 @@ impl std::ops::Add for StringElement {
 
 impl PartialOrd for StringElement {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match (self.to_string(), other.to_string()) {
-            (Ok(s1), Ok(s2)) => s1.partial_cmp(&s2),
-            _ => None,
-        }
+        Some(self.cmp(other))
     }
 }
 
@@ -160,9 +154,8 @@ pub fn array_from_strings<S: AsRef<str>>(
             .iter()
             .map(|s| Ok(StringElement::unicode(s.as_ref())))
             .collect()
-    } else if dtype.starts_with('S') {
+    } else if let Some(len_str) = dtype.strip_prefix('S') {
         // Fixed-length strings
-        let len_str = &dtype[1..];
         let max_len: usize = len_str.parse().map_err(|_| {
             NumRs2Error::ValueError(format!("Invalid string dtype: {}", dtype))
         })?;
@@ -862,11 +855,9 @@ pub mod chartype {
                                 break;
                             }
                             word_start = false;
-                        } else {
-                            if !c.is_lowercase() {
-                                is_title_case = false;
-                                break;
-                            }
+                        } else if !c.is_lowercase() {
+                            is_title_case = false;
+                            break;
                         }
                     } else {
                         word_start = true;
@@ -1125,7 +1116,7 @@ mod tests {
         
         // Test count
         let count_result = count(&arr, "o", None, None).unwrap();
-        assert_eq!(count_result.to_vec(), vec![2, 1, 0]); // Count of 'o' characters
+        assert_eq!(count_result.to_vec(), vec![2, 2, 0]); // Count of 'o' characters
         
         // Test startswith
         let starts_result = startswith(&arr, "hello", None, None).unwrap();

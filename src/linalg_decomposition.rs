@@ -27,7 +27,7 @@ use std::fmt::Debug;
 /// 
 /// * `a` - Input 2D matrix
 /// * `tol` - Tolerance for determining rank. If None, uses default tolerance
-///           based on machine precision and matrix size
+///   based on machine precision and matrix size
 /// 
 /// # Returns
 /// 
@@ -135,7 +135,7 @@ pub fn qr<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// let (q, r) = qr(&a).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn qr<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>)> {
+pub fn qr<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>) -> Result<(Array<T>, Array<T>)> {
     a.qr()
 }
 
@@ -193,7 +193,7 @@ pub fn cholesky<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// let l = cholesky(&a).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn cholesky<T: Float + Clone + Debug>(a: &Array<T>) -> Result<Array<T>> {
+pub fn cholesky<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>) -> Result<Array<T>> {
     a.cholesky()
 }
 
@@ -318,7 +318,7 @@ pub fn eig<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn eig<T: Float + Clone + Debug>(
+pub fn eig<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(
     a: &Array<T>,
     sort: Option<&str>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -447,6 +447,6 @@ pub fn svd<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// let (u, s, vt) = svd(&a).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn svd<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>, Array<T>)> {
+pub fn svd<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>) -> Result<(Array<T>, Array<T>, Array<T>)> {
     a.svd()
 }

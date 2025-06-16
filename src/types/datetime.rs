@@ -265,7 +265,7 @@ impl DateTime64 {
         
         // Parse time (HH:MM:SS)
         let time_components: Vec<&str> = time_part.split(':').collect();
-        let hour: u32 = if time_components.len() >= 1 {
+        let hour: u32 = if !time_components.is_empty() {
             time_components[0].parse().unwrap_or(0)
         } else { 0 };
         let minute: u32 = if time_components.len() >= 2 {
@@ -318,7 +318,7 @@ impl DateTime64 {
 
 /// Calculate days since Unix epoch (1970-01-01)
 fn days_since_epoch(year: i32, month: u32, day: u32) -> Result<i64> {
-    if month < 1 || month > 12 {
+    if !(1..=12).contains(&month) {
         return Err(NumRs2Error::ValueError("Invalid month".to_string()));
     }
     if day < 1 || day > days_in_month(year, month) {
@@ -920,8 +920,7 @@ impl TimezoneDateTime {
     /// Supports formats like "2023-12-25T15:30:45+05:00" or "2023-12-25T15:30:45Z"
     pub fn from_iso_string_with_tz(s: &str, unit: DateTimeUnit) -> Result<Self> {
         // Handle Z suffix (UTC)
-        if s.ends_with('Z') {
-            let datetime_part = &s[..s.len()-1];
+        if let Some(datetime_part) = s.strip_suffix('Z') {
             let utc_dt = DateTime64::from_iso_string(datetime_part, unit)?;
             return Ok(Self::new(utc_dt, Timezone::utc()));
         }
@@ -1185,10 +1184,114 @@ pub mod business_days {
             // Christmas Day - December 25
             calendar.add_holiday(DateTime64::from_iso_string(&format!("{}-12-25", year), DateTimeUnit::Day)?);
             
-            // TODO: Add more complex holidays (Memorial Day, Labor Day, Thanksgiving, etc.)
-            // These require more complex date calculations
+            // Martin Luther King Jr. Day - Third Monday in January
+            if let Some(mlk_day) = Self::nth_weekday_of_month(year, 1, Weekday::Monday, 3) {
+                calendar.add_holiday(mlk_day);
+            }
+            
+            // Presidents' Day - Third Monday in February  
+            if let Some(presidents_day) = Self::nth_weekday_of_month(year, 2, Weekday::Monday, 3) {
+                calendar.add_holiday(presidents_day);
+            }
+            
+            // Memorial Day - Last Monday in May
+            if let Some(memorial_day) = Self::last_weekday_of_month(year, 5, Weekday::Monday) {
+                calendar.add_holiday(memorial_day);
+            }
+            
+            // Labor Day - First Monday in September
+            if let Some(labor_day) = Self::nth_weekday_of_month(year, 9, Weekday::Monday, 1) {
+                calendar.add_holiday(labor_day);
+            }
+            
+            // Columbus Day - Second Monday in October
+            if let Some(columbus_day) = Self::nth_weekday_of_month(year, 10, Weekday::Monday, 2) {
+                calendar.add_holiday(columbus_day);
+            }
+            
+            // Veterans Day - November 11
+            calendar.add_holiday(DateTime64::from_iso_string(&format!("{}-11-11", year), DateTimeUnit::Day)?);
+            
+            // Thanksgiving - Fourth Thursday in November
+            if let Some(thanksgiving) = Self::nth_weekday_of_month(year, 11, Weekday::Thursday, 4) {
+                calendar.add_holiday(thanksgiving);
+            }
             
             Ok(calendar)
+        }
+        
+        /// Calculate the nth occurrence of a weekday in a given month
+        /// target_weekday: The target Weekday enum value
+        /// occurrence: 1=first, 2=second, 3=third, 4=fourth
+        fn nth_weekday_of_month(year: i32, month: u8, target_weekday: Weekday, occurrence: u8) -> Option<DateTime64> {
+            if month == 0 || month > 12 || occurrence == 0 || occurrence > 5 {
+                return None;
+            }
+            
+            // Get the first day of the month
+            let first_day = DateTime64::from_iso_string(&format!("{}-{:02}-01", year, month), DateTimeUnit::Day).ok()?;
+            let first_weekday = weekday(&first_day).ok()?;
+            
+            // Calculate days to add to get to the first occurrence of target weekday
+            let target_weekday_num = target_weekday as u8;
+            let first_weekday_num = first_weekday as u8;
+            
+            let days_to_first = if target_weekday_num >= first_weekday_num {
+                target_weekday_num - first_weekday_num
+            } else {
+                7 - (first_weekday_num - target_weekday_num)
+            };
+            
+            // Calculate the target date
+            let target_day = 1 + days_to_first + (occurrence - 1) * 7;
+            
+            // Check if the target day is valid for this month
+            let days_in_month = Self::days_in_month(year, month);
+            if target_day > days_in_month {
+                return None;
+            }
+            
+            DateTime64::from_iso_string(&format!("{}-{:02}-{:02}", year, month, target_day), DateTimeUnit::Day).ok()
+        }
+        
+        /// Calculate the last occurrence of a weekday in a given month
+        /// target_weekday: The target Weekday enum value
+        fn last_weekday_of_month(year: i32, month: u8, target_weekday: Weekday) -> Option<DateTime64> {
+            if month == 0 || month > 12 {
+                return None;
+            }
+            
+            let days_in_month = Self::days_in_month(year, month);
+            
+            // Start from the last day and work backwards
+            for day in (1..=days_in_month).rev() {
+                if let Ok(date) = DateTime64::from_iso_string(&format!("{}-{:02}-{:02}", year, month, day), DateTimeUnit::Day) {
+                    if let Ok(day_weekday) = weekday(&date) {
+                        if day_weekday as u8 == target_weekday as u8 {
+                            return Some(date);
+                        }
+                    }
+                }
+            }
+            
+            None
+        }
+        
+        /// Get the number of days in a given month
+        fn days_in_month(year: i32, month: u8) -> u8 {
+            match month {
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                4 | 6 | 9 | 11 => 30,
+                2 => {
+                    // Check for leap year
+                    if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+                        29
+                    } else {
+                        28
+                    }
+                },
+                _ => 0,
+            }
         }
     }
     

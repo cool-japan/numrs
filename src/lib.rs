@@ -1,6 +1,6 @@
 //! # NumRS2: High-Performance Numerical Computing in Rust
 //!
-//! NumRS2 v0.1.0-alpha.4 is a comprehensive numerical computing library for Rust, inspired by NumPy.
+//! NumRS2 is a comprehensive numerical computing library for Rust, inspired by NumPy.
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
@@ -26,20 +26,13 @@
 //! - **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
 //! - **Type Safety**: Leverage Rust's type system for compile-time guarantees
 
-#![allow(deprecated)] // Allow deprecated warnings during transition period
-#![allow(clippy::result_large_err)] // Allow large error types for comprehensive error handling
-#![allow(clippy::needless_range_loop)] // Allow range loops for clarity in numerical code
-#![allow(clippy::mixed_attributes_style)] // Allow mixed attribute styles during transition
-#![allow(clippy::empty_line_after_doc_comments)] // Allow formatting flexibility
-#![allow(clippy::too_many_arguments)] // Allow many arguments for mathematical functions
-#![allow(clippy::identity_op)] // Allow identity operations for clarity in numerical code
-#![allow(clippy::needless_lifetimes)] // Allow explicit lifetimes for clarity
-#![allow(clippy::should_implement_trait)] // Allow trait-like methods with different signatures
-#![allow(clippy::redundant_closure)] // Allow redundant closures for error conversion
-#![allow(clippy::only_used_in_recursion)] // Allow recursive pattern parameters
-#![allow(dead_code)] // Allow dead code during development
-#![allow(clippy::approx_constant)] // Allow approximate constants for SIMD optimization
-#![allow(clippy::excessive_precision)] // Allow high precision for numerical accuracy
+#![allow(deprecated)] // Suppress deprecation warnings for transition modules
+#![allow(clippy::result_large_err)] // Large error types for comprehensive error handling
+#![allow(clippy::needless_range_loop)] // Range loops for clarity in numerical code
+#![allow(clippy::too_many_arguments)] // Mathematical functions often require many parameters
+#![allow(clippy::identity_op)] // Identity operations for clarity in numerical code
+#![allow(clippy::approx_constant)] // Approximate constants for SIMD optimization
+#![allow(clippy::excessive_precision)] // High precision required for numerical accuracy
 
 pub mod algorithms;
 pub mod array;
@@ -52,6 +45,7 @@ pub mod char;
 pub mod comparisons;
 pub mod conversions;
 pub mod error;
+pub mod financial;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod indexing;
@@ -71,6 +65,7 @@ pub mod memory_optimize;
 pub mod mmap;
 pub mod parallel;
 pub mod parallel_optimize;
+pub mod printing;
 pub mod random;
 pub mod set_ops;
 pub mod signal;
@@ -133,6 +128,7 @@ pub mod prelude {
     };
     pub use crate::conversions::*;
     pub use crate::error::{NumRs2Error, Result};
+    pub use crate::financial::{pv, fv, pmt, rate, nper, npv, irr, mirr, pv_array, fv_array, pmt_array, rate_array, nper_array, npv_rates, npv_multiple_series, irr_multiple_series};
     pub use crate::indexing::*;
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
@@ -194,6 +190,9 @@ pub mod prelude {
     pub use crate::parallel_optimize::{
         ParallelConfig, ParallelizationThreshold, SchedulingStrategy, WorkloadPartitioning,
     };
+    
+    // Array printing and display
+    pub use crate::printing::{set_printoptions, get_printoptions, reset_printoptions, array_str, PrintOptions};
 
     // Memory allocation optimization
     pub use crate::memory_alloc::{

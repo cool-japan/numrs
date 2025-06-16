@@ -1,11 +1,12 @@
 //! Tests for numerical stability of matrix decompositions
 
-#![allow(deprecated)] // Allow deprecated warnings during API transition
 
-use approx::assert_relative_eq;
 use num_traits::Float;
 use numrs2::array::Array;
+#[cfg(feature = "matrix_decomp")]
 use numrs2::linalg_extended::{cholesky, condition_number, lu, pivoted_cholesky, qr, svd};
+#[cfg(feature = "matrix_decomp")]
+use approx::assert_relative_eq;
 
 /// Generate a Hilbert matrix of size n x n
 /// Hilbert matrices are famously ill-conditioned and provide a good stress test
@@ -62,6 +63,7 @@ fn near_singular_matrix<T: Float + From<f64>>(n: usize, condition: f64) -> Array
     result
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
 fn test_condition_number_accuracy() {
     // Test matrices with known condition numbers
@@ -99,6 +101,7 @@ fn test_condition_number_accuracy() {
     );
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
 fn test_decomposition_stability_well_conditioned() {
     // Test decompositions on well-conditioned matrices
@@ -185,6 +188,7 @@ fn test_decomposition_stability_well_conditioned() {
     }
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
 fn test_decomposition_stability_ill_conditioned() {
     // Test decompositions on ill-conditioned matrices
@@ -328,6 +332,7 @@ fn test_decomposition_stability_ill_conditioned() {
     );
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
 fn test_pivoted_cholesky_vs_standard() {
     // Verify both Cholesky implementations run on the same input
@@ -374,6 +379,7 @@ fn test_pivoted_cholesky_vs_standard() {
     assert_eq!(p.shape(), vec![n]);
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
 fn test_decompositions_with_scaling() {
     // Test that our decompositions handle matrices with large values correctly
@@ -431,8 +437,8 @@ fn test_decompositions_with_scaling() {
     );
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
-// Previously ignored, now passes
 fn test_relative_errors_between_decompositions() {
     // Compare accuracy of different decompositions on the same ill-conditioned matrix
     let n = 5;

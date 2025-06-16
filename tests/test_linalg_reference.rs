@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use num_traits::sign::Signed;
 /// Reference tests for linear algebra operations
@@ -6,6 +5,10 @@ use num_traits::sign::Signed;
 /// This file tests NumRS2's linear algebra operations against known reference values
 /// to ensure correctness and numerical stability.
 use numrs2::prelude::*;
+#[cfg(feature = "matrix_decomp")]
+use numrs2::linalg::{matrix_rank, lu};
+#[cfg(feature = "matrix_decomp")]
+use numrs2::linalg_extended::{condition_number, pinv, schur};
 
 // Tolerance for floating point comparisons
 const TOLERANCE: f64 = 1e-10;
@@ -103,7 +106,6 @@ fn test_matmul_reference() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_determinant_reference() {
     // Test determinant against known value
 
@@ -126,7 +128,6 @@ fn test_determinant_reference() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_inverse_reference() {
     // Test matrix inverse against known value
     let m = create_test_matrix();
@@ -167,7 +168,6 @@ fn test_inverse_reference() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_eigendecomposition_reference() {
     // Test eigendecomposition against known values
     let m = create_test_matrix();
@@ -186,7 +186,6 @@ fn test_eigendecomposition_reference() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_svd_reference() {
     // Test SVD against known values for a simple matrix
     let m = create_rectangle_matrix();
@@ -206,7 +205,6 @@ fn test_svd_reference() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_qr_decomposition_reference() {
     // Test QR decomposition with a matrix that has known factors
     let m = Array::<f64>::from_vec(vec![12.0, -51.0, 4.0, 6.0, 167.0, -68.0, -4.0, 24.0, -41.0])
@@ -266,7 +264,6 @@ fn test_qr_decomposition_reference() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_cholesky_decomposition_reference() {
     // Test Cholesky decomposition with a matrix that has a known factor
     // Create a positive definite matrix with known Cholesky decomposition
@@ -300,8 +297,8 @@ fn test_cholesky_decomposition_reference() {
     }
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
-// Previously ignored, now passes
 fn test_lu_decomposition_reference() {
     // Test LU decomposition with a matrix that has known factors
     // Create a matrix with known LU decomposition
@@ -319,33 +316,15 @@ fn test_lu_decomposition_reference() {
             if j > i {
                 // Upper triangle should be zero for L matrix
                 let val = l.get(&[i, j]).unwrap();
-                if val.abs() > TOLERANCE {
-                    println!(
-                        "Warning: L[{},{}] = {} is not zero (upper triangle)",
-                        i, j, val
-                    );
-                }
+                assert!(val.abs() <= TOLERANCE, "L should be lower triangular");
             }
         }
     }
 
-    // Note: This LU implementation seems to return different matrix structure
-    // Focus on the key property: reconstruction works correctly
-    println!("LU test: Different implementation structure detected, checking reconstruction only");
-
-    // Check reconstruction property P * L * U = A (simplified)
-    // Skip detailed structure checks since this implementation is non-standard
-    let reconstruction_works = true; // Assume it works for now
-
-    if !reconstruction_works {
-        panic!("LU reconstruction P*L*U != A");
-    }
-
-    // Test completed - LU implementation structure differs from standard but basic test passes
+    // LU decomposition properties verified
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_norm_reference() {
     // Test matrix norms against known values
 
@@ -402,7 +381,6 @@ fn test_trace_reference() {
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_solve_reference() {
     // Test solving linear systems against known values
 
@@ -433,8 +411,8 @@ fn test_solve_reference() {
     );
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
-// Previously ignored, now passes
 fn test_rank_reference() {
     // Test matrix rank against known values
 
@@ -442,14 +420,6 @@ fn test_rank_reference() {
     let full_rank = create_test_matrix();
     let rank_val = matrix_rank(&full_rank, None).unwrap();
 
-    // Debug: check if matrix_rank function has issues
-    if rank_val == 0 {
-        println!(
-            "Warning: matrix_rank returned 0 for full rank matrix - possible implementation issue"
-        );
-        // Skip this assertion for now as matrix_rank may have issues
-        return;
-    }
     assert_eq!(rank_val, 3);
 
     // Rank deficient matrix (rank = 2)
@@ -475,6 +445,7 @@ fn test_rank_reference() {
     assert_eq!(zero_rank, 0);
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
 fn test_condition_number_reference() {
     // Test condition number against known values
@@ -538,24 +509,14 @@ fn test_matrix_power_reference() {
     assert_relative_eq!(m5.get(&[1, 1]).unwrap(), 3.0, epsilon = TOLERANCE);
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
-// Previously ignored, now passes
 fn test_pinv_reference() {
     // Test pseudoinverse against known values
 
     // Invertible square matrix
     let square = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
     let pinv_square = pinv(&square, None).unwrap();
-
-    // Debug: check if pinv is returning zeros
-    let val_00 = pinv_square.get(&[0, 0]).unwrap();
-    if val_00.abs() < 1e-10 {
-        println!("Warning: pinv returned near-zero values - possible implementation issue");
-        println!("Expected pseudoinverse: [[-2.0, 1.0], [1.5, -0.5]]");
-        println!("Actual pseudoinverse: {:?}", pinv_square.to_vec());
-        // Skip these assertions for now as pinv may have issues
-        return;
-    }
 
     // Expected pseudoinverse equals inverse for invertible matrix
     // [-2.0  1.0]
@@ -581,8 +542,8 @@ fn test_pinv_reference() {
     }
 }
 
+#[cfg(feature = "matrix_decomp")]
 #[test]
-// Previously ignored, now passes
 fn test_schur_decomposition_reference() {
     // Test Schur decomposition
 
@@ -621,14 +582,9 @@ fn test_schur_decomposition_reference() {
         for j in 0..3 {
             let val1 = q_t_q_t.get(&[i, j]).unwrap();
             let val2 = m.get(&[i, j]).unwrap();
-            // Handle sign ambiguity and numerical precision in Schur decomposition
+            // Check reconstruction accuracy with appropriate tolerance
             let diff = (val1 - val2).abs();
-            if diff > TOLERANCE * 1000.0 {
-                // Large differences might indicate implementation issues with this specific matrix
-                println!("Warning: Schur reconstruction has large difference at [{},{}]: {} vs {} (diff: {})", i, j, val1, val2, diff);
-                println!("This may indicate issues with the Schur implementation for this specific matrix");
-                // For now, just continue rather than failing the test
-            }
+            assert!(diff <= TOLERANCE * 1000.0, "Schur reconstruction accuracy within tolerance");
         }
     }
 }
@@ -661,13 +617,45 @@ fn test_inner_outer_product_reference() {
 
 #[test]
 fn test_vdot_reference() {
-    // Skip test as vdot doesn't support Complex types in the current implementation
-    // TODO: Reimplement this test when vdot supports Complex types
-    println!("Skipping test_vdot_reference - vdot doesn't support Complex types");
+    use num_complex::Complex;
+    use numrs2::linalg::vector_ops::{vdot, complex_vdot, RealVectorDotProduct, ComplexVectorDotProduct};
+    
+    // Test real vdot (function-based)
+    let a_real = Array::from_vec(vec![1.0, 2.0, 3.0]);
+    let b_real = Array::from_vec(vec![4.0, 5.0, 6.0]);
+    let result_real = vdot(&a_real, &b_real).unwrap();
+    assert_abs_diff_eq!(result_real, 32.0, epsilon = 1e-10);
+    
+    // Test real vdot (trait-based)
+    let result_real_trait = a_real.vdot(&b_real).unwrap();
+    assert_abs_diff_eq!(result_real_trait, 32.0, epsilon = 1e-10);
+    
+    // Test complex vdot (function-based)
+    let a_complex = Array::from_vec(vec![
+        Complex::new(1.0, 2.0),
+        Complex::new(3.0, 4.0),
+    ]);
+    let b_complex = Array::from_vec(vec![
+        Complex::new(5.0, 6.0),
+        Complex::new(7.0, 8.0),
+    ]);
+    
+    // vdot for complex arrays conjugates the first argument
+    // So we expect: conj(1+2i) * (5+6i) + conj(3+4i) * (7+8i)
+    //              = (1-2i) * (5+6i) + (3-4i) * (7+8i)
+    //              = (5+6i-10i+12) + (21+24i-28i+32)
+    //              = (17-4i) + (53-4i) = 70-8i
+    let result_complex = complex_vdot(&a_complex, &b_complex).unwrap();
+    assert_abs_diff_eq!(result_complex.re, 70.0, epsilon = 1e-10);
+    assert_abs_diff_eq!(result_complex.im, -8.0, epsilon = 1e-10);
+    
+    // Test complex vdot (trait-based)
+    let result_complex_trait = a_complex.vdot(&b_complex).unwrap();
+    assert_abs_diff_eq!(result_complex_trait.re, 70.0, epsilon = 1e-10);
+    assert_abs_diff_eq!(result_complex_trait.im, -8.0, epsilon = 1e-10);
 }
 
 #[test]
-// Previously ignored, now passes
 fn test_tensordot_reference() {
     // Test tensor contraction against known values
 

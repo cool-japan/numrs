@@ -12,6 +12,7 @@
 //! - Numerical stability enhancements
 
 /// Matrix decomposition operations
+#[cfg(feature = "matrix_decomp")]
 pub mod decomposition {
     pub use crate::new_modules::matrix_decomp::*;
 }
@@ -22,5 +23,6 @@ pub mod eigenvalue {
 }
 
 // Re-export key functionality at module level for convenience
+#[cfg(feature = "matrix_decomp")]
 pub use decomposition::*;
 pub use eigenvalue::*;

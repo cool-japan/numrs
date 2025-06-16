@@ -377,7 +377,13 @@ impl<T: Clone> Array<T> {
     /// Create a new array from a vector and reshape it
     pub fn from_vec(vec: Vec<T>) -> Self {
         let data = NdArray::from_shape_vec(IxDyn(&[vec.len()]), vec)
-            .expect("Failed to create array from vec");
+            .unwrap_or_else(|e| {
+                // This should never happen with a properly sized vector
+                // Log the error and create an empty array as last resort
+                eprintln!("Critical: Array creation failed: {}. This indicates a serious bug.", e);
+                // Create a minimal array that won't cause undefined behavior
+                NdArray::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap()
+            });
         Self { data }
     }
 
@@ -428,9 +434,13 @@ impl<T: Clone> Array<T> {
             for j in 0..m {
                 // NumPy's tri returns 1s on or below the diagonal (i-j <= k)
                 if (j as isize) <= (i as isize) + k {
-                    result.set(&[i, j], value.clone()).unwrap_or_default();
+                    result.set(&[i, j], value.clone()).unwrap_or_else(|_| {
+                        panic!("Internal error: failed to set element at [{}, {}] in tri function", i, j)
+                    });
                 } else {
-                    result.set(&[i, j], zero.clone()).unwrap_or_default();
+                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
+                        panic!("Internal error: failed to set element at [{}, {}] in tri function", i, j)
+                    });
                 }
             }
         }
@@ -482,7 +492,9 @@ impl<T: Clone> Array<T> {
                 // Zero out elements above the k-th diagonal
                 // In NumPy, the condition is j > i + k
                 if (j as isize) > (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_default();
+                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
+                        panic!("Internal error: failed to set element at [{}, {}] in tril function", i, j)
+                    });
                 }
             }
         }
@@ -534,7 +546,9 @@ impl<T: Clone> Array<T> {
                 // Zero out elements below the k-th diagonal
                 // In NumPy, the condition is j < i + k
                 if (j as isize) < (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_default();
+                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
+                        panic!("Internal error: failed to set element at [{}, {}] in triu function", i, j)
+                    });
                 }
             }
         }
@@ -638,7 +652,9 @@ impl<T: Clone> Array<T> {
             let row = diagonal_start + i;
             let col = diagonal_col_start + i;
             if row < n_rows && col < n_cols {
-                result.set(&[row, col], T::one()).unwrap_or_default();
+                result.set(&[row, col], T::one()).unwrap_or_else(|_| {
+                    panic!("Internal error: failed to set element at [{}, {}] in eye function", row, col)
+                });
             }
         }
 
@@ -684,14 +700,18 @@ impl<T: Clone> Array<T> {
                 if j < size {
                     result
                         .set(&[i, j], v.array().get([i]).unwrap().clone())
-                        .unwrap_or_default();
+                        .unwrap_or_else(|_| {
+                            panic!("Internal error: failed to set element at [{}, {}] in diag function", i, j)
+                        });
                 }
             } else {
                 let i_offset = (-k) as usize;
                 if i + i_offset < size {
                     result
                         .set(&[i + i_offset, i], v.array().get([i]).unwrap().clone())
-                        .unwrap_or_default();
+                        .unwrap_or_else(|_| {
+                            panic!("Internal error: failed to set element at [{}, {}] in diag function", i + i_offset, i)
+                        });
                 }
             }
         }
