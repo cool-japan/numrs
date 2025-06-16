@@ -1,11 +1,11 @@
 //! Comprehensive tests for NumRS2 Financial Functions
 //!
-//! This test suite covers all financial functions including present value (PV), 
-//! future value (FV), payment (PMT), rate, number of periods (NPER), 
+//! This test suite covers all financial functions including present value (PV),
+//! future value (FV), payment (PMT), rate, number of periods (NPER),
 //! net present value (NPV), and internal rate of return (IRR).
 
-use numrs2::prelude::*;
 use approx::assert_relative_eq;
+use numrs2::prelude::*;
 
 #[test]
 fn test_pv_basic_functionality() {
@@ -44,7 +44,7 @@ fn test_pv_array() {
 
     let result = pv_array(&rates, &npers, &pmts, &fvs, 0).unwrap();
     assert_eq!(result.shape(), vec![2]);
-    
+
     let values = result.to_vec();
     assert_relative_eq!(values[0], -772.1734, epsilon = 1e-4);
     assert_relative_eq!(values[1], -1942.449798, epsilon = 1e-4);
@@ -94,7 +94,7 @@ fn test_fv_array() {
 
     let result = fv_array(&rates, &npers, &pmts, &pvs, 0).unwrap();
     assert_eq!(result.shape(), vec![2]);
-    
+
     let values = result.to_vec();
     assert_relative_eq!(values[0], 1628.8946, epsilon = 1e-4);
     assert_relative_eq!(values[1], 4793.116386, epsilon = 1e-4);
@@ -141,14 +141,14 @@ fn test_pmt_savings() {
 
 #[test]
 fn test_pmt_array() {
-    let rates = Array::from_vec(vec![0.05/12.0, 0.06/12.0]);
+    let rates = Array::from_vec(vec![0.05 / 12.0, 0.06 / 12.0]);
     let npers = Array::from_vec(vec![60.0, 72.0]);
     let pvs = Array::from_vec(vec![10000.0, 15000.0]);
     let fvs = Array::from_vec(vec![0.0, 0.0]);
 
     let result = pmt_array(&rates, &npers, &pvs, &fvs, 0).unwrap();
     assert_eq!(result.shape(), vec![2]);
-    
+
     let values = result.to_vec();
     assert_relative_eq!(values[0], -188.7107, epsilon = 2e-3);
     assert_relative_eq!(values[1], -248.59, epsilon = 1e-2);
@@ -158,29 +158,69 @@ fn test_pmt_array() {
 fn test_rate_basic_loan() {
     // Test interest rate calculation for a known loan
     let monthly_rate = 0.05 / 12.0;
-    let result = rate(60.0, -188.71, 10000.0, 0.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+    let result = rate(
+        60.0,
+        -188.71,
+        10000.0,
+        0.0,
+        0,
+        Some(0.1),
+        Some(1e-6),
+        Some(100),
+    )
+    .unwrap();
     assert_relative_eq!(result, monthly_rate, epsilon = 1e-4);
 }
 
 #[test]
 fn test_rate_simple_case() {
     // Simple case: find rate for doubling money in 10 periods with no payments
-    let result = rate(10.0, 0.0, -1000.0, 2000.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
-    let expected = 2.0_f64.powf(1.0/10.0) - 1.0; // ~7.18%
+    let result = rate(
+        10.0,
+        0.0,
+        -1000.0,
+        2000.0,
+        0,
+        Some(0.1),
+        Some(1e-6),
+        Some(100),
+    )
+    .unwrap();
+    let expected = 2.0_f64.powf(1.0 / 10.0) - 1.0; // ~7.18%
     assert_relative_eq!(result, expected, epsilon = 1e-6);
 }
 
 #[test]
 fn test_rate_annuity() {
     // Test rate calculation for an annuity
-    let result = rate(10.0, -100.0, 772.17, 0.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+    let result = rate(
+        10.0,
+        -100.0,
+        772.17,
+        0.0,
+        0,
+        Some(0.1),
+        Some(1e-6),
+        Some(100),
+    )
+    .unwrap();
     assert_relative_eq!(result, 0.05, epsilon = 1e-3);
 }
 
 #[test]
 fn test_rate_zero_payment() {
     // Test rate with zero payment (simple compound interest)
-    let result = rate(5.0, 0.0, -1000.0, 1276.28, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+    let result = rate(
+        5.0,
+        0.0,
+        -1000.0,
+        1276.28,
+        0,
+        Some(0.1),
+        Some(1e-6),
+        Some(100),
+    )
+    .unwrap();
     assert_relative_eq!(result, 0.05, epsilon = 1e-4);
 }
 
@@ -191,9 +231,19 @@ fn test_rate_array() {
     let pvs = Array::from_vec(vec![-1000.0, -2000.0]);
     let fvs = Array::from_vec(vec![1628.89, 6536.00]);
 
-    let result = rate_array(&npers, &pmts, &pvs, &fvs, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+    let result = rate_array(
+        &npers,
+        &pmts,
+        &pvs,
+        &fvs,
+        0,
+        Some(0.1),
+        Some(1e-6),
+        Some(100),
+    )
+    .unwrap();
     assert_eq!(result.shape(), vec![2]);
-    
+
     let values = result.to_vec();
     assert_relative_eq!(values[0], 0.05, epsilon = 1e-4);
     assert_relative_eq!(values[1], 0.06, epsilon = 1e-3);
@@ -246,14 +296,14 @@ fn test_nper_with_future_value() {
 
 #[test]
 fn test_nper_array() {
-    let rates = Array::from_vec(vec![0.05/12.0, 0.06/12.0]);
+    let rates = Array::from_vec(vec![0.05 / 12.0, 0.06 / 12.0]);
     let pmts = Array::from_vec(vec![-188.71, -250.0]);
     let pvs = Array::from_vec(vec![10000.0, 12000.0]);
     let fvs = Array::from_vec(vec![0.0, 0.0]);
 
     let result = nper_array(&rates, &pmts, &pvs, &fvs, 0).unwrap();
     assert_eq!(result.shape(), vec![2]);
-    
+
     let values = result.to_vec();
     assert_relative_eq!(values[0], 60.0, epsilon = 1e-2);
     assert!(values[1] > 0.0); // Should be positive
@@ -308,7 +358,7 @@ fn test_npv_rates() {
     let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
     let result = npv_rates(&rates, &cash_flows).unwrap();
     assert_eq!(result.shape(), vec![3]);
-    
+
     let values = result.to_vec();
     // Higher discount rates should give lower NPVs
     assert!(values[0] > values[1]);
@@ -318,12 +368,13 @@ fn test_npv_rates() {
 #[test]
 fn test_npv_multiple_series() {
     let cash_flows = Array::from_vec(vec![
-        -1000.0, 300.0, 400.0, 500.0,  // Project 1
-        -1200.0, 400.0, 500.0, 600.0   // Project 2
-    ]).reshape(&[2, 4]);
+        -1000.0, 300.0, 400.0, 500.0, // Project 1
+        -1200.0, 400.0, 500.0, 600.0, // Project 2
+    ])
+    .reshape(&[2, 4]);
     let result = npv_multiple_series(0.1, &cash_flows).unwrap();
     assert_eq!(result.shape(), vec![2]);
-    
+
     let values = result.to_vec();
     assert_relative_eq!(values[0], -21.036814, epsilon = 1e-5); // Project 1 NPV
     assert_relative_eq!(values[1], 27.648385, epsilon = 1e-5); // Project 2 NPV
@@ -364,12 +415,13 @@ fn test_irr_high_return() {
 #[test]
 fn test_irr_multiple_series() {
     let cash_flows = Array::from_vec(vec![
-        -1000.0, 300.0, 400.0, 500.0,  // Project 1
-        -100.0, 110.0, 0.0, 0.0        // Project 2 (simple case)
-    ]).reshape(&[2, 4]);
+        -1000.0, 300.0, 400.0, 500.0, // Project 1
+        -100.0, 110.0, 0.0, 0.0, // Project 2 (simple case)
+    ])
+    .reshape(&[2, 4]);
     let result = irr_multiple_series(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
     assert_eq!(result.shape(), vec![2]);
-    
+
     let values = result.to_vec();
     assert!(values[0] > 0.0); // Project 1 should have positive IRR
     assert_relative_eq!(values[1], 0.1, epsilon = 1e-2); // Project 2 should be ~10%
@@ -414,11 +466,11 @@ fn test_real_world_financial_scenarios() {
     let monthly_rate = 0.04 / 12.0; // 4% annual, monthly compounding
     let months = 30.0 * 12.0; // 30 years
     let loan_amount = 300000.0;
-    
+
     let monthly_payment: f64 = pmt(monthly_rate, months, loan_amount, 0.0, 0).unwrap();
     assert!(monthly_payment < 0.0); // Payment should be negative (outflow)
     assert!(monthly_payment.abs() > 1000.0 && monthly_payment.abs() < 2000.0); // Reasonable range
-    
+
     // Verify we can calculate back to original loan amount
     let calculated_pv = pv(monthly_rate, months, monthly_payment, 0.0, 0).unwrap();
     assert_relative_eq!(calculated_pv.abs(), loan_amount, epsilon = 1.0);
@@ -427,17 +479,17 @@ fn test_real_world_financial_scenarios() {
     let annual_rate = 0.07; // 7% annual return
     let years = 30.0; // 30 years to retirement
     let annual_contribution = -12000.0; // $12,000 per year (negative = payment)
-    
+
     let retirement_value = fv(annual_rate, years, annual_contribution, 0.0, 0).unwrap();
     assert!(retirement_value > 1000000.0); // Should be over $1M
 
     // Scenario 3: Project evaluation
     let project_flows = Array::from_vec(vec![-50000.0, 15000.0, 20000.0, 25000.0, 30000.0]);
     let discount_rate = 0.08;
-    
+
     let project_npv = npv(discount_rate, &project_flows).unwrap();
     assert!(project_npv > 0.0); // Project should be profitable
-    
+
     let project_irr = irr(&project_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
     assert!(project_irr > discount_rate); // IRR should exceed discount rate
 
@@ -447,8 +499,15 @@ fn test_real_world_financial_scenarios() {
     let market_rate = 0.04;
     let years_to_maturity = 10.0;
     let annual_coupon = face_value * coupon_rate;
-    
-    let bond_price = pv(market_rate, years_to_maturity, -annual_coupon, -face_value, 0).unwrap();
+
+    let bond_price = pv(
+        market_rate,
+        years_to_maturity,
+        -annual_coupon,
+        -face_value,
+        0,
+    )
+    .unwrap();
     assert!(bond_price > face_value); // Bond should trade at premium when coupon > market rate
 }
 
@@ -459,23 +518,33 @@ fn test_financial_functions_consistency() {
     let num_periods = 20.0;
     let payment = -500.0;
     let future_value = 0.0;
-    
+
     // Calculate PV, then use it to verify other functions
     let calculated_pv = pv(interest_rate, num_periods, payment, future_value, 0).unwrap();
-    
+
     // Verify FV calculation is consistent
     let calculated_fv = fv(interest_rate, num_periods, payment, calculated_pv, 0).unwrap();
     assert_relative_eq!(calculated_fv, future_value, epsilon = 1e-6);
-    
+
     // Verify PMT calculation is consistent
     let calculated_pmt = pmt(interest_rate, num_periods, calculated_pv, future_value, 0).unwrap();
     assert_relative_eq!(calculated_pmt, payment, epsilon = 1e-6);
-    
+
     // Verify NPER calculation is consistent
     let calculated_nper = nper(interest_rate, payment, calculated_pv, future_value, 0).unwrap();
     assert_relative_eq!(calculated_nper, num_periods, epsilon = 1e-6);
-    
+
     // Verify RATE calculation is consistent (this one is harder due to numerical methods)
-    let calculated_rate = rate(num_periods, payment, calculated_pv, future_value, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+    let calculated_rate = rate(
+        num_periods,
+        payment,
+        calculated_pv,
+        future_value,
+        0,
+        Some(0.1),
+        Some(1e-6),
+        Some(100),
+    )
+    .unwrap();
     assert_relative_eq!(calculated_rate, interest_rate, epsilon = 1e-4);
 }

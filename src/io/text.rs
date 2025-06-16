@@ -84,7 +84,7 @@ pub struct GenFromTxtOptions {
     pub comments: String,
     /// Delimiter separating values (default: any whitespace)
     pub delimiter: Option<String>,
-    /// Number of rows to skip at beginning (default: 0) 
+    /// Number of rows to skip at beginning (default: 0)
     pub skip_header: usize,
     /// Number of rows to skip at end (default: 0)
     pub skip_footer: usize,
@@ -106,7 +106,7 @@ pub struct GenFromTxtOptions {
     pub replace_space: Option<char>,
     /// Case sensitivity for column names
     pub case_sensitive: bool,
-    /// Whether to delete intermediate values 
+    /// Whether to delete intermediate values
     pub deletechars: String,
     /// Whether to strip whitespace from values
     pub autostrip: bool,
@@ -127,7 +127,7 @@ impl Default for GenFromTxtOptions {
             "NaN".to_string(),
             "NAN".to_string(),
         ];
-        
+
         Self {
             dtype: "f64".to_string(),
             comments: "#".to_string(),
@@ -167,10 +167,10 @@ impl Default for GenFromTxtOptions {
 /// ```rust
 /// use numrs2::io::text::{loadtxt, LoadTxtOptions};
 /// use std::path::Path;
-/// 
+///
 /// // Load with default options
 /// let array = loadtxt::<f64>(Path::new("data.txt"), LoadTxtOptions::default()).unwrap();
-/// 
+///
 /// // Load with custom delimiter and skip first row
 /// let mut options = LoadTxtOptions::default();
 /// options.delimiter = Some(",".to_string());
@@ -184,38 +184,40 @@ where
 {
     let file = File::open(fname)
         .map_err(|e| NumRs2Error::IOError(format!("Failed to open file {:?}: {}", fname, e)))?;
-    
+
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
-    
+
     // Skip header rows
     for _ in 0..options.skiprows {
         if lines.next().is_none() {
-            return Err(NumRs2Error::IOError("File ended during skip rows".to_string()));
+            return Err(NumRs2Error::IOError(
+                "File ended during skip rows".to_string(),
+            ));
         }
     }
-    
+
     let mut rows = Vec::new();
     let mut rows_read = 0;
-    
+
     // Process each line
     for (line_num, line_result) in lines.enumerate() {
         let line = line_result
             .map_err(|e| NumRs2Error::IOError(format!("Error reading line {}: {}", line_num, e)))?;
-        
+
         // Skip empty lines and comments
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with(&options.comments) {
             continue;
         }
-        
+
         // Check max_rows limit
         if let Some(max_rows) = options.max_rows {
             if rows_read >= max_rows {
                 break;
             }
         }
-        
+
         // Split line by delimiter
         let values: Vec<&str> = if let Some(ref delimiter) = options.delimiter {
             line.split(delimiter).collect()
@@ -223,59 +225,67 @@ where
             // Default: split by any whitespace
             line.split_whitespace().collect()
         };
-        
+
         if values.is_empty() {
             continue;
         }
-        
+
         // Select columns if specified
         let selected_values: Vec<&str> = if let Some(ref usecols) = options.usecols {
-            usecols.iter()
+            usecols
+                .iter()
                 .filter_map(|&col_idx| values.get(col_idx))
                 .copied()
                 .collect()
         } else {
             values
         };
-        
+
         // Parse values to type T
         let mut row = Vec::with_capacity(selected_values.len());
         for (col_idx, value_str) in selected_values.iter().enumerate() {
-            let parsed_value = value_str.trim().parse::<T>()
-                .map_err(|e| NumRs2Error::ConversionError(
-                    format!("Failed to parse '{}' at line {}, column {}: {:?}", 
-                           value_str, line_num + options.skiprows, col_idx, e)
-                ))?;
+            let parsed_value = value_str.trim().parse::<T>().map_err(|e| {
+                NumRs2Error::ConversionError(format!(
+                    "Failed to parse '{}' at line {}, column {}: {:?}",
+                    value_str,
+                    line_num + options.skiprows,
+                    col_idx,
+                    e
+                ))
+            })?;
             row.push(parsed_value);
         }
-        
+
         if !row.is_empty() {
             rows.push(row);
             rows_read += 1;
         }
     }
-    
+
     if rows.is_empty() {
         return Err(NumRs2Error::IOError("No data found in file".to_string()));
     }
-    
+
     // Verify all rows have the same length
     let row_length = rows[0].len();
     for (i, row) in rows.iter().enumerate() {
         if row.len() != row_length {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Row {} has {} columns, expected {}", i, row.len(), row_length)
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Row {} has {} columns, expected {}",
+                i,
+                row.len(),
+                row_length
+            )));
         }
     }
-    
+
     // Flatten into 1D vector
     let total_elements = rows.len() * row_length;
     let mut data = Vec::with_capacity(total_elements);
     for row in rows {
         data.extend(row);
     }
-    
+
     // Create array with appropriate shape
     let shape = if row_length == 1 {
         // 1D array for single column
@@ -284,9 +294,9 @@ where
         // 2D array for multiple columns
         vec![data.len() / row_length, row_length]
     };
-    
+
     let mut array = Array::from_vec(data).reshape(&shape);
-    
+
     // Apply ndmin constraint
     while array.ndim() < options.ndmin {
         let new_shape = {
@@ -296,7 +306,7 @@ where
         };
         array = array.reshape(&new_shape);
     }
-    
+
     Ok(array)
 }
 
@@ -318,12 +328,12 @@ where
 /// use numrs2::prelude::*;
 /// use numrs2::io::text::{savetxt, SaveTxtOptions};
 /// use std::path::Path;
-/// 
+///
 /// let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// 
+///
 /// // Save with default options
 /// savetxt(Path::new("output.txt"), &array, SaveTxtOptions::default()).unwrap();
-/// 
+///
 /// // Save with custom format and delimiter
 /// let mut options = SaveTxtOptions::default();
 /// options.fmt = "%.6f".to_string();
@@ -338,15 +348,15 @@ where
 {
     let file = File::create(fname)
         .map_err(|e| NumRs2Error::IOError(format!("Failed to create file {:?}: {}", fname, e)))?;
-    
+
     let mut writer = BufWriter::new(file);
-    
+
     // Write header if provided
     if let Some(ref header) = options.header {
         writeln!(writer, "{}{}", options.comments, header)
             .map_err(|e| NumRs2Error::IOError(format!("Failed to write header: {}", e)))?;
     }
-    
+
     // Convert array to 2D if it's not already
     let array_2d = if X.ndim() == 1 {
         // Reshape 1D array to column vector
@@ -354,49 +364,51 @@ where
     } else if X.ndim() == 2 {
         X.clone()
     } else {
-        return Err(NumRs2Error::DimensionMismatch(
-            format!("Can only save 1D or 2D arrays to text files, got {}D", X.ndim())
-        ));
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Can only save 1D or 2D arrays to text files, got {}D",
+            X.ndim()
+        )));
     };
-    
+
     let shape = array_2d.shape();
     let rows = shape[0];
     let cols = shape[1];
-    
+
     // Write data
     for row in 0..rows {
         let mut line_values = Vec::with_capacity(cols);
-        
+
         for col in 0..cols {
             let index = if array_2d.ndim() == 1 {
                 vec![row]
             } else {
                 vec![row, col]
             };
-            
+
             let value = array_2d.get(&index)?;
-            
+
             // Format the value according to fmt option
             // For simplicity, we use the Display trait which all numeric types implement
             let formatted = format!("{}", value);
-            
+
             line_values.push(formatted);
         }
-        
+
         let line = line_values.join(&options.delimiter);
         write!(writer, "{}{}", line, options.newline)
             .map_err(|e| NumRs2Error::IOError(format!("Failed to write data: {}", e)))?;
     }
-    
+
     // Write footer if provided
     if let Some(ref footer) = options.footer {
         writeln!(writer, "{}{}", options.comments, footer)
             .map_err(|e| NumRs2Error::IOError(format!("Failed to write footer: {}", e)))?;
     }
-    
-    writer.flush()
+
+    writer
+        .flush()
         .map_err(|e| NumRs2Error::IOError(format!("Failed to flush output: {}", e)))?;
-    
+
     Ok(())
 }
 
@@ -416,10 +428,10 @@ where
 /// ```rust
 /// use numrs2::io::text::{genfromtxt, GenFromTxtOptions};
 /// use std::path::Path;
-/// 
+///
 /// // Load with default missing value handling
 /// let array = genfromtxt::<f64>(Path::new("data_with_missing.txt"), GenFromTxtOptions::default()).unwrap();
-/// 
+///
 /// // Load with custom missing value markers
 /// let mut options = GenFromTxtOptions::default();
 /// options.default_missing.push("NULL".to_string());
@@ -432,35 +444,40 @@ where
 {
     let file = File::open(fname)
         .map_err(|e| NumRs2Error::IOError(format!("Failed to open file {:?}: {}", fname, e)))?;
-    
+
     let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines()
+    let lines: Vec<String> = reader
+        .lines()
         .collect::<std::io::Result<Vec<_>>>()
         .map_err(|e| NumRs2Error::IOError(format!("Failed to read file: {}", e)))?;
-    
+
     if lines.is_empty() {
         return Err(NumRs2Error::IOError("File is empty".to_string()));
     }
-    
+
     // Calculate effective range of lines to process
     let total_lines = lines.len();
     if options.skip_header >= total_lines {
-        return Err(NumRs2Error::IOError("skip_header is larger than file length".to_string()));
+        return Err(NumRs2Error::IOError(
+            "skip_header is larger than file length".to_string(),
+        ));
     }
-    
+
     let end_line = if options.skip_footer > 0 {
         total_lines.saturating_sub(options.skip_footer)
     } else {
         total_lines
     };
-    
+
     if options.skip_header >= end_line {
-        return Err(NumRs2Error::IOError("No data lines available after skipping header and footer".to_string()));
+        return Err(NumRs2Error::IOError(
+            "No data lines available after skipping header and footer".to_string(),
+        ));
     }
-    
+
     let mut rows = Vec::new();
     let mut rows_read = 0;
-    
+
     // Process lines in the effective range
     for (line_idx, line) in lines[options.skip_header..end_line].iter().enumerate() {
         // Skip empty lines and comments
@@ -468,14 +485,14 @@ where
         if trimmed.is_empty() || trimmed.starts_with(&options.comments) {
             continue;
         }
-        
+
         // Check max_rows limit
         if let Some(max_rows) = options.max_rows {
             if rows_read >= max_rows {
                 break;
             }
         }
-        
+
         // Split line by delimiter
         let raw_values: Vec<&str> = if let Some(ref delimiter) = options.delimiter {
             line.split(delimiter).collect()
@@ -483,21 +500,22 @@ where
             // Default: split by any whitespace
             line.split_whitespace().collect()
         };
-        
+
         if raw_values.is_empty() {
             continue;
         }
-        
+
         // Select columns if specified
         let selected_values: Vec<&str> = if let Some(ref usecols) = options.usecols {
-            usecols.iter()
+            usecols
+                .iter()
                 .filter_map(|&col_idx| raw_values.get(col_idx))
                 .copied()
                 .collect()
         } else {
             raw_values
         };
-        
+
         // Parse values with missing value handling
         let mut row = Vec::with_capacity(selected_values.len());
         for (col_idx, value_str) in selected_values.iter().enumerate() {
@@ -506,20 +524,24 @@ where
             } else {
                 *value_str
             };
-            
+
             // Check if this is a missing value
-            let is_missing = options.default_missing.contains(&trimmed_value.to_string()) ||
-                options.missing_values.get(&col_idx)
+            let is_missing = options.default_missing.contains(&trimmed_value.to_string())
+                || options
+                    .missing_values
+                    .get(&col_idx)
                     .map(|mv| mv.contains(&trimmed_value.to_string()))
                     .unwrap_or(false);
-            
+
             let parsed_value = if is_missing {
                 // Use filling value if specified, otherwise use default (zero)
                 if let Some(filling) = options.filling_values.get(&col_idx) {
-                    filling.parse::<T>()
-                        .map_err(|e| NumRs2Error::ConversionError(
-                            format!("Failed to parse filling value '{}': {:?}", filling, e)
-                        ))?
+                    filling.parse::<T>().map_err(|e| {
+                        NumRs2Error::ConversionError(format!(
+                            "Failed to parse filling value '{}': {:?}",
+                            filling, e
+                        ))
+                    })?
                 } else {
                     T::zero()
                 }
@@ -530,51 +552,58 @@ where
                 } else {
                     trimmed_value.to_string()
                 };
-                
-                converted_str.parse::<T>()
-                    .map_err(|e| NumRs2Error::ConversionError(
-                        format!("Failed to parse '{}' at line {}, column {}: {:?}", 
-                               converted_str, line_idx + options.skip_header, col_idx, e)
-                    ))?
+
+                converted_str.parse::<T>().map_err(|e| {
+                    NumRs2Error::ConversionError(format!(
+                        "Failed to parse '{}' at line {}, column {}: {:?}",
+                        converted_str,
+                        line_idx + options.skip_header,
+                        col_idx,
+                        e
+                    ))
+                })?
             };
-            
+
             row.push(parsed_value);
         }
-        
+
         if !row.is_empty() {
             rows.push(row);
             rows_read += 1;
         }
     }
-    
+
     if rows.is_empty() {
         return Err(NumRs2Error::IOError("No data found in file".to_string()));
     }
-    
+
     // Verify all rows have the same length
     let row_length = rows[0].len();
     for (i, row) in rows.iter().enumerate() {
         if row.len() != row_length {
-            return Err(NumRs2Error::DimensionMismatch(
-                format!("Row {} has {} columns, expected {}", i, row.len(), row_length)
-            ));
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Row {} has {} columns, expected {}",
+                i,
+                row.len(),
+                row_length
+            )));
         }
     }
-    
+
     // Flatten into 1D vector
     let total_elements = rows.len() * row_length;
     let mut data = Vec::with_capacity(total_elements);
     for row in rows {
         data.extend(row);
     }
-    
+
     // Create array with appropriate shape
     let shape = if row_length == 1 {
         vec![data.len()]
     } else {
         vec![data.len() / row_length, row_length]
     };
-    
+
     Ok(Array::from_vec(data).reshape(&shape))
 }
 
@@ -591,33 +620,34 @@ where
 pub fn detect_delimiter(fname: &Path, sample_lines: Option<usize>) -> Result<String> {
     let file = File::open(fname)
         .map_err(|e| NumRs2Error::IOError(format!("Failed to open file {:?}: {}", fname, e)))?;
-    
+
     let reader = BufReader::new(file);
     let sample_size = sample_lines.unwrap_or(10);
-    
-    let sample: Vec<String> = reader.lines()
+
+    let sample: Vec<String> = reader
+        .lines()
         .take(sample_size)
         .collect::<std::io::Result<Vec<_>>>()
         .map_err(|e| NumRs2Error::IOError(format!("Failed to read file: {}", e)))?;
-    
+
     if sample.is_empty() {
         return Err(NumRs2Error::IOError("File is empty".to_string()));
     }
-    
+
     // Common delimiters to test
     let delimiters = vec![",", "\t", ";", "|", " "];
     let mut delimiter_scores = HashMap::new();
-    
+
     for delimiter in &delimiters {
         let mut total_consistency = 0.0;
         let mut valid_lines = 0;
-        
+
         for line in &sample {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            
+
             let parts: Vec<&str> = line.split(delimiter).collect();
             if parts.len() > 1 {
                 // Score based on consistency of column count
@@ -625,26 +655,26 @@ pub fn detect_delimiter(fname: &Path, sample_lines: Option<usize>) -> Result<Str
                 valid_lines += 1;
             }
         }
-        
+
         if valid_lines > 0 {
             let avg_consistency = total_consistency / valid_lines as f64;
             delimiter_scores.insert(delimiter, avg_consistency);
         }
     }
-    
+
     if delimiter_scores.is_empty() {
         return Ok(" ".to_string()); // Default to space
     }
-    
+
     // Find delimiter with highest average column count
-    let best_delimiter = delimiter_scores.iter()
+    let best_delimiter = delimiter_scores
+        .iter()
         .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(delimiter, _)| delimiter.to_string())
         .unwrap_or_else(|| " ".to_string());
-    
+
     Ok(best_delimiter)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -658,12 +688,12 @@ mod tests {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "1.0 2.0 3.0").unwrap();
         writeln!(temp_file, "4.0 5.0 6.0").unwrap();
-        
+
         let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default()).unwrap();
         assert_eq!(array.shape(), &[2, 3]);
         assert_eq!(array.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     }
-    
+
     #[test]
     fn test_loadtxt_with_comments() {
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -671,61 +701,61 @@ mod tests {
         writeln!(temp_file, "1.0 2.0").unwrap();
         writeln!(temp_file, "# Another comment").unwrap();
         writeln!(temp_file, "3.0 4.0").unwrap();
-        
+
         let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default()).unwrap();
         assert_eq!(array.shape(), &[2, 2]);
         assert_eq!(array.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
     }
-    
+
     #[test]
     fn test_loadtxt_with_delimiter() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "1.0,2.0,3.0").unwrap();
         writeln!(temp_file, "4.0,5.0,6.0").unwrap();
-        
+
         let mut options = LoadTxtOptions::default();
         options.delimiter = Some(",".to_string());
-        
+
         let array = loadtxt::<f64>(temp_file.path(), options).unwrap();
         assert_eq!(array.shape(), &[2, 3]);
         assert_eq!(array.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     }
-    
+
     #[test]
     fn test_savetxt_basic() {
         let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let temp_file = NamedTempFile::new().unwrap();
-        
+
         savetxt(temp_file.path(), &array, SaveTxtOptions::default()).unwrap();
-        
+
         let content = fs::read_to_string(temp_file.path()).unwrap();
         let lines: Vec<&str> = content.trim().split('\n').collect();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("1") && lines[0].contains("2"));
         assert!(lines[1].contains("3") && lines[1].contains("4"));
     }
-    
+
     #[test]
     fn test_genfromtxt_with_missing() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "1.0 2.0 3.0").unwrap();
         writeln!(temp_file, "4.0 nan 6.0").unwrap();
         writeln!(temp_file, "7.0 8.0 N/A").unwrap();
-        
+
         let array = genfromtxt::<f64>(temp_file.path(), GenFromTxtOptions::default()).unwrap();
         assert_eq!(array.shape(), &[3, 3]);
         // Missing values should be replaced with 0.0
         let expected = vec![1.0, 2.0, 3.0, 4.0, 0.0, 6.0, 7.0, 8.0, 0.0];
         assert_eq!(array.to_vec(), expected);
     }
-    
+
     #[test]
     fn test_detect_delimiter() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "1,2,3").unwrap();
         writeln!(temp_file, "4,5,6").unwrap();
         writeln!(temp_file, "7,8,9").unwrap();
-        
+
         let delimiter = detect_delimiter(temp_file.path(), Some(3)).unwrap();
         assert_eq!(delimiter, ",");
     }

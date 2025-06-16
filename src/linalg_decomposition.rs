@@ -1,14 +1,14 @@
 //! Matrix decomposition functions
-//! 
+//!
 //! This module contains matrix decomposition functions extracted from the main linalg module
 //! for better organization and modularity. Includes:
-//! 
+//!
 //! - QR decomposition (`qr`)
-//! - Cholesky decomposition (`cholesky`) 
+//! - Cholesky decomposition (`cholesky`)
 //! - Eigenvalue decomposition (`eig`)
 //! - Singular value decomposition (`svd`)
 //! - Matrix rank computation (`matrix_rank`)
-//! 
+//!
 //! All functions support both feature-gated (with `matrix_decomp`) and non-feature-gated versions
 //! to maintain compatibility across different build configurations.
 
@@ -18,27 +18,27 @@ use num_traits::Float;
 use std::fmt::Debug;
 
 /// Compute the rank of a matrix
-/// 
+///
 /// Computes the rank of a matrix using singular value decomposition.
-/// The rank is determined by counting the number of singular values 
+/// The rank is determined by counting the number of singular values
 /// that are greater than a specified tolerance.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `a` - Input 2D matrix
 /// * `tol` - Tolerance for determining rank. If None, uses default tolerance
 ///   based on machine precision and matrix size
-/// 
+///
 /// # Returns
-/// 
+///
 /// The rank of the matrix as a usize
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::matrix_rank;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let rank = matrix_rank(&a, None).unwrap();
 /// assert_eq!(rank, 2);
@@ -47,7 +47,10 @@ use std::fmt::Debug;
 pub fn matrix_rank<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     tol: Option<T>,
-) -> Result<usize> {
+) -> Result<usize>
+where
+    <T as ndarray_linalg::Scalar>::Real: Clone + num_traits::Float,
+{
     // Check that the matrix is 2D
     let shape = a.shape();
     if shape.len() != 2 {
@@ -56,23 +59,29 @@ pub fn matrix_rank<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
         ));
     }
 
-    // Compute SVD to get singular values
-    let (_, s, _) = svd(a)?;
+    // Compute SVD to get singular values using the proper implementation
+    let (_, s, _) = crate::new_modules::matrix_decomp::svd(a)?;
 
     // Get the tolerance
     let tol_val = match tol {
-        Some(t) => t,
+        Some(t) => {
+            // Convert user tolerance to Real type
+            <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(t)
+                .unwrap_or_else(<<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero)
+        }
         None => {
             // Default is max(M, N) * eps * max(S)
             let m = shape[0];
             let n = shape[1];
             let max_dim = std::cmp::max(m, n);
-            let eps = T::epsilon();
-            let max_s = s
-                .array()
-                .fold(T::zero(), |max, &val| if val > max { val } else { max });
+            let eps = <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::epsilon();
+            let s_data = s.to_vec();
+            let max_s = s_data.iter().fold(
+                <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero(),
+                |max, &val| if val > max { val } else { max }
+            );
 
-            T::from(max_dim).unwrap() * eps * max_s
+            <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(max_dim).unwrap() * eps * max_s
         }
     };
 
@@ -84,24 +93,24 @@ pub fn matrix_rank<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 }
 
 /// Compute the QR decomposition of a matrix
-/// 
+///
 /// Performs QR decomposition of a matrix A such that A = Q * R, where
 /// Q is an orthogonal matrix and R is an upper triangular matrix.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `a` - Input matrix to decompose
-/// 
+///
 /// # Returns
-/// 
+///
 /// A tuple (Q, R) where Q is orthogonal and R is upper triangular
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::qr;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (q, r) = qr(&a).unwrap();
 /// ```
@@ -113,51 +122,61 @@ pub fn qr<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 }
 
 /// Compute the QR decomposition of a matrix
-/// 
+///
 /// Performs QR decomposition of a matrix A such that A = Q * R, where
 /// Q is an orthogonal matrix and R is an upper triangular matrix.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `a` - Input matrix to decompose
-/// 
+///
 /// # Returns
-/// 
+///
 /// A tuple (Q, R) where Q is orthogonal and R is upper triangular
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::qr;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (q, r) = qr(&a).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn qr<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>) -> Result<(Array<T>, Array<T>)> {
+pub fn qr<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
+    a: &Array<T>,
+) -> Result<(Array<T>, Array<T>)> {
     a.qr()
 }
 
 /// Compute the Cholesky decomposition of a matrix
-/// 
+///
 /// Performs Cholesky decomposition of a positive definite matrix A such that
 /// A = L * L^T, where L is a lower triangular matrix.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `a` - Input positive definite matrix
-/// 
+///
 /// # Returns
-/// 
+///
 /// The lower triangular matrix L
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::cholesky;
-/// 
+///
 /// // Create a positive definite matrix
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
 /// let l = cholesky(&a).unwrap();
@@ -170,30 +189,40 @@ pub fn cholesky<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 }
 
 /// Compute the Cholesky decomposition of a matrix
-/// 
+///
 /// Performs Cholesky decomposition of a positive definite matrix A such that
 /// A = L * L^T, where L is a lower triangular matrix.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `a` - Input positive definite matrix
-/// 
+///
 /// # Returns
-/// 
+///
 /// The lower triangular matrix L
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::cholesky;
-/// 
+///
 /// // Create a positive definite matrix
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
 /// let l = cholesky(&a).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn cholesky<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>) -> Result<Array<T>> {
+pub fn cholesky<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
+    a: &Array<T>,
+) -> Result<Array<T>> {
     a.cholesky()
 }
 
@@ -212,13 +241,13 @@ pub fn cholesky<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAs
 ///
 /// A tuple of (eigenvalues, eigenvectors) where eigenvalues is a 1D array
 /// and eigenvectors is a 2D array with eigenvectors as columns
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::eig;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
 /// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
 /// ```
@@ -307,18 +336,26 @@ pub fn eig<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 ///
 /// A tuple of (eigenvalues, eigenvectors) where eigenvalues is a 1D array
 /// and eigenvectors is a 2D array with eigenvectors as columns
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::eig;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
 /// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn eig<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(
+pub fn eig<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
     a: &Array<T>,
     sort: Option<&str>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -388,28 +425,28 @@ pub fn eig<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign 
 }
 
 /// Compute the singular value decomposition of a matrix
-/// 
+///
 /// Performs singular value decomposition of a matrix A such that
 /// A = U * S * V^T, where U and V are orthogonal matrices and S is
 /// a diagonal matrix containing the singular values.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `a` - Input matrix to decompose
-/// 
+///
 /// # Returns
-/// 
+///
 /// A tuple (U, S, V^T) where:
 /// - U: Left singular vectors (orthogonal matrix)
 /// - S: Singular values (1D array)
 /// - V^T: Right singular vectors transposed (orthogonal matrix)
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::svd;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (u, s, vt) = svd(&a).unwrap();
 /// ```
@@ -421,32 +458,42 @@ pub fn svd<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 }
 
 /// Compute the singular value decomposition of a matrix
-/// 
+///
 /// Performs singular value decomposition of a matrix A such that
 /// A = U * S * V^T, where U and V are orthogonal matrices and S is
 /// a diagonal matrix containing the singular values.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `a` - Input matrix to decompose
-/// 
+///
 /// # Returns
-/// 
+///
 /// A tuple (U, S, V^T) where:
 /// - U: Left singular vectors (orthogonal matrix)
 /// - S: Singular values (1D array)
 /// - V^T: Right singular vectors transposed (orthogonal matrix)
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use numrs::Array;
 /// use numrs::linalg::decomposition::svd;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (u, s, vt) = svd(&a).unwrap();
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn svd<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>) -> Result<(Array<T>, Array<T>, Array<T>)> {
+pub fn svd<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
+    a: &Array<T>,
+) -> Result<(Array<T>, Array<T>, Array<T>)> {
     a.svd()
 }

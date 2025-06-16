@@ -118,6 +118,12 @@ pub struct CacheOptimizedAllocator {
     access_tracker: std::sync::Mutex<AccessTracker>,
 }
 
+impl Default for CacheOptimizedAllocator {
+    fn default() -> Self {
+        Self::new(CacheConfig::default())
+    }
+}
+
 impl CacheOptimizedAllocator {
     /// Create a new cache-optimized allocator
     pub fn new(config: CacheConfig) -> Self {
@@ -126,11 +132,6 @@ impl CacheOptimizedAllocator {
             metrics: std::sync::Mutex::new(CacheMetrics::default()),
             access_tracker: std::sync::Mutex::new(AccessTracker::new()),
         }
-    }
-
-    /// Create with default cache configuration
-    pub fn default() -> Self {
-        Self::new(CacheConfig::default())
     }
 
     /// Get current cache performance metrics

@@ -51,7 +51,7 @@ pub trait ElementWiseMath<T> {
     // Utility functions
     fn clip(&self, min: T, max: T) -> Array<T>;
     fn sign(&self) -> Array<T>;
-    
+
     // Safe versions that return Result for error handling
     fn safe_logaddexp(&self, other: &Array<T>) -> Result<Array<T>>;
     fn safe_logaddexp2(&self, other: &Array<T>) -> Result<Array<T>>;
@@ -170,8 +170,12 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
     }
 
     fn atan2(&self, other: &Array<T>) -> Array<T> {
-        self.zip_with(other, |a, b| a.atan2(b))
-            .unwrap_or_else(|e| panic!("Failed to broadcast in atan2: {}. Consider using safe_atan2() for error handling.", e))
+        self.zip_with(other, |a, b| a.atan2(b)).unwrap_or_else(|e| {
+            panic!(
+                "Failed to broadcast in atan2: {}. Consider using safe_atan2() for error handling.",
+                e
+            )
+        })
     }
 
     fn hypot(&self, other: &Array<T>) -> Array<T> {
@@ -255,7 +259,7 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
             }
         })
     }
-    
+
     // Safe versions that return Result for proper error handling
     fn safe_logaddexp(&self, other: &Array<T>) -> Result<Array<T>> {
         self.zip_with(other, |a, b| {
@@ -270,9 +274,12 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
             let sum = (a - max_val).exp() + (b - max_val).exp();
             max_val + sum.ln()
         })
-        .map_err(|e| crate::error::NumRs2Error::ComputationError(
-            format!("Broadcasting failed in logaddexp: {}", e)
-        ))
+        .map_err(|e| {
+            crate::error::NumRs2Error::ComputationError(format!(
+                "Broadcasting failed in logaddexp: {}",
+                e
+            ))
+        })
     }
 
     fn safe_logaddexp2(&self, other: &Array<T>) -> Result<Array<T>> {
@@ -289,27 +296,39 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
 
             let a_scaled = a * ln2;
             let b_scaled = b * ln2;
-            let max_val = if a_scaled > b_scaled { a_scaled } else { b_scaled };
+            let max_val = if a_scaled > b_scaled {
+                a_scaled
+            } else {
+                b_scaled
+            };
             let sum = (a_scaled - max_val).exp() + (b_scaled - max_val).exp();
             (max_val + sum.ln()) * log2_e
         })
-        .map_err(|e| crate::error::NumRs2Error::ComputationError(
-            format!("Broadcasting failed in logaddexp2: {}", e)
-        ))
+        .map_err(|e| {
+            crate::error::NumRs2Error::ComputationError(format!(
+                "Broadcasting failed in logaddexp2: {}",
+                e
+            ))
+        })
     }
 
     fn safe_atan2(&self, other: &Array<T>) -> Result<Array<T>> {
-        self.zip_with(other, |a, b| a.atan2(b))
-            .map_err(|e| crate::error::NumRs2Error::ComputationError(
-                format!("Broadcasting failed in atan2: {}", e)
+        self.zip_with(other, |a, b| a.atan2(b)).map_err(|e| {
+            crate::error::NumRs2Error::ComputationError(format!(
+                "Broadcasting failed in atan2: {}",
+                e
             ))
+        })
     }
 
     fn safe_hypot(&self, other: &Array<T>) -> Result<Array<T>> {
         self.zip_with(other, |a, b| (a * a + b * b).sqrt())
-            .map_err(|e| crate::error::NumRs2Error::ComputationError(
-                format!("Broadcasting failed in hypot: {}", e)
-            ))
+            .map_err(|e| {
+                crate::error::NumRs2Error::ComputationError(format!(
+                    "Broadcasting failed in hypot: {}",
+                    e
+                ))
+            })
     }
 }
 

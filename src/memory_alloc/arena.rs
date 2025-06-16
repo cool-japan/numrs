@@ -313,7 +313,7 @@ impl<'a, T> ArenaVec<'a, T> {
         // Allocate memory from the arena
         let size = capacity * mem::size_of::<T>();
         let ptr_opt = arena.allocate_aligned(size, mem::align_of::<T>());
-        
+
         if ptr_opt.is_none() {
             // Fallback to zero capacity if allocation fails
             return Self {
@@ -324,7 +324,7 @@ impl<'a, T> ArenaVec<'a, T> {
                 phantom: PhantomData,
             };
         }
-        
+
         let ptr = ptr_opt.unwrap();
 
         Self {

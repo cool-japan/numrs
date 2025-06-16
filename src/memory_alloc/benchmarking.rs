@@ -168,6 +168,12 @@ pub struct AllocatorBenchmark {
     rng_state: u64, // Simple XORShift PRNG for reproducible benchmarks
 }
 
+impl Default for AllocatorBenchmark {
+    fn default() -> Self {
+        Self::new(BenchmarkConfig::default())
+    }
+}
+
 impl AllocatorBenchmark {
     /// Create a new allocator benchmark with the given configuration
     pub fn new(config: BenchmarkConfig) -> Self {
@@ -175,11 +181,6 @@ impl AllocatorBenchmark {
             config,
             rng_state: 0x123456789abcdef0,
         }
-    }
-
-    /// Create a benchmark with default configuration
-    pub fn default() -> Self {
-        Self::new(BenchmarkConfig::default())
     }
 
     /// Simple XORShift PRNG for reproducible random numbers

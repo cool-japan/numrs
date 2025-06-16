@@ -1,5 +1,5 @@
 //! Matrix operation functions including determinant and matrix power calculations.
-//! 
+//!
 //! This module provides essential matrix operations that are commonly used
 //! in linear algebra computations.
 
@@ -9,20 +9,20 @@ use num_traits::Float;
 use std::fmt::Debug;
 
 /// Compute the determinant of a matrix
-/// 
+///
 /// # Arguments
 /// * `a` - Input square matrix for which to compute the determinant
-/// 
+///
 /// # Returns
 /// * `Result<T>` - The determinant value if successful, error otherwise
-/// 
+///
 /// # Errors
 /// * `NumRs2Error::DimensionMismatch` - If the input is not a square matrix
-/// 
+///
 /// # Examples
 /// ```
 /// use numrs::prelude::*;
-/// 
+///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let det_val = det(&a).unwrap();
 /// assert_eq!(det_val, -2.0);
@@ -32,28 +32,28 @@ pub fn det<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> R
 }
 
 /// Compute the matrix power (A raised to power n)
-/// 
+///
 /// # Arguments
 /// * `a` - Input square matrix to raise to power n
 /// * `n` - The power to raise the matrix to (can be positive, negative, or zero)
-/// 
+///
 /// # Returns
 /// * `Result<Array<T>>` - The matrix raised to power n if successful, error otherwise
-/// 
+///
 /// # Errors
 /// * `NumRs2Error::DimensionMismatch` - If the input is not a square matrix
 /// * Matrix inversion errors if n is negative and matrix is singular
-/// 
+///
 /// # Examples
 /// ```
 /// use numrs::prelude::*;
-/// 
+///
 /// let a = Array::from_vec(vec![2.0, 0.0, 0.0, 2.0]).reshape(&[2, 2]);
 /// let a_squared = matrix_power(&a, 2).unwrap();
 /// let expected = Array::from_vec(vec![4.0, 0.0, 0.0, 4.0]).reshape(&[2, 2]);
 /// // Result should be [[4, 0], [0, 4]]
 /// ```
-/// 
+///
 /// # Special cases
 /// * `n = 0`: Returns the identity matrix of the same size
 /// * `n = 1`: Returns a copy of the original matrix  

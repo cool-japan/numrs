@@ -1,12 +1,11 @@
 //! Tests for numerical stability of matrix decompositions
 
-
+#[cfg(feature = "matrix_decomp")]
+use approx::assert_relative_eq;
 use num_traits::Float;
 use numrs2::array::Array;
 #[cfg(feature = "matrix_decomp")]
 use numrs2::linalg_extended::{cholesky, condition_number, lu, pivoted_cholesky, qr, svd};
-#[cfg(feature = "matrix_decomp")]
-use approx::assert_relative_eq;
 
 /// Generate a Hilbert matrix of size n x n
 /// Hilbert matrices are famously ill-conditioned and provide a good stress test

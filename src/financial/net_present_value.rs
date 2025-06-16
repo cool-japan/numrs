@@ -6,7 +6,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 #[allow(unused_imports)] // Used via T::zero(), T::one(), .is_zero() methods
-use num_traits::{Float, Zero, One};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
 
 /// Calculate the net present value of a cash flow series.
@@ -56,7 +56,7 @@ where
     }
 
     let cash_flows = values.to_vec();
-    
+
     if cash_flows.is_empty() {
         return Err(NumRs2Error::ComputationError(
             "Cash flow array cannot be empty".to_string(),
@@ -65,18 +65,20 @@ where
 
     let mut npv_value = T::zero();
     let one_plus_rate = T::one() + rate;
-    
+
     for (i, &cash_flow) in cash_flows.iter().enumerate() {
         if cash_flow.is_nan() {
-            return Err(NumRs2Error::ComputationError(
-                format!("Cash flow at index {} is NaN", i),
-            ));
+            return Err(NumRs2Error::ComputationError(format!(
+                "Cash flow at index {} is NaN",
+                i
+            )));
         }
-        
+
         if cash_flow.is_infinite() {
-            return Err(NumRs2Error::ComputationError(
-                format!("Cash flow at index {} is infinite", i),
-            ));
+            return Err(NumRs2Error::ComputationError(format!(
+                "Cash flow at index {} is infinite",
+                i
+            )));
         }
 
         if i == 0 {
@@ -181,7 +183,7 @@ where
         let row_end = row_start + cols;
         let row_data = data[row_start..row_end].to_vec();
         let row_array = Array::from_vec(row_data);
-        
+
         let npv_result = npv(rate, &row_array)?;
         result_vec.push(npv_result);
     }
@@ -243,7 +245,7 @@ mod tests {
         let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
         let result = npv_rates(&rates, &cash_flows).unwrap();
         assert_eq!(result.shape(), vec![3]);
-        
+
         let values = result.to_vec();
         // Higher discount rates should give lower NPVs
         assert!(values[0] > values[1]);
@@ -253,12 +255,13 @@ mod tests {
     #[test]
     fn test_npv_multiple_series() {
         let cash_flows = Array::from_vec(vec![
-            -1000.0, 300.0, 400.0, 500.0,  // Project 1
-            -1200.0, 400.0, 500.0, 600.0   // Project 2
-        ]).reshape(&[2, 4]);
+            -1000.0, 300.0, 400.0, 500.0, // Project 1
+            -1200.0, 400.0, 500.0, 600.0, // Project 2
+        ])
+        .reshape(&[2, 4]);
         let result = npv_multiple_series(0.1, &cash_flows).unwrap();
         assert_eq!(result.shape(), vec![2]);
-        
+
         let values = result.to_vec();
         assert_relative_eq!(values[0], -21.036814, epsilon = 1e-5); // Project 1 NPV
         assert_relative_eq!(values[1], 27.648385, epsilon = 1e-5); // Project 2 NPV

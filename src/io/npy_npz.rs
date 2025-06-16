@@ -269,7 +269,11 @@ pub fn serialize_to_file<T: Clone, W: Write + Seek>(
         "bool" => {
             let data = array.to_vec();
             for val in data.iter() {
-                let val_byte = if unsafe { std::mem::transmute_copy::<T, bool>(val) } { 1u8 } else { 0u8 };
+                let val_byte = if unsafe { std::mem::transmute_copy::<T, bool>(val) } {
+                    1u8
+                } else {
+                    0u8
+                };
                 npy_data.push(val_byte);
             }
         }
@@ -313,7 +317,6 @@ pub fn serialize_to_file<T: Clone, W: Write + Seek>(
 
     Ok(())
 }
-
 
 // Generic function to read NPY data for any supported type
 fn read_npy_generic<T: Clone, R: Read>(mut reader: R) -> Result<Array<T>> {
@@ -386,7 +389,7 @@ fn read_npy_generic<T: Clone, R: Read>(mut reader: R) -> Result<Array<T>> {
 
     // Convert raw bytes to typed values
     let mut typed_data = Vec::with_capacity(total_elements);
-    
+
     match type_name {
         "f32" => {
             for chunk in raw_data.chunks_exact(4) {

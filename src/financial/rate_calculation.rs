@@ -3,12 +3,12 @@
 //! This module implements the interest rate (RATE) calculation function,
 //! compatible with NumPy's financial functions.
 
+use super::validate_financial_params;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 #[allow(unused_imports)] // Used via T::zero(), T::one(), .is_zero() methods
-use num_traits::{Float, Zero, One};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
-use super::validate_financial_params;
 
 /// Calculate the interest rate per period.
 ///
@@ -66,10 +66,10 @@ where
 
     // Newton-Raphson method
     let mut rate = guess;
-    
+
     for _ in 0..maxiter {
         let (f_val, f_prime) = rate_function_and_derivative(rate, nper, pmt, pv, fv, when_factor);
-        
+
         if f_prime.abs() < T::from(1e-15).unwrap() {
             return Err(NumRs2Error::ComputationError(
                 "Rate calculation failed: derivative too small".to_string(),
@@ -77,11 +77,11 @@ where
         }
 
         let new_rate = rate - f_val / f_prime;
-        
+
         if (new_rate - rate).abs() < tol {
             return Ok(new_rate);
         }
-        
+
         rate = new_rate;
 
         // Prevent negative rates in some contexts
@@ -96,14 +96,7 @@ where
 }
 
 /// Calculate the function value and its derivative for Newton-Raphson method
-fn rate_function_and_derivative<T>(
-    rate: T,
-    nper: T,
-    pmt: T,
-    pv: T,
-    fv: T,
-    when_factor: T,
-) -> (T, T)
+fn rate_function_and_derivative<T>(rate: T, nper: T, pmt: T, pv: T, fv: T, when_factor: T) -> (T, T)
 where
     T: Float + Debug + Clone,
 {
@@ -117,28 +110,27 @@ where
     let one_plus_rate = T::one() + rate;
     let compound = one_plus_rate.powf(nper);
     let compound_inv = T::one() / compound;
-    
+
     // Function value: pv + pmt * [(1+r)^n - 1] / r * (1+r)^(-n) * (1 + r*when) + fv * (1+r)^(-n)
     let annuity_term = (compound - T::one()) / rate;
     let pmt_term = pmt * annuity_term * compound_inv * (T::one() + rate * when_factor);
     let fv_term = fv * compound_inv;
     let f_val = pv + pmt_term + fv_term;
-    
+
     // Derivative calculation
     let d_compound_d_rate = nper * one_plus_rate.powf(nper - T::one());
     let d_compound_inv_d_rate = -compound_inv * compound_inv * d_compound_d_rate;
-    
+
     let d_annuity_d_rate = (d_compound_d_rate * rate - compound + T::one()) / (rate * rate);
-    
-    let d_pmt_term_d_rate = pmt * (
-        d_annuity_d_rate * compound_inv * (T::one() + rate * when_factor) +
-        annuity_term * d_compound_inv_d_rate * (T::one() + rate * when_factor) +
-        annuity_term * compound_inv * when_factor
-    );
-    
+
+    let d_pmt_term_d_rate = pmt
+        * (d_annuity_d_rate * compound_inv * (T::one() + rate * when_factor)
+            + annuity_term * d_compound_inv_d_rate * (T::one() + rate * when_factor)
+            + annuity_term * compound_inv * when_factor);
+
     let d_fv_term_d_rate = fv * d_compound_inv_d_rate;
     let f_prime = d_pmt_term_d_rate + d_fv_term_d_rate;
-    
+
     (f_val, f_prime)
 }
 
@@ -186,7 +178,16 @@ where
     let mut result_vec = Vec::with_capacity(nper_vec.len());
 
     for i in 0..nper_vec.len() {
-        let rate_result = rate(nper_vec[i], pmt_vec[i], pv_vec[i], fv_vec[i], when, guess, tol, maxiter)?;
+        let rate_result = rate(
+            nper_vec[i],
+            pmt_vec[i],
+            pv_vec[i],
+            fv_vec[i],
+            when,
+            guess,
+            tol,
+            maxiter,
+        )?;
         result_vec.push(rate_result);
     }
 
@@ -202,29 +203,69 @@ mod tests {
     fn test_rate_basic_loan() {
         // Test interest rate calculation for a known loan
         let monthly_rate = 0.05 / 12.0;
-        let result = rate(60.0, -188.71, 10000.0, 0.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = rate(
+            60.0,
+            -188.71,
+            10000.0,
+            0.0,
+            0,
+            Some(0.1),
+            Some(1e-6),
+            Some(100),
+        )
+        .unwrap();
         assert_relative_eq!(result, monthly_rate, epsilon = 1e-4);
     }
 
     #[test]
     fn test_rate_simple_case() {
         // Simple case: find rate for doubling money in 10 periods with no payments
-        let result = rate(10.0, 0.0, -1000.0, 2000.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
-        let expected = 2.0_f64.powf(1.0/10.0) - 1.0; // ~7.18%
+        let result = rate(
+            10.0,
+            0.0,
+            -1000.0,
+            2000.0,
+            0,
+            Some(0.1),
+            Some(1e-6),
+            Some(100),
+        )
+        .unwrap();
+        let expected = 2.0_f64.powf(1.0 / 10.0) - 1.0; // ~7.18%
         assert_relative_eq!(result, expected, epsilon = 1e-6);
     }
 
     #[test]
     fn test_rate_annuity() {
         // Test rate calculation for an annuity
-        let result = rate(10.0, -100.0, 772.17, 0.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = rate(
+            10.0,
+            -100.0,
+            772.17,
+            0.0,
+            0,
+            Some(0.1),
+            Some(1e-6),
+            Some(100),
+        )
+        .unwrap();
         assert_relative_eq!(result, 0.05, epsilon = 1e-3);
     }
 
     #[test]
     fn test_rate_zero_payment() {
         // Test rate with zero payment (simple compound interest)
-        let result = rate(5.0, 0.0, -1000.0, 1276.28, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = rate(
+            5.0,
+            0.0,
+            -1000.0,
+            1276.28,
+            0,
+            Some(0.1),
+            Some(1e-6),
+            Some(100),
+        )
+        .unwrap();
         assert_relative_eq!(result, 0.05, epsilon = 1e-4);
     }
 
@@ -235,9 +276,19 @@ mod tests {
         let pvs = Array::from_vec(vec![-1000.0, -2000.0]);
         let fvs = Array::from_vec(vec![1628.89, 6536.00]);
 
-        let result = rate_array(&npers, &pmts, &pvs, &fvs, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = rate_array(
+            &npers,
+            &pmts,
+            &pvs,
+            &fvs,
+            0,
+            Some(0.1),
+            Some(1e-6),
+            Some(100),
+        )
+        .unwrap();
         assert_eq!(result.shape(), vec![2]);
-        
+
         let values = result.to_vec();
         assert_relative_eq!(values[0], 0.05, epsilon = 1e-4);
         assert_relative_eq!(values[1], 0.06, epsilon = 1e-3);

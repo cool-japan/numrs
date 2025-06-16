@@ -126,6 +126,12 @@ impl Default for TuningConfig {
     }
 }
 
+impl Default for PerformanceTuner {
+    fn default() -> Self {
+        Self::new(TuningConfig::default())
+    }
+}
+
 impl PerformanceTuner {
     /// Create a new performance tuner
     pub fn new(config: TuningConfig) -> Self {
@@ -135,11 +141,6 @@ impl PerformanceTuner {
             config,
             benchmark_cache: HashMap::new(),
         }
-    }
-
-    /// Create a tuner with default configuration
-    pub fn default() -> Self {
-        Self::new(TuningConfig::default())
     }
 
     /// Record an allocation event

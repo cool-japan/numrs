@@ -76,6 +76,12 @@ impl Default for OptimizationHints {
     }
 }
 
+impl Default for StrideCalculator {
+    fn default() -> Self {
+        Self::new(OptimizationHints::default())
+    }
+}
+
 impl StrideCalculator {
     /// Create a new stride calculator
     pub fn new(hints: OptimizationHints) -> Self {
@@ -83,11 +89,6 @@ impl StrideCalculator {
             stride_cache: HashMap::new(),
             hints,
         }
-    }
-
-    /// Create a stride calculator with default hints
-    pub fn default() -> Self {
-        Self::new(OptimizationHints::default())
     }
 
     /// Compute optimal strides for given shape and access pattern

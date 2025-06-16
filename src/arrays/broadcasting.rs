@@ -48,15 +48,16 @@ pub struct BroadcastEngine {
     config: BroadcastConfig,
 }
 
+impl Default for BroadcastEngine {
+    fn default() -> Self {
+        Self::new(BroadcastConfig::default())
+    }
+}
+
 impl BroadcastEngine {
     /// Create a new broadcasting engine
     pub fn new(config: BroadcastConfig) -> Self {
         Self { config }
-    }
-
-    /// Create a default broadcasting engine
-    pub fn default() -> Self {
-        Self::new(BroadcastConfig::default())
     }
 
     /// Add two arrays with broadcasting
@@ -176,7 +177,7 @@ impl BroadcastEngine {
                 }
                 Ok::<(), String>(())
             })
-            .map_err(|e| NumRs2Error::RuntimeError(e))?;
+            .map_err(NumRs2Error::RuntimeError)?;
 
         Ok(())
     }

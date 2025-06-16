@@ -4,24 +4,54 @@
 //! It includes functions for string manipulation, comparison, and character type checking.
 
 pub use crate::array_ops::string_ops::{
-    // Core string operations
-    StringArray, StringElement, array_from_strings,
-    
     // String manipulation functions
-    add, multiply, mod_format, center, ljust, rjust,
-    strip, lstrip, rstrip, upper, lower, title, capitalize,
-    replace, split, join, count, find, rfind,
-    startswith, endswith,
+    add,
+    array_from_strings,
+
+    capitalize,
+    center,
+    count,
+    endswith,
+    find,
+    join,
+    ljust,
+    lower,
+    lstrip,
+    mod_format,
+    multiply,
+    replace,
+    rfind,
+    rjust,
+    rstrip,
+    split,
+    startswith,
+    strip,
+    title,
+    upper,
+    // Core string operations
+    StringArray,
+    StringElement,
 };
 
 pub use crate::array_ops::string_ops::chartype::{
+    isalnum,
     // Character type checking functions
-    isalpha, isalnum, isdigit, islower, isupper, istitle, isspace,
+    isalpha,
+    isdigit,
+    islower,
+    isspace,
+    istitle,
+    isupper,
 };
 
 pub use crate::array_ops::string_ops::compare::{
     // String comparison functions
-    equal, not_equal, less, less_equal, greater, greater_equal,
+    equal,
+    greater,
+    greater_equal,
+    less,
+    less_equal,
+    not_equal,
 };
 
 use crate::array::Array;
@@ -39,24 +69,27 @@ pub fn decode(arr: &StringArray, encoding: &str, errors: &str) -> Result<StringA
             encoding
         )));
     }
-    
+
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         match s.to_string() {
             Ok(string) => result.push(StringElement::unicode(string)),
-            Err(_) => {
-                match errors {
-                    "strict" => return Err(NumRs2Error::ValueError("Decoding error".to_string())),
-                    "ignore" => result.push(StringElement::unicode("")),
-                    "replace" => result.push(StringElement::unicode("�")),
-                    _ => return Err(NumRs2Error::ValueError(format!("Invalid error handling: {}", errors))),
+            Err(_) => match errors {
+                "strict" => return Err(NumRs2Error::ValueError("Decoding error".to_string())),
+                "ignore" => result.push(StringElement::unicode("")),
+                "replace" => result.push(StringElement::unicode("�")),
+                _ => {
+                    return Err(NumRs2Error::ValueError(format!(
+                        "Invalid error handling: {}",
+                        errors
+                    )))
                 }
-            }
+            },
         }
     }
-    
+
     Ok(Array::from_vec(result).reshape(&arr.shape()))
 }
 
@@ -71,27 +104,30 @@ pub fn encode(arr: &StringArray, encoding: &str, errors: &str) -> Result<StringA
             encoding
         )));
     }
-    
+
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         match s.to_string() {
             Ok(string) => {
                 // For UTF-8, the string is already properly encoded
                 result.push(StringElement::unicode(string));
             }
-            Err(_) => {
-                match errors {
-                    "strict" => return Err(NumRs2Error::ValueError("Encoding error".to_string())),
-                    "ignore" => result.push(StringElement::unicode("")),
-                    "replace" => result.push(StringElement::unicode("�")),
-                    _ => return Err(NumRs2Error::ValueError(format!("Invalid error handling: {}", errors))),
+            Err(_) => match errors {
+                "strict" => return Err(NumRs2Error::ValueError("Encoding error".to_string())),
+                "ignore" => result.push(StringElement::unicode("")),
+                "replace" => result.push(StringElement::unicode("�")),
+                _ => {
+                    return Err(NumRs2Error::ValueError(format!(
+                        "Invalid error handling: {}",
+                        errors
+                    )))
                 }
-            }
+            },
         }
     }
-    
+
     Ok(Array::from_vec(result).reshape(&arr.shape()))
 }
 
@@ -102,10 +138,11 @@ pub fn expandtabs(arr: &StringArray, tabsize: Option<usize>) -> Result<StringArr
     let tab_size = tabsize.unwrap_or(8);
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
-        let expanded = string.chars()
+        let expanded = string
+            .chars()
             .fold((String::new(), 0), |(mut acc, pos), c| {
                 if c == '\t' {
                     let spaces_needed = tab_size - (pos % tab_size);
@@ -122,7 +159,7 @@ pub fn expandtabs(arr: &StringArray, tabsize: Option<usize>) -> Result<StringArr
             .0;
         result.push(StringElement::unicode(expanded));
     }
-    
+
     Ok(Array::from_vec(result).reshape(&arr.shape()))
 }
 
@@ -132,27 +169,30 @@ pub fn expandtabs(arr: &StringArray, tabsize: Option<usize>) -> Result<StringArr
 pub fn str_len(arr: &StringArray) -> Result<Array<i32>> {
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
         let length = string.chars().count() as i32;
         result.push(length);
     }
-    
+
     Ok(Array::from_vec(result).reshape(&arr.shape()))
 }
 
 /// Translate characters in string array elements
 ///
 /// Similar to NumPy's `np.char.translate()`
-pub fn translate(arr: &StringArray, table: &std::collections::HashMap<char, char>, delete: Option<&str>) -> Result<StringArray> {
-    let delete_chars: std::collections::HashSet<char> = delete
-        .map(|s| s.chars().collect())
-        .unwrap_or_default();
-    
+pub fn translate(
+    arr: &StringArray,
+    table: &std::collections::HashMap<char, char>,
+    delete: Option<&str>,
+) -> Result<StringArray> {
+    let delete_chars: std::collections::HashSet<char> =
+        delete.map(|s| s.chars().collect()).unwrap_or_default();
+
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
         let translated: String = string
@@ -162,7 +202,7 @@ pub fn translate(arr: &StringArray, table: &std::collections::HashMap<char, char
             .collect();
         result.push(StringElement::unicode(translated));
     }
-    
+
     Ok(Array::from_vec(result).reshape(&arr.shape()))
 }
 
@@ -172,7 +212,7 @@ pub fn translate(arr: &StringArray, table: &std::collections::HashMap<char, char
 pub fn zfill(arr: &StringArray, width: usize) -> Result<StringArray> {
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
         let filled = if string.len() >= width {
@@ -187,7 +227,7 @@ pub fn zfill(arr: &StringArray, width: usize) -> Result<StringArray> {
         };
         result.push(StringElement::unicode(filled));
     }
-    
+
     Ok(Array::from_vec(result).reshape(&arr.shape()))
 }
 
@@ -197,7 +237,7 @@ pub fn zfill(arr: &StringArray, width: usize) -> Result<StringArray> {
 pub fn partition(arr: &StringArray, sep: &str) -> Result<Vec<(String, String, String)>> {
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
         if let Some(pos) = string.find(sep) {
@@ -209,7 +249,7 @@ pub fn partition(arr: &StringArray, sep: &str) -> Result<Vec<(String, String, St
             result.push((string, String::new(), String::new()));
         }
     }
-    
+
     Ok(result)
 }
 
@@ -219,7 +259,7 @@ pub fn partition(arr: &StringArray, sep: &str) -> Result<Vec<(String, String, St
 pub fn rpartition(arr: &StringArray, sep: &str) -> Result<Vec<(String, String, String)>> {
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
         if let Some(pos) = string.rfind(sep) {
@@ -231,17 +271,21 @@ pub fn rpartition(arr: &StringArray, sep: &str) -> Result<Vec<(String, String, S
             result.push((String::new(), String::new(), string));
         }
     }
-    
+
     Ok(result)
 }
 
 /// Split string array elements from the right
 ///
 /// Similar to NumPy's `np.char.rsplit()`
-pub fn rsplit(arr: &StringArray, sep: Option<&str>, maxsplit: Option<usize>) -> Result<Vec<Vec<String>>> {
+pub fn rsplit(
+    arr: &StringArray,
+    sep: Option<&str>,
+    maxsplit: Option<usize>,
+) -> Result<Vec<Vec<String>>> {
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
         let parts: Vec<String> = match (sep, maxsplit) {
@@ -249,9 +293,7 @@ pub fn rsplit(arr: &StringArray, sep: Option<&str>, maxsplit: Option<usize>) -> 
                 let parts: Vec<&str> = string.rsplitn(max + 1, delimiter).collect();
                 parts.into_iter().rev().map(|s| s.to_string()).collect()
             }
-            (Some(delimiter), None) => {
-                string.rsplit(delimiter).map(|s| s.to_string()).collect()
-            }
+            (Some(delimiter), None) => string.rsplit(delimiter).map(|s| s.to_string()).collect(),
             (None, Some(max)) => {
                 // For rsplit with maxsplit, we want at most `max` splits from the right
                 // which results in at most `max+1` parts
@@ -264,16 +306,16 @@ pub fn rsplit(arr: &StringArray, sep: Option<&str>, maxsplit: Option<usize>) -> 
                     // and join the rest as the first part
                     let mut result = Vec::new();
                     let join_count = all_words.len() - max;
-                    
+
                     // Join the first (len - max) words into one part
                     let first_part = all_words[..join_count].join(" ");
                     result.push(first_part);
-                    
+
                     // Add the last `max` words as separate parts
                     for word in &all_words[join_count..] {
                         result.push(word.to_string());
                     }
-                    
+
                     result
                 }
             }
@@ -285,7 +327,7 @@ pub fn rsplit(arr: &StringArray, sep: Option<&str>, maxsplit: Option<usize>) -> 
         };
         result.push(parts);
     }
-    
+
     Ok(result)
 }
 
@@ -296,14 +338,14 @@ pub fn splitlines(arr: &StringArray, keepends: Option<bool>) -> Result<Vec<Vec<S
     let keep_endings = keepends.unwrap_or(false);
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
         let lines: Vec<String> = if keep_endings {
             // Split while keeping line endings
             let mut lines = Vec::new();
             let mut current_line = String::new();
-            
+
             for c in string.chars() {
                 current_line.push(c);
                 if c == '\n' || c == '\r' {
@@ -311,19 +353,19 @@ pub fn splitlines(arr: &StringArray, keepends: Option<bool>) -> Result<Vec<Vec<S
                     current_line.clear();
                 }
             }
-            
+
             if !current_line.is_empty() {
                 lines.push(current_line);
             }
-            
+
             lines
         } else {
             string.lines().map(|s| s.to_string()).collect()
         };
-        
+
         result.push(lines);
     }
-    
+
     Ok(result)
 }
 
@@ -333,10 +375,11 @@ pub fn splitlines(arr: &StringArray, keepends: Option<bool>) -> Result<Vec<Vec<S
 pub fn swapcase(arr: &StringArray) -> Result<StringArray> {
     let mut result = Vec::with_capacity(arr.size());
     let arr_data = arr.to_vec();
-    
+
     for s in arr_data.iter() {
         let string = s.to_string()?;
-        let swapped: String = string.chars()
+        let swapped: String = string
+            .chars()
             .map(|c| {
                 if c.is_uppercase() {
                     c.to_lowercase().collect::<String>()
@@ -349,18 +392,23 @@ pub fn swapcase(arr: &StringArray) -> Result<StringArray> {
             .collect();
         result.push(StringElement::unicode(swapped));
     }
-    
+
     Ok(Array::from_vec(result).reshape(&arr.shape()))
 }
 
 /// Create array of strings with common prefix
 ///
 /// Utility function for creating string arrays with patterns
-pub fn array_with_prefix<S: AsRef<str>>(prefix: S, suffixes: &[S], dtype: &str) -> Result<StringArray> {
-    let strings: Vec<String> = suffixes.iter()
+pub fn array_with_prefix<S: AsRef<str>>(
+    prefix: S,
+    suffixes: &[S],
+    dtype: &str,
+) -> Result<StringArray> {
+    let strings: Vec<String> = suffixes
+        .iter()
         .map(|suffix| format!("{}{}", prefix.as_ref(), suffix.as_ref()))
         .collect();
-    
+
     let string_refs: Vec<&str> = strings.iter().map(|s| s.as_str()).collect();
     array_from_strings(&string_refs, dtype, None)
 }
@@ -368,11 +416,16 @@ pub fn array_with_prefix<S: AsRef<str>>(prefix: S, suffixes: &[S], dtype: &str) 
 /// Create array of strings with common suffix
 ///
 /// Utility function for creating string arrays with patterns
-pub fn array_with_suffix<S: AsRef<str>>(prefixes: &[S], suffix: S, dtype: &str) -> Result<StringArray> {
-    let strings: Vec<String> = prefixes.iter()
+pub fn array_with_suffix<S: AsRef<str>>(
+    prefixes: &[S],
+    suffix: S,
+    dtype: &str,
+) -> Result<StringArray> {
+    let strings: Vec<String> = prefixes
+        .iter()
         .map(|prefix| format!("{}{}", prefix.as_ref(), suffix.as_ref()))
         .collect();
-    
+
     let string_refs: Vec<&str> = strings.iter().map(|s| s.as_str()).collect();
     array_from_strings(&string_refs, dtype, None)
 }
@@ -380,36 +433,40 @@ pub fn array_with_suffix<S: AsRef<str>>(prefixes: &[S], suffix: S, dtype: &str) 
 /// Regular expression operations
 pub mod regex_ops {
     use super::*;
-    
+
     /// Find all matches of pattern in string array elements
     pub fn findall(arr: &StringArray, pattern: &str) -> Result<Vec<Vec<String>>> {
-        let regex = Regex::new(pattern).map_err(|e| {
-            NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e))
-        })?;
-        
+        let regex = Regex::new(pattern)
+            .map_err(|e| NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e)))?;
+
         let mut result = Vec::with_capacity(arr.size());
         let arr_data = arr.to_vec();
-        
+
         for s in arr_data.iter() {
             let string = s.to_string()?;
-            let matches: Vec<String> = regex.find_iter(&string)
+            let matches: Vec<String> = regex
+                .find_iter(&string)
                 .map(|m| m.as_str().to_string())
                 .collect();
             result.push(matches);
         }
-        
+
         Ok(result)
     }
-    
+
     /// Replace pattern matches in string array elements
-    pub fn sub(arr: &StringArray, pattern: &str, replacement: &str, count: Option<usize>) -> Result<StringArray> {
-        let regex = Regex::new(pattern).map_err(|e| {
-            NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e))
-        })?;
-        
+    pub fn sub(
+        arr: &StringArray,
+        pattern: &str,
+        replacement: &str,
+        count: Option<usize>,
+    ) -> Result<StringArray> {
+        let regex = Regex::new(pattern)
+            .map_err(|e| NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e)))?;
+
         let mut result = Vec::with_capacity(arr.size());
         let arr_data = arr.to_vec();
-        
+
         for s in arr_data.iter() {
             let string = s.to_string()?;
             let replaced = match count {
@@ -417,7 +474,8 @@ pub mod regex_ops {
                     let mut replaced = string.clone();
                     for _ in 0..n {
                         if let Some(captures) = regex.find(&replaced) {
-                            replaced = format!("{}{}{}", 
+                            replaced = format!(
+                                "{}{}{}",
                                 &replaced[..captures.start()],
                                 replacement,
                                 &replaced[captures.end()..]
@@ -432,46 +490,51 @@ pub mod regex_ops {
             };
             result.push(StringElement::unicode(replaced));
         }
-        
+
         Ok(Array::from_vec(result).reshape(&arr.shape()))
     }
-    
+
     /// Test if pattern matches string array elements
     pub fn match_pattern(arr: &StringArray, pattern: &str) -> Result<Array<bool>> {
-        let regex = Regex::new(pattern).map_err(|e| {
-            NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e))
-        })?;
-        
+        let regex = Regex::new(pattern)
+            .map_err(|e| NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e)))?;
+
         let mut result = Vec::with_capacity(arr.size());
         let arr_data = arr.to_vec();
-        
+
         for s in arr_data.iter() {
             let string = s.to_string()?;
             let matches = regex.is_match(&string);
             result.push(matches);
         }
-        
+
         Ok(Array::from_vec(result).reshape(&arr.shape()))
     }
-    
+
     /// Split string array elements using regex pattern
-    pub fn split_regex(arr: &StringArray, pattern: &str, maxsplit: Option<usize>) -> Result<Vec<Vec<String>>> {
-        let regex = Regex::new(pattern).map_err(|e| {
-            NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e))
-        })?;
-        
+    pub fn split_regex(
+        arr: &StringArray,
+        pattern: &str,
+        maxsplit: Option<usize>,
+    ) -> Result<Vec<Vec<String>>> {
+        let regex = Regex::new(pattern)
+            .map_err(|e| NumRs2Error::ValueError(format!("Invalid regex pattern: {}", e)))?;
+
         let mut result = Vec::with_capacity(arr.size());
         let arr_data = arr.to_vec();
-        
+
         for s in arr_data.iter() {
             let string = s.to_string()?;
             let parts: Vec<String> = match maxsplit {
-                Some(max) => regex.splitn(&string, max + 1).map(|s| s.to_string()).collect(),
+                Some(max) => regex
+                    .splitn(&string, max + 1)
+                    .map(|s| s.to_string())
+                    .collect(),
                 None => regex.split(&string).map(|s| s.to_string()).collect(),
             };
             result.push(parts);
         }
-        
+
         Ok(result)
     }
 }
@@ -480,22 +543,25 @@ pub mod regex_ops {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    
+
     #[test]
     fn test_char_module_functions() {
         let strings = vec!["hello", "world", "test"];
         let arr = array_from_strings(&strings, "U", None).unwrap();
-        
+
         // Test length function
         let lengths = str_len(&arr).unwrap();
         assert_eq!(lengths.to_vec(), vec![5, 5, 4]);
-        
+
         // Test expandtabs
         let tab_strings = vec!["hello\tworld", "test\ttab"];
         let tab_arr = array_from_strings(&tab_strings, "U", None).unwrap();
         let expanded = expandtabs(&tab_arr, Some(4)).unwrap();
-        assert_eq!(expanded.get(&[0]).unwrap().to_string().unwrap(), "hello   world");
-        
+        assert_eq!(
+            expanded.get(&[0]).unwrap().to_string().unwrap(),
+            "hello   world"
+        );
+
         // Test zfill
         let numbers = vec!["42", "-17", "123"];
         let num_arr = array_from_strings(&numbers, "U", None).unwrap();
@@ -503,70 +569,87 @@ mod tests {
         assert_eq!(filled.get(&[0]).unwrap().to_string().unwrap(), "00042");
         assert_eq!(filled.get(&[1]).unwrap().to_string().unwrap(), "-0017");
     }
-    
+
     #[test]
     fn test_translation() {
         let strings = vec!["hello", "world"];
         let arr = array_from_strings(&strings, "U", None).unwrap();
-        
+
         let mut table = HashMap::new();
         table.insert('l', 'L');
         table.insert('o', 'O');
-        
+
         let translated = translate(&arr, &table, None).unwrap();
         assert_eq!(translated.get(&[0]).unwrap().to_string().unwrap(), "heLLO");
         assert_eq!(translated.get(&[1]).unwrap().to_string().unwrap(), "wOrLd");
     }
-    
+
     #[test]
     fn test_partition_operations() {
         let strings = vec!["hello-world-test", "one-two-three"];
         let arr = array_from_strings(&strings, "U", None).unwrap();
-        
+
         let partitions = partition(&arr, "-").unwrap();
-        assert_eq!(partitions[0], ("hello".to_string(), "-".to_string(), "world-test".to_string()));
-        
+        assert_eq!(
+            partitions[0],
+            (
+                "hello".to_string(),
+                "-".to_string(),
+                "world-test".to_string()
+            )
+        );
+
         let rpartitions = rpartition(&arr, "-").unwrap();
-        assert_eq!(rpartitions[0], ("hello-world".to_string(), "-".to_string(), "test".to_string()));
+        assert_eq!(
+            rpartitions[0],
+            (
+                "hello-world".to_string(),
+                "-".to_string(),
+                "test".to_string()
+            )
+        );
     }
-    
+
     #[test]
     fn test_regex_operations() {
         let strings = vec!["hello123world", "test456example"];
         let arr = array_from_strings(&strings, "U", None).unwrap();
-        
+
         // Test findall
         let matches = regex_ops::findall(&arr, r"\d+").unwrap();
         assert_eq!(matches[0], vec!["123"]);
         assert_eq!(matches[1], vec!["456"]);
-        
+
         // Test substitution
         let substituted = regex_ops::sub(&arr, r"\d+", "XXX", None).unwrap();
-        assert_eq!(substituted.get(&[0]).unwrap().to_string().unwrap(), "helloXXXworld");
-        
+        assert_eq!(
+            substituted.get(&[0]).unwrap().to_string().unwrap(),
+            "helloXXXworld"
+        );
+
         // Test pattern matching
         let matches_bool = regex_ops::match_pattern(&arr, r".*\d+.*").unwrap();
         assert_eq!(matches_bool.to_vec(), vec![true, true]);
     }
-    
+
     #[test]
     fn test_utility_functions() {
         // Test array_with_prefix
         let suffixes = vec!["1", "2", "3"];
         let prefixed = array_with_prefix("test_", &suffixes, "U").unwrap();
         assert_eq!(prefixed.get(&[0]).unwrap().to_string().unwrap(), "test_1");
-        
+
         // Test array_with_suffix
         let prefixes = vec!["file", "data", "image"];
         let suffixed = array_with_suffix(&prefixes, ".txt", "U").unwrap();
         assert_eq!(suffixed.get(&[0]).unwrap().to_string().unwrap(), "file.txt");
     }
-    
+
     #[test]
     fn test_swapcase() {
         let strings = vec!["Hello", "WORLD", "tEsT"];
         let arr = array_from_strings(&strings, "U", None).unwrap();
-        
+
         let swapped = swapcase(&arr).unwrap();
         assert_eq!(swapped.get(&[0]).unwrap().to_string().unwrap(), "hELLO");
         assert_eq!(swapped.get(&[1]).unwrap().to_string().unwrap(), "world");

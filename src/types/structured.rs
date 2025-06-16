@@ -396,7 +396,7 @@ impl RecordArray {
     pub fn new(shape: &[usize], fields: Vec<Field>) -> Self {
         let dtype = DType::Struct(fields.clone());
         let array = StructuredArray::new(shape, dtype);
-        
+
         // Initialize field cache with empty arrays for each field
         let mut field_cache = HashMap::new();
         for field in &fields {
@@ -405,10 +405,7 @@ impl RecordArray {
             field_cache.insert(field.name.clone(), field_array);
         }
 
-        Self {
-            array,
-            field_cache,
-        }
+        Self { array, field_cache }
     }
 
     /// Create a record array from a set of NumRS Arrays with the same shape
@@ -526,7 +523,11 @@ impl RecordArray {
                             1 => field_array.array()[[index[0]]],
                             2 => field_array.array()[[index[0], index[1]]],
                             3 => field_array.array()[[index[0], index[1], index[2]]],
-                            _ => return Err(NumRs2Error::NotImplemented("More than 3 dimensions not supported in add_field".to_string())),
+                            _ => {
+                                return Err(NumRs2Error::NotImplemented(
+                                    "More than 3 dimensions not supported in add_field".to_string(),
+                                ))
+                            }
                         };
                         new_array.set_field(&index, existing_field_name, value)?;
                     }
@@ -543,7 +544,11 @@ impl RecordArray {
                 1 => data.array()[[index[0]]],
                 2 => data.array()[[index[0], index[1]]],
                 3 => data.array()[[index[0], index[1], index[2]]],
-                _ => return Err(NumRs2Error::NotImplemented("More than 3 dimensions not supported in add_field".to_string())),
+                _ => {
+                    return Err(NumRs2Error::NotImplemented(
+                        "More than 3 dimensions not supported in add_field".to_string(),
+                    ))
+                }
             };
             new_array.set_field(&index, field_name, value)?;
         }
@@ -607,9 +612,9 @@ impl fmt::Display for RecordArray {
 /// This implementation handles the conversion based on the size of T and assumes little-endian.
 fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> Result<T> {
     use std::any::TypeId;
-    
+
     let type_id = TypeId::of::<T>();
-    
+
     // Handle different data types
     match dtype {
         DType::Bool => {
@@ -618,7 +623,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 // SAFETY: We've verified T is bool
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Bool".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Bool".to_string(),
+                ))
             }
         }
         DType::Int8 => {
@@ -626,7 +633,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = i8::from_le_bytes([bytes[0]]);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int8".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int8".to_string(),
+                ))
             }
         }
         DType::Int16 => {
@@ -636,7 +645,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = i16::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int16".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int16".to_string(),
+                ))
             }
         }
         DType::Int32 => {
@@ -646,7 +657,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = i32::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int32".to_string(),
+                ))
             }
         }
         DType::Int64 => {
@@ -656,7 +669,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = i64::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int64".to_string(),
+                ))
             }
         }
         DType::UInt8 => {
@@ -664,7 +679,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = bytes[0];
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt8".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt8".to_string(),
+                ))
             }
         }
         DType::UInt16 => {
@@ -674,7 +691,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = u16::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt16".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt16".to_string(),
+                ))
             }
         }
         DType::UInt32 => {
@@ -684,7 +703,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = u32::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt32".to_string(),
+                ))
             }
         }
         DType::UInt64 => {
@@ -694,7 +715,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = u64::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt64".to_string(),
+                ))
             }
         }
         DType::Float32 => {
@@ -704,7 +727,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = f32::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Float32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Float32".to_string(),
+                ))
             }
         }
         DType::Float64 => {
@@ -714,7 +739,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let value = f64::from_le_bytes(buf);
                 Ok(unsafe { std::mem::transmute_copy(&value) })
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Float64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Float64".to_string(),
+                ))
             }
         }
         DType::String(_) => {
@@ -728,7 +755,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 std::mem::forget(value); // Prevent double free for non-Copy types
                 Ok(result)
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for String".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for String".to_string(),
+                ))
             }
         }
         DType::Complex32 => {
@@ -746,7 +775,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let _ = value; // Prevent double free
                 Ok(result)
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Complex32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Complex32".to_string(),
+                ))
             }
         }
         DType::Complex64 => {
@@ -764,12 +795,14 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
                 let _ = value; // Prevent double free
                 Ok(result)
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Complex64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Complex64".to_string(),
+                ))
             }
         }
-        DType::Struct(_) => {
-            Err(NumRs2Error::ValueError("Cannot convert struct to single value".to_string()))
-        }
+        DType::Struct(_) => Err(NumRs2Error::ValueError(
+            "Cannot convert struct to single value".to_string(),
+        )),
     }
 }
 
@@ -778,9 +811,9 @@ fn bytes_to_value<T: Clone + Default + 'static>(bytes: &[u8], dtype: &DType) -> 
 /// This implementation handles the conversion based on the type and assumes little-endian.
 fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8>> {
     use std::any::TypeId;
-    
+
     let type_id = TypeId::of::<T>();
-    
+
     // Handle different data types
     match dtype {
         DType::Bool => {
@@ -788,7 +821,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let bool_value: &bool = unsafe { std::mem::transmute(value) };
                 Ok(vec![if *bool_value { 1u8 } else { 0u8 }])
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Bool".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Bool".to_string(),
+                ))
             }
         }
         DType::Int8 => {
@@ -796,7 +831,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let int_value: &i8 = unsafe { std::mem::transmute(value) };
                 Ok(int_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int8".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int8".to_string(),
+                ))
             }
         }
         DType::Int16 => {
@@ -804,7 +841,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let int_value: &i16 = unsafe { std::mem::transmute(value) };
                 Ok(int_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int16".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int16".to_string(),
+                ))
             }
         }
         DType::Int32 => {
@@ -812,7 +851,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let int_value: &i32 = unsafe { std::mem::transmute(value) };
                 Ok(int_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int32".to_string(),
+                ))
             }
         }
         DType::Int64 => {
@@ -820,7 +861,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let int_value: &i64 = unsafe { std::mem::transmute(value) };
                 Ok(int_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Int64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Int64".to_string(),
+                ))
             }
         }
         DType::UInt8 => {
@@ -828,7 +871,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let uint_value: &u8 = unsafe { std::mem::transmute(value) };
                 Ok(vec![*uint_value])
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt8".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt8".to_string(),
+                ))
             }
         }
         DType::UInt16 => {
@@ -836,7 +881,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let uint_value: &u16 = unsafe { std::mem::transmute(value) };
                 Ok(uint_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt16".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt16".to_string(),
+                ))
             }
         }
         DType::UInt32 => {
@@ -844,7 +891,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let uint_value: &u32 = unsafe { std::mem::transmute(value) };
                 Ok(uint_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt32".to_string(),
+                ))
             }
         }
         DType::UInt64 => {
@@ -852,7 +901,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let uint_value: &u64 = unsafe { std::mem::transmute(value) };
                 Ok(uint_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for UInt64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for UInt64".to_string(),
+                ))
             }
         }
         DType::Float32 => {
@@ -860,7 +911,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let float_value: &f32 = unsafe { std::mem::transmute(value) };
                 Ok(float_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Float32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Float32".to_string(),
+                ))
             }
         }
         DType::Float64 => {
@@ -868,24 +921,28 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 let float_value: &f64 = unsafe { std::mem::transmute(value) };
                 Ok(float_value.to_le_bytes().to_vec())
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Float64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Float64".to_string(),
+                ))
             }
         }
         DType::String(max_len) => {
             if type_id == TypeId::of::<String>() {
                 let string_value: &String = unsafe { std::mem::transmute(value) };
                 let mut bytes = string_value.as_bytes().to_vec();
-                
+
                 // Pad with zeros or truncate to the specified length
                 match bytes.len().cmp(max_len) {
                     std::cmp::Ordering::Less => bytes.resize(*max_len, 0),
                     std::cmp::Ordering::Greater => bytes.truncate(*max_len),
-                    std::cmp::Ordering::Equal => {},
+                    std::cmp::Ordering::Equal => {}
                 }
-                
+
                 Ok(bytes)
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for String".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for String".to_string(),
+                ))
             }
         }
         DType::Complex32 => {
@@ -896,7 +953,9 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 bytes.extend_from_slice(&complex_value.im.to_le_bytes());
                 Ok(bytes)
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Complex32".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Complex32".to_string(),
+                ))
             }
         }
         DType::Complex64 => {
@@ -907,12 +966,14 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
                 bytes.extend_from_slice(&complex_value.im.to_le_bytes());
                 Ok(bytes)
             } else {
-                Err(NumRs2Error::TypeCastError("Type mismatch for Complex64".to_string()))
+                Err(NumRs2Error::TypeCastError(
+                    "Type mismatch for Complex64".to_string(),
+                ))
             }
         }
-        DType::Struct(_) => {
-            Err(NumRs2Error::ValueError("Cannot convert single value to struct".to_string()))
-        }
+        DType::Struct(_) => Err(NumRs2Error::ValueError(
+            "Cannot convert single value to struct".to_string(),
+        )),
     }
 }
 

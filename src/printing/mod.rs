@@ -4,8 +4,8 @@
 //! including `set_printoptions` for controlling array display format.
 
 use crate::array::Array;
-use std::sync::RwLock;
 use lazy_static::lazy_static;
+use std::sync::RwLock;
 
 /// Global print options for array display
 pub struct PrintOptions {
@@ -86,7 +86,7 @@ lazy_static! {
 ///
 /// // Set precision to 2 decimal places
 /// set_printoptions(Some(2), None, None, None, None);
-/// 
+///
 /// let arr = Array::from_vec(vec![1.0/3.0, 2.0/3.0, 1.0]);
 /// println!("{}", arr); // Will display with 2 decimal places
 /// ```
@@ -98,7 +98,7 @@ pub fn set_printoptions(
     suppress: Option<bool>,
 ) {
     let mut options = PRINT_OPTIONS.write().unwrap();
-    
+
     if let Some(p) = precision {
         options.precision = p;
     }
@@ -156,7 +156,7 @@ pub fn reset_printoptions() {
 /// Format a single floating point value according to current print options
 pub fn format_float(value: f64) -> String {
     let options = PRINT_OPTIONS.read().unwrap();
-    
+
     if options.suppress && value.abs() < 10_f64.powi(-(options.precision as i32)) {
         return "0".to_string();
     }
@@ -177,7 +177,7 @@ pub fn format_float(value: f64) -> String {
 /// Format a single integer value according to current print options
 pub fn format_int<T: std::fmt::Display>(value: T) -> String {
     let options = PRINT_OPTIONS.read().unwrap();
-    
+
     match options.sign {
         '+' => format!("{:+}", value),
         ' ' => format!(" {}", value),
@@ -215,17 +215,17 @@ where
 {
     // Save current options
     let original_options = get_printoptions();
-    
+
     // Set temporary options
     set_printoptions(precision, threshold, edgeitems, None, None);
-    
+
     // Format the array using existing Display implementation
     let result = format!("{}", array);
-    
+
     // Restore original options
     let mut options = PRINT_OPTIONS.write().unwrap();
     *options = original_options;
-    
+
     result
 }
 
@@ -238,17 +238,17 @@ mod tests {
     fn test_set_and_get_printoptions() {
         // Save original options
         let original = get_printoptions();
-        
+
         // Set new options
         set_printoptions(Some(2), Some(100), Some(2), Some(50), Some(true));
-        
+
         let options = get_printoptions();
         assert_eq!(options.precision, 2);
         assert_eq!(options.threshold, 100);
         assert_eq!(options.edgeitems, 2);
         assert_eq!(options.linewidth, 50);
         assert_eq!(options.suppress, true);
-        
+
         // Restore original options
         let mut global_options = PRINT_OPTIONS.write().unwrap();
         *global_options = original;
@@ -258,10 +258,10 @@ mod tests {
     fn test_reset_printoptions() {
         // Change options
         set_printoptions(Some(2), Some(100), None, None, None);
-        
+
         // Reset to defaults
         reset_printoptions();
-        
+
         let options = get_printoptions();
         assert_eq!(options.precision, 8);
         assert_eq!(options.threshold, 1000);
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn test_array_str_function() {
-        let arr = Array::from_vec(vec![1.0/3.0, 2.0/3.0, 1.0]);
+        let arr = Array::from_vec(vec![1.0 / 3.0, 2.0 / 3.0, 1.0]);
         let formatted = array_str(&arr, Some(2), None, None);
         assert!(formatted.len() > 0);
     }
@@ -302,11 +302,11 @@ mod tests {
     fn test_format_float() {
         // Save original options
         let original = get_printoptions();
-        
+
         set_printoptions(Some(2), None, None, None, None);
         let formatted = format_float(1.23456);
         assert!(formatted.contains("1.23"));
-        
+
         // Restore original options
         let mut global_options = PRINT_OPTIONS.write().unwrap();
         *global_options = original;
@@ -316,11 +316,11 @@ mod tests {
     fn test_suppress_small_values() {
         // Save original options
         let original = get_printoptions();
-        
+
         set_printoptions(Some(8), None, None, None, Some(true));
         let formatted = format_float(1e-10);
         assert_eq!(formatted, "0");
-        
+
         // Restore original options
         let mut global_options = PRINT_OPTIONS.write().unwrap();
         *global_options = original;
@@ -330,7 +330,7 @@ mod tests {
     fn test_sign_formatting() {
         // Save original options
         let original = get_printoptions();
-        
+
         // Test positive sign
         {
             let mut options = PRINT_OPTIONS.write().unwrap();
@@ -338,7 +338,7 @@ mod tests {
         }
         let formatted = format_float(1.23);
         assert!(formatted.starts_with('+'));
-        
+
         // Restore original options
         let mut global_options = PRINT_OPTIONS.write().unwrap();
         *global_options = original;

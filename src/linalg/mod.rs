@@ -3,7 +3,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::Float;
+use num_traits::{Float, ToPrimitive};
 use std::fmt::Debug;
 
 // Matrix decomposition submodule
@@ -15,9 +15,9 @@ pub mod decomposition;
 pub mod solve;
 
 // Import submodules
-pub mod vector_ops;
 pub mod matrix_ops;
 pub mod tensor_ops;
+pub mod vector_ops;
 
 // Re-export all functions for backward compatibility
 pub use decomposition::{cholesky, eig, qr, svd};
@@ -26,11 +26,11 @@ pub use solve::{inv, solve};
 // Re-export conditional features
 #[cfg(feature = "matrix_decomp")]
 pub use decomposition::matrix_rank;
+pub use matrix_ops::{det, matrix_power};
 #[cfg(feature = "matrix_decomp")]
 pub use solve::pinv;
-pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
-pub use matrix_ops::{det, matrix_power};
 pub use tensor_ops::{kron, tensordot};
+pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
 
 /// Set the number of threads for LAPACK operations
 pub fn set_lapack_threads(threads: usize) {
@@ -852,7 +852,13 @@ where
 #[cfg(not(feature = "matrix_decomp"))]
 impl<T> Array<T>
 where
-    T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
     /// Compute the determinant of a matrix using LU decomposition for large matrices
     /// and direct formula for small matrices.

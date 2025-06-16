@@ -1,10 +1,10 @@
 //! Linear system solving functions
-//! 
+//!
 //! This module contains functions for solving linear systems, computing matrix inverses,
 //! and computing pseudoinverses.
 
 use crate::array::Array;
-use crate::error::Result;
+use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use std::fmt::Debug;
 
@@ -44,7 +44,18 @@ pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 
 /// Solve a linear system Ax = b
 #[cfg(not(any(feature = "matrix_decomp", feature = "scirs")))]
-pub fn solve<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>> {
+pub fn solve<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
+    a: &Array<T>,
+    b: &Array<T>,
+) -> Result<Array<T>> {
     a.solve(b)
 }
 
@@ -56,7 +67,17 @@ pub fn inv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> R
 
 /// Compute the inverse of a matrix
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn inv<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(a: &Array<T>) -> Result<Array<T>> {
+pub fn inv<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
+    a: &Array<T>,
+) -> Result<Array<T>> {
     a.inv()
 }
 
@@ -90,7 +111,7 @@ pub fn pinv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     }
 
     // Perform SVD: A = U * S * V^T
-    let (u, s, vt) = decomposition::svd(a)?;
+    let (u, s, vt) = crate::linalg::decomposition::svd(a)?;
 
     // Get the cutoff value for singular values
     let rcond_val = rcond.unwrap_or_else(|| T::from(1e-15).unwrap());

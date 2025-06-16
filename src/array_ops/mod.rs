@@ -26,12 +26,9 @@ pub use sorting::*;
 pub use splitting::*;
 // Import string_ops selectively to avoid name collisions
 pub use string_ops::{
-    StringArray, StringElement, array_from_strings,
-    add as string_add, multiply as string_multiply, mod_format,
-    center, ljust, rjust, strip, lstrip, rstrip,
-    upper, lower, title, capitalize, replace,
-    split as string_split, join as string_join,
-    count as string_count, find as string_find, rfind as string_rfind,
-    startswith, endswith, chartype, compare
+    add as string_add, array_from_strings, capitalize, center, chartype, compare,
+    count as string_count, endswith, find as string_find, join as string_join, ljust, lower,
+    lstrip, mod_format, multiply as string_multiply, replace, rfind as string_rfind, rjust, rstrip,
+    split as string_split, startswith, strip, title, upper, StringArray, StringElement,
 };
 pub use tiling::*;

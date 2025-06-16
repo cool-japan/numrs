@@ -276,6 +276,12 @@ pub struct MonitoredAllocatorFactory {
     tuning_config: TuningConfig,
 }
 
+impl Default for MonitoredAllocatorFactory {
+    fn default() -> Self {
+        Self::new(MonitoringConfig::default(), TuningConfig::default())
+    }
+}
+
 impl MonitoredAllocatorFactory {
     /// Create a new factory with the given configurations
     pub fn new(monitoring_config: MonitoringConfig, tuning_config: TuningConfig) -> Self {
@@ -283,11 +289,6 @@ impl MonitoredAllocatorFactory {
             monitoring_config,
             tuning_config,
         }
-    }
-
-    /// Create a factory with default configurations
-    pub fn default() -> Self {
-        Self::new(MonitoringConfig::default(), TuningConfig::default())
     }
 
     /// Wrap any allocator with monitoring capabilities

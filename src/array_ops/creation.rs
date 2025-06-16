@@ -245,10 +245,10 @@ pub fn fromiter<T: Clone, I: Iterator<Item = T>>(
 ///
 /// // Create an array from a memory-mapped file
 /// let result = frommemmap::<f64>(
-///     Path::new("data.mmap"), 
-///     "r", 
-///     Some(0), 
-///     None, 
+///     Path::new("data.mmap"),
+///     "r",
+///     Some(0),
+///     None,
 ///     Some("C")
 /// ).unwrap();
 /// println!("Array shape: {:?}", result.shape());
@@ -268,10 +268,13 @@ pub fn frommemmap<T: Copy + Clone + Default>(
 
     // Validate mode
     match mode {
-        "r" | "r+" => {},
-        _ => return Err(NumRs2Error::InvalidOperation(
-            format!("Unsupported mode '{}'. Use 'r' for read-only or 'r+' for read-write", mode)
-        )),
+        "r" | "r+" => {}
+        _ => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Unsupported mode '{}'. Use 'r' for read-only or 'r+' for read-write",
+                mode
+            )))
+        }
     }
 
     // Read metadata from the file to get information
@@ -304,14 +307,18 @@ pub fn frommemmap<T: Copy + Clone + Default>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use crate::mmap::MmapArray;
     use std::fs;
+    use std::path::Path;
 
     #[test]
     fn test_fromfunction() {
         // Test 2D array creation
-        let result = fromfunction(|indices: &[usize]| (indices[0] + indices[1]) as f64, &[3, 3]).unwrap();
+        let result = fromfunction(
+            |indices: &[usize]| (indices[0] + indices[1]) as f64,
+            &[3, 3],
+        )
+        .unwrap();
         assert_eq!(result.shape(), vec![3, 3]);
         assert_eq!(result.get(&[0, 0]).unwrap(), 0.0);
         assert_eq!(result.get(&[0, 1]).unwrap(), 1.0);
@@ -331,7 +338,7 @@ mod tests {
         let buffer = unsafe {
             std::slice::from_raw_parts(
                 data.as_ptr() as *const u8,
-                data.len() * std::mem::size_of::<i32>()
+                data.len() * std::mem::size_of::<i32>(),
             )
         };
         let result = frombuffer::<i32>(buffer, std::mem::size_of::<i32>(), -1, 0).unwrap();
@@ -342,7 +349,13 @@ mod tests {
         assert_eq!(result.to_vec(), vec![1, 2, 3]);
 
         // Test with offset
-        let result = frombuffer::<i32>(buffer, std::mem::size_of::<i32>(), 2, std::mem::size_of::<i32>()).unwrap();
+        let result = frombuffer::<i32>(
+            buffer,
+            std::mem::size_of::<i32>(),
+            2,
+            std::mem::size_of::<i32>(),
+        )
+        .unwrap();
         assert_eq!(result.to_vec(), vec![2, 3]);
     }
 
@@ -375,7 +388,7 @@ mod tests {
 
         // Ensure cleanup on test start and defer cleanup to end
         cleanup();
-        
+
         // Create test data
         let data = vec![1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0];
         let shape = vec![2, 3];
@@ -420,7 +433,7 @@ mod tests {
         // Test with invalid mode
         let test_path = std::env::temp_dir().join("test_frommemmap_errors.tmp");
         let path = test_path.as_path();
-        
+
         // Cleanup function
         let cleanup = || {
             let _ = fs::remove_file(path);

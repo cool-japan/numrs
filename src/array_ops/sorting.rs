@@ -383,15 +383,15 @@ mod tests {
     fn test_partition_1d() {
         let a = Array::from_vec(vec![9, 4, 1, 7, 5, 3, 8, 2, 6]);
         let partitioned = partition(&a, 3, None).unwrap();
-        
+
         // The 4th element (index 3) should be in its sorted position
         let kth_element = partitioned.get(&[3]).unwrap();
-        
+
         // Check that all elements before index 3 are <= kth_element
         for i in 0..3 {
             assert!(partitioned.get(&[i]).unwrap() <= kth_element);
         }
-        
+
         // Check that all elements after index 3 are >= kth_element
         for i in 4..9 {
             assert!(partitioned.get(&[i]).unwrap() >= kth_element);
@@ -418,10 +418,10 @@ mod tests {
     fn test_searchsorted_duplicates() {
         let a = Array::from_vec(vec![1, 1, 1, 3, 3, 5]);
         let v = Array::from_vec(vec![1, 3]);
-        
+
         let indices_left = searchsorted(&a, &v, Some("left"), None).unwrap();
         assert_eq!(indices_left.to_vec(), vec![0, 3]); // First occurrence
-        
+
         let indices_right = searchsorted(&a, &v, Some("right"), None).unwrap();
         assert_eq!(indices_right.to_vec(), vec![3, 5]); // After last occurrence
     }
@@ -429,12 +429,12 @@ mod tests {
     #[test]
     fn test_binary_search_functions() {
         let arr = vec![1, 3, 5, 7, 9];
-        
+
         assert_eq!(binary_search_left(&arr, &0), 0);
         assert_eq!(binary_search_left(&arr, &1), 0);
         assert_eq!(binary_search_left(&arr, &2), 1);
         assert_eq!(binary_search_left(&arr, &10), 5);
-        
+
         assert_eq!(binary_search_right(&arr, &0), 0);
         assert_eq!(binary_search_right(&arr, &1), 1);
         assert_eq!(binary_search_right(&arr, &2), 1);

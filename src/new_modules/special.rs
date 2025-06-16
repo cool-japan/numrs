@@ -389,11 +389,11 @@ where
 {
     // Improved error function using rational approximation
     // Based on W. J. Cody's algorithm with high precision coefficients
-    
+
     let zero = T::zero();
     let one = T::one();
     let abs_x = x.abs();
-    
+
     // Handle special cases
     if x.is_nan() {
         return x;
@@ -404,53 +404,52 @@ where
     if x.is_infinite() {
         return if x > zero { one } else { -one };
     }
-    
+
     let sign = if x < zero { -one } else { one };
-    
+
     // For small x, use series expansion
     if abs_x < T::from(0.5).unwrap() {
         let x2 = abs_x * abs_x;
         let sqrt_pi = T::from(1.7724538509055160272981674833411).unwrap(); // sqrt(π)
-        
+
         // erf(x) = (2/√π) * x * Σ((-1)^n * x^(2n) / (n! * (2n+1)))
         let mut sum = one;
         let mut term = one;
-        
+
         for n in 1..=50 {
             term = term * (-x2) / T::from(n as f64).unwrap();
             let add_term = term / T::from((2 * n + 1) as f64).unwrap();
             sum = sum + add_term;
-            
+
             if add_term.abs() < T::from(1e-15).unwrap() {
                 break;
             }
         }
-        
+
         return sign * (T::from(2.0).unwrap() / sqrt_pi) * abs_x * sum;
     }
-    
+
     // For larger x, use Chebyshev rational approximation
     // Based on Hart et al. approximations
     if abs_x < T::from(4.0).unwrap() {
         let t = one / (one + T::from(0.3275911).unwrap() * abs_x);
-        
+
         // Coefficients for improved approximation
         let a1 = T::from(0.254829592).unwrap();
-        let a2 = T::from(-0.284496736).unwrap(); 
+        let a2 = T::from(-0.284496736).unwrap();
         let a3 = T::from(1.421413741).unwrap();
         let a4 = T::from(-1.453152027).unwrap();
         let a5 = T::from(1.061405429).unwrap();
-        
+
         let poly = (((a5 * t + a4) * t + a3) * t + a2) * t + a1;
         let result = one - poly * t * (-abs_x * abs_x).exp();
-        
+
         return sign * result;
     }
-    
+
     // For very large x, erf(x) approaches ±1
     sign * one
 }
-
 
 /// Complementary error function for a scalar value
 fn erfc_scalar<T>(x: T) -> T

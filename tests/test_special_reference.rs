@@ -26,8 +26,13 @@ fn test_erf_reference() {
     // Test improved implementation with much tighter precision
     for (i, &expected) in expected_values.iter().enumerate() {
         let val = erf_x.get(&[i]).unwrap();
-        println!("erf({}) = {} (expected {})", x.get(&[i]).unwrap(), val, expected);
-        
+        println!(
+            "erf({}) = {} (expected {})",
+            x.get(&[i]).unwrap(),
+            val,
+            expected
+        );
+
         // With the improved implementation, we achieve much better precision (~1e-7)
         // This is a significant improvement from the previous ~1e-1 tolerance
         assert_abs_diff_eq!(val, expected, epsilon = 1e-6);
@@ -50,11 +55,16 @@ fn test_erfc_reference() {
         1.5204998778130465f64,   // erfc(-0.5)
     ];
 
-    // Test improved erfc implementation with better precision  
+    // Test improved erfc implementation with better precision
     for (i, &expected) in expected_values.iter().enumerate() {
         let val = erfc_x.get(&[i]).unwrap();
-        println!("erfc({}) = {} (expected {})", x.get(&[i]).unwrap(), val, expected);
-        
+        println!(
+            "erfc({}) = {} (expected {})",
+            x.get(&[i]).unwrap(),
+            val,
+            expected
+        );
+
         // With the improved implementation, we achieve much better precision
         assert_abs_diff_eq!(val, expected, epsilon = 1e-6);
     }

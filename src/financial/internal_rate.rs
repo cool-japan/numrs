@@ -6,7 +6,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 #[allow(unused_imports)] // Used via T::zero(), T::one(), .is_zero() methods
-use num_traits::{Float, Zero, One};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
 
 /// Calculate the internal rate of return for a series of cash flows.
@@ -51,7 +51,7 @@ where
     T: Float + Debug + Clone,
 {
     let cash_flows = values.to_vec();
-    
+
     if cash_flows.is_empty() {
         return Err(NumRs2Error::ComputationError(
             "Cash flow array cannot be empty".to_string(),
@@ -67,10 +67,11 @@ where
     // Check for alternating signs (necessary for IRR to exist)
     let has_positive = cash_flows.iter().any(|&x| x > T::zero());
     let has_negative = cash_flows.iter().any(|&x| x < T::zero());
-    
+
     if !has_positive || !has_negative {
         return Err(NumRs2Error::ComputationError(
-            "IRR calculation requires cash flows with both positive and negative values".to_string(),
+            "IRR calculation requires cash flows with both positive and negative values"
+                .to_string(),
         ));
     }
 
@@ -80,10 +81,10 @@ where
 
     // Newton-Raphson method
     let mut rate = guess;
-    
+
     for iteration in 0..maxiter {
         let (npv_val, npv_derivative) = irr_function_and_derivative(&cash_flows, rate);
-        
+
         if npv_derivative.abs() < T::from(1e-15).unwrap() {
             return Err(NumRs2Error::ComputationError(
                 "IRR calculation failed: derivative too small".to_string(),
@@ -91,11 +92,11 @@ where
         }
 
         let new_rate = rate - npv_val / npv_derivative;
-        
+
         if (new_rate - rate).abs() < tol {
             return Ok(new_rate);
         }
-        
+
         rate = new_rate;
 
         // Prevent extremely negative rates that could cause numerical issues
@@ -122,7 +123,7 @@ where
     let mut npv_val = T::zero();
     let mut npv_derivative = T::zero();
     let one_plus_rate = T::one() + rate;
-    
+
     for (i, &cash_flow) in cash_flows.iter().enumerate() {
         if i == 0 {
             // Initial cash flow is not discounted
@@ -131,16 +132,16 @@ where
         } else {
             let period = T::from(i).unwrap();
             let discount_factor = one_plus_rate.powf(period);
-            
+
             // NPV contribution
             npv_val = npv_val + cash_flow / discount_factor;
-            
+
             // Derivative contribution: -i * CF_i / (1 + rate)^(i+1)
             let derivative_term = -period * cash_flow / (discount_factor * one_plus_rate);
             npv_derivative = npv_derivative + derivative_term;
         }
     }
-    
+
     (npv_val, npv_derivative)
 }
 
@@ -198,7 +199,7 @@ where
         let row_end = row_start + cols;
         let row_data = data[row_start..row_end].to_vec();
         let row_array = Array::from_vec(row_data);
-        
+
         let irr_result = irr(&row_array, guess, tol, maxiter)?;
         result_vec.push(irr_result);
     }
@@ -236,7 +237,7 @@ where
     T: Float + Debug + Clone,
 {
     let cash_flows = values.to_vec();
-    
+
     if cash_flows.is_empty() {
         return Err(NumRs2Error::ComputationError(
             "Cash flow array cannot be empty".to_string(),
@@ -251,18 +252,18 @@ where
 
     let n = cash_flows.len();
     let n_float = T::from(n - 1).unwrap();
-    
+
     // Calculate present value of negative cash flows (financing)
     let mut pv_negative = T::zero();
     // Calculate future value of positive cash flows (reinvestment)
     let mut fv_positive = T::zero();
-    
+
     let one_plus_finance = T::one() + finance_rate;
     let one_plus_reinvest = T::one() + reinvest_rate;
-    
+
     for (i, &cash_flow) in cash_flows.iter().enumerate() {
         let period = T::from(i).unwrap();
-        
+
         if cash_flow < T::zero() {
             // Negative cash flow - discount to present value
             let discount_factor = one_plus_finance.powf(period);
@@ -274,18 +275,18 @@ where
             fv_positive = fv_positive + cash_flow * compound_factor;
         }
     }
-    
+
     if pv_negative.is_zero() || fv_positive.is_zero() {
         return Err(NumRs2Error::ComputationError(
             "MIRR calculation requires both positive and negative cash flows".to_string(),
         ));
     }
-    
+
     // MIRR = (FV_positive / -PV_negative)^(1/n) - 1
     let ratio = fv_positive / (-pv_negative);
     let exponent = T::one() / n_float;
     let mirr_value = ratio.powf(exponent) - T::one();
-    
+
     Ok(mirr_value)
 }
 
@@ -329,12 +330,13 @@ mod tests {
     #[test]
     fn test_irr_multiple_series() {
         let cash_flows = Array::from_vec(vec![
-            -1000.0, 300.0, 400.0, 500.0,  // Project 1
-            -100.0, 110.0, 0.0, 0.0        // Project 2 (simple case)
-        ]).reshape(&[2, 4]);
+            -1000.0, 300.0, 400.0, 500.0, // Project 1
+            -100.0, 110.0, 0.0, 0.0, // Project 2 (simple case)
+        ])
+        .reshape(&[2, 4]);
         let result = irr_multiple_series(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
         assert_eq!(result.shape(), vec![2]);
-        
+
         let values = result.to_vec();
         assert!(values[0] > 0.0); // Project 1 should have positive IRR
         assert_relative_eq!(values[1], 0.1, epsilon = 1e-2); // Project 2 should be ~10%

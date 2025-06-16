@@ -376,14 +376,16 @@ impl<T: Clone> Array<T> {
     }
     /// Create a new array from a vector and reshape it
     pub fn from_vec(vec: Vec<T>) -> Self {
-        let data = NdArray::from_shape_vec(IxDyn(&[vec.len()]), vec)
-            .unwrap_or_else(|e| {
-                // This should never happen with a properly sized vector
-                // Log the error and create an empty array as last resort
-                eprintln!("Critical: Array creation failed: {}. This indicates a serious bug.", e);
-                // Create a minimal array that won't cause undefined behavior
-                NdArray::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap()
-            });
+        let data = NdArray::from_shape_vec(IxDyn(&[vec.len()]), vec).unwrap_or_else(|e| {
+            // This should never happen with a properly sized vector
+            // Log the error and create an empty array as last resort
+            eprintln!(
+                "Critical: Array creation failed: {}. This indicates a serious bug.",
+                e
+            );
+            // Create a minimal array that won't cause undefined behavior
+            NdArray::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap()
+        });
         Self { data }
     }
 
@@ -435,11 +437,17 @@ impl<T: Clone> Array<T> {
                 // NumPy's tri returns 1s on or below the diagonal (i-j <= k)
                 if (j as isize) <= (i as isize) + k {
                     result.set(&[i, j], value.clone()).unwrap_or_else(|_| {
-                        panic!("Internal error: failed to set element at [{}, {}] in tri function", i, j)
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in tri function",
+                            i, j
+                        )
                     });
                 } else {
                     result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
-                        panic!("Internal error: failed to set element at [{}, {}] in tri function", i, j)
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in tri function",
+                            i, j
+                        )
                     });
                 }
             }
@@ -493,7 +501,10 @@ impl<T: Clone> Array<T> {
                 // In NumPy, the condition is j > i + k
                 if (j as isize) > (i as isize) + k {
                     result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
-                        panic!("Internal error: failed to set element at [{}, {}] in tril function", i, j)
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in tril function",
+                            i, j
+                        )
                     });
                 }
             }
@@ -547,7 +558,10 @@ impl<T: Clone> Array<T> {
                 // In NumPy, the condition is j < i + k
                 if (j as isize) < (i as isize) + k {
                     result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
-                        panic!("Internal error: failed to set element at [{}, {}] in triu function", i, j)
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in triu function",
+                            i, j
+                        )
                     });
                 }
             }
@@ -653,7 +667,10 @@ impl<T: Clone> Array<T> {
             let col = diagonal_col_start + i;
             if row < n_rows && col < n_cols {
                 result.set(&[row, col], T::one()).unwrap_or_else(|_| {
-                    panic!("Internal error: failed to set element at [{}, {}] in eye function", row, col)
+                    panic!(
+                        "Internal error: failed to set element at [{}, {}] in eye function",
+                        row, col
+                    )
                 });
             }
         }

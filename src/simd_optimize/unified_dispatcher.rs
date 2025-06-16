@@ -98,7 +98,8 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_exp_f32(&self, input: &Array<f32>) -> Array<f32> {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => Avx2EnhancedOps::avx2_add_f32(input, input).unwrap_or_else(|_| input.map(|x| x.exp())),
+            SimdImplementation::AVX512 => Avx2EnhancedOps::avx2_add_f32(input, input)
+                .unwrap_or_else(|_| input.map(|x| x.exp())),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => EnhancedSimdOps::vectorized_exp_f32(input),
             #[cfg(target_arch = "aarch64")]
@@ -348,7 +349,7 @@ static GLOBAL_DISPATCHER: OnceLock<UnifiedSimdDispatcher> = OnceLock::new();
 
 /// Get or initialize the global SIMD dispatcher
 pub fn global_dispatcher() -> &'static UnifiedSimdDispatcher {
-    GLOBAL_DISPATCHER.get_or_init(|| UnifiedSimdDispatcher::new())
+    GLOBAL_DISPATCHER.get_or_init(UnifiedSimdDispatcher::new)
 }
 
 /// Convenience functions using the global dispatcher

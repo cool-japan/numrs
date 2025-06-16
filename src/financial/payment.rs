@@ -3,12 +3,12 @@
 //! This module implements the payment (PMT) calculation function,
 //! compatible with NumPy's financial functions.
 
+use super::{annuity_factor, compound_factor, validate_financial_params};
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 #[allow(unused_imports)] // Used via T::zero(), T::one(), .is_zero() methods
-use num_traits::{Float, Zero, One};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
-use super::{validate_financial_params, compound_factor, annuity_factor};
 
 /// Calculate the payment against loan principal plus interest.
 ///
@@ -47,7 +47,7 @@ where
     validate_financial_params(rate, nper, T::zero(), pv, fv)?;
 
     let when_factor = if when == 1 { T::one() + rate } else { T::one() };
-    
+
     if rate.is_zero() {
         // Special case when rate is 0
         return Ok(-(pv + fv) / nper);
@@ -55,10 +55,10 @@ where
 
     let compound = compound_factor(rate, nper);
     let annuity = annuity_factor(rate, nper);
-    
+
     let numerator = pv * compound + fv;
     let denominator = annuity * when_factor;
-    
+
     Ok(-numerator / denominator)
 }
 
@@ -86,7 +86,7 @@ where
 /// let npers = Array::from_vec(vec![60.0, 72.0, 84.0]);
 /// let pvs = Array::from_vec(vec![10000.0, 15000.0, 20000.0]);
 /// let fvs = Array::from_vec(vec![0.0, 0.0, 0.0]);
-/// 
+///
 /// let result = pmt_array(&rates, &npers, &pvs, &fvs, 0).unwrap();
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
@@ -168,14 +168,14 @@ mod tests {
 
     #[test]
     fn test_pmt_array() {
-        let rates = Array::from_vec(vec![0.05/12.0, 0.06/12.0]);
+        let rates = Array::from_vec(vec![0.05 / 12.0, 0.06 / 12.0]);
         let npers = Array::from_vec(vec![60.0, 72.0]);
         let pvs = Array::from_vec(vec![10000.0, 15000.0]);
         let fvs = Array::from_vec(vec![0.0, 0.0]);
 
         let result = pmt_array(&rates, &npers, &pvs, &fvs, 0).unwrap();
         assert_eq!(result.shape(), vec![2]);
-        
+
         let values = result.to_vec();
         assert_relative_eq!(values[0], -188.7107, epsilon = 1e-2);
         assert_relative_eq!(values[1], -248.59, epsilon = 1e-2);

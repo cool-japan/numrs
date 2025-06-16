@@ -1,6 +1,9 @@
 /// Calculate the maximum absolute difference between two matrices
 #[cfg(test)]
-pub fn calculate_max_diff<T>(a: &crate::array::Array<T>, b: &crate::array::Array<T>) -> crate::error::Result<T>
+pub fn calculate_max_diff<T>(
+    a: &crate::array::Array<T>,
+    b: &crate::array::Array<T>,
+) -> crate::error::Result<T>
 where
     T: num_traits::Float + Clone + std::fmt::Debug,
 {

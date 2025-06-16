@@ -1,5 +1,5 @@
 //! Vector operations for linear algebra
-//! 
+//!
 //! This module contains vector-specific operations including norm calculations,
 //! dot products, inner products, trace operations, and outer products.
 

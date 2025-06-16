@@ -222,17 +222,15 @@ impl ParallelMatrixOps {
         // Parallel matrix multiplication using row-wise parallelization
         if m * n * k > self.config.parallel_threshold {
             // Use parallel computation for large matrices
-            c.par_chunks_mut(n)
-                .enumerate()
-                .for_each(|(i, row)| {
-                    for j in 0..n {
-                        let mut sum = T::zero();
-                        for l in 0..k {
-                            sum = sum + a[i * k + l] * b[l * n + j];
-                        }
-                        row[j] = sum;
+            c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
+                for j in 0..n {
+                    let mut sum = T::zero();
+                    for l in 0..k {
+                        sum = sum + a[i * k + l] * b[l * n + j];
                     }
-                });
+                    row[j] = sum;
+                }
+            });
         } else {
             // Sequential for small matrices to avoid parallel overhead
             for i in 0..m {
@@ -274,7 +272,7 @@ impl ParallelMatrixOps {
                 .for_each(|(dst_idx, dst_elem)| {
                     let j = dst_idx / rows; // column in destination (row in source)
                     let i = dst_idx % rows; // row in destination (column in source)
-                    
+
                     if j < cols {
                         *dst_elem = src[i * cols + j];
                     }

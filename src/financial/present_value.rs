@@ -3,12 +3,12 @@
 //! This module implements the present value (PV) calculation function,
 //! compatible with NumPy's financial functions.
 
+use super::{annuity_factor, compound_factor, validate_financial_params};
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 #[allow(unused_imports)] // Used via T::zero(), T::one(), .is_zero() methods
-use num_traits::{Float, Zero, One};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
-use super::{validate_financial_params, compound_factor, annuity_factor};
 
 /// Calculate the present value of a payment or series of payments.
 ///
@@ -45,7 +45,7 @@ where
     validate_financial_params(rate, nper, pmt, T::zero(), fv)?;
 
     let when_factor = if when == 1 { T::one() + rate } else { T::one() };
-    
+
     if rate.is_zero() {
         // Special case when rate is 0
         return Ok(-(fv + pmt * nper));
@@ -53,10 +53,10 @@ where
 
     let compound = compound_factor(rate, nper);
     let annuity = annuity_factor(rate, nper);
-    
+
     let pv_annuity = pmt * annuity * when_factor / compound;
     let pv_lump_sum = fv / compound;
-    
+
     Ok(-(pv_annuity + pv_lump_sum))
 }
 
@@ -84,7 +84,7 @@ where
 /// let npers = Array::from_vec(vec![10.0, 15.0, 20.0]);
 /// let pmts = Array::from_vec(vec![100.0, 200.0, 300.0]);
 /// let fvs = Array::from_vec(vec![0.0, 0.0, 0.0]);
-/// 
+///
 /// let result = pv_array(&rates, &npers, &pmts, &fvs, 0).unwrap();
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
@@ -162,7 +162,7 @@ mod tests {
 
         let result = pv_array(&rates, &npers, &pmts, &fvs, 0).unwrap();
         assert_eq!(result.shape(), vec![2]);
-        
+
         let values = result.to_vec();
         assert_relative_eq!(values[0], -772.1734, epsilon = 1e-4);
         assert_relative_eq!(values[1], -1942.449798, epsilon = 1e-4);

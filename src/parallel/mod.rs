@@ -101,9 +101,10 @@ impl Default for ParallelContext {
             let num_cores = 1; // Conservative fallback
             let scheduler_config = SchedulerConfig::optimal_for_cores(num_cores);
             let scheduler = Arc::new(ParallelScheduler::new(scheduler_config).unwrap());
-            let load_balancer = Arc::new(LoadBalancer::new(BalancingStrategy::Adaptive, num_cores).unwrap());
+            let load_balancer =
+                Arc::new(LoadBalancer::new(BalancingStrategy::Adaptive, num_cores).unwrap());
             let work_stealing_pool = Arc::new(WorkStealingPool::new(num_cores).unwrap());
-            
+
             Self {
                 scheduler,
                 load_balancer,

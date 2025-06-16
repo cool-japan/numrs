@@ -100,7 +100,8 @@ impl<T: Clone + Serialize> Array<T> {
                 "NPZ format serialization to string not supported".to_string(),
             )),
             SerializeFormat::Pickle => Err(NumRs2Error::SerializationError(
-                "Pickle format serialization to string not supported (use to_file instead)".to_string(),
+                "Pickle format serialization to string not supported (use to_file instead)"
+                    .to_string(),
             )),
         }
     }
@@ -167,9 +168,13 @@ impl<T: Clone + Serialize> Array<T> {
                 npy_npz::serialize_to_file(self, &mut writer, format)?;
             }
             SerializeFormat::Pickle => {
-                serde_pickle::to_writer(&mut writer, &serialized, serde_pickle::SerOptions::new()).map_err(|e| {
-                    NumRs2Error::SerializationError(format!("Pickle serialization error: {}", e))
-                })?;
+                serde_pickle::to_writer(&mut writer, &serialized, serde_pickle::SerOptions::new())
+                    .map_err(|e| {
+                        NumRs2Error::SerializationError(format!(
+                            "Pickle serialization error: {}",
+                            e
+                        ))
+                    })?;
             }
         }
 
@@ -220,7 +225,7 @@ impl<T: Clone + Serialize> Array<T> {
     }
 }
 
-impl<T: Clone + for<'a> Deserialize<'a> + std::str::FromStr> Array<T> 
+impl<T: Clone + for<'a> Deserialize<'a> + std::str::FromStr> Array<T>
 where
     <T as FromStr>::Err: std::fmt::Debug,
 {
@@ -263,17 +268,16 @@ where
 
                 for result in reader.records() {
                     let record = result.map_err(|e| {
-                        NumRs2Error::DeserializationError(format!(
-                            "CSV reading error: {}",
-                            e
-                        ))
+                        NumRs2Error::DeserializationError(format!("CSV reading error: {}", e))
                     })?;
-                    
+
                     for field in record.iter() {
-                        let value = field.parse::<T>()
-                            .map_err(|_| NumRs2Error::DeserializationError(
-                                format!("Failed to parse CSV field: {}", field)
-                            ))?;
+                        let value = field.parse::<T>().map_err(|_| {
+                            NumRs2Error::DeserializationError(format!(
+                                "Failed to parse CSV field: {}",
+                                field
+                            ))
+                        })?;
                         data.push(value);
                     }
                 }
@@ -291,7 +295,8 @@ where
                 "NPZ format deserialization from string not supported".to_string(),
             )),
             SerializeFormat::Pickle => Err(NumRs2Error::DeserializationError(
-                "Pickle format deserialization from string not supported (use from_file instead)".to_string(),
+                "Pickle format deserialization from string not supported (use from_file instead)"
+                    .to_string(),
             )),
         }
     }
@@ -343,19 +348,18 @@ where
 
                 for result in csv_reader.records() {
                     let record = result.map_err(|e| {
-                        NumRs2Error::DeserializationError(format!(
-                            "CSV reading error: {}",
-                            e
-                        ))
+                        NumRs2Error::DeserializationError(format!("CSV reading error: {}", e))
                     })?;
-                    
+
                     // Parse each field in the record
                     let mut row = Vec::new();
                     for field in record.iter() {
-                        let value = field.parse::<T>()
-                            .map_err(|_| NumRs2Error::DeserializationError(
-                                format!("Failed to parse CSV field: {}", field)
-                            ))?;
+                        let value = field.parse::<T>().map_err(|_| {
+                            NumRs2Error::DeserializationError(format!(
+                                "Failed to parse CSV field: {}",
+                                field
+                            ))
+                        })?;
                         row.push(value);
                     }
                     all_rows.push(row);
@@ -407,12 +411,14 @@ where
             }
             SerializeFormat::Pickle => {
                 let serialized: SerializedArray<T> =
-                    serde_pickle::from_reader(reader, serde_pickle::DeOptions::new()).map_err(|e| {
-                        NumRs2Error::DeserializationError(format!(
-                            "Pickle deserialization error: {}",
-                            e
-                        ))
-                    })?;
+                    serde_pickle::from_reader(reader, serde_pickle::DeOptions::new()).map_err(
+                        |e| {
+                            NumRs2Error::DeserializationError(format!(
+                                "Pickle deserialization error: {}",
+                                e
+                            ))
+                        },
+                    )?;
 
                 Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }

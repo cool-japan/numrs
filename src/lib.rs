@@ -115,20 +115,23 @@ pub mod doctests {}
 pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
-    // Import specific non-conflicting functions from legacy module  
+    // Import specific non-conflicting functions from legacy module
     pub use crate::array_ops_legacy::rollaxis;
     // String and character operations
-    pub use crate::char;
-    pub use crate::char::{StringArray, StringElement, array_from_strings};
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
+    pub use crate::char;
+    pub use crate::char::{array_from_strings, StringArray, StringElement};
     pub use crate::comparisons::{
         all, allclose, allclose_with_tol, any, array_equal, equal, greater, greater_equal, isclose,
         isclose_array, less, less_equal, not_equal,
     };
     pub use crate::conversions::*;
     pub use crate::error::{NumRs2Error, Result};
-    pub use crate::financial::{pv, fv, pmt, rate, nper, npv, irr, mirr, pv_array, fv_array, pmt_array, rate_array, nper_array, npv_rates, npv_multiple_series, irr_multiple_series};
+    pub use crate::financial::{
+        fv, fv_array, irr, irr_multiple_series, mirr, nper, nper_array, npv, npv_multiple_series,
+        npv_rates, pmt, pmt_array, pv, pv_array, rate, rate_array,
+    };
     pub use crate::indexing::*;
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
@@ -190,9 +193,11 @@ pub mod prelude {
     pub use crate::parallel_optimize::{
         ParallelConfig, ParallelizationThreshold, SchedulingStrategy, WorkloadPartitioning,
     };
-    
+
     // Array printing and display
-    pub use crate::printing::{set_printoptions, get_printoptions, reset_printoptions, array_str, PrintOptions};
+    pub use crate::printing::{
+        array_str, get_printoptions, reset_printoptions, set_printoptions, PrintOptions,
+    };
 
     // Memory allocation optimization
     pub use crate::memory_alloc::{
@@ -258,7 +263,10 @@ pub mod prelude {
 
     // Re-export advanced types
     pub use crate::types::custom::CustomDType;
-    pub use crate::types::datetime::{DateTime64, DateTimeUnit, DateUnit, TimeDelta64, Timezone, TimezoneDateTime, datetime_array, business_days};
+    pub use crate::types::datetime::{
+        business_days, datetime_array, DateTime64, DateTimeUnit, DateUnit, TimeDelta64, Timezone,
+        TimezoneDateTime,
+    };
     pub use crate::types::structured::{DType, Field, RecordArray, StructuredArray};
 
     // Re-export ndarray types for convenience
@@ -453,11 +461,11 @@ mod tests {
         // Test Kronecker product via prelude
         let a = Array::<f64>::from_vec(vec![1.0, 2.0]).reshape(&[1, 2]);
         let b = Array::<f64>::from_vec(vec![3.0, 4.0]).reshape(&[2, 1]);
-        
+
         let kron_result = kron(&a, &b).unwrap();
         assert_eq!(kron_result.shape(), &[2, 2]);
         assert_eq!(kron_result.to_vec(), vec![3.0, 6.0, 4.0, 8.0]);
-        
+
         // Test tensordot via prelude
         let tensordot_result = tensordot(&a, &b, &[1, 0]).unwrap();
         assert_eq!(tensordot_result.shape(), &[1, 1]);

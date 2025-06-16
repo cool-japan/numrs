@@ -1737,7 +1737,6 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
 /// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The flipud function is already implemented earlier in the file
-
 /// Create a new array by stacking arrays row-wise (along axis 0)
 ///
 /// # Parameters
@@ -2053,7 +2052,6 @@ fn array_transpose<T: Clone + Zero>(
 /// ```
 // This implementation is commented out to avoid duplicate function definitions
 // The rot90 function is already implemented earlier in the file with a more comprehensive version
-
 /// Broadcast any number of arrays to a common shape
 ///
 /// # Parameters

@@ -7,15 +7,15 @@ use ndarray_linalg::{Scalar, SVD};
 use num_traits::{Float, NumCast, Zero};
 use std::fmt::Debug;
 
-pub mod qr;
 pub mod cholesky;
-pub mod lu;
-pub mod schur;
 pub mod condition;
+pub mod lu;
+pub mod qr;
+pub mod schur;
 pub mod utils;
 
 // Re-export QR functions for convenience
-pub use qr::{qr, householder_qr, identity_matrix};
+pub use qr::{householder_qr, identity_matrix, qr};
 
 // Re-export Cholesky functions for convenience
 pub use cholesky::{cholesky, pivoted_cholesky};

@@ -145,6 +145,7 @@ impl IndexingEngine {
     }
 
     /// Recursive function to iterate through multi-dimensional ranges
+    #[allow(clippy::only_used_in_recursion)]
     fn iterate_ranges<T>(
         &self,
         array: &ArrayView<T>,
@@ -366,6 +367,7 @@ impl IndexingEngine {
     }
 
     /// Recursive function to extract block elements
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_block<T>(
         &self,
         array: &ArrayView<T>,
@@ -462,6 +464,7 @@ impl IndexingEngine {
     }
 
     /// Recursive extraction of diagonal elements
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_diagonal_recursive<T>(
         &self,
         array: &ArrayView<T>,

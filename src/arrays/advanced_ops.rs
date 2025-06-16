@@ -586,7 +586,7 @@ impl<'a, T> ArrayView<'a, T> {
     // }
 }
 
-impl<'a, T: Clone> ArrayView<'a, T> {
+impl<T: Clone> ArrayView<'_, T> {
     /// Convert the view to a owned vector (collects all elements)
     pub fn to_vec(&self) -> Vec<T> {
         let mut result = Vec::with_capacity(self.shape.size());
@@ -630,7 +630,7 @@ pub struct ArrayViewIterator<T> {
 
 impl<T> ArrayViewIterator<T> {
     #[allow(dead_code)]
-    fn new<'a>(view: &ArrayView<'a, T>) -> Self {
+    fn new(view: &ArrayView<'_, T>) -> Self {
         let current_indices = vec![0; view.shape.ndim()];
         let finished = view.shape.size() == 0;
         Self {

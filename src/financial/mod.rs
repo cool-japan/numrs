@@ -18,21 +18,21 @@ use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use std::fmt::Debug;
 
-mod present_value;
 mod future_value;
-mod payment;
-mod rate_calculation;
-mod periods;
-mod net_present_value;
 mod internal_rate;
+mod net_present_value;
+mod payment;
+mod periods;
+mod present_value;
+mod rate_calculation;
 
-pub use present_value::*;
 pub use future_value::*;
-pub use payment::*;
-pub use rate_calculation::*;
-pub use periods::*;
-pub use net_present_value::*;
 pub use internal_rate::*;
+pub use net_present_value::*;
+pub use payment::*;
+pub use periods::*;
+pub use present_value::*;
+pub use rate_calculation::*;
 
 /// Trait for financial calculations supporting both scalar and array operations
 pub trait FinancialCalculation<T>
@@ -59,7 +59,12 @@ pub fn validate_financial_params<T: Float + Debug>(
     }
 
     // Check for infinite values
-    if rate.is_infinite() || nper.is_infinite() || pmt.is_infinite() || pv.is_infinite() || fv.is_infinite() {
+    if rate.is_infinite()
+        || nper.is_infinite()
+        || pmt.is_infinite()
+        || pv.is_infinite()
+        || fv.is_infinite()
+    {
         return Err(NumRs2Error::ComputationError(
             "Financial parameters cannot be infinite".to_string(),
         ));
@@ -114,7 +119,7 @@ mod tests {
 
         // NaN parameters should fail
         assert!(validate_financial_params(f64::NAN, 10.0, -100.0, 0.0, 1000.0).is_err());
-        
+
         // Infinite parameters should fail
         assert!(validate_financial_params(f64::INFINITY, 10.0, -100.0, 0.0, 1000.0).is_err());
     }

@@ -1,6 +1,6 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::new_modules::matrix_decomp::qr::{qr, identity_matrix};
+use crate::new_modules::matrix_decomp::qr::{identity_matrix, qr};
 use ndarray::ArrayView2;
 use num_traits::Float;
 use std::fmt::Debug;

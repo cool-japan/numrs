@@ -3,12 +3,12 @@
 //! This module implements the number of periods (NPER) calculation function,
 //! compatible with NumPy's financial functions.
 
+use super::validate_financial_params;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 #[allow(unused_imports)] // Used via T::zero(), T::one(), .is_zero() methods
-use num_traits::{Float, Zero, One};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
-use super::{validate_financial_params};
 
 /// Calculate the number of periodic payments.
 ///
@@ -45,12 +45,13 @@ where
     validate_financial_params(rate, T::zero(), pmt, pv, fv)?;
 
     let when_factor = if when == 1 { T::one() + rate } else { T::one() };
-    
+
     if rate.is_zero() {
         // Special case when rate is 0
         if pmt.is_zero() {
             return Err(NumRs2Error::ComputationError(
-                "Cannot calculate number of periods when both rate and payment are zero".to_string(),
+                "Cannot calculate number of periods when both rate and payment are zero"
+                    .to_string(),
             ));
         }
         return Ok(-(pv + fv) / pmt);
@@ -58,12 +59,13 @@ where
 
     // Adjust payment for when factor
     let adjusted_pmt = pmt * when_factor;
-    
+
     if adjusted_pmt.is_zero() {
         // No payment case - simple compound interest
         if pv.is_zero() || (pv < T::zero()) == (fv < T::zero()) {
             return Err(NumRs2Error::ComputationError(
-                "Present value and future value must have opposite signs when payment is zero".to_string(),
+                "Present value and future value must have opposite signs when payment is zero"
+                    .to_string(),
             ));
         }
         let compound_ratio = -fv / pv;
@@ -80,16 +82,16 @@ where
     // But we need to handle the signs correctly for the loan case
     let pmt_fv_term = adjusted_pmt - fv * rate;
     let pmt_pv_term = adjusted_pmt + pv * rate;
-    
+
     // Check for division by zero
     if pmt_pv_term.abs() < T::from(1e-15).unwrap() {
         return Err(NumRs2Error::ComputationError(
             "Division by zero in number of periods calculation".to_string(),
         ));
     }
-    
+
     let ratio = pmt_fv_term / pmt_pv_term;
-    
+
     // Check if ratio is positive (required for logarithm)
     if ratio <= T::zero() {
         return Err(NumRs2Error::ComputationError(
@@ -99,7 +101,7 @@ where
 
     let log_ratio = ratio.ln();
     let log_one_plus_rate = (T::one() + rate).ln();
-    
+
     Ok(log_ratio / log_one_plus_rate)
 }
 
@@ -127,7 +129,7 @@ where
 /// let pmts = Array::from_vec(vec![-188.71, -250.0, -300.0]);
 /// let pvs = Array::from_vec(vec![10000.0, 12000.0, 15000.0]);
 /// let fvs = Array::from_vec(vec![0.0, 0.0, 0.0]);
-/// 
+///
 /// let result = nper_array(&rates, &pmts, &pvs, &fvs, 0).unwrap();
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
@@ -215,14 +217,14 @@ mod tests {
 
     #[test]
     fn test_nper_array() {
-        let rates = Array::from_vec(vec![0.05/12.0, 0.06/12.0]);
+        let rates = Array::from_vec(vec![0.05 / 12.0, 0.06 / 12.0]);
         let pmts = Array::from_vec(vec![-188.71, -250.0]);
         let pvs = Array::from_vec(vec![10000.0, 12000.0]);
         let fvs = Array::from_vec(vec![0.0, 0.0]);
 
         let result = nper_array(&rates, &pmts, &pvs, &fvs, 0).unwrap();
         assert_eq!(result.shape(), vec![2]);
-        
+
         let values = result.to_vec();
         assert_relative_eq!(values[0], 60.0, epsilon = 1e-2);
         assert!(values[1] > 0.0); // Should be positive
