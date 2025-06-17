@@ -13,7 +13,9 @@ use std::arch::x86_64::*;
 
 /// AVX2 vectorization constants for production stability
 const AVX2_F32_LANES: usize = 8;
+#[allow(dead_code)]
 const AVX2_F64_LANES: usize = 4;
+#[allow(dead_code)]
 const AVX2_ALIGNMENT: usize = 32;
 
 /// Advanced AVX2 operations with maximum vectorization
