@@ -499,3 +499,70 @@ pub fn svd<
 ) -> Result<(Array<T>, Array<T>, Array<T>)> {
     a.svd()
 }
+
+/// Compute the rank of a matrix
+///
+/// Computes the rank of a matrix using singular value decomposition.
+/// The rank is determined by counting the number of singular values
+/// that are greater than a specified tolerance.
+///
+/// # Arguments
+///
+/// * `a` - Input 2D matrix
+/// * `tol` - Tolerance for determining rank. If None, uses default tolerance
+///   based on machine precision and matrix size
+///
+/// # Returns
+///
+/// The rank of the matrix as a usize
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::matrix_rank;
+///
+/// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+/// let rank = matrix_rank(&a, None).unwrap();
+/// assert_eq!(rank, 2);
+/// ```
+#[cfg(not(feature = "matrix_decomp"))]
+pub fn matrix_rank<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(
+    a: &Array<T>,
+    tol: Option<T>,
+) -> Result<usize> {
+    // Check that the matrix is 2D
+    let shape = a.shape();
+    if shape.len() != 2 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "matrix_rank requires a 2D matrix".to_string(),
+        ));
+    }
+
+    // Compute SVD to get singular values using the non-feature-gated implementation
+    let (_, s, _) = svd(a)?;
+
+    // Get the tolerance
+    let tol_val = match tol {
+        Some(t) => t,
+        None => {
+            // Default is max(M, N) * eps * max(S)
+            let m = shape[0];
+            let n = shape[1];
+            let max_dim = if m > n { m } else { n };
+            let eps = T::epsilon();
+            
+            // Find max singular value
+            let s_data = s.to_vec();
+            let max_s = s_data.iter().fold(T::zero(), |max, &val| if val > max { val } else { max });
+
+            T::from(max_dim).unwrap() * eps * max_s
+        }
+    };
+
+    // Count singular values larger than tolerance
+    let s_data = s.to_vec();
+    let rank = s_data.iter().filter(|&&val| val > tol_val).count();
+
+    Ok(rank)
+}
