@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// Calculate the future value of a present value sum, or a series of payments.
 ///
 /// The future value is computed by solving the following equation:
-/// ```
+/// ```text
 /// fv + pv * (1 + rate)^nper + pmt * [(1 + rate)^nper - 1] / rate = 0
 /// ```
 ///
@@ -32,11 +32,11 @@ use std::fmt::Debug;
 /// # Examples
 ///
 /// ```
-/// use numrs2::financial::fv;
+/// use numrs2::prelude::*;
 ///
 /// // Calculate future value of $1000 invested for 10 periods at 5% interest
 /// let result = fv(0.05, 10.0, 0.0, -1000.0, 0).unwrap();
-/// assert!((result - 1628.895).abs() < 0.001);
+/// assert!((result - 1628.895_f64).abs() < 0.001);
 /// ```
 pub fn fv<T>(rate: T, nper: T, pmt: T, pv: T, when: i32) -> Result<T>
 where
@@ -78,7 +78,6 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use numrs2::financial::fv_array;
 ///
 /// let rates = Array::from_vec(vec![0.05, 0.06, 0.07]);
 /// let npers = Array::from_vec(vec![10.0, 15.0, 20.0]);

@@ -11,7 +11,9 @@
 use approx::assert_relative_eq;
 use numrs2::array::Array;
 use numrs2::interop::scirs_compat::*;
-use numrs2::random::distributions::set_seed;
+use numrs2::random::distributions::{set_seed, multivariate_normal_with_rotation};
+use numrs2::random::advanced_distributions::{vonmises, maxwell};
+use numrs2::random::distributions_enhanced::truncated_normal;
 use std::f64::consts::PI;
 
 /// Utility function to calculate the mean of a sample
@@ -206,8 +208,8 @@ fn test_truncated_normal_statistics() {
         let alpha = (low - mean) / std;
         let beta = (high - mean) / std;
 
-        let phi_alpha = (-0.5 * alpha * alpha).exp() / (2.0 * PI).sqrt();
-        let phi_beta = (-0.5 * beta * beta).exp() / (2.0 * PI).sqrt();
+        let phi_alpha = (-0.5f64 * alpha * alpha).exp() / (2.0f64 * PI).sqrt();
+        let phi_beta = (-0.5f64 * beta * beta).exp() / (2.0f64 * PI).sqrt();
 
         let phi_cdf_alpha = 0.5 * (1.0 + erf(alpha / 2.0f64.sqrt()));
         let phi_cdf_beta = 0.5 * (1.0 + erf(beta / 2.0f64.sqrt()));

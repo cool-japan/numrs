@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// Calculate the present value of a payment or series of payments.
 ///
 /// The present value is computed by solving the following equation:
-/// ```
+/// ```text
 /// pv + pmt * [(1 + rate)^nper - 1] / rate * (1 + rate)^(-nper) + fv * (1 + rate)^(-nper) = 0
 /// ```
 ///
@@ -32,11 +32,11 @@ use std::fmt::Debug;
 /// # Examples
 ///
 /// ```
-/// use numrs2::financial::pv;
+/// use numrs2::prelude::*;
 ///
 /// // Calculate present value of $100 payments for 10 periods at 5% interest
 /// let result = pv(0.05, 10.0, 100.0, 0.0, 0).unwrap();
-/// assert!((result - (-772.173)).abs() < 0.001);
+/// assert!((result - (-772.173_f64)).abs() < 0.001);
 /// ```
 pub fn pv<T>(rate: T, nper: T, pmt: T, fv: T, when: i32) -> Result<T>
 where

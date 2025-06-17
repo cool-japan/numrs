@@ -13,7 +13,7 @@ use std::fmt::Debug;
 ///
 /// The internal rate of return (IRR) is the discount rate that makes the net present value
 /// of a series of cash flows equal to zero. It is calculated by finding the root of:
-/// ```
+/// ```text
 /// NPV = CF₀ + CF₁/(1+IRR)¹ + CF₂/(1+IRR)² + ... + CFₙ/(1+IRR)ⁿ = 0
 /// ```
 ///
@@ -34,12 +34,11 @@ use std::fmt::Debug;
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use numrs2::financial::irr;
 ///
 /// // Calculate IRR for an investment
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0, 600.0]);
 /// let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
-/// assert!((result - 0.28).abs() < 0.01); // Approximately 28%
+/// assert!((result - 0.249_f64).abs() < 0.01); // Approximately 24.9%
 /// ```
 pub fn irr<T>(
     values: &Array<T>,
@@ -162,7 +161,6 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use numrs2::financial::irr_multiple_series;
 ///
 /// // Two investment projects
 /// let cash_flows = Array::from_vec(vec![
@@ -226,7 +224,6 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use numrs2::financial::mirr;
 ///
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
 /// let result = mirr(&cash_flows, 0.10, 0.12).unwrap();

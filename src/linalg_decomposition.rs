@@ -36,8 +36,8 @@ use std::fmt::Debug;
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::matrix_rank;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::matrix_rank;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let rank = matrix_rank(&a, None).unwrap();
@@ -110,8 +110,8 @@ where
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::qr;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::qr;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (q, r) = qr(&a).unwrap();
@@ -139,8 +139,8 @@ pub fn qr<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::qr;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::qr;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (q, r) = qr(&a).unwrap();
@@ -176,8 +176,8 @@ pub fn qr<
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::cholesky;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::cholesky;
 ///
 /// // Create a positive definite matrix
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
@@ -206,8 +206,8 @@ pub fn cholesky<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::cholesky;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::cholesky;
 ///
 /// // Create a positive definite matrix
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
@@ -247,8 +247,8 @@ pub fn cholesky<
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::eig;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::eig;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
 /// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
@@ -342,8 +342,8 @@ pub fn eig<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::eig;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::eig;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
 /// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
@@ -446,8 +446,8 @@ pub fn eig<
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::svd;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::svd;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (u, s, vt) = svd(&a).unwrap();
@@ -479,8 +479,8 @@ pub fn svd<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 /// # Examples
 ///
 /// ```
-/// use numrs::Array;
-/// use numrs::linalg::decomposition::svd;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::decomposition::svd;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (u, s, vt) = svd(&a).unwrap();

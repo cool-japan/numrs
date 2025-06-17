@@ -21,7 +21,7 @@ use std::fmt::Debug;
 ///
 /// # Examples
 /// ```
-/// use numrs::prelude::*;
+/// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let det_val = det(&a).unwrap();
@@ -46,7 +46,7 @@ pub fn det<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> R
 ///
 /// # Examples
 /// ```
-/// use numrs::prelude::*;
+/// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![2.0, 0.0, 0.0, 2.0]).reshape(&[2, 2]);
 /// let a_squared = matrix_power(&a, 2).unwrap();

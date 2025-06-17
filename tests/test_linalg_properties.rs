@@ -1,15 +1,32 @@
 use approx::assert_abs_diff_eq;
-#[cfg(feature = "matrix_decomp")]
-use numrs2::linalg_extended::condition_number;
-#[cfg(feature = "matrix_decomp")]
-use numrs2::new_modules::matrix_decomp;
-#[cfg(feature = "matrix_decomp")]
-use numrs2::prelude::lu;
 /// Property-based tests for linear algebra operations
 ///
 /// This file tests the mathematical properties and relationships
 /// that should be satisfied by linear algebra operations.
 use numrs2::prelude::*;
+
+// Import from the core linalg module (non-deprecated)
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::cholesky;
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::qr;
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::svd;
+#[cfg(feature = "matrix_decomp")]
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::{condition_number, lu};
+#[allow(deprecated)]
+use numrs2::new_modules::eigenvalues::eigh as eigh_impl;
+use numrs2::linalg::vector_ops::{norm, trace};
+use numrs2::linalg::solve::{inv, solve};
+use numrs2::linalg::matrix_ops::det;
+
+// For eigenvalues, we need to define a wrapper that calls the correct function
+#[allow(deprecated)]
+fn eigh(a: &Array<f64>, uplo: &str) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
+    // Use the correct symmetric eigendecomposition function
+    eigh_impl(a, uplo)
+}
 
 // Constants for testing
 // Tolerance for floating point comparisons
@@ -22,15 +39,6 @@ fn random_matrix(rows: usize, cols: usize) -> Array<f64> {
     rng.random::<f64>(&[rows, cols]).unwrap()
 }
 
-/// Helper function to generate a random symmetric matrix
-fn random_symmetric_matrix(size: usize) -> Array<f64> {
-    let rng = random::default_rng();
-    let m = rng.random::<f64>(&[size, size]).unwrap();
-
-    // Make it symmetric: (M + M^T) / 2
-    let m_t = m.transpose();
-    m.add(&m_t).multiply_scalar(0.5)
-}
 
 /// Helper function to generate a random positive definite matrix
 fn random_positive_definite_matrix(size: usize) -> Array<f64> {
@@ -348,6 +356,7 @@ fn test_eigendecomposition_properties() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_svd_properties() {
     // Test SVD properties
     for &rows in MATRIX_SIZES.iter() {
@@ -397,6 +406,7 @@ fn test_svd_properties() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_qr_decomposition_properties() {
     // Test QR decomposition properties
     for &rows in MATRIX_SIZES.iter() {
@@ -437,6 +447,7 @@ fn test_qr_decomposition_properties() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_cholesky_decomposition_properties() {
     // Test Cholesky decomposition properties
     for &size in MATRIX_SIZES.iter() {
@@ -490,7 +501,8 @@ fn test_lu_decomposition_properties() {
 
         // Compute LU decomposition: A = P * L * U
         #[cfg(feature = "matrix_decomp")]
-        let (l, u, p) = matrix_decomp::lu(&a).unwrap();
+        #[allow(deprecated)]
+        let (l, u, p) = lu(&a).unwrap();
         #[cfg(not(feature = "matrix_decomp"))]
         let (p, l, u) = lu(&a).unwrap();
 
@@ -551,12 +563,14 @@ fn test_lu_decomposition_properties() {
 
 #[cfg(feature = "matrix_decomp")]
 #[test]
+#[allow(deprecated)]
 fn test_condition_number_properties() {
     // Test condition number properties
     for &size in MATRIX_SIZES.iter() {
         let a = random_matrix(size, size);
 
         // Property 1: cond(A) >= 1
+        #[allow(deprecated)]
         let cond_a = condition_number(&a).unwrap();
         assert!(cond_a >= 1.0, "Condition number should be >= 1");
 
@@ -564,6 +578,7 @@ fn test_condition_number_properties() {
         // Only test with well-conditioned matrices
         if cond_a < 1e5 {
             let a_inv = inv(&a).unwrap();
+            #[allow(deprecated)]
             let cond_a_inv = condition_number(&a_inv).unwrap();
 
             assert_abs_diff_eq!(
@@ -577,6 +592,7 @@ fn test_condition_number_properties() {
         let q = random_matrix(size, size);
         let (q, _) = qr(&q).unwrap(); // Get orthogonal matrix from QR
 
+        #[allow(deprecated)]
         let cond_q = condition_number(&q).unwrap();
         assert_abs_diff_eq!(cond_q, 1.0, epsilon = TOLERANCE * 10.0);
     }
@@ -664,6 +680,7 @@ fn test_trace_properties() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_rank_properties() {
     // Test matrix rank properties using fixed matrices to avoid numerical issues
     let test_matrices = vec![

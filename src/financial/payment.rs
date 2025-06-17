@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// Calculate the payment against loan principal plus interest.
 ///
 /// The payment is computed by solving the following equation:
-/// ```
+/// ```text
 /// pv + pmt * [(1 + rate)^nper - 1] / rate * (1 + rate)^(-nper) + fv * (1 + rate)^(-nper) = 0
 /// ```
 ///
@@ -32,13 +32,13 @@ use std::fmt::Debug;
 /// # Examples
 ///
 /// ```
-/// use numrs2::financial::pmt;
+/// use numrs2::prelude::*;
 ///
 /// // Calculate monthly payment for a $10,000 loan at 5% annual interest for 5 years
 /// let monthly_rate = 0.05 / 12.0;
 /// let months = 5.0 * 12.0;
 /// let result = pmt(monthly_rate, months, 10000.0, 0.0, 0).unwrap();
-/// assert!((result - (-188.71)).abs() < 0.01);
+/// assert!((result - (-188.71_f64)).abs() < 0.01);
 /// ```
 pub fn pmt<T>(rate: T, nper: T, pv: T, fv: T, when: i32) -> Result<T>
 where

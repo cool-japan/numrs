@@ -17,4 +17,7 @@ Cargo.lock
 # Cargo config (local settings)
 .cargo/
 
+# Test Generated files
+output.*
+
 **/.claude/settings.local.json

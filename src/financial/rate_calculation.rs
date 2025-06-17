@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// Calculate the interest rate per period.
 ///
 /// The rate is computed by solving the following equation iteratively:
-/// ```
+/// ```text
 /// pv + pmt * [(1 + rate)^nper - 1] / rate * (1 + rate)^(-nper) + fv * (1 + rate)^(-nper) = 0
 /// ```
 ///
@@ -37,11 +37,11 @@ use std::fmt::Debug;
 /// # Examples
 ///
 /// ```
-/// use numrs2::financial::rate;
+/// use numrs2::prelude::*;
 ///
 /// // Calculate interest rate for a loan
 /// let result = rate(60.0, -188.71, 10000.0, 0.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
-/// assert!((result - (0.05/12.0)).abs() < 0.001);
+/// assert!((result - (0.05_f64/12.0)).abs() < 0.001);
 /// ```
 pub fn rate<T>(
     nper: T,

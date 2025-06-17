@@ -1,14 +1,37 @@
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use num_traits::sign::Signed;
-#[cfg(feature = "matrix_decomp")]
-use numrs2::linalg_extended::{condition_number, schur};
 /// Reference tests for linear algebra operations
 ///
 /// This file tests NumRS2's linear algebra operations against known reference values
 /// to ensure correctness and numerical stability.
 use numrs2::prelude::*;
+
+// Import from the core linalg module (non-deprecated)
+#[cfg(not(feature = "matrix_decomp"))]
+use numrs2::linalg::decomposition::{eig, cholesky, qr, svd};
 #[cfg(feature = "matrix_decomp")]
-use numrs2::prelude::{lu, matrix_rank};
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::{condition_number, lu, cholesky, qr, svd};
+use numrs2::linalg::vector_ops::{norm, trace};
+use numrs2::linalg::solve::{inv, solve};
+use numrs2::linalg::matrix_ops::det;
+
+// For eigenvalues, we need to define a wrapper that calls the correct function
+#[allow(deprecated)]
+fn eigh(a: &Array<f64>, uplo: &str) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
+    // Use the correct symmetric eigendecomposition function
+    #[cfg(feature = "matrix_decomp")]
+    {
+        numrs2::new_modules::eigenvalues::eigh(a, uplo)
+    }
+    #[cfg(not(feature = "matrix_decomp"))]
+    {
+        // The linalg::decomposition::eig function returns general eigenvalues
+        // For symmetric matrices, we can use the same function
+        let (eigenvalues, eigenvectors) = eig(a, None)?;
+        Ok((eigenvalues, eigenvectors))
+    }
+}
 
 // Tolerance for floating point comparisons
 const TOLERANCE: f64 = 1e-10;
@@ -186,6 +209,7 @@ fn test_eigendecomposition_reference() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_svd_reference() {
     // Test SVD against known values for a simple matrix
     let m = create_rectangle_matrix();
@@ -205,6 +229,7 @@ fn test_svd_reference() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_qr_decomposition_reference() {
     // Test QR decomposition with a matrix that has known factors
     let m = Array::<f64>::from_vec(vec![12.0, -51.0, 4.0, 6.0, 167.0, -68.0, -4.0, 24.0, -41.0])
@@ -264,6 +289,7 @@ fn test_qr_decomposition_reference() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_cholesky_decomposition_reference() {
     // Test Cholesky decomposition with a matrix that has a known factor
     // Create a positive definite matrix with known Cholesky decomposition
@@ -306,6 +332,7 @@ fn test_lu_decomposition_reference() {
         .reshape(&[3, 3]);
 
     // Compute LU decomposition
+    #[allow(deprecated)]
     let (l, _u, _p) = lu(&m).unwrap();
 
     // Check L is lower triangular - different LU implementations have different forms
@@ -335,6 +362,7 @@ fn test_lu_decomposition_reference() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_norm_reference() {
     // Test matrix norms against known values
 
@@ -462,6 +490,7 @@ fn test_condition_number_reference() {
 
     // Identity matrix should have condition number 1
     let identity = Array::<f64>::eye(3, 3, 0);
+    #[allow(deprecated)]
     let cond_identity = condition_number(&identity).unwrap();
     assert_relative_eq!(cond_identity, 1.0, epsilon = TOLERANCE);
 
@@ -471,6 +500,7 @@ fn test_condition_number_reference() {
     symmetric.set(&[1, 1], 2.0).unwrap();
     symmetric.set(&[2, 2], 1.0).unwrap();
 
+    #[allow(deprecated)]
     let cond_symmetric = condition_number(&symmetric).unwrap();
     assert_relative_eq!(cond_symmetric, 3.0, epsilon = TOLERANCE);
 
@@ -479,6 +509,7 @@ fn test_condition_number_reference() {
     nearly_singular.set(&[0, 0], 1000.0).unwrap();
     nearly_singular.set(&[2, 2], 0.001).unwrap();
 
+    #[allow(deprecated)]
     let cond_nearly_singular = condition_number(&nearly_singular).unwrap();
     assert_relative_eq!(cond_nearly_singular, 1000000.0, epsilon = 0.01);
 }
@@ -566,6 +597,7 @@ fn test_schur_decomposition_reference() {
         Array::<f64>::from_vec(vec![3.0, 1.0, 0.0, 1.0, 2.0, 1.0, 0.0, 1.0, 3.0]).reshape(&[3, 3]);
 
     // Compute Schur decomposition: A = Q * T * Q^T
+    #[allow(deprecated)]
     let (q, t) = schur(&m).unwrap();
 
     // Check Q is orthogonal

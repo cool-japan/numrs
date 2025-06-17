@@ -127,7 +127,7 @@ pub fn set_printoptions(
 /// ```
 /// use numrs2::printing::{set_printoptions, get_printoptions};
 ///
-/// set_printoptions(Some(4), None, None, None, None, None);
+/// set_printoptions(Some(4), None, None, None, None);
 /// let options = get_printoptions();
 /// assert_eq!(options.precision, 4);
 /// ```
@@ -142,7 +142,7 @@ pub fn get_printoptions() -> PrintOptions {
 /// ```
 /// use numrs2::printing::{set_printoptions, reset_printoptions, get_printoptions};
 ///
-/// set_printoptions(Some(2), Some(100), None, None, None, None);
+/// set_printoptions(Some(2), Some(100), None, None, None);
 /// reset_printoptions();
 /// let options = get_printoptions();
 /// assert_eq!(options.precision, 8); // Back to default

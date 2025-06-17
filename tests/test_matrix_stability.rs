@@ -5,7 +5,15 @@ use approx::assert_relative_eq;
 use num_traits::Float;
 use numrs2::array::Array;
 #[cfg(feature = "matrix_decomp")]
-use numrs2::linalg_extended::{cholesky, condition_number, lu, pivoted_cholesky, qr, svd};
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::{condition_number, lu, pivoted_cholesky};
+#[cfg(not(feature = "matrix_decomp"))]
+use numrs2::linalg::decomposition::{cholesky, qr, svd};
+#[cfg(feature = "matrix_decomp")]
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::{cholesky, qr, svd};
+#[cfg(feature = "matrix_decomp")]
+// Use functions from the core module structure
 
 /// Generate a Hilbert matrix of size n x n
 /// Hilbert matrices are famously ill-conditioned and provide a good stress test
@@ -64,12 +72,14 @@ fn near_singular_matrix<T: Float + From<f64>>(n: usize, condition: f64) -> Array
 
 #[cfg(feature = "matrix_decomp")]
 #[test]
+#[allow(deprecated)]
 fn test_condition_number_accuracy() {
     // Test matrices with known condition numbers
     let n = 4;
 
     // Test with a well-conditioned matrix (identity)
     let identity = Array::<f64>::eye_square(n);
+    #[allow(deprecated)]
     let cond_identity = condition_number(&identity).unwrap();
     assert_relative_eq!(cond_identity, 1.0, epsilon = 1e-10);
 
@@ -78,11 +88,13 @@ fn test_condition_number_accuracy() {
     for i in 0..n {
         diagonal.set(&[i, i], 10.0f64.powi(i as i32)).unwrap();
     }
+    #[allow(deprecated)]
     let cond_diagonal = condition_number(&diagonal).unwrap();
     assert_relative_eq!(cond_diagonal, 1000.0, epsilon = 1e-10);
 
     // Test with near singular matrix with known condition
     let near_singular = near_singular_matrix::<f64>(n, 1e3);
+    #[allow(deprecated)]
     let cond_near_singular = condition_number(&near_singular).unwrap();
     assert!(
         cond_near_singular > 1e2 && cond_near_singular < 1e5 || cond_near_singular.is_infinite(),
@@ -102,6 +114,7 @@ fn test_condition_number_accuracy() {
 
 #[cfg(feature = "matrix_decomp")]
 #[test]
+#[allow(deprecated)]
 fn test_decomposition_stability_well_conditioned() {
     // Test decompositions on well-conditioned matrices
     let n = 4;
@@ -189,6 +202,7 @@ fn test_decomposition_stability_well_conditioned() {
 
 #[cfg(feature = "matrix_decomp")]
 #[test]
+#[allow(deprecated)]
 fn test_decomposition_stability_ill_conditioned() {
     // Test decompositions on ill-conditioned matrices
     // For these tests, we use more generous error bounds
@@ -333,6 +347,7 @@ fn test_decomposition_stability_ill_conditioned() {
 
 #[cfg(feature = "matrix_decomp")]
 #[test]
+#[allow(deprecated)]
 fn test_pivoted_cholesky_vs_standard() {
     // Verify both Cholesky implementations run on the same input
 
@@ -380,6 +395,7 @@ fn test_pivoted_cholesky_vs_standard() {
 
 #[cfg(feature = "matrix_decomp")]
 #[test]
+#[allow(deprecated)]
 fn test_decompositions_with_scaling() {
     // Test that our decompositions handle matrices with large values correctly
     let n = 4;
@@ -438,6 +454,7 @@ fn test_decompositions_with_scaling() {
 
 #[cfg(feature = "matrix_decomp")]
 #[test]
+#[allow(deprecated)]
 fn test_relative_errors_between_decompositions() {
     // Compare accuracy of different decompositions on the same ill-conditioned matrix
     let n = 5;

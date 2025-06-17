@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// Calculate the number of periodic payments.
 ///
 /// The number of periods is computed by solving the following equation:
-/// ```
+/// ```text
 /// pv + pmt * [(1 + rate)^nper - 1] / rate * (1 + rate)^(-nper) + fv * (1 + rate)^(-nper) = 0
 /// ```
 ///
@@ -32,11 +32,11 @@ use std::fmt::Debug;
 /// # Examples
 ///
 /// ```
-/// use numrs2::financial::nper;
+/// use numrs2::prelude::*;
 ///
 /// // Calculate number of periods to pay off a loan
 /// let result = nper(0.05/12.0, -188.71, 10000.0, 0.0, 0).unwrap();
-/// assert!((result - 60.0).abs() < 0.01);
+/// assert!((result - 60.0_f64).abs() < 0.01);
 /// ```
 pub fn nper<T>(rate: T, pmt: T, pv: T, fv: T, when: i32) -> Result<T>
 where

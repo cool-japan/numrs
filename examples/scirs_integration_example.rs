@@ -13,12 +13,14 @@
 #[cfg(feature = "scirs")]
 use numrs2::array::Array;
 use numrs2::error::Result;
-use numrs2::random::distributions::set_seed;
+use numrs2::random::distributions::{set_seed, multivariate_normal_with_rotation};
 
 // Import the regular distributions for comparison
 #[cfg(feature = "scirs")]
 use numrs2::random::distributions::student_t;
 use numrs2::random::distributions::{chisquare, normal};
+use numrs2::random::advanced_distributions::{vonmises, maxwell};
+use numrs2::random::distributions_enhanced::truncated_normal;
 
 // Import the SciRS2 integration when available
 #[cfg(feature = "scirs")]

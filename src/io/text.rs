@@ -167,15 +167,30 @@ impl Default for GenFromTxtOptions {
 /// ```rust
 /// use numrs2::io::text::{loadtxt, LoadTxtOptions};
 /// use std::path::Path;
+/// use std::fs::File;
+/// use std::io::Write;
+/// use tempfile::NamedTempFile;
+///
+/// // Create a temporary test file
+/// let mut temp_file = NamedTempFile::new().unwrap();
+/// writeln!(temp_file, "1.0 2.0 3.0").unwrap();
+/// writeln!(temp_file, "4.0 5.0 6.0").unwrap();
 ///
 /// // Load with default options
-/// let array = loadtxt::<f64>(Path::new("data.txt"), LoadTxtOptions::default()).unwrap();
+/// let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default()).unwrap();
+/// assert_eq!(array.shape(), &[2, 3]);
 ///
 /// // Load with custom delimiter and skip first row
+/// let mut temp_file2 = NamedTempFile::new().unwrap();
+/// writeln!(temp_file2, "header,line").unwrap();
+/// writeln!(temp_file2, "1.0,2.0").unwrap();
+/// writeln!(temp_file2, "3.0,4.0").unwrap();
+/// 
 /// let mut options = LoadTxtOptions::default();
 /// options.delimiter = Some(",".to_string());
 /// options.skiprows = 1;
-/// let array = loadtxt::<f64>(Path::new("data.csv"), options).unwrap();
+/// let array = loadtxt::<f64>(temp_file2.path(), options).unwrap();
+/// assert_eq!(array.shape(), &[2, 2]);
 /// ```
 pub fn loadtxt<T>(fname: &Path, options: LoadTxtOptions) -> Result<Array<T>>
 where
@@ -428,14 +443,29 @@ where
 /// ```rust
 /// use numrs2::io::text::{genfromtxt, GenFromTxtOptions};
 /// use std::path::Path;
+/// use std::fs::File;
+/// use std::io::Write;
+/// use tempfile::NamedTempFile;
+///
+/// // Create a temporary test file with missing values
+/// let mut temp_file = NamedTempFile::new().unwrap();
+/// writeln!(temp_file, "1.0 2.0 3.0").unwrap();
+/// writeln!(temp_file, "4.0 nan 6.0").unwrap();
+/// writeln!(temp_file, "7.0 8.0 N/A").unwrap();
 ///
 /// // Load with default missing value handling
-/// let array = genfromtxt::<f64>(Path::new("data_with_missing.txt"), GenFromTxtOptions::default()).unwrap();
+/// let array = genfromtxt::<f64>(temp_file.path(), GenFromTxtOptions::default()).unwrap();
+/// assert_eq!(array.shape(), &[3, 3]);
 ///
 /// // Load with custom missing value markers
+/// let mut temp_file2 = NamedTempFile::new().unwrap();
+/// writeln!(temp_file2, "1.0 2.0").unwrap();
+/// writeln!(temp_file2, "NULL 4.0").unwrap();
+/// 
 /// let mut options = GenFromTxtOptions::default();
 /// options.default_missing.push("NULL".to_string());
-/// let array = genfromtxt::<f64>(Path::new("data.txt"), options).unwrap();
+/// let array = genfromtxt::<f64>(temp_file2.path(), options).unwrap();
+/// assert_eq!(array.shape(), &[2, 2]);
 /// ```
 pub fn genfromtxt<T>(fname: &Path, options: GenFromTxtOptions) -> Result<Array<T>>
 where

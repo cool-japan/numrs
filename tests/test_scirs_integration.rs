@@ -12,7 +12,9 @@
 use approx::assert_relative_eq;
 use numrs2::array::Array;
 use numrs2::interop::scirs_compat::*;
-use numrs2::random::distributions::set_seed;
+use numrs2::random::distributions::{set_seed, multivariate_normal_with_rotation};
+use numrs2::random::advanced_distributions::{vonmises, maxwell};
+use numrs2::random::distributions_enhanced::truncated_normal;
 use std::f64::consts::PI;
 
 /// Test that the noncentral chi-square distribution generates valid values and

@@ -24,8 +24,8 @@ use std::fmt::Debug;
 ///
 /// # Examples
 /// ```
-/// use numrs::prelude::*;
-/// use numrs::linalg::tensor_ops::kron;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::tensor_ops::kron;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
@@ -98,8 +98,8 @@ pub fn kron<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arra
 ///
 /// # Examples
 /// ```
-/// use numrs::prelude::*;
-/// use numrs::linalg::tensor_ops::tensordot;
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::tensor_ops::tensordot;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);

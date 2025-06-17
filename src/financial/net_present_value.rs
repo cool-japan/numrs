@@ -12,7 +12,7 @@ use std::fmt::Debug;
 /// Calculate the net present value of a cash flow series.
 ///
 /// The net present value is calculated as:
-/// ```
+/// ```text
 /// NPV = CF₀ + CF₁/(1+rate)¹ + CF₂/(1+rate)² + ... + CFₙ/(1+rate)ⁿ
 /// ```
 ///
@@ -32,12 +32,11 @@ use std::fmt::Debug;
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use numrs2::financial::npv;
 ///
 /// // Calculate NPV for an investment
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0, 600.0]);
 /// let result = npv(0.1, &cash_flows).unwrap();
-/// assert!((result - 447.07).abs() < 0.01);
+/// assert!((result - 388.77_f64).abs() < 0.01);
 /// ```
 pub fn npv<T>(rate: T, values: &Array<T>) -> Result<T>
 where
@@ -114,7 +113,6 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use numrs2::financial::npv_rates;
 ///
 /// let rates = Array::from_vec(vec![0.05, 0.10, 0.15]);
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
@@ -151,7 +149,6 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use numrs2::financial::npv_multiple_series;
 ///
 /// // Two investment projects
 /// let cash_flows = Array::from_vec(vec![
