@@ -7,6 +7,7 @@
 
 use approx::assert_relative_eq;
 use numrs2::prelude::*;
+use numrs2::math::{linspace, meshgrid, mgrid, ogrid};
 
 #[cfg(test)]
 mod test_indexing_functions {

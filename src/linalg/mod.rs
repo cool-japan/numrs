@@ -26,6 +26,7 @@ pub use solve::{inv, solve};
 // Re-export conditional features
 #[cfg(feature = "matrix_decomp")]
 pub use decomposition::matrix_rank;
+#[cfg(feature = "lapack")]
 pub use matrix_ops::{det, matrix_power};
 #[cfg(feature = "matrix_decomp")]
 pub use solve::pinv;

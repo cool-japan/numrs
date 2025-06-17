@@ -136,8 +136,10 @@ pub mod prelude {
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
     // Explicit linear algebra imports to avoid ambiguous re-exports
+    #[cfg(feature = "lapack")]
+    pub use crate::linalg::{det, matrix_power};
     pub use crate::linalg::{
-        cholesky, det, eig, inner, inv, kron, matrix_power, norm, outer, qr, solve, svd, tensordot, trace, vdot
+        cholesky as cholesky_basic, eig, inner, inv, kron, norm, outer, qr as qr_basic, solve, svd as svd_basic, tensordot, trace, vdot
     };
     #[cfg(feature = "matrix_decomp")]
     pub use crate::linalg::{matrix_rank, pinv};
@@ -149,14 +151,17 @@ pub mod prelude {
         CholeskyStableResult, QRPivotedResult, SVDStableResult, StableDecompositions,
     };
     pub use crate::masked::MaskedArray;
-    // Core math functions (avoiding conflicts with math_extended)
-    pub use crate::math::{
-        abs, add, ceil, clip, divide, exp, floor, log, max, min, multiply, power, round, sqrt, subtract
+    // Core math functions (from ufuncs module)
+    pub use crate::ufuncs::{
+        abs, ceil, exp, floor, log, round, sqrt
     };
+    // Binary operations that return Result<Array> - use through qualified path
+    // pub use crate::ufuncs::{add, subtract, multiply, divide, power, maximum, minimum};
     // Extended math functions (avoiding conflicts with core math)  
     pub use crate::math_extended::{
-        bessel_i0, bessel_j0, bessel_y0, erf, erfc, gamma, gammaln, loggamma
+        erf, erfc, gamma, gammaln
     };
+    // Note: bessel_i0, bessel_j0, bessel_y0, loggamma not available - use bessel_i(0), etc.
     pub use crate::matrix::{BandedMatrix, Matrix};
     pub use crate::mmap::MmapArray;
     pub use crate::random::advanced_distributions;
@@ -259,6 +264,7 @@ pub mod prelude {
     };
 
     // New modules
+    #[cfg(feature = "lapack")]
     pub use crate::new_modules::eigenvalues::{eig as eig_general, eigh, eigvals, eigvalsh};
     pub use crate::new_modules::fft::FFT;
     #[cfg(feature = "matrix_decomp")]
@@ -270,13 +276,15 @@ pub mod prelude {
     // GPU acceleration
     #[cfg(feature = "gpu")]
     pub use crate::gpu::{
-        add, divide, matmul, multiply, subtract, transpose, GpuArray, GpuContext,
+        add as gpu_add, divide as gpu_divide, matmul, multiply as gpu_multiply, 
+        subtract as gpu_subtract, transpose, GpuArray, GpuContext,
     };
     pub use crate::new_modules::sparse::{SparseArray, SparseMatrix, SparseMatrixFormat};
     pub use crate::new_modules::special::{
-        bessel_i, bessel_j, bessel_k, bessel_y, digamma, ellipe, ellipk, erf, erfc, erfcinv,
-        erfinv, gamma, gammainc, gammaln,
+        bessel_i, bessel_j, bessel_k, bessel_y, digamma, ellipe, ellipk, erfcinv,
+        erfinv, gammainc,
     };
+    // Note: erf, erfc, gamma, gammaln already imported from math_extended
 
     // Advanced array operations (Phase 3)
     pub use crate::arrays::{
@@ -301,6 +309,7 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    use crate::simd::{simd_add, simd_mul, simd_div, simd_sqrt, simd_sum, simd_prod};
     use approx::assert_relative_eq;
 
     #[test]
@@ -439,6 +448,7 @@ mod tests {
         assert_relative_eq!(par_sqrt_a.to_vec()[3], 4.0, epsilon = 1e-10);
     }
 
+    #[cfg(feature = "lapack")]
     #[test]
     fn test_linalg_ops() {
         // Create a 2x2 matrix

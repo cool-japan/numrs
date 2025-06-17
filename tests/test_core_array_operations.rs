@@ -6,6 +6,9 @@
 use approx::assert_relative_eq;
 use numrs2::array::Array;
 use numrs2::prelude::*;
+use numrs2::math::{arange, linspace, ElementWiseMath};
+use numrs2::ufuncs::{sin, cos, tan};
+use numrs2::simd::simd_add;
 
 /// Test array creation operations
 #[cfg(test)]

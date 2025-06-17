@@ -18,12 +18,13 @@ unstable = []
 fast = []  # Minimal feature set for fast compilation during development
 scirs = ["dep:scirs2-stats", "dep:scirs2-core", "dep:scirs2-linalg"]
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
+lapack = ["dep:ndarray-linalg", "dep:blas", "dep:lapack"]  # Enable LAPACK-dependent linear algebra operations
 
 [dependencies]
 ndarray = "0.16.1"  # Provides n-dimensional arrays
-ndarray-linalg = { version = "0.17.0", features = ["netlib"] }  # Linear algebra with BLAS/LAPACK (faster compilation)
-blas = { version = "0.23.0" }  # BLAS bindings
-lapack = { version = "0.20.0" }  # LAPACK bindings
+ndarray-linalg = { version = "0.17.0", optional = true }  # Linear algebra with BLAS/LAPACK
+blas = { version = "0.23.0", optional = true }  # BLAS bindings
+lapack = { version = "0.20.0", optional = true }  # LAPACK bindings
 num-traits = "0.2.19"  # Numeric traits for generic math
 num-complex = "0.4.6"  # Complex number implementation
 # Type conversions are handled by num-traits::NumCast

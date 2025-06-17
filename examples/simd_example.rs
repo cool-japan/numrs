@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 
 use numrs2::prelude::*;
+use numrs2::simd::{simd_add, simd_mul, simd_div, simd_exp, simd_log, simd_sqrt, simd_sum, simd_prod};
 
 fn main() {
     println!("NumRS SIMD Operations Example");

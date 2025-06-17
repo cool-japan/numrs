@@ -27,6 +27,7 @@ use std::fmt::Debug;
 /// let det_val = det(&a).unwrap();
 /// assert_eq!(det_val, -2.0);
 /// ```
+#[cfg(feature = "lapack")]
 pub fn det<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> Result<T> {
     a.det()
 }
@@ -60,6 +61,7 @@ pub fn det<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> R
 /// * `n = -1`: Returns the matrix inverse
 /// * `n > 1`: Computes A * A * ... * A (n times)
 /// * `n < -1`: Computes (A^-1)^|n|
+#[cfg(feature = "lapack")]
 pub fn matrix_power<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     n: i32,

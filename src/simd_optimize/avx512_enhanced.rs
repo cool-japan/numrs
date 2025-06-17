@@ -6,12 +6,12 @@
 //! Note: AVX-512 features are currently unstable in Rust, so this module
 //! provides production-ready implementations using stable AVX2 instructions.
 
-use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+// AVX512 operations - currently using stable AVX2 implementations
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 /// AVX2 vectorization constants for production stability
+#[allow(dead_code)]
 const AVX2_F32_LANES: usize = 8;
 #[allow(dead_code)]
 const AVX2_F64_LANES: usize = 4;
@@ -349,10 +349,15 @@ impl Avx2EnhancedOps {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_arch = "x86_64")]
     use super::*;
+    #[cfg(target_arch = "x86_64")]
+    use crate::array::Array;
+    #[cfg(target_arch = "x86_64")]
     use approx::assert_relative_eq;
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_matrix_multiplication() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let a = Array::from_vec(a_data).reshape(&[2, 3]);
@@ -373,6 +378,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_add() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let a = Array::from_vec(a_data).reshape(&[3, 3]);
@@ -389,6 +395,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_dot_product() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0];
         let a = Array::from_vec(a_data).reshape(&[4]);
@@ -403,6 +410,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_convolution() {
         let signal_data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let signal = Array::from_vec(signal_data).reshape(&[5]);

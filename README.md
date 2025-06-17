@@ -43,6 +43,7 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
 NumRS2 includes several optional features that can be enabled in your `Cargo.toml`:
 
 - **matrix_decomp** (enabled by default): Matrix decomposition functions (SVD, QR, LU, etc.)
+- **lapack**: Enable LAPACK-dependent linear algebra operations (eigenvalues, matrix decompositions)
 - **validation**: Additional runtime validation checks for array operations
 - **scirs**: Integration with SciRS2 for advanced statistical distributions and scientific computing
 - **gpu**: GPU acceleration for array operations using WGPU
@@ -184,6 +185,23 @@ sudo apt-get install libopenblas-dev liblapack-dev
 
 # macOS
 brew install openblas lapack
+```
+
+### macOS Apple Silicon Configuration
+
+For Apple Silicon Macs (M1/M2/M3), additional configuration is required to properly link LAPACK libraries. Create a `.cargo/config.toml` file in your project root:
+
+```toml
+[build]
+rustflags = ["-L", "/opt/homebrew/opt/openblas/lib", "-l", "openblas"]
+```
+
+This configuration ensures that the OpenBLAS library installed via Homebrew is properly linked when using LAPACK features. Without this configuration, you may encounter linking errors when building with the `lapack` feature enabled.
+
+To use LAPACK functionality:
+```bash
+cargo build --features lapack
+cargo test --features lapack
 ```
 
 ## Implementation Details

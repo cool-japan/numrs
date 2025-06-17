@@ -207,8 +207,16 @@ where
                     let other_f32 = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(other) };
                     let self_data = self_f32.to_vec();
                     let other_data = other_f32.to_vec();
-                    let result = unsafe {
-                        crate::simd_optimize::avx2_ops::avx2_dot_f32(&self_data, &other_data)
+                    let result: f32 = {
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            crate::simd_optimize::avx2_ops::avx2_dot_f32(&self_data, &other_data)
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            // Fallback for non-x86_64
+                            self_data.iter().zip(other_data.iter()).map(|(a, b)| a * b).sum()
+                        }
                     };
                     return Ok(T::from(result).unwrap());
                 } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
@@ -216,8 +224,16 @@ where
                     let other_f64 = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(other) };
                     let self_data = self_f64.to_vec();
                     let other_data = other_f64.to_vec();
-                    let result = unsafe {
-                        crate::simd_optimize::avx2_ops::avx2_dot_f64(&self_data, &other_data)
+                    let result: f64 = {
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            crate::simd_optimize::avx2_ops::avx2_dot_f64(&self_data, &other_data)
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            // Fallback for non-x86_64
+                            self_data.iter().zip(other_data.iter()).map(|(a, b)| a * b).sum()
+                        }
                     };
                     return Ok(T::from(result).unwrap());
                 }
@@ -276,13 +292,28 @@ where
                     let add_data = add_f32.to_vec();
                     let mut result_data = vec![0.0f32; self_data.len()];
 
-                    unsafe {
-                        crate::simd_optimize::avx2_ops::avx2_fma_f32(
-                            &self_data,
-                            &mul_data,
-                            &add_data,
-                            &mut result_data,
-                        );
+                    {
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            crate::simd_optimize::avx2_ops::avx2_fma_f32(
+                                &self_data,
+                                &mul_data,
+                                &add_data,
+                                &mut result_data,
+                            );
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            // Fallback FMA: a * b + c
+                            for (((&a, &b), &c), r) in self_data
+                                .iter()
+                                .zip(mul_data.iter())
+                                .zip(add_data.iter())
+                                .zip(result_data.iter_mut())
+                            {
+                                *r = a * b + c;
+                            }
+                        }
                     }
 
                     let result_f32 = Array::from_vec(result_data).reshape(&self_f32.shape());
@@ -297,13 +328,28 @@ where
                     let add_data = add_f64.to_vec();
                     let mut result_data = vec![0.0f64; self_data.len()];
 
-                    unsafe {
-                        crate::simd_optimize::avx2_ops::avx2_fma_f64(
-                            &self_data,
-                            &mul_data,
-                            &add_data,
-                            &mut result_data,
-                        );
+                    {
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            crate::simd_optimize::avx2_ops::avx2_fma_f64(
+                                &self_data,
+                                &mul_data,
+                                &add_data,
+                                &mut result_data,
+                            );
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            // Fallback FMA: a * b + c
+                            for (((&a, &b), &c), r) in self_data
+                                .iter()
+                                .zip(mul_data.iter())
+                                .zip(add_data.iter())
+                                .zip(result_data.iter_mut())
+                            {
+                                *r = a * b + c;
+                            }
+                        }
                     }
 
                     let result_f64 = Array::from_vec(result_data).reshape(&self_f64.shape());

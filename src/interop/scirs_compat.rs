@@ -51,6 +51,7 @@ where
 }
 
 /// Linear system solver using SciRS2
+#[cfg(feature = "lapack")]
 pub fn solve_linear_system<T>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
     T: Float + NumCast + Clone + Debug + Display + ndarray_linalg::Lapack,
@@ -86,6 +87,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "lapack")]
     #[test]
     fn test_solve_linear_system() {
         // Test a simple 2x2 system
