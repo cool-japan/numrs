@@ -135,18 +135,28 @@ pub mod prelude {
     pub use crate::indexing::*;
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
-    #[allow(ambiguous_glob_reexports)]
-    pub use crate::linalg::*;
-    #[allow(ambiguous_glob_reexports)]
-    pub use crate::linalg_extended::*;
+    // Explicit linear algebra imports to avoid ambiguous re-exports
+    pub use crate::linalg::{
+        cholesky, det, eig, inner, inv, kron, matrix_power, norm, outer, qr, solve, svd, tensordot, trace, vdot
+    };
+    #[cfg(feature = "matrix_decomp")]
+    pub use crate::linalg::{matrix_rank, pinv};
+    // Import specific advanced functions from linalg_extended (avoiding conflicts)
+    pub use crate::linalg_extended::eigenvalue;
     pub use crate::linalg_optimized::{lu_optimized, transpose_optimized, OptimizedBlas};
     pub use crate::linalg_parallel::ParallelLinAlg;
     pub use crate::linalg_stable::{
         CholeskyStableResult, QRPivotedResult, SVDStableResult, StableDecompositions,
     };
     pub use crate::masked::MaskedArray;
-    pub use crate::math::*;
-    pub use crate::math_extended::*;
+    // Core math functions (avoiding conflicts with math_extended)
+    pub use crate::math::{
+        abs, add, ceil, clip, divide, exp, floor, log, max, min, multiply, power, round, sqrt, subtract
+    };
+    // Extended math functions (avoiding conflicts with core math)  
+    pub use crate::math_extended::{
+        bessel_i0, bessel_j0, bessel_y0, erf, erfc, gamma, gammaln, loggamma
+    };
     pub use crate::matrix::{BandedMatrix, Matrix};
     pub use crate::mmap::MmapArray;
     pub use crate::random::advanced_distributions;
@@ -157,17 +167,30 @@ pub mod prelude {
         in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options,
     };
     pub use crate::signal;
-    pub use crate::simd::*;
+    // Explicit SIMD imports to avoid glob conflicts
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
     pub use crate::simd_optimize::{detect_cpu_features, CpuFeatures, SimdImplementation};
     pub use crate::sparse;
     pub use crate::sparse_enhanced::SparseOpsAdvanced;
-    pub use crate::stats::*;
+    // Explicit stats imports to avoid potential conflicts
+    pub use crate::stats::{
+        Statistics, ptp, min_along_axis, max_along_axis, average, cov, corrcoef, 
+        quantile, percentile, histogram, HistBins
+    };
     pub use crate::stride_tricks::{
         as_strided, broadcast_arrays, broadcast_to, byte_strides, set_strides, sliding_window_view,
     };
-    pub use crate::traits::*;
-    pub use crate::ufuncs::*;
+    // Explicit trait imports
+    pub use crate::traits::{
+        NumericElement, FloatingPoint, IntegerElement, ComplexElement, ArrayOps, 
+        ArrayReduction, ArrayIndexing, ArrayMath, LinearAlgebra, MatrixDecomposition
+    };
+    // Explicit ufunc imports
+    pub use crate::ufuncs::{
+        BinaryUfunc, UnaryUfunc, add, subtract, multiply, divide, power, maximum, minimum,
+        add_scalar, subtract_scalar, multiply_scalar, divide_scalar, power_scalar, 
+        negative, absolute
+    };
     pub use crate::unique::{unique, UniqueResult};
     pub use crate::unique_optimized::unique_optimized;
     pub use crate::util::{
