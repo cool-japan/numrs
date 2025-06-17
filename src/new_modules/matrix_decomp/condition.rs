@@ -1,3 +1,5 @@
+#![cfg(feature = "lapack")]
+
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::matrix_decomp::svd;

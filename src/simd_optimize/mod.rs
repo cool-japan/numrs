@@ -74,7 +74,11 @@ pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
     }
     let a_data = a.to_vec();
     let b_data = b.to_vec();
-    let result_data: Vec<f32> = a_data.iter().zip(b_data.iter()).map(|(a, b)| a + b).collect();
+    let result_data: Vec<f32> = a_data
+        .iter()
+        .zip(b_data.iter())
+        .map(|(a, b)| a + b)
+        .collect();
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 
@@ -247,7 +251,11 @@ pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
     }
     let a_data = a.to_vec();
     let b_data = b.to_vec();
-    let result_data: Vec<f64> = a_data.iter().zip(b_data.iter()).map(|(a, b)| a + b).collect();
+    let result_data: Vec<f64> = a_data
+        .iter()
+        .zip(b_data.iter())
+        .map(|(a, b)| a + b)
+        .collect();
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 
@@ -261,7 +269,11 @@ pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
     }
     let a_data = a.to_vec();
     let b_data = b.to_vec();
-    let result_data: Vec<f32> = a_data.iter().zip(b_data.iter()).map(|(a, b)| a * b).collect();
+    let result_data: Vec<f32> = a_data
+        .iter()
+        .zip(b_data.iter())
+        .map(|(a, b)| a * b)
+        .collect();
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 
@@ -275,7 +287,11 @@ pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
     }
     let a_data = a.to_vec();
     let b_data = b.to_vec();
-    let result_data: Vec<f64> = a_data.iter().zip(b_data.iter()).map(|(a, b)| a * b).collect();
+    let result_data: Vec<f64> = a_data
+        .iter()
+        .zip(b_data.iter())
+        .map(|(a, b)| a * b)
+        .collect();
     Ok(Array::from_vec(result_data).reshape(&a.shape()))
 }
 

@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 
+use numrs2::math::{arange, geomspace, linspace, logspace, meshgrid, ElementWiseMath};
 use numrs2::prelude::*;
-use numrs2::math::{arange, linspace, logspace, geomspace, meshgrid, ElementWiseMath};
 
 fn main() -> Result<()> {
     println!("NumRS2 Array Creation and Manipulation Example");

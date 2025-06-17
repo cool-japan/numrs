@@ -19,16 +19,18 @@ pub mod matrix_ops;
 pub mod tensor_ops;
 pub mod vector_ops;
 
-// Re-export all functions for backward compatibility
+// Re-export all functions for backward compatibility - conditional on lapack feature
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub use decomposition::{cholesky, eig, qr, svd};
+#[cfg(feature = "lapack")]
 pub use solve::{inv, solve};
 
 // Re-export conditional features
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub use decomposition::matrix_rank;
 #[cfg(feature = "lapack")]
 pub use matrix_ops::{det, matrix_power};
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub use solve::pinv;
 pub use tensor_ops::{kron, tensordot};
 pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
@@ -41,7 +43,7 @@ pub fn set_lapack_threads(threads: usize) {
 }
 
 /// Implementation for when matrix_decomp feature is enabled
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 impl<T> Array<T>
 where
     T: Float + Clone + Debug + ndarray_linalg::Lapack,
@@ -119,11 +121,11 @@ where
 
         // Step 1: Obtain LU decomposition with pivoting
         // We'll use the implementation in matrix_decomp module
-        #[cfg(feature = "matrix_decomp")]
-        use crate::prelude::lu;
+        #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+        use crate::new_modules::matrix_decomp::lu;
 
         // Calculate LU decomposition
-        #[cfg(feature = "matrix_decomp")]
+        #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
         let (_, u, p) = lu(self)?;
 
         #[cfg(not(feature = "matrix_decomp"))]
@@ -256,8 +258,8 @@ where
 
         // For larger matrices, use LU decomposition
         // Get LU decomposition with pivoting: PA = LU
-        #[cfg(feature = "matrix_decomp")]
-        use crate::prelude::lu;
+        #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+        use crate::new_modules::matrix_decomp::lu;
 
         // Step 1: Calculate LU decomposition
         #[cfg(feature = "matrix_decomp")]
@@ -543,8 +545,8 @@ where
 
         // For larger systems, use LU decomposition with partial pivoting
         // Get LU decomposition with pivoting: PA = LU
-        #[cfg(feature = "matrix_decomp")]
-        use crate::prelude::lu;
+        #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+        use crate::new_modules::matrix_decomp::lu;
 
         // Step 1: Calculate LU decomposition
         #[cfg(feature = "matrix_decomp")]
@@ -1393,8 +1395,8 @@ where
 
         // For larger systems, use LU decomposition with partial pivoting
         // Get LU decomposition with pivoting: PA = LU
-        #[cfg(feature = "matrix_decomp")]
-        use crate::prelude::lu;
+        #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+        use crate::new_modules::matrix_decomp::lu;
 
         // Step 1: Calculate LU decomposition
         #[cfg(feature = "matrix_decomp")]

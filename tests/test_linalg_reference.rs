@@ -8,13 +8,13 @@ use numrs2::prelude::*;
 
 // Import from the core linalg module (non-deprecated)
 #[cfg(not(feature = "matrix_decomp"))]
-use numrs2::linalg::decomposition::{eig, cholesky, qr, svd};
+use numrs2::linalg::decomposition::{cholesky, eig, qr, svd};
+use numrs2::linalg::matrix_ops::det;
+use numrs2::linalg::solve::{inv, solve};
+use numrs2::linalg::vector_ops::{norm, trace};
 #[cfg(feature = "matrix_decomp")]
 #[allow(deprecated)]
-use numrs2::new_modules::matrix_decomp::{condition_number, lu, cholesky, qr, svd};
-use numrs2::linalg::vector_ops::{norm, trace};
-use numrs2::linalg::solve::{inv, solve};
-use numrs2::linalg::matrix_ops::det;
+use numrs2::new_modules::matrix_decomp::{cholesky, condition_number, lu, qr, svd};
 
 // For eigenvalues, we need to define a wrapper that calls the correct function
 #[allow(deprecated)]

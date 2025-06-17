@@ -325,7 +325,7 @@ mod scirs_tests {
         // Temporarily use relaxed tolerance for Von Mises while we improve the implementation
         let ref_variance = ref_data["vonmises"]["variance"].as_f64().unwrap();
         let ref_mean = ref_data["vonmises"]["mean"].as_f64().unwrap();
-        
+
         // Check mean with normal tolerance
         assert!(
             (rs_stats["mean"] - ref_mean).abs() < EPSILON,
@@ -334,7 +334,7 @@ mod scirs_tests {
             ref_mean,
             (rs_stats["mean"] - ref_mean).abs()
         );
-        
+
         // Use much more relaxed tolerance for variance (temporarily)
         assert!(
             (rs_stats["variance"] - ref_variance).abs() / ref_variance < 1.0, // Allow up to 100% difference

@@ -25,7 +25,7 @@ use std::fmt::Debug;
 /// # Errors
 ///
 /// Returns an error if the matrix is singular or if the dimensions do not match.
-#[cfg(feature = "scirs")]
+#[cfg(all(feature = "scirs", feature = "lapack"))]
 pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     b: &Array<T>,
@@ -34,7 +34,7 @@ pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 }
 
 /// Solve a linear system Ax = b
-#[cfg(all(feature = "matrix_decomp", not(feature = "scirs")))]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack", not(feature = "scirs")))]
 pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     b: &Array<T>,
@@ -60,7 +60,7 @@ pub fn solve<
 }
 
 /// Compute the inverse of a matrix
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn inv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> Result<Array<T>> {
     a.inv()
 }
@@ -97,7 +97,7 @@ pub fn inv<
 /// # Returns
 ///
 /// The pseudoinverse of the input matrix
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn pinv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     rcond: Option<T>,

@@ -3,6 +3,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use ndarray::ArrayView2;
+#[cfg(feature = "lapack")]
 use ndarray_linalg::{Scalar, SVD};
 use num_traits::{Float, NumCast, Zero};
 use std::fmt::Debug;
@@ -15,24 +16,30 @@ pub mod schur;
 pub mod utils;
 
 // Re-export QR functions for convenience
+#[cfg(feature = "lapack")]
 pub use qr::{householder_qr, identity_matrix, qr};
 
 // Re-export Cholesky functions for convenience
+#[cfg(feature = "lapack")]
 pub use cholesky::{cholesky, pivoted_cholesky};
 
 // Re-export LU functions for convenience
+#[cfg(feature = "lapack")]
 pub use lu::lu;
 
 // Re-export Schur functions for convenience
+#[cfg(feature = "lapack")]
 pub use schur::schur;
 
 // Re-export condition number functions for convenience
+#[cfg(feature = "lapack")]
 pub use condition::{condition_number, rcond};
 
 // Re-export utils functions for convenience
 #[cfg(test)]
 pub use utils::calculate_max_diff;
 
+#[cfg(feature = "lapack")]
 /// Type alias for SVD result to reduce complexity
 pub type SvdResult<T> = (
     Array<T>,
@@ -40,6 +47,7 @@ pub type SvdResult<T> = (
     Array<T>,
 );
 
+#[cfg(feature = "lapack")]
 /// Enhanced matrix decomposition implementations that utilize ndarray-linalg
 /// for more complete linear algebra functionality
 /// Compute the Singular Value Decomposition (SVD) of a matrix
@@ -156,6 +164,7 @@ where
     Ok((u_converted, s_converted, vt_converted))
 }
 
+#[cfg(feature = "lapack")]
 /// Compute a complete orthogonal decomposition of a matrix
 /// This returns (Q, T, Z) where A = Q*T*Z^T, Q and Z are orthogonal, and T is upper triangular
 ///
@@ -379,6 +388,7 @@ where
     Ok((q, t, z))
 }
 
+#[cfg(feature = "lapack")]
 /// Extend the Array type with the decomposition methods
 impl<T> Array<T>
 where
@@ -454,7 +464,7 @@ where
 }
 
 // Add tests to verify the implementation
-#[cfg(test)]
+#[cfg(all(test, feature = "lapack"))]
 mod tests {
     use super::*;
 

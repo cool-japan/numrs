@@ -4,14 +4,14 @@
 use approx::assert_relative_eq;
 use num_traits::Float;
 use numrs2::array::Array;
-#[cfg(feature = "matrix_decomp")]
-#[allow(deprecated)]
-use numrs2::new_modules::matrix_decomp::{condition_number, lu, pivoted_cholesky};
 #[cfg(not(feature = "matrix_decomp"))]
 use numrs2::linalg::decomposition::{cholesky, qr, svd};
 #[cfg(feature = "matrix_decomp")]
 #[allow(deprecated)]
 use numrs2::new_modules::matrix_decomp::{cholesky, qr, svd};
+#[cfg(feature = "matrix_decomp")]
+#[allow(deprecated)]
+use numrs2::new_modules::matrix_decomp::{condition_number, lu, pivoted_cholesky};
 #[cfg(feature = "matrix_decomp")]
 // Use functions from the core module structure
 

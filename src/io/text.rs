@@ -185,7 +185,7 @@ impl Default for GenFromTxtOptions {
 /// writeln!(temp_file2, "header,line").unwrap();
 /// writeln!(temp_file2, "1.0,2.0").unwrap();
 /// writeln!(temp_file2, "3.0,4.0").unwrap();
-/// 
+///
 /// let mut options = LoadTxtOptions::default();
 /// options.delimiter = Some(",".to_string());
 /// options.skiprows = 1;
@@ -461,7 +461,7 @@ where
 /// let mut temp_file2 = NamedTempFile::new().unwrap();
 /// writeln!(temp_file2, "1.0 2.0").unwrap();
 /// writeln!(temp_file2, "NULL 4.0").unwrap();
-/// 
+///
 /// let mut options = GenFromTxtOptions::default();
 /// options.default_missing.push("NULL".to_string());
 /// let array = genfromtxt::<f64>(temp_file2.path(), options).unwrap();

@@ -293,15 +293,15 @@ impl RandomState {
                 let u1 = rng.random::<f64>();
                 let u2 = rng.random::<f64>();
                 let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
-                
+
                 // Transform to desired distribution
                 sample = mean_f64 + std_f64 * z;
-                
+
                 // Check if within bounds
                 if sample >= low_f64 && sample <= high_f64 {
                     break;
                 }
-                
+
                 attempts += 1;
                 // Prevent infinite loops for very narrow truncation
                 if attempts > 1000 {
@@ -359,7 +359,8 @@ impl RandomState {
                     attempts += 1;
                     if attempts > 1000 {
                         // Fallback to uniform if too many attempts
-                        break rng.random::<f64>() * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
+                        break rng.random::<f64>() * 2.0 * std::f64::consts::PI
+                            - std::f64::consts::PI;
                     }
 
                     let u1 = rng.random::<f64>();
@@ -368,13 +369,13 @@ impl RandomState {
                     let c = kappa_f64 * (r - f);
 
                     let u2 = rng.random::<f64>();
-                    
+
                     if c * (2.0 - c) - u2 > 0.0 {
                         let u3 = rng.random::<f64>();
                         let theta = if u3 - 0.5 > 0.0 { f.acos() } else { -f.acos() };
                         break theta;
                     }
-                    
+
                     if (c / u2.max(1e-10)).ln() + 1.0 - c >= 0.0 {
                         let u3 = rng.random::<f64>();
                         let theta = if u3 - 0.5 > 0.0 { f.acos() } else { -f.acos() };
@@ -384,8 +385,9 @@ impl RandomState {
             };
 
             let angle = mu_f64 + sample;
-            let normalized = ((angle + std::f64::consts::PI) % (2.0 * std::f64::consts::PI)) - std::f64::consts::PI;
-            
+            let normalized = ((angle + std::f64::consts::PI) % (2.0 * std::f64::consts::PI))
+                - std::f64::consts::PI;
+
             vec.push(<T as NumCast>::from(normalized).unwrap_or(T::zero()));
         }
 

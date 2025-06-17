@@ -6,6 +6,13 @@ use approx::assert_abs_diff_eq;
 use numrs2::prelude::*;
 
 // Import from the core linalg module (non-deprecated)
+#[cfg(feature = "lapack")]
+use numrs2::linalg::matrix_ops::det;
+use numrs2::linalg::solve::{inv, solve};
+use numrs2::linalg::vector_ops::{norm, trace};
+#[cfg(feature = "lapack")]
+#[allow(deprecated)]
+use numrs2::new_modules::eigenvalues::eigh as eigh_impl;
 #[allow(deprecated)]
 use numrs2::new_modules::matrix_decomp::cholesky;
 #[allow(deprecated)]
@@ -15,13 +22,6 @@ use numrs2::new_modules::matrix_decomp::svd;
 #[cfg(feature = "matrix_decomp")]
 #[allow(deprecated)]
 use numrs2::new_modules::matrix_decomp::{condition_number, lu};
-#[cfg(feature = "lapack")]
-#[allow(deprecated)]
-use numrs2::new_modules::eigenvalues::eigh as eigh_impl;
-use numrs2::linalg::vector_ops::{norm, trace};
-use numrs2::linalg::solve::{inv, solve};
-#[cfg(feature = "lapack")]
-use numrs2::linalg::matrix_ops::det;
 
 // For eigenvalues, we need to define a wrapper that calls the correct function
 #[cfg(feature = "lapack")]
@@ -42,18 +42,17 @@ fn random_matrix(rows: usize, cols: usize) -> Array<f64> {
     rng.random::<f64>(&[rows, cols]).unwrap()
 }
 
-
 /// Helper function to generate a random positive definite matrix
 fn random_positive_definite_matrix(size: usize) -> Array<f64> {
     // Create a simple well-conditioned positive definite matrix
     // Using a diagonal matrix with values > 1 to ensure positive definiteness
     let mut data = vec![0.0; size * size];
-    
+
     // Fill diagonal with values 1.0 + i to ensure positive definiteness
     for i in 0..size {
         data[i * size + i] = 1.0 + i as f64;
     }
-    
+
     // Add some off-diagonal elements to make it more interesting
     for i in 0..size {
         for j in 0..size {
@@ -62,9 +61,9 @@ fn random_positive_definite_matrix(size: usize) -> Array<f64> {
             }
         }
     }
-    
+
     let mut result = Array::from_vec(data).reshape(&[size, size]);
-    
+
     // Make it symmetric: A = (M + M^T) / 2 + I
     let a_t = result.transpose();
     result = result.add(&a_t).multiply_scalar(0.5);
@@ -769,12 +768,18 @@ fn test_solve_properties() {
     // Test properties of linear system solving - simplified to avoid stack overflow
     // Only test with size 3 to reduce stack usage
     let size = 3;
-    
+
     // Create a simple well-conditioned matrix
     let mut a_data = vec![0.0; size * size];
-    a_data[0] = 2.0; a_data[1] = 1.0; a_data[2] = 0.0;
-    a_data[3] = 1.0; a_data[4] = 3.0; a_data[5] = 1.0;
-    a_data[6] = 0.0; a_data[7] = 1.0; a_data[8] = 2.0;
+    a_data[0] = 2.0;
+    a_data[1] = 1.0;
+    a_data[2] = 0.0;
+    a_data[3] = 1.0;
+    a_data[4] = 3.0;
+    a_data[5] = 1.0;
+    a_data[6] = 0.0;
+    a_data[7] = 1.0;
+    a_data[8] = 2.0;
     let a = Array::from_vec(a_data).reshape(&[size, size]);
 
     // Create a simple right-hand side
@@ -791,9 +796,12 @@ fn test_solve_properties() {
         "A * x should equal b for solution of A * x = b"
     );
 
-    // Property 2: For invertible A, x = A^(-1) * b  
+    // Property 2: For invertible A, x = A^(-1) * b
     let a_inv = inv(&a).unwrap();
-    let a_inv_b = a_inv.matmul(&b.reshape(&[size, 1])).unwrap().reshape(&[size]);
+    let a_inv_b = a_inv
+        .matmul(&b.reshape(&[size, 1]))
+        .unwrap()
+        .reshape(&[size]);
 
     assert!(
         matrices_approx_equal(&x, &a_inv_b),

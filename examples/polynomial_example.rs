@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 
-use numrs2::prelude::*;
 use numrs2::math::linspace;
+use numrs2::prelude::*;
 
 fn main() {
     println!("NumRS Polynomial Functions Examples");

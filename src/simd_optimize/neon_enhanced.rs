@@ -179,13 +179,13 @@ impl NeonEnhancedOps {
             // Scale by 2^n (simplified - would need proper implementation)
             let mut temp = [0.0f32; NEON_F32_LANES];
             vst1q_f32(temp.as_mut_ptr(), poly);
-            
+
             // Extract lane values using const indices
             let n0 = vgetq_lane_s32(n, 0);
             let n1 = vgetq_lane_s32(n, 1);
             let n2 = vgetq_lane_s32(n, 2);
             let n3 = vgetq_lane_s32(n, 3);
-            
+
             temp[0] *= (2.0f32).powi(n0);
             temp[1] *= (2.0f32).powi(n1);
             temp[2] *= (2.0f32).powi(n2);

@@ -43,7 +43,7 @@ use std::fmt::Debug;
 /// let rank = matrix_rank(&a, None).unwrap();
 /// assert_eq!(rank, 2);
 /// ```
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn matrix_rank<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     tol: Option<T>,
@@ -116,7 +116,7 @@ where
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (q, r) = qr(&a).unwrap();
 /// ```
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn qr<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -183,7 +183,7 @@ pub fn qr<
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
 /// let l = cholesky(&a).unwrap();
 /// ```
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn cholesky<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -253,7 +253,7 @@ pub fn cholesky<
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
 /// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
 /// ```
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn eig<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     sort: Option<&str>,
@@ -452,7 +452,7 @@ pub fn eig<
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let (u, s, vt) = svd(&a).unwrap();
 /// ```
-#[cfg(feature = "matrix_decomp")]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn svd<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>, Array<T>)> {
@@ -527,7 +527,15 @@ pub fn svd<
 /// assert_eq!(rank, 2);
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
-pub fn matrix_rank<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::MulAssign + std::ops::SubAssign + std::fmt::Display>(
+pub fn matrix_rank<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
     a: &Array<T>,
     tol: Option<T>,
 ) -> Result<usize> {
@@ -551,10 +559,12 @@ pub fn matrix_rank<T: Float + Clone + Debug + std::ops::AddAssign + std::ops::Mu
             let n = shape[1];
             let max_dim = if m > n { m } else { n };
             let eps = T::epsilon();
-            
+
             // Find max singular value
             let s_data = s.to_vec();
-            let max_s = s_data.iter().fold(T::zero(), |max, &val| if val > max { val } else { max });
+            let max_s = s_data
+                .iter()
+                .fold(T::zero(), |max, &val| if val > max { val } else { max });
 
             T::from(max_dim).unwrap() * eps * max_s
         }

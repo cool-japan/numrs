@@ -149,7 +149,7 @@ fn detect_cache_info() -> CacheInfo {
 #[cfg(target_arch = "x86_64")]
 fn detect_x86_cache_info() -> CacheInfo {
     #[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::__cpuid;
+    use std::arch::x86_64::__cpuid;
 
     let mut info = CacheInfo {
         line_size: 64,

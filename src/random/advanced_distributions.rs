@@ -192,7 +192,7 @@ impl VonMises {
         };
         let normal = Normal::new(self.mu, variance_scaling).unwrap();
         let sample = normal.sample(rng);
-        
+
         // Wrap to [-π, π] range
         let mut result = sample;
         while result > PI {
@@ -201,10 +201,9 @@ impl VonMises {
         while result < -PI {
             result += 2.0 * PI;
         }
-        
+
         result
     }
-
 }
 
 /// Maxwell-Boltzmann distribution (Maxwell distribution)

@@ -215,7 +215,11 @@ where
                         #[cfg(not(target_arch = "x86_64"))]
                         {
                             // Fallback for non-x86_64
-                            self_data.iter().zip(other_data.iter()).map(|(a, b)| a * b).sum()
+                            self_data
+                                .iter()
+                                .zip(other_data.iter())
+                                .map(|(a, b)| a * b)
+                                .sum()
                         }
                     };
                     return Ok(T::from(result).unwrap());
@@ -232,7 +236,11 @@ where
                         #[cfg(not(target_arch = "x86_64"))]
                         {
                             // Fallback for non-x86_64
-                            self_data.iter().zip(other_data.iter()).map(|(a, b)| a * b).sum()
+                            self_data
+                                .iter()
+                                .zip(other_data.iter())
+                                .map(|(a, b)| a * b)
+                                .sum()
                         }
                     };
                     return Ok(T::from(result).unwrap());

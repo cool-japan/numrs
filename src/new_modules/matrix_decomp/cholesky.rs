@@ -1,4 +1,5 @@
 #![allow(clippy::needless_range_loop)]
+#![cfg(feature = "lapack")]
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
