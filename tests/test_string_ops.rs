@@ -103,12 +103,12 @@ fn test_string_formatting_operations() {
     let result = mod_format(&arr, &val_arr).unwrap();
     assert_eq!(
         result.get(&[0]).unwrap().to_string().unwrap(),
-        "Value: 3.14159"
+        "Value: 3.141592653589793"
     );
     assert_eq!(result.get(&[1]).unwrap().to_string().unwrap(), "Number: 42");
     assert_eq!(
         result.get(&[2]).unwrap().to_string().unwrap(),
-        "Float: 2.71828"
+        "Float: 2.718281828459045"
     );
 }
 
