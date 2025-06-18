@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 
+use numrs2::math::{linspace, ElementWiseMath};
 use numrs2::prelude::*;
 
 fn main() {

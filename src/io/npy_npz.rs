@@ -195,35 +195,94 @@ pub fn serialize_to_file<T: Clone, W: Write + Seek>(
     npy_data.extend_from_slice(&header);
 
     // Write the data based on its type
-    if type_name == "f32" {
-        // Convert data to raw bytes and write
-        let data = array.to_vec();
-        for val in data.iter() {
-            // Safety: This is only allowed because we've checked that T is f32
-            let val_bytes = unsafe { std::mem::transmute_copy::<T, f32>(val) }.to_le_bytes();
-            npy_data.extend_from_slice(&val_bytes);
+    match type_name {
+        "f32" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, f32>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
         }
-    } else if type_name == "f64" {
-        // Convert data to raw bytes and write
-        let data = array.to_vec();
-        for val in data.iter() {
-            // Safety: This is only allowed because we've checked that T is f64
-            let val_bytes = unsafe { std::mem::transmute_copy::<T, f64>(val) }.to_le_bytes();
-            npy_data.extend_from_slice(&val_bytes);
+        "f64" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, f64>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
         }
-    } else if type_name == "i32" {
-        // Convert data to raw bytes and write
-        let data = array.to_vec();
-        for val in data.iter() {
-            // Safety: This is only allowed because we've checked that T is i32
-            let val_bytes = unsafe { std::mem::transmute_copy::<T, i32>(val) }.to_le_bytes();
-            npy_data.extend_from_slice(&val_bytes);
+        "i8" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, i8>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
         }
-    } else {
-        return Err(NumRs2Error::SerializationError(format!(
-            "NPY/NPZ format only supports f32, f64, and i32 types. Got: {}",
-            type_name
-        )));
+        "i16" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, i16>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
+        }
+        "i32" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, i32>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
+        }
+        "i64" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, i64>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
+        }
+        "u8" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, u8>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
+        }
+        "u16" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, u16>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
+        }
+        "u32" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, u32>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
+        }
+        "u64" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_bytes = unsafe { std::mem::transmute_copy::<T, u64>(val) }.to_le_bytes();
+                npy_data.extend_from_slice(&val_bytes);
+            }
+        }
+        "bool" => {
+            let data = array.to_vec();
+            for val in data.iter() {
+                let val_byte = if unsafe { std::mem::transmute_copy::<T, bool>(val) } {
+                    1u8
+                } else {
+                    0u8
+                };
+                npy_data.push(val_byte);
+            }
+        }
+        _ => {
+            return Err(NumRs2Error::SerializationError(format!(
+                "NPY/NPZ format does not support type: {}",
+                type_name
+            )));
+        }
     }
 
     // If it's just NPY format, write directly to the file
@@ -259,8 +318,8 @@ pub fn serialize_to_file<T: Clone, W: Write + Seek>(
     Ok(())
 }
 
-// Helper function for NPY format deserialization for f32 arrays
-fn read_npy_f32<R: Read>(mut reader: R) -> Result<Array<f32>> {
+// Generic function to read NPY data for any supported type
+fn read_npy_generic<T: Clone, R: Read>(mut reader: R) -> Result<Array<T>> {
     // Read NPY header (first 10 bytes contain magic string, version, and header length)
     let mut header_prefix = [0u8; 10];
     reader.read_exact(&mut header_prefix).map_err(|e| {
@@ -291,152 +350,128 @@ fn read_npy_f32<R: Read>(mut reader: R) -> Result<Array<f32>> {
     // Parse header to get shape and dtype
     let (shape, dtype) = parse_npy_header(&full_header)?;
 
-    // Verify the dtype is compatible with f32
-    if dtype != "<f4" {
+    // Determine element size and read data
+    let type_name = std::any::type_name::<T>();
+    let (element_size, expected_dtype) = match type_name {
+        "f32" => (4, "<f4"),
+        "f64" => (8, "<f8"),
+        "i8" => (1, "<i1"),
+        "i16" => (2, "<i2"),
+        "i32" => (4, "<i4"),
+        "i64" => (8, "<i8"),
+        "u8" => (1, "<u1"),
+        "u16" => (2, "<u2"),
+        "u32" => (4, "<u4"),
+        "u64" => (8, "<u8"),
+        "bool" => (1, "|b1"),
+        _ => {
+            return Err(NumRs2Error::DeserializationError(format!(
+                "Unsupported type for NPY deserialization: {}",
+                type_name
+            )));
+        }
+    };
+
+    // Verify the dtype is compatible
+    if dtype != expected_dtype {
         return Err(NumRs2Error::DeserializationError(format!(
-            "Expected f32 data (dtype '<f4'), but got '{}'",
-            dtype
+            "Expected {} data (dtype '{}'), but got '{}'",
+            type_name, expected_dtype, dtype
         )));
     }
 
-    // Read data based on dtype and shape
+    // Read raw data
     let total_elements: usize = shape.iter().product();
-    let mut raw_data = vec![0u8; total_elements * 4]; // 4 bytes per f32
+    let mut raw_data = vec![0u8; total_elements * element_size];
     reader.read_exact(&mut raw_data).map_err(|e| {
         NumRs2Error::DeserializationError(format!("Failed to read NPY data: {}", e))
     })?;
 
-    // Convert raw bytes to f32 values
-    let mut f32_data = Vec::with_capacity(total_elements);
-    for chunk in raw_data.chunks_exact(4) {
-        let value = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        f32_data.push(value);
+    // Convert raw bytes to typed values
+    let mut typed_data = Vec::with_capacity(total_elements);
+
+    match type_name {
+        "f32" => {
+            for chunk in raw_data.chunks_exact(4) {
+                let value = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<f32, T>(&value) });
+            }
+        }
+        "f64" => {
+            for chunk in raw_data.chunks_exact(8) {
+                let value = f64::from_le_bytes([
+                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+                ]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<f64, T>(&value) });
+            }
+        }
+        "i8" => {
+            for chunk in raw_data.chunks_exact(1) {
+                let value = i8::from_le_bytes([chunk[0]]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<i8, T>(&value) });
+            }
+        }
+        "i16" => {
+            for chunk in raw_data.chunks_exact(2) {
+                let value = i16::from_le_bytes([chunk[0], chunk[1]]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<i16, T>(&value) });
+            }
+        }
+        "i32" => {
+            for chunk in raw_data.chunks_exact(4) {
+                let value = i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<i32, T>(&value) });
+            }
+        }
+        "i64" => {
+            for chunk in raw_data.chunks_exact(8) {
+                let value = i64::from_le_bytes([
+                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+                ]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<i64, T>(&value) });
+            }
+        }
+        "u8" => {
+            for chunk in raw_data.chunks_exact(1) {
+                let value = u8::from_le_bytes([chunk[0]]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<u8, T>(&value) });
+            }
+        }
+        "u16" => {
+            for chunk in raw_data.chunks_exact(2) {
+                let value = u16::from_le_bytes([chunk[0], chunk[1]]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<u16, T>(&value) });
+            }
+        }
+        "u32" => {
+            for chunk in raw_data.chunks_exact(4) {
+                let value = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<u32, T>(&value) });
+            }
+        }
+        "u64" => {
+            for chunk in raw_data.chunks_exact(8) {
+                let value = u64::from_le_bytes([
+                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+                ]);
+                typed_data.push(unsafe { std::mem::transmute_copy::<u64, T>(&value) });
+            }
+        }
+        "bool" => {
+            for chunk in raw_data.chunks_exact(1) {
+                let value = chunk[0] != 0;
+                typed_data.push(unsafe { std::mem::transmute_copy::<bool, T>(&value) });
+            }
+        }
+        _ => unreachable!(),
     }
 
     // Create the array
-    Ok(Array::from_vec(f32_data).reshape(&shape))
+    Ok(Array::from_vec(typed_data).reshape(&shape))
 }
 
-// Helper function for NPY format deserialization for f64 arrays
-fn read_npy_f64<R: Read>(mut reader: R) -> Result<Array<f64>> {
-    // Read NPY header (first 10 bytes contain magic string, version, and header length)
-    let mut header_prefix = [0u8; 10];
-    reader.read_exact(&mut header_prefix).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to read NPY header: {}", e))
-    })?;
-
-    // Check magic string
-    if &header_prefix[0..6] != NPY_MAGIC_STRING {
-        return Err(NumRs2Error::DeserializationError(
-            "Invalid NPY file: missing magic string".to_string(),
-        ));
-    }
-
-    // Read header length (little endian)
-    let header_len = LittleEndian::read_u16(&header_prefix[8..10]) as usize;
-
-    // Read the rest of the header
-    let mut header_data = vec![0u8; header_len];
-    reader.read_exact(&mut header_data).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to read NPY header data: {}", e))
-    })?;
-
-    // Combine header prefix and data for parsing
-    let mut full_header = Vec::with_capacity(10 + header_len);
-    full_header.extend_from_slice(&header_prefix);
-    full_header.extend_from_slice(&header_data);
-
-    // Parse header to get shape and dtype
-    let (shape, dtype) = parse_npy_header(&full_header)?;
-
-    // Verify the dtype is compatible with f64
-    if dtype != "<f8" {
-        return Err(NumRs2Error::DeserializationError(format!(
-            "Expected f64 data (dtype '<f8'), but got '{}'",
-            dtype
-        )));
-    }
-
-    // Read data based on dtype and shape
-    let total_elements: usize = shape.iter().product();
-    let mut raw_data = vec![0u8; total_elements * 8]; // 8 bytes per f64
-    reader.read_exact(&mut raw_data).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to read NPY data: {}", e))
-    })?;
-
-    // Convert raw bytes to f64 values
-    let mut f64_data = Vec::with_capacity(total_elements);
-    for chunk in raw_data.chunks_exact(8) {
-        let value = f64::from_le_bytes([
-            chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
-        ]);
-        f64_data.push(value);
-    }
-
-    // Create the array
-    Ok(Array::from_vec(f64_data).reshape(&shape))
-}
-
-// Helper function for NPY format deserialization for i32 arrays
-fn read_npy_i32<R: Read>(mut reader: R) -> Result<Array<i32>> {
-    // Read NPY header (first 10 bytes contain magic string, version, and header length)
-    let mut header_prefix = [0u8; 10];
-    reader.read_exact(&mut header_prefix).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to read NPY header: {}", e))
-    })?;
-
-    // Check magic string
-    if &header_prefix[0..6] != NPY_MAGIC_STRING {
-        return Err(NumRs2Error::DeserializationError(
-            "Invalid NPY file: missing magic string".to_string(),
-        ));
-    }
-
-    // Read header length (little endian)
-    let header_len = LittleEndian::read_u16(&header_prefix[8..10]) as usize;
-
-    // Read the rest of the header
-    let mut header_data = vec![0u8; header_len];
-    reader.read_exact(&mut header_data).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to read NPY header data: {}", e))
-    })?;
-
-    // Combine header prefix and data for parsing
-    let mut full_header = Vec::with_capacity(10 + header_len);
-    full_header.extend_from_slice(&header_prefix);
-    full_header.extend_from_slice(&header_data);
-
-    // Parse header to get shape and dtype
-    let (shape, dtype) = parse_npy_header(&full_header)?;
-
-    // Verify the dtype is compatible with i32
-    if dtype != "<i4" {
-        return Err(NumRs2Error::DeserializationError(format!(
-            "Expected i32 data (dtype '<i4'), but got '{}'",
-            dtype
-        )));
-    }
-
-    // Read data based on dtype and shape
-    let total_elements: usize = shape.iter().product();
-    let mut raw_data = vec![0u8; total_elements * 4]; // 4 bytes per i32
-    reader.read_exact(&mut raw_data).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to read NPY data: {}", e))
-    })?;
-
-    // Convert raw bytes to i32 values
-    let mut i32_data = Vec::with_capacity(total_elements);
-    for chunk in raw_data.chunks_exact(4) {
-        let value = i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        i32_data.push(value);
-    }
-
-    // Create the array
-    Ok(Array::from_vec(i32_data).reshape(&shape))
-}
-
-// Helper function for NPZ format deserialization for f32 arrays
-fn read_npz_f32<R: Read + Seek>(reader: R) -> Result<Array<f32>> {
+// Generic function to read NPZ data for any supported type
+fn read_npz_generic<T: Clone, R: Read + Seek>(reader: R) -> Result<Array<T>> {
     // Open a ZIP archive from the reader
     let mut archive = ZipArchive::new(reader).map_err(|e| {
         NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
@@ -471,88 +506,8 @@ fn read_npz_f32<R: Read + Seek>(reader: R) -> Result<Array<f32>> {
         NumRs2Error::DeserializationError(format!("Failed to extract NPY file from NPZ: {}", e))
     })?;
 
-    // Use the same logic as read_npy_f32 but with the npy_file reader
-    read_npy_f32(npy_file)
-}
-
-// Helper function for NPZ format deserialization for f64 arrays
-fn read_npz_f64<R: Read + Seek>(reader: R) -> Result<Array<f64>> {
-    // Open a ZIP archive from the reader
-    let mut archive = ZipArchive::new(reader).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
-    })?;
-
-    // Find the first .npy file in the archive
-    let mut npy_index = None;
-    for i in 0..archive.len() {
-        let name = archive
-            .by_index(i)
-            .map_err(|e| {
-                NumRs2Error::DeserializationError(format!(
-                    "Failed to access file in NPZ archive: {}",
-                    e
-                ))
-            })?
-            .name()
-            .to_string();
-
-        if name.ends_with(".npy") {
-            npy_index = Some(i);
-            break;
-        }
-    }
-
-    let npy_idx = npy_index.ok_or_else(|| {
-        NumRs2Error::DeserializationError("No .npy files found in NPZ archive".to_string())
-    })?;
-
-    // Extract the NPY file and read it
-    let npy_file = archive.by_index(npy_idx).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to extract NPY file from NPZ: {}", e))
-    })?;
-
-    // Use the same logic as read_npy_f64 but with the npy_file reader
-    read_npy_f64(npy_file)
-}
-
-// Helper function for NPZ format deserialization for i32 arrays
-fn read_npz_i32<R: Read + Seek>(reader: R) -> Result<Array<i32>> {
-    // Open a ZIP archive from the reader
-    let mut archive = ZipArchive::new(reader).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
-    })?;
-
-    // Find the first .npy file in the archive
-    let mut npy_index = None;
-    for i in 0..archive.len() {
-        let name = archive
-            .by_index(i)
-            .map_err(|e| {
-                NumRs2Error::DeserializationError(format!(
-                    "Failed to access file in NPZ archive: {}",
-                    e
-                ))
-            })?
-            .name()
-            .to_string();
-
-        if name.ends_with(".npy") {
-            npy_index = Some(i);
-            break;
-        }
-    }
-
-    let npy_idx = npy_index.ok_or_else(|| {
-        NumRs2Error::DeserializationError("No .npy files found in NPZ archive".to_string())
-    })?;
-
-    // Extract the NPY file and read it
-    let npy_file = archive.by_index(npy_idx).map_err(|e| {
-        NumRs2Error::DeserializationError(format!("Failed to extract NPY file from NPZ: {}", e))
-    })?;
-
-    // Use the same logic as read_npy_i32 but with the npy_file reader
-    read_npy_i32(npy_file)
+    // Use the generic NPY reader
+    read_npy_generic(npy_file)
 }
 
 // Public function to deserialize an array from a file in NPY or NPZ format
@@ -560,58 +515,12 @@ pub fn deserialize_from_file<T: Clone, R: Read + Seek>(
     reader: R,
     format: SerializeFormat,
 ) -> Result<Array<T>> {
-    // For NPY and NPZ formats, we need to simplify in the MVP implementation
-    // We'll limit to specific types and have separate implementations for each type
-    let type_name = std::any::type_name::<T>();
-
-    // Call the appropriate type-specific helper function
-    // Unfortunately, we can't directly return Array<T> from a function that produces Array<specific_type>
-    // So we have to use unsafe transmute, but we carefully check the types match first
-    if type_name == "f32" {
-        // Safe because we've checked that T is f32
-        unsafe {
-            let result = if matches!(format, SerializeFormat::Npy) {
-                read_npy_f32(reader)
-            } else {
-                read_npz_f32(reader)
-            };
-
-            // We need to reinterpret the Result<Array<f32>> as Result<Array<T>>
-            // This is safe because we've verified that T is f32
-            std::mem::transmute::<Result<Array<f32>>, Result<Array<T>>>(result)
-        }
-    } else if type_name == "f64" {
-        // Safe because we've checked that T is f64
-        unsafe {
-            let result = if matches!(format, SerializeFormat::Npy) {
-                read_npy_f64(reader)
-            } else {
-                read_npz_f64(reader)
-            };
-
-            // We need to reinterpret the Result<Array<f64>> as Result<Array<T>>
-            // This is safe because we've verified that T is f64
-            std::mem::transmute::<Result<Array<f64>>, Result<Array<T>>>(result)
-        }
-    } else if type_name == "i32" {
-        // Safe because we've checked that T is i32
-        unsafe {
-            let result = if matches!(format, SerializeFormat::Npy) {
-                read_npy_i32(reader)
-            } else {
-                read_npz_i32(reader)
-            };
-
-            // We need to reinterpret the Result<Array<i32>> as Result<Array<T>>
-            // This is safe because we've verified that T is i32
-            std::mem::transmute::<Result<Array<i32>>, Result<Array<T>>>(result)
-        }
-    } else {
-        // For simplicity, we're only supporting f32, f64, and i32 in this initial implementation
-        Err(NumRs2Error::DeserializationError(format!(
-            "NPY/NPZ format currently only supports f32, f64, and i32 types, got: {}",
-            type_name
-        )))
+    match format {
+        SerializeFormat::Npy => read_npy_generic(reader),
+        SerializeFormat::Npz => read_npz_generic(reader),
+        _ => Err(NumRs2Error::DeserializationError(
+            "Only NPY and NPZ formats are supported".to_string(),
+        )),
     }
 }
 

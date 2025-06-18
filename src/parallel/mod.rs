@@ -95,7 +95,22 @@ impl ParallelContext {
 
 impl Default for ParallelContext {
     fn default() -> Self {
-        Self::new().expect("Failed to create default parallel context")
+        Self::new().unwrap_or_else(|_| {
+            // Fallback: create a minimal parallel context
+            // This should rarely happen, but prevents panics
+            let num_cores = 1; // Conservative fallback
+            let scheduler_config = SchedulerConfig::optimal_for_cores(num_cores);
+            let scheduler = Arc::new(ParallelScheduler::new(scheduler_config).unwrap());
+            let load_balancer =
+                Arc::new(LoadBalancer::new(BalancingStrategy::Adaptive, num_cores).unwrap());
+            let work_stealing_pool = Arc::new(WorkStealingPool::new(num_cores).unwrap());
+
+            Self {
+                scheduler,
+                load_balancer,
+                work_stealing_pool,
+            }
+        })
     }
 }
 

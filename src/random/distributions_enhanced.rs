@@ -8,7 +8,6 @@ use crate::error::Result;
 use crate::random::state::RandomState;
 use num_traits::{Float, NumCast};
 use rand::Rng;
-use std::f64::consts::PI;
 use std::fmt::{Debug, Display};
 
 /// Get a reference to the global random state
@@ -279,37 +278,45 @@ impl RandomState {
         let mut vec = Vec::with_capacity(size);
         let mut rng = self.get_rng()?;
 
-        // Calculate standardized bounds
-        let low_std = (low - mean) / std;
-        let high_std = (high - mean) / std;
+        // Convert to f64 for calculation
+        let mean_f64 = mean.to_f64().unwrap_or(0.0);
+        let std_f64 = std.to_f64().unwrap_or(1.0);
+        let low_f64 = low.to_f64().unwrap_or(f64::NEG_INFINITY);
+        let high_f64 = high.to_f64().unwrap_or(f64::INFINITY);
 
-        let low_std_f64 = low_std.to_f64().unwrap_or(0.0);
-        let high_std_f64 = high_std.to_f64().unwrap_or(0.0);
-
-        // Reference implementation of the inverse CDF method for truncated normal
+        // Use rejection sampling for truncated normal (more robust than inverse CDF)
         for _ in 0..size {
-            // Generate a uniform random number between 0 and 1
-            let u = rng.random::<f64>();
+            let mut sample;
+            let mut attempts = 0;
+            loop {
+                // Generate standard normal sample
+                let u1 = rng.random::<f64>();
+                let u2 = rng.random::<f64>();
+                let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
 
-            // Calculate the CDF at the bounds
-            let cdf_low = normal_cdf(low_std_f64);
-            let cdf_high = normal_cdf(high_std_f64);
+                // Transform to desired distribution
+                sample = mean_f64 + std_f64 * z;
 
-            // Scale the uniform random number to the truncated range
-            let scaled_u = cdf_low + u * (cdf_high - cdf_low);
+                // Check if within bounds
+                if sample >= low_f64 && sample <= high_f64 {
+                    break;
+                }
 
-            // Apply the inverse CDF to get a truncated normal sample
-            let z = normal_inv_cdf(scaled_u);
-
-            // Transform back to the original scale
-            let mut val = mean + std * <T as NumCast>::from(z).unwrap_or(T::zero());
-
-            // Ensure the value is within bounds (clamp to avoid numerical errors)
-            if val < low {
-                val = low;
-            } else if val > high {
-                val = high;
+                attempts += 1;
+                // Prevent infinite loops for very narrow truncation
+                if attempts > 1000 {
+                    sample = (low_f64 + high_f64) / 2.0;
+                    break;
+                }
             }
+
+            let val = <T as NumCast>::from(sample).unwrap_or_else(|| {
+                if sample <= low.to_f64().unwrap_or(f64::NEG_INFINITY) {
+                    low
+                } else {
+                    high
+                }
+            });
 
             vec.push(val);
         }
@@ -336,41 +343,52 @@ impl RandomState {
         let kappa_f64 = kappa.to_f64().unwrap_or(0.0);
         let mu_f64 = mu.to_f64().unwrap_or(0.0);
 
-        // Algorithm from Best & Fisher, 1979
-        if kappa_f64 < 1e-8 {
-            // For small kappa, approximate with uniform distribution
-            for _ in 0..size {
-                let angle = rng.random::<f64>() * 2.0 * PI;
-                vec.push(<T as NumCast>::from(angle).unwrap_or(T::zero()));
-            }
-        } else {
-            let r = 1.0 + (1.0 + 4.0 * kappa_f64 * kappa_f64).sqrt();
-            let rho = (r - (2.0 * r).sqrt()) / (2.0 * kappa_f64);
-            let s = (1.0 + rho * rho) / (2.0 * rho);
+        // Generate von Mises samples using the algorithm from Devroye (1986)
+        for _ in 0..size {
+            let sample = if kappa_f64 < 1e-6 {
+                // For very small kappa, use uniform distribution
+                rng.random::<f64>() * 2.0 * std::f64::consts::PI - std::f64::consts::PI
+            } else {
+                // Use Best-Fisher algorithm for von Mises sampling
+                let a = 1.0 + (1.0 + 4.0 * kappa_f64 * kappa_f64).sqrt();
+                let b = (a - (2.0 * a).sqrt()) / (2.0 * kappa_f64);
+                let r = (1.0 + b * b) / (2.0 * b);
 
-            for _ in 0..size {
+                let mut attempts = 0;
                 loop {
+                    attempts += 1;
+                    if attempts > 1000 {
+                        // Fallback to uniform if too many attempts
+                        break rng.random::<f64>() * 2.0 * std::f64::consts::PI
+                            - std::f64::consts::PI;
+                    }
+
                     let u1 = rng.random::<f64>();
-                    let z = (s * (2.0 * u1 - 1.0)).cos();
-                    let f = (1.0 + s * z) / (s + z);
-                    let c = kappa_f64 * (s - f);
+                    let z = (1.0 - u1).cos();
+                    let f = (1.0 + r * z) / (r + z);
+                    let c = kappa_f64 * (r - f);
 
                     let u2 = rng.random::<f64>();
-                    if u2 < c * (2.0 - c) || u2 <= c * (1.0 / c).exp() {
-                        let u3 = rng.random::<f64>();
-                        let angle = if u3 < 0.5 {
-                            mu_f64 + f.acos()
-                        } else {
-                            mu_f64 - f.acos()
-                        };
 
-                        // Normalize angle to [-π, π)
-                        let angle_norm = ((angle + PI) % (2.0 * PI)) - PI;
-                        vec.push(<T as NumCast>::from(angle_norm).unwrap_or(T::zero()));
-                        break;
+                    if c * (2.0 - c) - u2 > 0.0 {
+                        let u3 = rng.random::<f64>();
+                        let theta = if u3 - 0.5 > 0.0 { f.acos() } else { -f.acos() };
+                        break theta;
+                    }
+
+                    if (c / u2.max(1e-10)).ln() + 1.0 - c >= 0.0 {
+                        let u3 = rng.random::<f64>();
+                        let theta = if u3 - 0.5 > 0.0 { f.acos() } else { -f.acos() };
+                        break theta;
                     }
                 }
-            }
+            };
+
+            let angle = mu_f64 + sample;
+            let normalized = ((angle + std::f64::consts::PI) % (2.0 * std::f64::consts::PI))
+                - std::f64::consts::PI;
+
+            vec.push(<T as NumCast>::from(normalized).unwrap_or(T::zero()));
         }
 
         Ok(Array::from_vec(vec).reshape(shape))
@@ -989,6 +1007,7 @@ fn normal_cdf(x: f64) -> f64 {
 }
 
 /// Inverse normal cumulative distribution function
+#[allow(dead_code)]
 fn normal_inv_cdf(p: f64) -> f64 {
     if p <= 0.0 {
         return f64::NEG_INFINITY;

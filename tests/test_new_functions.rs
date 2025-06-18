@@ -6,6 +6,7 @@
 //! - Conditional operations: where_cond, select
 
 use approx::assert_relative_eq;
+use numrs2::math::{linspace, meshgrid, mgrid, ogrid};
 use numrs2::prelude::*;
 
 #[cfg(test)]

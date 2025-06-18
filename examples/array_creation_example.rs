@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 
+use numrs2::math::{arange, geomspace, linspace, logspace, meshgrid, ElementWiseMath};
 use numrs2::prelude::*;
 
 fn main() -> Result<()> {

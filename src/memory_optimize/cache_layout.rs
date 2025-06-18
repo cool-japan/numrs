@@ -3,6 +3,7 @@
 //! This module provides functions for reorganizing data in memory to improve
 //! cache efficiency, taking advantage of both spatial and temporal locality.
 
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::__cpuid;
 use std::cmp;
 use std::mem;
@@ -15,6 +16,7 @@ struct CacheInfo {
     l1_size: usize,
     l2_size: usize,
     l3_size: usize,
+    #[allow(dead_code)]
     associativity: usize,
 }
 
@@ -146,6 +148,7 @@ fn detect_cache_info() -> CacheInfo {
 
 #[cfg(target_arch = "x86_64")]
 fn detect_x86_cache_info() -> CacheInfo {
+    #[cfg(target_arch = "x86_64")]
     use std::arch::x86_64::__cpuid;
 
     let mut info = CacheInfo {
@@ -452,8 +455,8 @@ fn prefetch_data_pattern<T: Copy>(data: &mut [T], cache_line_size: usize) {
     for i in (0..data.len()).step_by(elements_per_line) {
         // Prefetch hint for the next cache line
         if i + elements_per_line < data.len() {
+            #[cfg(target_arch = "x86_64")]
             unsafe {
-                #[cfg(target_arch = "x86_64")]
                 {
                     let ptr = data.as_ptr().add(i + elements_per_line);
                     std::arch::x86_64::_mm_prefetch(

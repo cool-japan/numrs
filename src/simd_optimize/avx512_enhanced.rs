@@ -6,14 +6,18 @@
 //! Note: AVX-512 features are currently unstable in Rust, so this module
 //! provides production-ready implementations using stable AVX2 instructions.
 
-use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+
+// AVX512 operations - currently using stable AVX2 implementations
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 /// AVX2 vectorization constants for production stability
+#[allow(dead_code)]
 const AVX2_F32_LANES: usize = 8;
+#[allow(dead_code)]
 const AVX2_F64_LANES: usize = 4;
+#[allow(dead_code)]
 const AVX2_ALIGNMENT: usize = 32;
 
 /// Advanced AVX2 operations with maximum vectorization
@@ -161,7 +165,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Array::from_vec(result).reshape(a.shape())
+        Ok(Array::from_vec(result).reshape(&a.shape()))
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -299,13 +303,13 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Array::from_vec(result).reshape(&[output_len])
+        Ok(Array::from_vec(result).reshape(&[output_len]))
     }
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     unsafe fn vectorized_convolution_avx2(signal: &[f32], kernel: &[f32], result: &mut [f32]) {
-        let signal_len = signal.len();
+        let _signal_len = signal.len();
         let kernel_len = kernel.len();
         let output_len = result.len();
 
@@ -333,7 +337,7 @@ impl Avx2EnhancedOps {
             let low = _mm256_castps256_ps128(sum_vec);
             let high = _mm256_extractf128_ps(sum_vec, 1);
             let final_sum = _mm_add_ps(low, high);
-            let mut result_val = _mm_cvtss_f32(final_sum);
+            let result_val = _mm_cvtss_f32(final_sum);
 
             // Handle remaining elements
             for k in start_k + vectorizable_len..end_k {
@@ -347,10 +351,15 @@ impl Avx2EnhancedOps {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_arch = "x86_64")]
     use super::*;
+    #[cfg(target_arch = "x86_64")]
+    use crate::array::Array;
+    #[cfg(target_arch = "x86_64")]
     use approx::assert_relative_eq;
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_matrix_multiplication() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let a = Array::from_vec(a_data).reshape(&[2, 3]);
@@ -371,6 +380,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_add() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let a = Array::from_vec(a_data).reshape(&[3, 3]);
@@ -387,6 +397,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_dot_product() {
         let a_data = vec![1.0, 2.0, 3.0, 4.0];
         let a = Array::from_vec(a_data).reshape(&[4]);
@@ -401,6 +412,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_avx2_convolution() {
         let signal_data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let signal = Array::from_vec(signal_data).reshape(&[5]);

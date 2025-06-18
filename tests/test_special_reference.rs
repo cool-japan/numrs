@@ -23,20 +23,19 @@ fn test_erf_reference() {
         -0.5204998778130465f64, // erf(-0.5)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix erf implementation to match reference values
+    // Test improved implementation with much tighter precision
     for (i, &expected) in expected_values.iter().enumerate() {
         let val = erf_x.get(&[i]).unwrap();
-        // Check the sign and approximate magnitude only
-        if expected.abs() < 0.1f64 {
-            assert_abs_diff_eq!(val, expected, epsilon = 0.1f64);
-        } else {
-            assert!(val * expected > 0.0f64, "Values should have same sign");
-            assert!(
-                (val.abs() - expected.abs()).abs() < 0.1f64,
-                "Values should be approximately the same magnitude"
-            );
-        }
+        println!(
+            "erf({}) = {} (expected {})",
+            x.get(&[i]).unwrap(),
+            val,
+            expected
+        );
+
+        // With the improved implementation, we achieve much better precision (~1e-7)
+        // This is a significant improvement from the previous ~1e-1 tolerance
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-6);
     }
 }
 
@@ -56,21 +55,18 @@ fn test_erfc_reference() {
         1.5204998778130465f64,   // erfc(-0.5)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix erfc implementation to match reference values
+    // Test improved erfc implementation with better precision
     for (i, &expected) in expected_values.iter().enumerate() {
         let val = erfc_x.get(&[i]).unwrap();
-        // For values near 1.0, check more precisely
-        if (expected - 1.0f64).abs() < 0.01f64 {
-            assert_abs_diff_eq!(val, expected, epsilon = 0.01f64);
-        } else {
-            // For other values, just check the sign and approximate magnitude
-            assert!(val * expected > 0.0f64, "Values should have same sign");
-            assert!(
-                (val - expected).abs() / (1.0f64 + expected.abs()) < 0.1f64,
-                "Values should be approximately the same relative magnitude"
-            );
-        }
+        println!(
+            "erfc({}) = {} (expected {})",
+            x.get(&[i]).unwrap(),
+            val,
+            expected
+        );
+
+        // With the improved implementation, we achieve much better precision
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-6);
     }
 }
 
@@ -175,7 +171,7 @@ fn test_gammaln_reference() {
     let expected_values = vec![
         0.0,                             // ln(gamma(1)) = ln(1)
         0.0,                             // ln(gamma(2)) = ln(1)
-        0.6931471805599453,              // ln(gamma(3)) = ln(2)
+        std::f64::consts::LN_2,          // ln(gamma(3)) = ln(2)
         12.801827480081469,              // ln(gamma(10)) = ln(9!)
         0.5 * std::f64::consts::PI.ln(), // ln(gamma(0.5)) = ln(sqrt(π))
     ];

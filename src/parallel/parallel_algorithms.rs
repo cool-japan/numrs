@@ -6,6 +6,7 @@
 use super::WorkStealingPool;
 use crate::error::{NumRs2Error, Result};
 use crate::traits::{FloatingPoint, NumericElement};
+use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::thread;
@@ -216,16 +217,29 @@ impl ParallelMatrixOps {
         }
 
         // Initialize result matrix
-        for elem in c.iter_mut() {
-            *elem = T::zero();
-        }
+        c.par_iter_mut().for_each(|elem| *elem = T::zero());
 
-        // For simplicity, use sequential matrix multiplication
-        // In a production implementation, we'd use proper parallel matrix algorithms
-        for i in 0..m {
-            for j in 0..n {
-                for l in 0..k {
-                    c[i * n + j] = c[i * n + j] + a[i * k + l] * b[l * n + j];
+        // Parallel matrix multiplication using row-wise parallelization
+        if m * n * k > self.config.parallel_threshold {
+            // Use parallel computation for large matrices
+            c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
+                for j in 0..n {
+                    let mut sum = T::zero();
+                    for l in 0..k {
+                        sum = sum + a[i * k + l] * b[l * n + j];
+                    }
+                    row[j] = sum;
+                }
+            });
+        } else {
+            // Sequential for small matrices to avoid parallel overhead
+            for i in 0..m {
+                for j in 0..n {
+                    let mut sum = T::zero();
+                    for l in 0..k {
+                        sum = sum + a[i * k + l] * b[l * n + j];
+                    }
+                    c[i * n + j] = sum;
                 }
             }
         }
@@ -250,10 +264,25 @@ impl ParallelMatrixOps {
             ));
         }
 
-        // Sequential transpose for simplicity
-        for i in 0..rows {
-            for j in 0..cols {
-                dst[j * rows + i] = src[i * cols + j];
+        if rows * cols > self.config.parallel_threshold {
+            // Parallel transpose using safe indexing
+            // Process each destination column in parallel
+            dst.par_iter_mut()
+                .enumerate()
+                .for_each(|(dst_idx, dst_elem)| {
+                    let j = dst_idx / rows; // column in destination (row in source)
+                    let i = dst_idx % rows; // row in destination (column in source)
+
+                    if j < cols {
+                        *dst_elem = src[i * cols + j];
+                    }
+                });
+        } else {
+            // Sequential for small matrices
+            for i in 0..rows {
+                for j in 0..cols {
+                    dst[j * rows + i] = src[i * cols + j];
+                }
             }
         }
 
@@ -360,11 +389,15 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
 
         // Recursive FFT on even and odd parts (in parallel for large sizes)
         if n >= self.config.parallel_threshold * 4 {
-            // TODO: Implement true parallel recursion
-            // For now, use sequential due to borrowing constraints
-            self.parallel_fft_recursive(&mut even, inverse)?;
-            self.parallel_fft_recursive(&mut odd, inverse)?;
+            // True parallel recursion using rayon::join
+            let (even_result, odd_result) = rayon::join(
+                || self.parallel_fft_recursive(&mut even, inverse),
+                || self.parallel_fft_recursive(&mut odd, inverse),
+            );
+            even_result?;
+            odd_result?;
         } else {
+            // Sequential for smaller sizes to avoid parallel overhead
             self.parallel_fft_recursive(&mut even, inverse)?;
             self.parallel_fft_recursive(&mut odd, inverse)?;
         }

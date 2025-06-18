@@ -13,7 +13,7 @@ use rand::SeedableRng;
 use rand_distr::uniform::SampleUniform;
 use rand_distr::{Bernoulli, Distribution, Exp as Exponential, Gamma, LogNormal, Normal, Uniform};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// A Generator for random number streams (legacy interface)
 pub struct Generator {
@@ -32,7 +32,7 @@ impl Generator {
         // Use current time as seed if none provided
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
+            .unwrap_or_else(|_| Duration::from_secs(1));
 
         Self {
             rng: Arc::new(Mutex::new(StdRng::seed_from_u64(now.as_secs()))),

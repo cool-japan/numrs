@@ -201,9 +201,9 @@ impl ShapeEngine {
     }
 
     /// Roll array elements along a given axis
-    pub fn roll_view<'a, T>(
+    pub fn roll_view<T>(
         &self,
-        view: &ArrayView<'a, T>,
+        view: &ArrayView<'_, T>,
         shift: isize,
         axis: Option<usize>,
     ) -> Result<Vec<T>>
@@ -217,9 +217,9 @@ impl ShapeEngine {
     }
 
     /// Roll elements along a specific axis
-    fn roll_along_axis<'a, T>(
+    fn roll_along_axis<T>(
         &self,
-        view: &ArrayView<'a, T>,
+        view: &ArrayView<'_, T>,
         shift: isize,
         axis: usize,
     ) -> Result<Vec<T>>
@@ -265,7 +265,7 @@ impl ShapeEngine {
     }
 
     /// Roll elements in flattened array
-    fn roll_flattened<'a, T>(&self, view: &ArrayView<'a, T>, shift: isize) -> Result<Vec<T>>
+    fn roll_flattened<T>(&self, view: &ArrayView<'_, T>, shift: isize) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -289,11 +289,7 @@ impl ShapeEngine {
     }
 
     /// Flip array along specified axes
-    pub fn flip_view<'a, T>(
-        &self,
-        view: &ArrayView<'a, T>,
-        axes: Option<Vec<usize>>,
-    ) -> Result<Vec<T>>
+    pub fn flip_view<T>(&self, view: &ArrayView<'_, T>, axes: Option<Vec<usize>>) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -338,9 +334,9 @@ impl ShapeEngine {
     }
 
     /// Rotate array by 90 degrees
-    pub fn rot90_view<'a, T>(
+    pub fn rot90_view<T>(
         &self,
-        view: &ArrayView<'a, T>,
+        view: &ArrayView<'_, T>,
         k: i32,
         axes: Option<(usize, usize)>,
     ) -> Result<Vec<T>>
@@ -374,9 +370,9 @@ impl ShapeEngine {
     }
 
     /// Rotate by 90 degrees once
-    fn rotate_90_once<'a, T>(
+    fn rotate_90_once<T>(
         &self,
-        view: &ArrayView<'a, T>,
+        view: &ArrayView<'_, T>,
         axis1: usize,
         axis2: usize,
     ) -> Result<Vec<T>>
@@ -408,12 +404,7 @@ impl ShapeEngine {
     }
 
     /// Rotate by 180 degrees
-    fn rotate_180<'a, T>(
-        &self,
-        view: &ArrayView<'a, T>,
-        axis1: usize,
-        axis2: usize,
-    ) -> Result<Vec<T>>
+    fn rotate_180<T>(&self, view: &ArrayView<'_, T>, axis1: usize, axis2: usize) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {
@@ -439,12 +430,7 @@ impl ShapeEngine {
     }
 
     /// Rotate by 270 degrees (or -90 degrees)
-    fn rotate_270<'a, T>(
-        &self,
-        view: &ArrayView<'a, T>,
-        axis1: usize,
-        axis2: usize,
-    ) -> Result<Vec<T>>
+    fn rotate_270<T>(&self, view: &ArrayView<'_, T>, axis1: usize, axis2: usize) -> Result<Vec<T>>
     where
         T: NumericElement + Copy,
     {

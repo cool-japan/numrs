@@ -36,15 +36,16 @@ pub struct FancyIndexEngine {
     config: FancyIndexConfig,
 }
 
+impl Default for FancyIndexEngine {
+    fn default() -> Self {
+        Self::new(FancyIndexConfig::default())
+    }
+}
+
 impl FancyIndexEngine {
     /// Create a new fancy indexing engine
     pub fn new(config: FancyIndexConfig) -> Self {
         Self { config }
-    }
-
-    /// Create a default fancy indexing engine
-    pub fn default() -> Self {
-        Self::new(FancyIndexConfig::default())
     }
 
     /// Index array using integer arrays (fancy indexing)
@@ -510,6 +511,7 @@ impl FancyIndexEngine {
         Ok(result)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_recursive<T>(
         &self,
         array: &ArrayView<T>,
@@ -568,6 +570,7 @@ impl FancyIndexEngine {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn iterate_other_axes<F>(
         &self,
         shape: &Shape,

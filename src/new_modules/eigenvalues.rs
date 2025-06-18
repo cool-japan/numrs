@@ -1,6 +1,9 @@
 use crate::array::Array;
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
+#[allow(unused_imports)] // Used conditionally based on features
 use ndarray::ArrayView2;
+#[cfg(feature = "lapack")]
 use ndarray_linalg::{Eig, EigVals, Eigh, Scalar};
 use num_complex::Complex;
 use num_traits::{Float, NumCast, Zero};
@@ -11,6 +14,7 @@ pub type EigResult<T> = (Array<Complex<T>>, Array<Complex<T>>);
 
 /// Enhanced eigenvalue and eigenvector computation using ndarray-linalg
 /// Compute eigenvalues and eigenvectors of a symmetric/Hermitian matrix
+#[cfg(feature = "lapack")]
 pub fn eigh<T>(
     a: &Array<T>,
     uplo: &str,
@@ -54,6 +58,7 @@ where
 }
 
 /// Compute eigenvalues of a symmetric/Hermitian matrix
+#[cfg(feature = "lapack")]
 pub fn eigvalsh<T>(a: &Array<T>, uplo: &str) -> Result<Array<<T as ndarray_linalg::Scalar>::Real>>
 where
     T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
@@ -94,6 +99,7 @@ where
 
 /// Compute eigenvalues and eigenvectors of a general square matrix
 /// Returns complex eigenvalues and eigenvectors
+#[cfg(feature = "lapack")]
 pub fn eig<T>(a: &Array<T>) -> Result<EigResult<T>>
 where
     T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
@@ -150,6 +156,7 @@ where
 
 /// Compute eigenvalues of a general square matrix
 /// Returns complex eigenvalues
+#[cfg(feature = "lapack")]
 pub fn eigvals<T>(a: &Array<T>) -> Result<Array<Complex<T>>>
 where
     T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
@@ -187,6 +194,7 @@ where
 }
 
 /// Check if a matrix is positive definite (all eigenvalues > 0)
+#[cfg(feature = "lapack")]
 pub fn is_positive_definite<T>(a: &Array<T>) -> Result<bool>
 where
     T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
@@ -202,6 +210,7 @@ where
 }
 
 /// Extend the Array type with eigenvalue methods
+#[cfg(feature = "lapack")]
 impl<T> Array<T>
 where
     T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
@@ -246,7 +255,7 @@ where
 }
 
 // Add tests to verify the implementation
-#[cfg(test)]
+#[cfg(all(test, feature = "lapack"))]
 mod tests {
     use super::*;
 

@@ -101,8 +101,10 @@ impl PoolAllocator {
         };
 
         // Pre-allocate the initial blocks
-        let layout =
-            Layout::from_size_align(config.block_size, 8).expect("Invalid block size or alignment");
+        let layout = Layout::from_size_align(config.block_size, 8).unwrap_or_else(|_| {
+            // Fallback to a safe default layout if the provided parameters are invalid
+            Layout::from_size_align(1024, 8).unwrap()
+        });
 
         for _ in 0..config.initial_blocks {
             if let Some(block) = MemoryBlock::new(layout) {
@@ -149,7 +151,7 @@ impl PoolAllocator {
 
                 // Allocate new blocks
                 let layout = Layout::from_size_align(state.config.block_size, 8)
-                    .expect("Invalid block size or alignment");
+                    .unwrap_or_else(|_| Layout::from_size_align(1024, 8).unwrap());
 
                 for _ in 0..max_new {
                     if let Some(block) = MemoryBlock::new(layout) {

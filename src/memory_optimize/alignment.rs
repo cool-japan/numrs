@@ -72,14 +72,21 @@ fn get_simd_alignment<T>() -> usize {
 
     // Determine SIMD alignment based on runtime CPU feature detection
     let base_alignment = if cfg!(target_arch = "x86_64") {
-        if is_x86_feature_detected!("avx512f") {
-            64 // AVX-512 uses 512-bit registers (64 bytes)
-        } else if is_x86_feature_detected!("avx2") || is_x86_feature_detected!("avx") {
-            32 // AVX/AVX2 uses 256-bit registers (32 bytes)
-        } else if is_x86_feature_detected!("sse2") {
-            16 // SSE2 uses 128-bit registers (16 bytes)
-        } else {
-            8 // Fallback for very old CPUs
+        #[cfg(target_arch = "x86_64")]
+        {
+            if is_x86_feature_detected!("avx512f") {
+                64 // AVX-512 uses 512-bit registers (64 bytes)
+            } else if is_x86_feature_detected!("avx2") || is_x86_feature_detected!("avx") {
+                32 // AVX/AVX2 uses 256-bit registers (32 bytes)
+            } else if is_x86_feature_detected!("sse2") {
+                16 // SSE2 uses 128-bit registers (16 bytes)
+            } else {
+                8 // Fallback for very old CPUs
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            16 // Default for non-x86_64
         }
     } else if cfg!(target_arch = "aarch64") {
         // For aarch64, NEON requires 16-byte alignment

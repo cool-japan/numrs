@@ -3,6 +3,7 @@
 //! This module provides optimized implementations of common array
 //! operations using AVX2 intrinsics.
 
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 /// AVX2-optimized element-wise addition for f32 arrays

@@ -1,5 +1,10 @@
 #![allow(deprecated)]
 
+use numrs2::linalg;
+#[cfg(feature = "eigenvalues")]
+use numrs2::new_modules::eigenvalues;
+#[cfg(feature = "matrix_decomp")]
+use numrs2::new_modules::matrix_decomp;
 use numrs2::prelude::*;
 
 fn main() {
@@ -18,7 +23,8 @@ fn main() {
     // Cholesky Decomposition - A = L * L^T
     println!("\n1. Cholesky Decomposition");
     println!("-------------------------");
-    match a.cholesky_compute() {
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    match linalg::cholesky(&a) {
         Ok(l) => {
             println!("Cholesky factor L (lower triangular):");
             print_matrix(&l);
@@ -34,11 +40,17 @@ fn main() {
         }
         Err(e) => println!("Error: {}", e),
     }
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
+    {
+        println!("Cholesky decomposition requires the 'matrix_decomp' and 'lapack' features.");
+        println!("Enable with: cargo run --example matrix_decomp_example --features matrix_decomp,lapack");
+    }
 
     // QR Decomposition - A = Q * R
     println!("\n2. QR Decomposition");
     println!("-------------------");
-    match a.qr_compute() {
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    match linalg::qr(&a) {
         Ok((q, r)) => {
             println!("Orthogonal matrix Q:");
             print_matrix(&q);
@@ -63,11 +75,17 @@ fn main() {
         }
         Err(e) => println!("Error: {}", e),
     }
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
+    {
+        println!("QR decomposition requires the 'matrix_decomp' and 'lapack' features.");
+        println!("Enable with: cargo run --example matrix_decomp_example --features matrix_decomp,lapack");
+    }
 
     // SVD - A = U * S * V^T
     println!("\n3. Singular Value Decomposition (SVD)");
     println!("------------------------------------");
-    match a.svd_compute() {
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    match linalg::svd(&a) {
         Ok((u, s, vt)) => {
             println!("Left singular vectors U:");
             print_matrix(&u);
@@ -95,11 +113,17 @@ fn main() {
         }
         Err(e) => println!("Error: {}", e),
     }
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
+    {
+        println!("SVD requires the 'matrix_decomp' and 'lapack' features.");
+        println!("Enable with: cargo run --example matrix_decomp_example --features matrix_decomp,lapack");
+    }
 
     // Eigendecomposition - A = P * D * P^(-1)
     println!("\n4. Eigenvalue Decomposition");
     println!("--------------------------");
-    match a.eigh("lower") {
+    #[cfg(feature = "eigenvalues")]
+    match eigenvalues::eigh(&a, "lower") {
         Ok((eigenvalues, eigenvectors)) => {
             println!("Eigenvalues:");
             println!("{:?}", eigenvalues.to_vec());
@@ -124,24 +148,36 @@ fn main() {
         }
         Err(e) => println!("Error: {}", e),
     }
+    #[cfg(not(feature = "eigenvalues"))]
+    {
+        println!("Eigenvalue decomposition requires the 'eigenvalues' feature.");
+        println!("Enable with: cargo run --example matrix_decomp_example --features eigenvalues");
+    }
 
     // LU Decomposition - A = L * U
     println!("\n5. LU Decomposition");
     println!("-------------------");
-    match a.lu() {
-        Ok((l, u, p)) => {
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    match matrix_decomp::lu(&a) {
+        Ok((l, u, _p)) => {
             println!("Lower triangular matrix L:");
             print_matrix(&l);
 
             println!("Upper triangular matrix U:");
             print_matrix(&u);
 
-            println!("Permutation indices: {:?}", p);
-
-            // For a complete example, we would verify L*U = A
-            // But our current implementation is a placeholder
+            // Verify: L * U ≈ A
+            let a_reconstructed = l.matmul(&u).unwrap();
+            println!("Verification - L * U:");
+            print_matrix(&a_reconstructed);
+            println!("Is close to original? {}", is_close(&a, &a_reconstructed));
         }
         Err(e) => println!("Error: {}", e),
+    }
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
+    {
+        println!("LU decomposition requires the 'matrix_decomp' and 'lapack' features.");
+        println!("Enable with: cargo run --example matrix_decomp_example --features matrix_decomp,lapack");
     }
 }
 

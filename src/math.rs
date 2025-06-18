@@ -51,6 +51,12 @@ pub trait ElementWiseMath<T> {
     // Utility functions
     fn clip(&self, min: T, max: T) -> Array<T>;
     fn sign(&self) -> Array<T>;
+
+    // Safe versions that return Result for error handling
+    fn safe_logaddexp(&self, other: &Array<T>) -> Result<Array<T>>;
+    fn safe_logaddexp2(&self, other: &Array<T>) -> Result<Array<T>>;
+    fn safe_atan2(&self, other: &Array<T>) -> Result<Array<T>>;
+    fn safe_hypot(&self, other: &Array<T>) -> Result<Array<T>>;
 }
 
 impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
@@ -110,7 +116,7 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
             let sum = (a - max_val).exp() + (b - max_val).exp();
             max_val + sum.ln()
         })
-        .unwrap_or_else(|_| panic!("Failed to broadcast in logaddexp"))
+        .unwrap_or_else(|e| panic!("Failed to broadcast in logaddexp: {}. Consider using safe_logaddexp() for error handling.", e))
     }
 
     fn logaddexp2(&self, other: &Array<T>) -> Array<T> {
@@ -135,7 +141,7 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
             let sum = (ln_a - max_val).exp() + (ln_b - max_val).exp();
             (max_val + sum.ln()) * log2_e
         })
-        .unwrap_or_else(|_| panic!("Failed to broadcast in logaddexp2"))
+        .unwrap_or_else(|e| panic!("Failed to broadcast in logaddexp2: {}. Consider using safe_logaddexp2() for error handling.", e))
     }
 
     // Trigonometric functions
@@ -164,13 +170,17 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
     }
 
     fn atan2(&self, other: &Array<T>) -> Array<T> {
-        self.zip_with(other, |a, b| a.atan2(b))
-            .unwrap_or_else(|_| panic!("Failed to broadcast in atan2"))
+        self.zip_with(other, |a, b| a.atan2(b)).unwrap_or_else(|e| {
+            panic!(
+                "Failed to broadcast in atan2: {}. Consider using safe_atan2() for error handling.",
+                e
+            )
+        })
     }
 
     fn hypot(&self, other: &Array<T>) -> Array<T> {
         self.zip_with(other, |a, b| (a * a + b * b).sqrt())
-            .unwrap_or_else(|_| panic!("Failed to broadcast in hypot"))
+            .unwrap_or_else(|e| panic!("Failed to broadcast in hypot: {}. Consider using safe_hypot() for error handling.", e))
     }
 
     fn degrees(&self) -> Array<T> {
@@ -248,6 +258,77 @@ impl<T: Float + Clone> ElementWiseMath<T> for Array<T> {
                 -T::one()
             }
         })
+    }
+
+    // Safe versions that return Result for proper error handling
+    fn safe_logaddexp(&self, other: &Array<T>) -> Result<Array<T>> {
+        self.zip_with(other, |a, b| {
+            if a == T::neg_infinity() {
+                return b;
+            }
+            if b == T::neg_infinity() {
+                return a;
+            }
+
+            let max_val = if a > b { a } else { b };
+            let sum = (a - max_val).exp() + (b - max_val).exp();
+            max_val + sum.ln()
+        })
+        .map_err(|e| {
+            crate::error::NumRs2Error::ComputationError(format!(
+                "Broadcasting failed in logaddexp: {}",
+                e
+            ))
+        })
+    }
+
+    fn safe_logaddexp2(&self, other: &Array<T>) -> Result<Array<T>> {
+        let ln2 = T::from(std::f64::consts::LN_2).unwrap();
+        let log2_e = T::from(std::f64::consts::LOG2_E).unwrap();
+
+        self.zip_with(other, |a, b| {
+            if a == T::neg_infinity() {
+                return b;
+            }
+            if b == T::neg_infinity() {
+                return a;
+            }
+
+            let a_scaled = a * ln2;
+            let b_scaled = b * ln2;
+            let max_val = if a_scaled > b_scaled {
+                a_scaled
+            } else {
+                b_scaled
+            };
+            let sum = (a_scaled - max_val).exp() + (b_scaled - max_val).exp();
+            (max_val + sum.ln()) * log2_e
+        })
+        .map_err(|e| {
+            crate::error::NumRs2Error::ComputationError(format!(
+                "Broadcasting failed in logaddexp2: {}",
+                e
+            ))
+        })
+    }
+
+    fn safe_atan2(&self, other: &Array<T>) -> Result<Array<T>> {
+        self.zip_with(other, |a, b| a.atan2(b)).map_err(|e| {
+            crate::error::NumRs2Error::ComputationError(format!(
+                "Broadcasting failed in atan2: {}",
+                e
+            ))
+        })
+    }
+
+    fn safe_hypot(&self, other: &Array<T>) -> Result<Array<T>> {
+        self.zip_with(other, |a, b| (a * a + b * b).sqrt())
+            .map_err(|e| {
+                crate::error::NumRs2Error::ComputationError(format!(
+                    "Broadcasting failed in hypot: {}",
+                    e
+                ))
+            })
     }
 }
 
@@ -342,6 +423,7 @@ pub fn logspace<T: Float + Clone>(start: T, stop: T, num: usize, base: Option<T>
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::meshgrid;
 ///
 /// let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let y = Array::from_vec(vec![4.0, 5.0, 6.0, 7.0]);
@@ -485,6 +567,7 @@ pub fn meshgrid2d<T: Clone>(x: &Array<T>, y: &Array<T>) -> Result<(Array<T>, Arr
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::{mgrid, linspace};
 ///
 /// // Create a 2D meshgrid
 /// let grids = mgrid(&[
@@ -590,6 +673,7 @@ pub fn mgrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::{ogrid, linspace};
 ///
 /// // Create a 2D open meshgrid
 /// let grids = ogrid(&[

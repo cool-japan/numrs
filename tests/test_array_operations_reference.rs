@@ -6,7 +6,9 @@
 
 use approx::assert_relative_eq;
 use numrs2::array::Array;
+use numrs2::math::{arange, linspace, ElementWiseMath};
 use numrs2::prelude::*;
+use numrs2::ufuncs::{cos, sin, tan};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

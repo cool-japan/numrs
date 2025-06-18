@@ -18,6 +18,7 @@ use rand_distr::{Pareto, Pert, StandardNormal};
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Sample from a triangular distribution using inverse CDF
 fn sample_triangular(low: f64, mode: f64, high: f64, u: f64) -> f64 {
@@ -29,7 +30,6 @@ fn sample_triangular(low: f64, mode: f64, high: f64, u: f64) -> f64 {
         high - ((high - low) * (high - mode) * (1.0 - u)).sqrt()
     }
 }
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// RandomState for managing the state of random number generators
 ///
@@ -46,7 +46,7 @@ impl RandomState {
         // Use current time as seed if none provided
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
+            .unwrap_or_else(|_| Duration::from_secs(1));
 
         Self {
             rng: Arc::new(Mutex::new(StdRng::seed_from_u64(now.as_secs()))),
@@ -62,9 +62,14 @@ impl RandomState {
 
     /// Get a locked reference to the RNG
     pub fn get_rng(&self) -> Result<std::sync::MutexGuard<'_, StdRng>> {
-        self.rng
-            .lock()
-            .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))
+        match self.rng.lock() {
+            Ok(guard) => Ok(guard),
+            Err(poisoned) => {
+                // If the lock is poisoned, we can still recover by getting the guard
+                // This allows the random number generation to continue working even after a panic
+                Ok(poisoned.into_inner())
+            }
+        }
     }
 
     /// Generate uniform random values in [0, 1)

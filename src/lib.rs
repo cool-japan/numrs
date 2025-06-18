@@ -1,6 +1,6 @@
 //! # NumRS2: High-Performance Numerical Computing in Rust
 //!
-//! NumRS2 v0.1.0-alpha.4 is a comprehensive numerical computing library for Rust, inspired by NumPy.
+//! NumRS2 is a comprehensive numerical computing library for Rust, inspired by NumPy.
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
@@ -26,30 +26,26 @@
 //! - **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
 //! - **Type Safety**: Leverage Rust's type system for compile-time guarantees
 
-#![allow(deprecated)] // Allow deprecated warnings during transition period
-#![allow(clippy::result_large_err)] // Allow large error types for comprehensive error handling
-#![allow(clippy::needless_range_loop)] // Allow range loops for clarity in numerical code
-#![allow(clippy::mixed_attributes_style)] // Allow mixed attribute styles during transition
-#![allow(clippy::empty_line_after_doc_comments)] // Allow formatting flexibility
-#![allow(clippy::too_many_arguments)] // Allow many arguments for mathematical functions
-#![allow(clippy::identity_op)] // Allow identity operations for clarity in numerical code
-#![allow(clippy::needless_lifetimes)] // Allow explicit lifetimes for clarity
-#![allow(clippy::should_implement_trait)] // Allow trait-like methods with different signatures
-#![allow(clippy::redundant_closure)] // Allow redundant closures for error conversion
-#![allow(clippy::only_used_in_recursion)] // Allow recursive pattern parameters
-#![allow(dead_code)] // Allow dead code during development
-#![allow(clippy::approx_constant)] // Allow approximate constants for SIMD optimization
-#![allow(clippy::excessive_precision)] // Allow high precision for numerical accuracy
+#![allow(deprecated)] // Suppress deprecation warnings for transition modules
+#![allow(clippy::result_large_err)] // Large error types for comprehensive error handling
+#![allow(clippy::needless_range_loop)] // Range loops for clarity in numerical code
+#![allow(clippy::too_many_arguments)] // Mathematical functions often require many parameters
+#![allow(clippy::identity_op)] // Identity operations for clarity in numerical code
+#![allow(clippy::approx_constant)] // Approximate constants for SIMD optimization
+#![allow(clippy::excessive_precision)] // High precision required for numerical accuracy
 
 pub mod algorithms;
 pub mod array;
 pub mod array_ops;
+pub mod array_ops_legacy;
 pub mod arrays;
 pub mod axis_ops;
 pub mod blas;
+pub mod char;
 pub mod comparisons;
 pub mod conversions;
 pub mod error;
+pub mod financial;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod indexing;
@@ -59,6 +55,7 @@ pub mod linalg;
 pub mod linalg_extended;
 pub mod linalg_optimized;
 pub mod linalg_parallel;
+// pub mod linalg_solve; // Loaded via linalg/mod.rs
 pub mod linalg_stable;
 pub mod masked;
 pub mod math;
@@ -69,6 +66,7 @@ pub mod memory_optimize;
 pub mod mmap;
 pub mod parallel;
 pub mod parallel_optimize;
+pub mod printing;
 pub mod random;
 pub mod set_ops;
 pub mod signal;
@@ -118,33 +116,53 @@ pub mod doctests {}
 pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
-    pub use crate::array_ops::{
-        atleast_1d, atleast_2d, atleast_3d, flatten, frombuffer, fromfunction, fromiter, moveaxis,
-        ravel, select, swapaxes, where_cond,
-    };
+    // Import specific non-conflicting functions from legacy module
+    pub use crate::array_ops_legacy::rollaxis;
+    // String and character operations
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
+    pub use crate::char;
+    pub use crate::char::{array_from_strings, StringArray, StringElement};
     pub use crate::comparisons::{
         all, allclose, allclose_with_tol, any, array_equal, equal, greater, greater_equal, isclose,
         isclose_array, less, less_equal, not_equal,
     };
     pub use crate::conversions::*;
     pub use crate::error::{NumRs2Error, Result};
+    pub use crate::financial::{
+        fv, fv_array, irr, irr_multiple_series, mirr, nper, nper_array, npv, npv_multiple_series,
+        npv_rates, pmt, pmt_array, pv, pv_array, rate, rate_array,
+    };
     pub use crate::indexing::*;
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
-    #[allow(ambiguous_glob_reexports)]
-    pub use crate::linalg::*;
-    #[allow(ambiguous_glob_reexports)]
-    pub use crate::linalg_extended::*;
+    // Explicit linear algebra imports to avoid ambiguous re-exports
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    pub use crate::linalg::{
+        cholesky as cholesky_basic, eig, inv, qr as qr_basic, solve, svd as svd_basic,
+    };
+    #[cfg(feature = "lapack")]
+    pub use crate::linalg::{det, matrix_power};
+    pub use crate::linalg::{inner, kron, norm, outer, tensordot, trace, vdot};
+
+    // Note: Matrix decomposition functions are available through conditional re-exports above
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    pub use crate::linalg::{matrix_rank, pinv};
+    // Import specific advanced functions from linalg_extended (avoiding conflicts)
+    pub use crate::linalg_extended::eigenvalue;
     pub use crate::linalg_optimized::{lu_optimized, transpose_optimized, OptimizedBlas};
     pub use crate::linalg_parallel::ParallelLinAlg;
     pub use crate::linalg_stable::{
         CholeskyStableResult, QRPivotedResult, SVDStableResult, StableDecompositions,
     };
     pub use crate::masked::MaskedArray;
-    pub use crate::math::*;
-    pub use crate::math_extended::*;
+    // Core math functions (from ufuncs module)
+    pub use crate::ufuncs::{abs, ceil, exp, floor, log, round, sqrt};
+    // Binary operations that return Result<Array> - use through qualified path
+    // pub use crate::ufuncs::{add, subtract, multiply, divide, power, maximum, minimum};
+    // Extended math functions (avoiding conflicts with core math)
+    pub use crate::math_extended::{erf, erfc, gamma, gammaln};
+    // Note: bessel_i0, bessel_j0, bessel_y0, loggamma not available - use bessel_i(0), etc.
     pub use crate::matrix::{BandedMatrix, Matrix};
     pub use crate::mmap::MmapArray;
     pub use crate::random::advanced_distributions;
@@ -155,17 +173,30 @@ pub mod prelude {
         in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options,
     };
     pub use crate::signal;
-    pub use crate::simd::*;
+    // Explicit SIMD imports to avoid glob conflicts
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
     pub use crate::simd_optimize::{detect_cpu_features, CpuFeatures, SimdImplementation};
     pub use crate::sparse;
     pub use crate::sparse_enhanced::SparseOpsAdvanced;
-    pub use crate::stats::*;
+    // Explicit stats imports to avoid potential conflicts
+    pub use crate::stats::{
+        average, corrcoef, cov, histogram, max_along_axis, min_along_axis, percentile, ptp,
+        quantile, HistBins, Statistics,
+    };
     pub use crate::stride_tricks::{
         as_strided, broadcast_arrays, broadcast_to, byte_strides, set_strides, sliding_window_view,
     };
-    pub use crate::traits::*;
-    pub use crate::ufuncs::*;
+    // Explicit trait imports
+    pub use crate::traits::{
+        ArrayIndexing, ArrayMath, ArrayOps, ArrayReduction, ComplexElement, FloatingPoint,
+        IntegerElement, LinearAlgebra, MatrixDecomposition, NumericElement,
+    };
+    // Explicit ufunc imports
+    pub use crate::ufuncs::{
+        absolute, add, add_scalar, divide, divide_scalar, maximum, minimum, multiply,
+        multiply_scalar, negative, power, power_scalar, subtract, subtract_scalar, BinaryUfunc,
+        UnaryUfunc,
+    };
     pub use crate::unique::{unique, UniqueResult};
     pub use crate::unique_optimized::unique_optimized;
     pub use crate::util::{
@@ -190,6 +221,11 @@ pub mod prelude {
     };
     pub use crate::parallel_optimize::{
         ParallelConfig, ParallelizationThreshold, SchedulingStrategy, WorkloadPartitioning,
+    };
+
+    // Array printing and display
+    pub use crate::printing::{
+        array_str, get_printoptions, reset_printoptions, set_printoptions, PrintOptions,
     };
 
     // Memory allocation optimization
@@ -229,9 +265,10 @@ pub mod prelude {
     };
 
     // New modules
+    #[cfg(feature = "lapack")]
     pub use crate::new_modules::eigenvalues::{eig as eig_general, eigh, eigvals, eigvalsh};
     pub use crate::new_modules::fft::FFT;
-    #[cfg(feature = "matrix_decomp")]
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub use crate::new_modules::matrix_decomp::{
         cholesky, cod, condition_number, lu, pivoted_cholesky, qr, rcond, schur, svd,
     };
@@ -240,13 +277,14 @@ pub mod prelude {
     // GPU acceleration
     #[cfg(feature = "gpu")]
     pub use crate::gpu::{
-        add, divide, matmul, multiply, subtract, transpose, GpuArray, GpuContext,
+        add as gpu_add, divide as gpu_divide, matmul, multiply as gpu_multiply,
+        subtract as gpu_subtract, transpose, GpuArray, GpuContext,
     };
     pub use crate::new_modules::sparse::{SparseArray, SparseMatrix, SparseMatrixFormat};
     pub use crate::new_modules::special::{
-        bessel_i, bessel_j, bessel_k, bessel_y, digamma, ellipe, ellipk, erf, erfc, erfcinv,
-        erfinv, gamma, gammainc, gammaln,
+        bessel_i, bessel_j, bessel_k, bessel_y, digamma, ellipe, ellipk, erfcinv, erfinv, gammainc,
     };
+    // Note: erf, erfc, gamma, gammaln already imported from math_extended
 
     // Advanced array operations (Phase 3)
     pub use crate::arrays::{
@@ -256,7 +294,10 @@ pub mod prelude {
 
     // Re-export advanced types
     pub use crate::types::custom::CustomDType;
-    pub use crate::types::datetime::{DateTime64, DateTimeUnit, DateUnit, TimeDelta64};
+    pub use crate::types::datetime::{
+        business_days, datetime_array, DateTime64, DateTimeUnit, DateUnit, TimeDelta64, Timezone,
+        TimezoneDateTime,
+    };
     pub use crate::types::structured::{DType, Field, RecordArray, StructuredArray};
 
     // Re-export ndarray types for convenience
@@ -268,6 +309,7 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    use crate::simd::{simd_add, simd_div, simd_mul, simd_prod, simd_sqrt, simd_sum};
     use approx::assert_relative_eq;
 
     #[test]
@@ -406,6 +448,7 @@ mod tests {
         assert_relative_eq!(par_sqrt_a.to_vec()[3], 4.0, epsilon = 1e-10);
     }
 
+    #[cfg(feature = "lapack")]
     #[test]
     fn test_linalg_ops() {
         // Create a 2x2 matrix
@@ -444,6 +487,22 @@ mod tests {
         };
         assert_relative_eq!(b_check.to_vec()[0], b.to_vec()[0], epsilon = 1e-10);
         assert_relative_eq!(b_check.to_vec()[1], b.to_vec()[1], epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_tensor_operations() {
+        // Test Kronecker product via prelude
+        let a = Array::<f64>::from_vec(vec![1.0, 2.0]).reshape(&[1, 2]);
+        let b = Array::<f64>::from_vec(vec![3.0, 4.0]).reshape(&[2, 1]);
+
+        let kron_result = kron(&a, &b).unwrap();
+        assert_eq!(kron_result.shape(), &[2, 2]);
+        assert_eq!(kron_result.to_vec(), vec![3.0, 6.0, 4.0, 8.0]);
+
+        // Test tensordot via prelude
+        let tensordot_result = tensordot(&a, &b, &[1, 0]).unwrap();
+        assert_eq!(tensordot_result.shape(), &[1, 1]);
+        assert_relative_eq!(tensordot_result.to_vec()[0], 11.0, epsilon = 1e-10);
     }
 
     #[test]

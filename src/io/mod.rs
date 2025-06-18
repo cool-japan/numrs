@@ -4,10 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
+use std::str::FromStr;
 
 mod npy_npz;
+pub mod text;
 
 pub use npy_npz::*;
+pub use text::*;
 
 /// Module for input/output operations with NumRS arrays.
 ///
@@ -36,6 +39,8 @@ pub enum SerializeFormat {
     Npy,
     /// NumPy NPZ format (zipped NPY files, *.npz)
     Npz,
+    /// Python pickle format (*.pkl)
+    Pickle,
 }
 
 impl<T: Clone + Serialize> Array<T> {
@@ -93,6 +98,10 @@ impl<T: Clone + Serialize> Array<T> {
             )),
             SerializeFormat::Npz => Err(NumRs2Error::SerializationError(
                 "NPZ format serialization to string not supported".to_string(),
+            )),
+            SerializeFormat::Pickle => Err(NumRs2Error::SerializationError(
+                "Pickle format serialization to string not supported (use to_file instead)"
+                    .to_string(),
             )),
         }
     }
@@ -158,6 +167,15 @@ impl<T: Clone + Serialize> Array<T> {
                 // Delegate to the NPY/NPZ module
                 npy_npz::serialize_to_file(self, &mut writer, format)?;
             }
+            SerializeFormat::Pickle => {
+                serde_pickle::to_writer(&mut writer, &serialized, serde_pickle::SerOptions::new())
+                    .map_err(|e| {
+                        NumRs2Error::SerializationError(format!(
+                            "Pickle serialization error: {}",
+                            e
+                        ))
+                    })?;
+            }
         }
 
         Ok(())
@@ -207,7 +225,10 @@ impl<T: Clone + Serialize> Array<T> {
     }
 }
 
-impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
+impl<T: Clone + for<'a> Deserialize<'a> + std::str::FromStr> Array<T>
+where
+    <T as FromStr>::Err: std::fmt::Debug,
+{
     /// Deserialize an array from a string
     ///
     /// # Arguments
@@ -240,17 +261,25 @@ impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
                 Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }
             SerializeFormat::Csv => {
-                let mut reader = csv::Reader::from_reader(s.as_bytes());
+                let mut reader = csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .from_reader(s.as_bytes());
                 let mut data = Vec::new();
 
-                for result in reader.deserialize() {
-                    let record: Vec<T> = result.map_err(|e| {
-                        NumRs2Error::DeserializationError(format!(
-                            "CSV deserialization error: {}",
-                            e
-                        ))
+                for result in reader.records() {
+                    let record = result.map_err(|e| {
+                        NumRs2Error::DeserializationError(format!("CSV reading error: {}", e))
                     })?;
-                    data.extend(record);
+
+                    for field in record.iter() {
+                        let value = field.parse::<T>().map_err(|_| {
+                            NumRs2Error::DeserializationError(format!(
+                                "Failed to parse CSV field: {}",
+                                field
+                            ))
+                        })?;
+                        data.push(value);
+                    }
                 }
 
                 // For CSV, we assume 1D array since we don't have shape information
@@ -264,6 +293,10 @@ impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
             )),
             SerializeFormat::Npz => Err(NumRs2Error::DeserializationError(
                 "NPZ format deserialization from string not supported".to_string(),
+            )),
+            SerializeFormat::Pickle => Err(NumRs2Error::DeserializationError(
+                "Pickle format deserialization from string not supported (use from_file instead)"
+                    .to_string(),
             )),
         }
     }
@@ -307,18 +340,29 @@ impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
                 Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }
             SerializeFormat::Csv => {
-                let mut csv_reader = csv::Reader::from_reader(reader);
+                let mut csv_reader = csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .from_reader(reader);
                 // Read all rows first to determine shape
                 let mut all_rows: Vec<Vec<T>> = Vec::new();
 
-                for result in csv_reader.deserialize() {
-                    let record: Vec<T> = result.map_err(|e| {
-                        NumRs2Error::DeserializationError(format!(
-                            "CSV deserialization error: {}",
-                            e
-                        ))
+                for result in csv_reader.records() {
+                    let record = result.map_err(|e| {
+                        NumRs2Error::DeserializationError(format!("CSV reading error: {}", e))
                     })?;
-                    all_rows.push(record);
+
+                    // Parse each field in the record
+                    let mut row = Vec::new();
+                    for field in record.iter() {
+                        let value = field.parse::<T>().map_err(|_| {
+                            NumRs2Error::DeserializationError(format!(
+                                "Failed to parse CSV field: {}",
+                                field
+                            ))
+                        })?;
+                        row.push(value);
+                    }
+                    all_rows.push(row);
                 }
 
                 if all_rows.is_empty() {
@@ -364,6 +408,19 @@ impl<T: Clone + for<'a> Deserialize<'a>> Array<T> {
             SerializeFormat::Npy | SerializeFormat::Npz => {
                 // Delegate to the NPY/NPZ module for these formats
                 npy_npz::deserialize_from_file(reader, format)
+            }
+            SerializeFormat::Pickle => {
+                let serialized: SerializedArray<T> =
+                    serde_pickle::from_reader(reader, serde_pickle::DeOptions::new()).map_err(
+                        |e| {
+                            NumRs2Error::DeserializationError(format!(
+                                "Pickle deserialization error: {}",
+                                e
+                            ))
+                        },
+                    )?;
+
+                Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }
         }
     }

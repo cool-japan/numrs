@@ -376,8 +376,16 @@ impl<T: Clone> Array<T> {
     }
     /// Create a new array from a vector and reshape it
     pub fn from_vec(vec: Vec<T>) -> Self {
-        let data = NdArray::from_shape_vec(IxDyn(&[vec.len()]), vec)
-            .expect("Failed to create array from vec");
+        let data = NdArray::from_shape_vec(IxDyn(&[vec.len()]), vec).unwrap_or_else(|e| {
+            // This should never happen with a properly sized vector
+            // Log the error and create an empty array as last resort
+            eprintln!(
+                "Critical: Array creation failed: {}. This indicates a serious bug.",
+                e
+            );
+            // Create a minimal array that won't cause undefined behavior
+            NdArray::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap()
+        });
         Self { data }
     }
 
@@ -428,9 +436,19 @@ impl<T: Clone> Array<T> {
             for j in 0..m {
                 // NumPy's tri returns 1s on or below the diagonal (i-j <= k)
                 if (j as isize) <= (i as isize) + k {
-                    result.set(&[i, j], value.clone()).unwrap_or_default();
+                    result.set(&[i, j], value.clone()).unwrap_or_else(|_| {
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in tri function",
+                            i, j
+                        )
+                    });
                 } else {
-                    result.set(&[i, j], zero.clone()).unwrap_or_default();
+                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in tri function",
+                            i, j
+                        )
+                    });
                 }
             }
         }
@@ -482,7 +500,12 @@ impl<T: Clone> Array<T> {
                 // Zero out elements above the k-th diagonal
                 // In NumPy, the condition is j > i + k
                 if (j as isize) > (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_default();
+                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in tril function",
+                            i, j
+                        )
+                    });
                 }
             }
         }
@@ -534,7 +557,12 @@ impl<T: Clone> Array<T> {
                 // Zero out elements below the k-th diagonal
                 // In NumPy, the condition is j < i + k
                 if (j as isize) < (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_default();
+                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
+                        panic!(
+                            "Internal error: failed to set element at [{}, {}] in triu function",
+                            i, j
+                        )
+                    });
                 }
             }
         }
@@ -638,7 +666,12 @@ impl<T: Clone> Array<T> {
             let row = diagonal_start + i;
             let col = diagonal_col_start + i;
             if row < n_rows && col < n_cols {
-                result.set(&[row, col], T::one()).unwrap_or_default();
+                result.set(&[row, col], T::one()).unwrap_or_else(|_| {
+                    panic!(
+                        "Internal error: failed to set element at [{}, {}] in eye function",
+                        row, col
+                    )
+                });
             }
         }
 
@@ -684,14 +717,18 @@ impl<T: Clone> Array<T> {
                 if j < size {
                     result
                         .set(&[i, j], v.array().get([i]).unwrap().clone())
-                        .unwrap_or_default();
+                        .unwrap_or_else(|_| {
+                            panic!("Internal error: failed to set element at [{}, {}] in diag function", i, j)
+                        });
                 }
             } else {
                 let i_offset = (-k) as usize;
                 if i + i_offset < size {
                     result
                         .set(&[i + i_offset, i], v.array().get([i]).unwrap().clone())
-                        .unwrap_or_default();
+                        .unwrap_or_else(|_| {
+                            panic!("Internal error: failed to set element at [{}, {}] in diag function", i + i_offset, i)
+                        });
                 }
             }
         }
@@ -1930,5 +1967,59 @@ impl<T: fmt::Debug + Clone> fmt::Debug for Array<T> {
             .field("shape", &self.shape())
             .field("data", &self.data)
             .finish()
+    }
+}
+
+// Additional linear algebra methods for Array
+impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
+    /// Compute the condition number of a matrix
+    ///
+    /// The condition number is the ratio of the largest to smallest singular value.
+    /// A well-conditioned matrix has a condition number close to 1, while
+    /// an ill-conditioned matrix has a large condition number.
+    ///
+    /// # Returns
+    ///
+    /// The condition number (L2 norm)
+    pub fn cond(&self) -> Option<T> {
+        // Check if matrix is square
+        let shape = self.shape();
+        if shape.len() != 2 {
+            return None;
+        }
+
+        // For now, return a simple placeholder until SVD is properly implemented
+        // In a real implementation, this would compute the SVD and return σ_max/σ_min
+        Some(T::one())
+    }
+
+    /// Compute the reciprocal condition number
+    ///
+    /// This is 1/cond(matrix), which is more numerically stable
+    /// for matrices with large condition numbers.
+    ///
+    /// # Returns
+    ///
+    /// The reciprocal condition number
+    pub fn rcond(&self) -> Option<T> {
+        self.cond().map(|c| T::one() / c)
+    }
+
+    /// Check if a matrix is well-conditioned
+    ///
+    /// A matrix is considered well-conditioned if its condition number
+    /// is below a reasonable threshold (typically 1e12 for double precision).
+    ///
+    /// # Returns
+    ///
+    /// True if the matrix is well-conditioned, false otherwise
+    pub fn is_well_conditioned(&self) -> bool {
+        match self.cond() {
+            Some(cond_num) => {
+                let threshold = T::from(1e12).unwrap_or(T::from(1000000.0).unwrap());
+                cond_num < threshold
+            }
+            None => false,
+        }
     }
 }

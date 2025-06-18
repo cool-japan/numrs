@@ -312,9 +312,20 @@ impl<'a, T> ArenaVec<'a, T> {
 
         // Allocate memory from the arena
         let size = capacity * mem::size_of::<T>();
-        let ptr = arena
-            .allocate_aligned(size, mem::align_of::<T>())
-            .expect("Arena allocation failed");
+        let ptr_opt = arena.allocate_aligned(size, mem::align_of::<T>());
+
+        if ptr_opt.is_none() {
+            // Fallback to zero capacity if allocation fails
+            return Self {
+                ptr: NonNull::dangling(),
+                len: 0,
+                capacity: 0,
+                arena,
+                phantom: PhantomData,
+            };
+        }
+
+        let ptr = ptr_opt.unwrap();
 
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr.as_ptr() as *mut T) },

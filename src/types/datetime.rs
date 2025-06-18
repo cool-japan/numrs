@@ -3,10 +3,12 @@
 //! This module provides data types for working with dates and times,
 //! similar to NumPy's datetime64 and timedelta64.
 
+use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::ops::{Add, Sub};
+use std::ops::{Add, Div, Mul, Sub};
+use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 
 /// Represents the unit of time for date and datetime operations
@@ -234,6 +236,191 @@ impl DateTime64 {
 
         UNIX_EPOCH + Duration::new(secs as u64, nanos)
     }
+
+    /// Parse a DateTime64 from an ISO 8601 string
+    ///
+    /// Supports formats like "2023-12-25T15:30:45" or "2023-12-25"
+    pub fn from_iso_string(s: &str, unit: DateTimeUnit) -> Result<Self> {
+        // Basic ISO 8601 parsing - simplified implementation
+        let parts: Vec<&str> = s.split('T').collect();
+        if parts.is_empty() {
+            return Err(NumRs2Error::ValueError("Invalid date format".to_string()));
+        }
+
+        let date_part = parts[0];
+        let time_part = parts.get(1).unwrap_or(&"00:00:00");
+
+        // Parse date (YYYY-MM-DD)
+        let date_components: Vec<&str> = date_part.split('-').collect();
+        if date_components.len() != 3 {
+            return Err(NumRs2Error::ValueError(
+                "Invalid date format, expected YYYY-MM-DD".to_string(),
+            ));
+        }
+
+        let year: i32 = date_components[0]
+            .parse()
+            .map_err(|_| NumRs2Error::ValueError("Invalid year".to_string()))?;
+        let month: u32 = date_components[1]
+            .parse()
+            .map_err(|_| NumRs2Error::ValueError("Invalid month".to_string()))?;
+        let day: u32 = date_components[2]
+            .parse()
+            .map_err(|_| NumRs2Error::ValueError("Invalid day".to_string()))?;
+
+        // Parse time (HH:MM:SS)
+        let time_components: Vec<&str> = time_part.split(':').collect();
+        let hour: u32 = if !time_components.is_empty() {
+            time_components[0].parse().unwrap_or(0)
+        } else {
+            0
+        };
+        let minute: u32 = if time_components.len() >= 2 {
+            time_components[1].parse().unwrap_or(0)
+        } else {
+            0
+        };
+        let second: u32 = if time_components.len() >= 3 {
+            time_components[2].parse().unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Calculate days since Unix epoch (1970-01-01)
+        let days_since_epoch = days_since_epoch(year, month, day)?;
+        let seconds_in_day = hour * 3600 + minute * 60 + second;
+        let total_seconds = days_since_epoch * 86400 + seconds_in_day as i64;
+
+        // Convert to the requested unit
+        let value = match unit {
+            DateTimeUnit::Year => days_since_epoch / 365,
+            DateTimeUnit::Month => days_since_epoch / 30,
+            DateTimeUnit::Week => days_since_epoch / 7,
+            DateTimeUnit::Day => days_since_epoch,
+            DateTimeUnit::Hour => total_seconds / 3600,
+            DateTimeUnit::Minute => total_seconds / 60,
+            DateTimeUnit::Second => total_seconds,
+            DateTimeUnit::Millisecond => total_seconds * 1000,
+            DateTimeUnit::Microsecond => total_seconds * 1_000_000,
+            DateTimeUnit::Nanosecond => total_seconds * 1_000_000_000,
+        };
+
+        Ok(Self { value, unit })
+    }
+
+    /// Format as ISO 8601 string
+    pub fn to_iso_string(&self) -> Result<String> {
+        let dt_seconds = self.to_unit(DateTimeUnit::Second);
+        let total_seconds = dt_seconds.value;
+
+        // Convert to date components
+        let days_since_epoch = total_seconds / 86400;
+        let seconds_in_day = (total_seconds % 86400) as u32;
+
+        let (year, month, day) = date_from_days_since_epoch(days_since_epoch)?;
+        let hour = seconds_in_day / 3600;
+        let minute = (seconds_in_day % 3600) / 60;
+        let second = seconds_in_day % 60;
+
+        Ok(format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+            year, month, day, hour, minute, second
+        ))
+    }
+}
+
+/// Calculate days since Unix epoch (1970-01-01)
+fn days_since_epoch(year: i32, month: u32, day: u32) -> Result<i64> {
+    if !(1..=12).contains(&month) {
+        return Err(NumRs2Error::ValueError("Invalid month".to_string()));
+    }
+    if day < 1 || day > days_in_month(year, month) {
+        return Err(NumRs2Error::ValueError("Invalid day".to_string()));
+    }
+
+    // Days in each month (non-leap year)
+    const DAYS_IN_MONTH: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+    // Calculate total days
+    let mut total_days = 0i64;
+
+    // Add days for complete years
+    for y in 1970..year {
+        total_days += if is_leap_year(y) { 366 } else { 365 };
+    }
+
+    // Add days for complete months in the current year
+    for m in 1..month {
+        total_days += DAYS_IN_MONTH[(m - 1) as usize] as i64;
+        if m == 2 && is_leap_year(year) {
+            total_days += 1; // Leap day
+        }
+    }
+
+    // Add remaining days
+    total_days += (day - 1) as i64;
+
+    Ok(total_days)
+}
+
+/// Convert days since epoch to date components
+fn date_from_days_since_epoch(days: i64) -> Result<(i32, u32, u32)> {
+    let mut remaining_days = days;
+    let mut year = 1970i32;
+
+    // Find the year
+    loop {
+        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+        if remaining_days >= days_in_year {
+            remaining_days -= days_in_year;
+            year += 1;
+        } else {
+            break;
+        }
+    }
+
+    // Find the month and day
+    const DAYS_IN_MONTH: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 1u32;
+
+    for m in 1..=12 {
+        let mut days_in_month = DAYS_IN_MONTH[(m - 1) as usize] as i64;
+        if m == 2 && is_leap_year(year) {
+            days_in_month += 1; // Leap day
+        }
+
+        if remaining_days >= days_in_month {
+            remaining_days -= days_in_month;
+            month += 1;
+        } else {
+            break;
+        }
+    }
+
+    let day = (remaining_days + 1) as u32;
+
+    Ok((year, month, day))
+}
+
+/// Check if a year is a leap year
+fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+/// Get number of days in a month
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if is_leap_year(year) {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 0,
+    }
 }
 
 impl fmt::Display for DateTime64 {
@@ -385,6 +572,22 @@ impl TimeDelta64 {
             }
         }
     }
+
+    /// Get absolute value of the timedelta
+    pub fn abs(&self) -> Self {
+        Self {
+            value: self.value.abs(),
+            unit: self.unit,
+        }
+    }
+
+    /// Get negative of the timedelta  
+    pub fn neg(&self) -> Self {
+        Self {
+            value: -self.value,
+            unit: self.unit,
+        }
+    }
 }
 
 impl fmt::Display for TimeDelta64 {
@@ -466,6 +669,699 @@ impl Sub for TimeDelta64 {
         TimeDelta64 {
             value: self.value - td.value,
             unit: self.unit,
+        }
+    }
+}
+
+impl Mul<i64> for TimeDelta64 {
+    type Output = TimeDelta64;
+
+    fn mul(self, rhs: i64) -> Self::Output {
+        TimeDelta64 {
+            value: self.value * rhs,
+            unit: self.unit,
+        }
+    }
+}
+
+impl Mul<TimeDelta64> for i64 {
+    type Output = TimeDelta64;
+
+    fn mul(self, rhs: TimeDelta64) -> Self::Output {
+        TimeDelta64 {
+            value: self * rhs.value,
+            unit: rhs.unit,
+        }
+    }
+}
+
+impl Div<i64> for TimeDelta64 {
+    type Output = TimeDelta64;
+
+    fn div(self, rhs: i64) -> Self::Output {
+        TimeDelta64 {
+            value: self.value / rhs,
+            unit: self.unit,
+        }
+    }
+}
+
+impl Div for TimeDelta64 {
+    type Output = f64;
+
+    fn div(self, rhs: TimeDelta64) -> Self::Output {
+        // Convert to same unit and divide
+        let rhs_converted = rhs.to_unit(self.unit);
+        self.value as f64 / rhs_converted.value as f64
+    }
+}
+
+impl std::ops::Neg for TimeDelta64 {
+    type Output = TimeDelta64;
+
+    fn neg(self) -> Self::Output {
+        TimeDelta64 {
+            value: -self.value,
+            unit: self.unit,
+        }
+    }
+}
+
+impl FromStr for DateTime64 {
+    type Err = NumRs2Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        // Default to second precision for parsing
+        Self::from_iso_string(s, DateTimeUnit::Second)
+    }
+}
+
+/// Array creation functions for datetime arrays
+pub mod datetime_array {
+    use super::*;
+
+    /// Create an array of datetime values from start to stop with given frequency
+    ///
+    /// Similar to NumPy's `pd.date_range()` or `np.arange()` for datetimes
+    pub fn date_range(
+        start: &str,
+        end: Option<&str>,
+        periods: Option<usize>,
+        freq: DateTimeUnit,
+        unit: DateTimeUnit,
+    ) -> Result<Array<DateTime64>> {
+        let start_dt = DateTime64::from_iso_string(start, unit)?;
+
+        match (end, periods) {
+            (Some(end_str), None) => {
+                // Generate from start to end
+                let end_dt = DateTime64::from_iso_string(end_str, unit)?;
+                let _duration = end_dt - start_dt;
+
+                // Calculate step size - should be 1 unit of the frequency
+                let step = TimeDelta64::new(1, freq);
+                let mut result = Vec::new();
+                let mut current = start_dt;
+
+                while current.value <= end_dt.value {
+                    result.push(current);
+                    current = current + step;
+                }
+
+                Ok(Array::from_vec(result))
+            }
+            (None, Some(num_periods)) => {
+                // Generate fixed number of periods
+                let step = TimeDelta64::new(1, freq);
+                let mut result = Vec::with_capacity(num_periods);
+                let mut current = start_dt;
+
+                for _ in 0..num_periods {
+                    result.push(current);
+                    current = current + step;
+                }
+
+                Ok(Array::from_vec(result))
+            }
+            (Some(_), Some(_)) => Err(NumRs2Error::ValueError(
+                "Cannot specify both end and periods".to_string(),
+            )),
+            (None, None) => Err(NumRs2Error::ValueError(
+                "Must specify either end or periods".to_string(),
+            )),
+        }
+    }
+
+    /// Create an array of timedelta values
+    pub fn timedelta_range(
+        start: i64,
+        end: Option<i64>,
+        periods: Option<usize>,
+        unit: DateTimeUnit,
+    ) -> Result<Array<TimeDelta64>> {
+        match (end, periods) {
+            (Some(end_val), None) => {
+                let mut result = Vec::new();
+                for val in start..=end_val {
+                    result.push(TimeDelta64::new(val, unit));
+                }
+                Ok(Array::from_vec(result))
+            }
+            (None, Some(num_periods)) => {
+                let mut result = Vec::with_capacity(num_periods);
+                for i in 0..num_periods {
+                    result.push(TimeDelta64::new(start + i as i64, unit));
+                }
+                Ok(Array::from_vec(result))
+            }
+            (Some(_), Some(_)) => Err(NumRs2Error::ValueError(
+                "Cannot specify both end and periods".to_string(),
+            )),
+            (None, None) => Err(NumRs2Error::ValueError(
+                "Must specify either end or periods".to_string(),
+            )),
+        }
+    }
+
+    /// Create an array of datetime values from string representations
+    pub fn datetime_from_strings(
+        strings: &[&str],
+        unit: DateTimeUnit,
+    ) -> Result<Array<DateTime64>> {
+        let mut result = Vec::with_capacity(strings.len());
+
+        for s in strings {
+            let dt = DateTime64::from_iso_string(s, unit)?;
+            result.push(dt);
+        }
+
+        Ok(Array::from_vec(result))
+    }
+
+    /// Create datetime array for today with different time units
+    pub fn today(unit: DateTimeUnit) -> Result<DateTime64> {
+        let now = SystemTime::now();
+        DateTime64::from_system_time(now, unit)
+    }
+
+    /// Create datetime array for now with different time units  
+    pub fn now(unit: DateTimeUnit) -> Result<DateTime64> {
+        today(unit)
+    }
+}
+
+/// Timezone-aware datetime support
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Timezone {
+    /// Timezone name (e.g., "UTC", "EST", "PST")
+    pub name: String,
+    /// Offset from UTC in minutes
+    pub offset_minutes: i32,
+}
+
+impl Timezone {
+    /// Create UTC timezone
+    pub fn utc() -> Self {
+        Self {
+            name: "UTC".to_string(),
+            offset_minutes: 0,
+        }
+    }
+
+    /// Create timezone with fixed offset from UTC
+    pub fn fixed_offset(name: &str, hours: i32, minutes: i32) -> Self {
+        Self {
+            name: name.to_string(),
+            offset_minutes: hours * 60 + minutes,
+        }
+    }
+
+    /// Common timezone presets
+    pub fn est() -> Self {
+        Self::fixed_offset("EST", -5, 0)
+    }
+
+    pub fn pst() -> Self {
+        Self::fixed_offset("PST", -8, 0)
+    }
+
+    pub fn cet() -> Self {
+        Self::fixed_offset("CET", 1, 0)
+    }
+
+    pub fn jst() -> Self {
+        Self::fixed_offset("JST", 9, 0)
+    }
+}
+
+impl fmt::Display for Timezone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let sign = if self.offset_minutes >= 0 { "+" } else { "-" };
+        let abs_minutes = self.offset_minutes.abs();
+        let hours = abs_minutes / 60;
+        let minutes = abs_minutes % 60;
+        write!(f, "{} ({}{:02}:{:02})", self.name, sign, hours, minutes)
+    }
+}
+
+/// Timezone-aware datetime
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TimezoneDateTime {
+    /// The UTC datetime value
+    pub utc_datetime: DateTime64,
+    /// The timezone information
+    pub timezone: Timezone,
+}
+
+impl TimezoneDateTime {
+    /// Create a new timezone-aware datetime
+    pub fn new(utc_datetime: DateTime64, timezone: Timezone) -> Self {
+        Self {
+            utc_datetime,
+            timezone,
+        }
+    }
+
+    /// Create from local time and timezone
+    pub fn from_local(local_datetime: DateTime64, timezone: Timezone) -> Self {
+        // Convert local time to UTC
+        let offset_delta = TimeDelta64::new(timezone.offset_minutes as i64, DateTimeUnit::Minute);
+        let utc_datetime = local_datetime - offset_delta;
+
+        Self {
+            utc_datetime,
+            timezone,
+        }
+    }
+
+    /// Parse timezone-aware datetime from ISO 8601 string with timezone
+    ///
+    /// Supports formats like "2023-12-25T15:30:45+05:00" or "2023-12-25T15:30:45Z"
+    pub fn from_iso_string_with_tz(s: &str, unit: DateTimeUnit) -> Result<Self> {
+        // Handle Z suffix (UTC)
+        if let Some(datetime_part) = s.strip_suffix('Z') {
+            let utc_dt = DateTime64::from_iso_string(datetime_part, unit)?;
+            return Ok(Self::new(utc_dt, Timezone::utc()));
+        }
+
+        // Look for timezone offset (+/-HH:MM)
+        let tz_patterns = ["+", "-"];
+        for &pattern in &tz_patterns {
+            if let Some(tz_pos) = s.rfind(pattern) {
+                let datetime_part = &s[..tz_pos];
+                let tz_part = &s[tz_pos..];
+
+                // Parse timezone offset
+                let tz_sign = if pattern == "+" { 1 } else { -1 };
+                let tz_components: Vec<&str> = tz_part[1..].split(':').collect();
+
+                if tz_components.len() >= 2 {
+                    let tz_hours: i32 = tz_components[0].parse().map_err(|_| {
+                        NumRs2Error::ValueError("Invalid timezone hours".to_string())
+                    })?;
+                    let tz_minutes: i32 = tz_components[1].parse().map_err(|_| {
+                        NumRs2Error::ValueError("Invalid timezone minutes".to_string())
+                    })?;
+
+                    let offset_minutes = tz_sign * (tz_hours * 60 + tz_minutes);
+                    let timezone = Timezone {
+                        name: tz_part.to_string(),
+                        offset_minutes,
+                    };
+
+                    // Parse datetime as local time and convert
+                    let local_dt = DateTime64::from_iso_string(datetime_part, unit)?;
+                    return Ok(Self::from_local(local_dt, timezone));
+                }
+            }
+        }
+
+        // No timezone found, assume UTC
+        let utc_dt = DateTime64::from_iso_string(s, unit)?;
+        Ok(Self::new(utc_dt, Timezone::utc()))
+    }
+
+    /// Get the local datetime in the specified timezone
+    pub fn to_local(&self) -> DateTime64 {
+        let offset_delta =
+            TimeDelta64::new(self.timezone.offset_minutes as i64, DateTimeUnit::Minute);
+        self.utc_datetime + offset_delta
+    }
+
+    /// Convert to a different timezone
+    pub fn to_timezone(&self, new_timezone: Timezone) -> Self {
+        Self {
+            utc_datetime: self.utc_datetime,
+            timezone: new_timezone,
+        }
+    }
+
+    /// Format as ISO 8601 string with timezone
+    pub fn to_iso_string_with_tz(&self) -> Result<String> {
+        let local_dt = self.to_local();
+        let base_str = local_dt.to_iso_string()?;
+
+        if self.timezone.name == "UTC" {
+            Ok(format!("{}Z", base_str))
+        } else {
+            let sign = if self.timezone.offset_minutes >= 0 {
+                "+"
+            } else {
+                "-"
+            };
+            let abs_minutes = self.timezone.offset_minutes.abs();
+            let hours = abs_minutes / 60;
+            let minutes = abs_minutes % 60;
+            Ok(format!("{}{}{:02}:{:02}", base_str, sign, hours, minutes))
+        }
+    }
+}
+
+impl fmt::Display for TimezoneDateTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.to_iso_string_with_tz() {
+            Ok(s) => write!(f, "{}", s),
+            Err(_) => write!(f, "<invalid datetime>"),
+        }
+    }
+}
+
+impl Add<TimeDelta64> for TimezoneDateTime {
+    type Output = TimezoneDateTime;
+
+    fn add(self, rhs: TimeDelta64) -> Self::Output {
+        TimezoneDateTime {
+            utc_datetime: self.utc_datetime + rhs,
+            timezone: self.timezone,
+        }
+    }
+}
+
+impl Sub<TimeDelta64> for TimezoneDateTime {
+    type Output = TimezoneDateTime;
+
+    fn sub(self, rhs: TimeDelta64) -> Self::Output {
+        TimezoneDateTime {
+            utc_datetime: self.utc_datetime - rhs,
+            timezone: self.timezone,
+        }
+    }
+}
+
+impl Sub for TimezoneDateTime {
+    type Output = TimeDelta64;
+
+    fn sub(self, rhs: TimezoneDateTime) -> Self::Output {
+        self.utc_datetime - rhs.utc_datetime
+    }
+}
+
+/// Business day and calendar functions
+pub mod business_days {
+    use super::*;
+
+    /// Day of the week (0 = Monday, 6 = Sunday)
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Weekday {
+        Monday = 0,
+        Tuesday = 1,
+        Wednesday = 2,
+        Thursday = 3,
+        Friday = 4,
+        Saturday = 5,
+        Sunday = 6,
+    }
+
+    impl Weekday {
+        /// Check if this is a business day (Monday-Friday)
+        pub fn is_business_day(&self) -> bool {
+            matches!(
+                self,
+                Weekday::Monday
+                    | Weekday::Tuesday
+                    | Weekday::Wednesday
+                    | Weekday::Thursday
+                    | Weekday::Friday
+            )
+        }
+    }
+
+    /// Get the weekday for a given date
+    pub fn weekday(dt: &DateTime64) -> Result<Weekday> {
+        let dt_days = dt.to_unit(DateTimeUnit::Day);
+        // Unix epoch (1970-01-01) was a Thursday (index 3)
+        let days_since_epoch = dt_days.value;
+        let weekday_index = ((days_since_epoch + 3) % 7 + 7) % 7; // Handle negative numbers
+
+        match weekday_index {
+            0 => Ok(Weekday::Monday),
+            1 => Ok(Weekday::Tuesday),
+            2 => Ok(Weekday::Wednesday),
+            3 => Ok(Weekday::Thursday),
+            4 => Ok(Weekday::Friday),
+            5 => Ok(Weekday::Saturday),
+            6 => Ok(Weekday::Sunday),
+            _ => Err(NumRs2Error::ValueError(
+                "Invalid weekday calculation".to_string(),
+            )),
+        }
+    }
+
+    /// Check if a date is a business day
+    pub fn is_busday(dt: &DateTime64) -> Result<bool> {
+        let wd = weekday(dt)?;
+        Ok(wd.is_business_day())
+    }
+
+    /// Count business days between two dates
+    pub fn busday_count(start: &DateTime64, end: &DateTime64) -> Result<i64> {
+        let start_days = start.to_unit(DateTimeUnit::Day);
+        let end_days = end.to_unit(DateTimeUnit::Day);
+
+        if start_days.value > end_days.value {
+            return Ok(-busday_count(end, start)?);
+        }
+
+        let mut count = 0i64;
+        let mut current = start_days;
+
+        while current.value < end_days.value {
+            if is_busday(&current)? {
+                count += 1;
+            }
+            current = current + TimeDelta64::new(1, DateTimeUnit::Day);
+        }
+
+        Ok(count)
+    }
+
+    /// Offset a date by a number of business days
+    pub fn busday_offset(dt: &DateTime64, offset: i64) -> Result<DateTime64> {
+        let mut current = dt.to_unit(DateTimeUnit::Day);
+        let mut remaining = offset.abs();
+        let direction = if offset >= 0 { 1 } else { -1 };
+
+        while remaining > 0 {
+            current = current + TimeDelta64::new(direction, DateTimeUnit::Day);
+            if is_busday(&current)? {
+                remaining -= 1;
+            }
+        }
+
+        Ok(current.to_unit(dt.unit))
+    }
+
+    /// Holiday calendar - simple implementation with common holidays
+    #[derive(Debug, Clone)]
+    pub struct HolidayCalendar {
+        holidays: Vec<DateTime64>,
+    }
+
+    impl HolidayCalendar {
+        /// Create a new holiday calendar
+        pub fn new() -> Self {
+            Self {
+                holidays: Vec::new(),
+            }
+        }
+
+        /// Add a holiday to the calendar
+        pub fn add_holiday(&mut self, date: DateTime64) {
+            self.holidays.push(date.to_unit(DateTimeUnit::Day));
+        }
+
+        /// Check if a date is a holiday
+        pub fn is_holiday(&self, dt: &DateTime64) -> bool {
+            let dt_days = dt.to_unit(DateTimeUnit::Day);
+            self.holidays.iter().any(|h| h.value == dt_days.value)
+        }
+
+        /// Check if a date is a business day (not weekend and not holiday)
+        pub fn is_business_day(&self, dt: &DateTime64) -> Result<bool> {
+            Ok(is_busday(dt)? && !self.is_holiday(dt))
+        }
+
+        /// Count business days between two dates considering holidays
+        pub fn business_day_count(&self, start: &DateTime64, end: &DateTime64) -> Result<i64> {
+            let start_days = start.to_unit(DateTimeUnit::Day);
+            let end_days = end.to_unit(DateTimeUnit::Day);
+
+            if start_days.value > end_days.value {
+                return Ok(-self.business_day_count(end, start)?);
+            }
+
+            let mut count = 0i64;
+            let mut current = start_days;
+
+            while current.value < end_days.value {
+                if self.is_business_day(&current)? {
+                    count += 1;
+                }
+                current = current + TimeDelta64::new(1, DateTimeUnit::Day);
+            }
+
+            Ok(count)
+        }
+
+        /// Create a calendar with US federal holidays for a given year
+        pub fn us_federal(year: i32) -> Result<Self> {
+            let mut calendar = Self::new();
+
+            // New Year's Day - January 1
+            calendar.add_holiday(DateTime64::from_iso_string(
+                &format!("{}-01-01", year),
+                DateTimeUnit::Day,
+            )?);
+
+            // Independence Day - July 4
+            calendar.add_holiday(DateTime64::from_iso_string(
+                &format!("{}-07-04", year),
+                DateTimeUnit::Day,
+            )?);
+
+            // Christmas Day - December 25
+            calendar.add_holiday(DateTime64::from_iso_string(
+                &format!("{}-12-25", year),
+                DateTimeUnit::Day,
+            )?);
+
+            // Martin Luther King Jr. Day - Third Monday in January
+            if let Some(mlk_day) = Self::nth_weekday_of_month(year, 1, Weekday::Monday, 3) {
+                calendar.add_holiday(mlk_day);
+            }
+
+            // Presidents' Day - Third Monday in February
+            if let Some(presidents_day) = Self::nth_weekday_of_month(year, 2, Weekday::Monday, 3) {
+                calendar.add_holiday(presidents_day);
+            }
+
+            // Memorial Day - Last Monday in May
+            if let Some(memorial_day) = Self::last_weekday_of_month(year, 5, Weekday::Monday) {
+                calendar.add_holiday(memorial_day);
+            }
+
+            // Labor Day - First Monday in September
+            if let Some(labor_day) = Self::nth_weekday_of_month(year, 9, Weekday::Monday, 1) {
+                calendar.add_holiday(labor_day);
+            }
+
+            // Columbus Day - Second Monday in October
+            if let Some(columbus_day) = Self::nth_weekday_of_month(year, 10, Weekday::Monday, 2) {
+                calendar.add_holiday(columbus_day);
+            }
+
+            // Veterans Day - November 11
+            calendar.add_holiday(DateTime64::from_iso_string(
+                &format!("{}-11-11", year),
+                DateTimeUnit::Day,
+            )?);
+
+            // Thanksgiving - Fourth Thursday in November
+            if let Some(thanksgiving) = Self::nth_weekday_of_month(year, 11, Weekday::Thursday, 4) {
+                calendar.add_holiday(thanksgiving);
+            }
+
+            Ok(calendar)
+        }
+
+        /// Calculate the nth occurrence of a weekday in a given month
+        /// target_weekday: The target Weekday enum value
+        /// occurrence: 1=first, 2=second, 3=third, 4=fourth
+        fn nth_weekday_of_month(
+            year: i32,
+            month: u8,
+            target_weekday: Weekday,
+            occurrence: u8,
+        ) -> Option<DateTime64> {
+            if month == 0 || month > 12 || occurrence == 0 || occurrence > 5 {
+                return None;
+            }
+
+            // Get the first day of the month
+            let first_day = DateTime64::from_iso_string(
+                &format!("{}-{:02}-01", year, month),
+                DateTimeUnit::Day,
+            )
+            .ok()?;
+            let first_weekday = weekday(&first_day).ok()?;
+
+            // Calculate days to add to get to the first occurrence of target weekday
+            let target_weekday_num = target_weekday as u8;
+            let first_weekday_num = first_weekday as u8;
+
+            let days_to_first = if target_weekday_num >= first_weekday_num {
+                target_weekday_num - first_weekday_num
+            } else {
+                7 - (first_weekday_num - target_weekday_num)
+            };
+
+            // Calculate the target date
+            let target_day = 1 + days_to_first + (occurrence - 1) * 7;
+
+            // Check if the target day is valid for this month
+            let days_in_month = Self::days_in_month(year, month);
+            if target_day > days_in_month {
+                return None;
+            }
+
+            DateTime64::from_iso_string(
+                &format!("{}-{:02}-{:02}", year, month, target_day),
+                DateTimeUnit::Day,
+            )
+            .ok()
+        }
+
+        /// Calculate the last occurrence of a weekday in a given month
+        /// target_weekday: The target Weekday enum value
+        fn last_weekday_of_month(
+            year: i32,
+            month: u8,
+            target_weekday: Weekday,
+        ) -> Option<DateTime64> {
+            if month == 0 || month > 12 {
+                return None;
+            }
+
+            let days_in_month = Self::days_in_month(year, month);
+
+            // Start from the last day and work backwards
+            for day in (1..=days_in_month).rev() {
+                if let Ok(date) = DateTime64::from_iso_string(
+                    &format!("{}-{:02}-{:02}", year, month, day),
+                    DateTimeUnit::Day,
+                ) {
+                    if let Ok(day_weekday) = weekday(&date) {
+                        if day_weekday as u8 == target_weekday as u8 {
+                            return Some(date);
+                        }
+                    }
+                }
+            }
+
+            None
+        }
+
+        /// Get the number of days in a given month
+        fn days_in_month(year: i32, month: u8) -> u8 {
+            match month {
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                4 | 6 | 9 | 11 => 30,
+                2 => {
+                    // Check for leap year
+                    if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+                        29
+                    } else {
+                        28
+                    }
+                }
+                _ => 0,
+            }
+        }
+    }
+
+    impl Default for HolidayCalendar {
+        fn default() -> Self {
+            Self::new()
         }
     }
 }
@@ -585,5 +1481,228 @@ mod tests {
         // Convert to seconds to see the actual value
         let dt2_sec = dt2.to_unit(DateTimeUnit::Second);
         assert_eq!(dt2_sec.value(), 60); // 1 minute = 60 seconds
+    }
+
+    #[test]
+    fn test_datetime_parsing() {
+        // Test ISO string parsing
+        let dt = DateTime64::from_iso_string("2023-12-25T15:30:45", DateTimeUnit::Second).unwrap();
+        let iso_str = dt.to_iso_string().unwrap();
+        assert!(iso_str.starts_with("2023-12-25T15:30:45"));
+
+        // Test date-only parsing
+        let dt2 = DateTime64::from_iso_string("2023-01-01", DateTimeUnit::Day).unwrap();
+        let iso_str2 = dt2.to_iso_string().unwrap();
+        assert!(iso_str2.starts_with("2023-01-01T00:00:00"));
+    }
+
+    #[test]
+    fn test_timedelta_arithmetic() {
+        let td1 = TimeDelta64::new(100, DateTimeUnit::Second);
+        let td2 = TimeDelta64::new(50, DateTimeUnit::Second);
+
+        // Test multiplication
+        let td3 = td1 * 2;
+        assert_eq!(td3.value(), 200);
+
+        let td4 = 3 * td2;
+        assert_eq!(td4.value(), 150);
+
+        // Test division
+        let td5 = td1 / 2;
+        assert_eq!(td5.value(), 50);
+
+        let ratio = td1 / td2;
+        assert_eq!(ratio, 2.0);
+
+        // Test negation
+        let td6 = -td1;
+        assert_eq!(td6.value(), -100);
+    }
+
+    #[test]
+    fn test_date_range_creation() {
+        // Test date range with end date
+        let range1 = datetime_array::date_range(
+            "2023-01-01",
+            Some("2023-01-05"),
+            None,
+            DateTimeUnit::Day,
+            DateTimeUnit::Day,
+        )
+        .unwrap();
+        assert!(range1.size() >= 4);
+
+        // Test date range with periods
+        let range2 = datetime_array::date_range(
+            "2023-01-01",
+            None,
+            Some(5),
+            DateTimeUnit::Day,
+            DateTimeUnit::Day,
+        )
+        .unwrap();
+        assert_eq!(range2.size(), 5);
+    }
+
+    #[test]
+    fn test_timedelta_range_creation() {
+        // Test timedelta range with end
+        let range1 =
+            datetime_array::timedelta_range(0, Some(10), None, DateTimeUnit::Second).unwrap();
+        assert_eq!(range1.size(), 11); // 0 to 10 inclusive
+
+        // Test timedelta range with periods
+        let range2 =
+            datetime_array::timedelta_range(5, None, Some(3), DateTimeUnit::Minute).unwrap();
+        assert_eq!(range2.size(), 3);
+    }
+
+    #[test]
+    fn test_business_days() {
+        use business_days::*;
+
+        // Test weekday calculation (2023-01-01 was a Sunday)
+        let dt = DateTime64::from_iso_string("2023-01-01", DateTimeUnit::Day).unwrap();
+        let wd = weekday(&dt).unwrap();
+        assert_eq!(wd, Weekday::Sunday);
+        assert!(!wd.is_business_day());
+
+        // Test business day check (2023-01-02 was a Monday)
+        let dt2 = DateTime64::from_iso_string("2023-01-02", DateTimeUnit::Day).unwrap();
+        assert!(is_busday(&dt2).unwrap());
+
+        // Test business day count
+        let start = DateTime64::from_iso_string("2023-01-02", DateTimeUnit::Day).unwrap(); // Monday
+        let end = DateTime64::from_iso_string("2023-01-06", DateTimeUnit::Day).unwrap(); // Friday
+        let count = busday_count(&start, &end).unwrap();
+        assert_eq!(count, 4); // Mon, Tue, Wed, Thu (not including end date)
+
+        // Test business day offset
+        let offset_dt = busday_offset(&start, 2).unwrap();
+        let expected = DateTime64::from_iso_string("2023-01-04", DateTimeUnit::Day).unwrap(); // Wednesday
+        assert_eq!(offset_dt.value, expected.value);
+    }
+
+    #[test]
+    fn test_holiday_calendar() {
+        use business_days::*;
+
+        let mut calendar = HolidayCalendar::new();
+        let holiday = DateTime64::from_iso_string("2023-07-04", DateTimeUnit::Day).unwrap();
+        calendar.add_holiday(holiday);
+
+        // Test holiday detection
+        assert!(calendar.is_holiday(&holiday));
+
+        let non_holiday = DateTime64::from_iso_string("2023-07-05", DateTimeUnit::Day).unwrap();
+        assert!(!calendar.is_holiday(&non_holiday));
+
+        // Test US federal calendar creation
+        let us_calendar = HolidayCalendar::us_federal(2023).unwrap();
+        let new_years = DateTime64::from_iso_string("2023-01-01", DateTimeUnit::Day).unwrap();
+        assert!(us_calendar.is_holiday(&new_years));
+    }
+
+    #[test]
+    fn test_leap_year_calculations() {
+        // Test leap year function
+        assert!(is_leap_year(2000)); // Divisible by 400
+        assert!(is_leap_year(2004)); // Divisible by 4, not by 100
+        assert!(!is_leap_year(1900)); // Divisible by 100, not by 400
+        assert!(!is_leap_year(2001)); // Not divisible by 4
+
+        // Test February days
+        assert_eq!(days_in_month(2000, 2), 29); // Leap year
+        assert_eq!(days_in_month(2001, 2), 28); // Non-leap year
+        assert_eq!(days_in_month(2023, 1), 31); // January
+        assert_eq!(days_in_month(2023, 4), 30); // April
+    }
+
+    #[test]
+    fn test_timezone_support() {
+        // Test timezone creation
+        let utc = Timezone::utc();
+        assert_eq!(utc.offset_minutes, 0);
+        assert_eq!(utc.name, "UTC");
+
+        let est = Timezone::est();
+        assert_eq!(est.offset_minutes, -300); // -5 hours
+
+        let custom_tz = Timezone::fixed_offset("GMT+5:30", 5, 30);
+        assert_eq!(custom_tz.offset_minutes, 330); // 5.5 hours
+
+        // Test timezone display
+        let tz_str = format!("{}", est);
+        assert!(tz_str.contains("EST"));
+        assert!(tz_str.contains("-05:00"));
+    }
+
+    #[test]
+    fn test_timezone_datetime() {
+        // Test creation from UTC
+        let utc_dt =
+            DateTime64::from_iso_string("2023-01-01T12:00:00", DateTimeUnit::Second).unwrap();
+        let tz_dt = TimezoneDateTime::new(utc_dt, Timezone::est());
+
+        // Test local time conversion
+        let local_dt = tz_dt.to_local();
+        let local_str = local_dt.to_iso_string().unwrap();
+        assert!(local_str.starts_with("2023-01-01T07:00:00")); // UTC 12:00 = EST 07:00
+
+        // Test timezone conversion
+        let pst_dt = tz_dt.to_timezone(Timezone::pst());
+        assert_eq!(pst_dt.timezone.name, "PST");
+        assert_eq!(pst_dt.utc_datetime, tz_dt.utc_datetime); // UTC time should be same
+    }
+
+    #[test]
+    fn test_timezone_datetime_parsing() {
+        // Test UTC parsing
+        let utc_dt =
+            TimezoneDateTime::from_iso_string_with_tz("2023-01-01T12:00:00Z", DateTimeUnit::Second)
+                .unwrap();
+        assert_eq!(utc_dt.timezone.name, "UTC");
+
+        // Test positive offset parsing
+        let plus_dt = TimezoneDateTime::from_iso_string_with_tz(
+            "2023-01-01T12:00:00+05:30",
+            DateTimeUnit::Second,
+        )
+        .unwrap();
+        assert_eq!(plus_dt.timezone.offset_minutes, 330);
+
+        // Test negative offset parsing
+        let minus_dt = TimezoneDateTime::from_iso_string_with_tz(
+            "2023-01-01T12:00:00-08:00",
+            DateTimeUnit::Second,
+        )
+        .unwrap();
+        assert_eq!(minus_dt.timezone.offset_minutes, -480);
+
+        // Test round-trip conversion
+        let iso_str = plus_dt.to_iso_string_with_tz().unwrap();
+        assert!(iso_str.contains("+05:30"));
+    }
+
+    #[test]
+    fn test_timezone_datetime_arithmetic() {
+        let utc_dt =
+            DateTime64::from_iso_string("2023-01-01T12:00:00", DateTimeUnit::Second).unwrap();
+        let tz_dt = TimezoneDateTime::new(utc_dt, Timezone::est());
+
+        // Test addition
+        let td = TimeDelta64::new(3600, DateTimeUnit::Second); // 1 hour
+        let result = tz_dt.clone() + td;
+        assert_eq!(result.timezone.name, "EST");
+
+        // Test subtraction with timedelta
+        let result2 = tz_dt.clone() - td;
+        assert_eq!(result2.timezone.name, "EST");
+
+        // Test datetime difference
+        let diff = result - tz_dt;
+        assert_eq!(diff.value, 3600);
+        assert_eq!(diff.unit, DateTimeUnit::Second);
     }
 }

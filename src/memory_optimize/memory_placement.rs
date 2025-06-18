@@ -222,6 +222,7 @@ fn is_avx512_available() -> bool {
 }
 
 /// Check if AVX2 instructions are available at runtime
+#[allow(dead_code)]
 fn is_avx2_available() -> bool {
     #[cfg(target_arch = "x86_64")]
     {

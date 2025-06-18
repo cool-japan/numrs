@@ -14,19 +14,29 @@ lazy_static::lazy_static! {
 
 /// Set the random seed for the global generator
 pub fn set_seed(seed: u64) {
-    if let Ok(mut guard) = GLOBAL_RANDOM_STATE.lock() {
-        *guard = RandomState::with_seed(seed);
+    match GLOBAL_RANDOM_STATE.lock() {
+        Ok(mut guard) => {
+            *guard = RandomState::with_seed(seed);
+        }
+        Err(poisoned) => {
+            // If the lock is poisoned, we can still recover by getting the guard
+            // and replacing the state, which will clear the poison
+            let mut guard = poisoned.into_inner();
+            *guard = RandomState::with_seed(seed);
+        }
     }
 }
 
 /// Get a reference to the global random state
 pub fn get_global_random_state() -> Result<std::sync::MutexGuard<'static, RandomState>> {
-    GLOBAL_RANDOM_STATE.lock().map_err(|e| {
-        crate::error::NumRs2Error::InvalidOperation(format!(
-            "Failed to acquire global random state lock: {}",
-            e
-        ))
-    })
+    match GLOBAL_RANDOM_STATE.lock() {
+        Ok(guard) => Ok(guard),
+        Err(poisoned) => {
+            // If the lock is poisoned, we can still recover by getting the guard
+            // This allows the random number generation to continue working even after a panic
+            Ok(poisoned.into_inner())
+        }
+    }
 }
 
 /// Generate random values from a beta distribution using the global generator
