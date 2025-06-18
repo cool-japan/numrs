@@ -62,9 +62,14 @@ impl RandomState {
 
     /// Get a locked reference to the RNG
     pub fn get_rng(&self) -> Result<std::sync::MutexGuard<'_, StdRng>> {
-        self.rng
-            .lock()
-            .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))
+        match self.rng.lock() {
+            Ok(guard) => Ok(guard),
+            Err(poisoned) => {
+                // If the lock is poisoned, we can still recover by getting the guard
+                // This allows the random number generation to continue working even after a panic
+                Ok(poisoned.into_inner())
+            }
+        }
     }
 
     /// Generate uniform random values in [0, 1)

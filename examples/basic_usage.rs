@@ -78,36 +78,34 @@ fn main() -> Result<()> {
         Array::from_vec(vec![1.0, 0.9999, 0.9999, 1.0]).reshape(&[2, 2]);
     let very_ill_conditioned = Array::from_vec(vec![1.0, 0.999999, 0.999999, 1.0]).reshape(&[2, 2]);
 
-    println!("\nCondition Number Examples:");
-    println!("Well-conditioned matrix:");
-    println!("{}", well_conditioned);
-    println!(
-        "Condition number: {}",
-        condition_number(&well_conditioned).unwrap()
-    );
-    println!(
-        "Is well-conditioned: {}",
-        condition_number(&well_conditioned).unwrap() < 1e6
-    );
+    #[cfg(feature = "lapack")]
+    {
+        println!("\nCondition Number Examples (requires lapack feature):");
+        println!("Well-conditioned matrix:");
+        println!("{}", well_conditioned);
+        println!(
+            "Moderately ill-conditioned matrix:\n{}",
+            moderately_ill_conditioned
+        );
+        println!("Very ill-conditioned matrix:\n{}", very_ill_conditioned);
+        // Note: condition number functionality requires LAPACK feature
+        println!("Condition number calculation requires 'lapack' feature");
+        println!("Enable with: cargo run --example basic_usage --features lapack");
+    }
 
-    println!("\nModerately ill-conditioned matrix:");
-    println!("{}", moderately_ill_conditioned);
-    println!(
-        "Condition number: {}",
-        condition_number(&moderately_ill_conditioned).unwrap()
-    );
-    println!(
-        "Is well-conditioned: {}",
-        moderately_ill_conditioned.is_well_conditioned().unwrap()
-    );
-
-    println!("\nVery ill-conditioned matrix:");
-    println!("{}", very_ill_conditioned);
-    println!("Condition number: {}", very_ill_conditioned.cond().unwrap());
-    println!(
-        "Is well-conditioned: {}",
-        very_ill_conditioned.is_well_conditioned().unwrap()
-    );
+    #[cfg(not(feature = "lapack"))]
+    {
+        println!("\nCondition Number Examples:");
+        println!("Condition number functionality requires the 'lapack' feature.");
+        println!("Enable with: cargo run --example basic_usage --features lapack");
+        println!("For now, showing matrix contents:");
+        println!("Well-conditioned matrix:\n{}", well_conditioned);
+        println!(
+            "Moderately ill-conditioned matrix:\n{}",
+            moderately_ill_conditioned
+        );
+        println!("Very ill-conditioned matrix:\n{}", very_ill_conditioned);
+    }
 
     Ok(())
 }

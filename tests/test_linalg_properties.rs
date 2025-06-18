@@ -1,3 +1,5 @@
+#![cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+
 use approx::assert_abs_diff_eq;
 /// Property-based tests for linear algebra operations
 ///
@@ -8,20 +10,15 @@ use numrs2::prelude::*;
 // Import from the core linalg module (non-deprecated)
 #[cfg(feature = "lapack")]
 use numrs2::linalg::matrix_ops::det;
+#[cfg(feature = "lapack")]
 use numrs2::linalg::solve::{inv, solve};
 use numrs2::linalg::vector_ops::{norm, trace};
 #[cfg(feature = "lapack")]
 #[allow(deprecated)]
 use numrs2::new_modules::eigenvalues::eigh as eigh_impl;
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
-use numrs2::new_modules::matrix_decomp::cholesky;
-#[allow(deprecated)]
-use numrs2::new_modules::matrix_decomp::qr;
-#[allow(deprecated)]
-use numrs2::new_modules::matrix_decomp::svd;
-#[cfg(feature = "matrix_decomp")]
-#[allow(deprecated)]
-use numrs2::new_modules::matrix_decomp::{condition_number, lu};
+use numrs2::new_modules::matrix_decomp::{cholesky, qr, svd, condition_number, lu};
 
 // For eigenvalues, we need to define a wrapper that calls the correct function
 #[cfg(feature = "lapack")]

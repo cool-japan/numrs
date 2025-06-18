@@ -113,33 +113,49 @@ fn test_vonmises_concentration() {
         let mean_sin = data.iter().map(|&x| x.sin()).sum::<f64>() / sample_count as f64;
         let mean_cos = data.iter().map(|&x| x.cos()).sum::<f64>() / sample_count as f64;
         let circular_mean = mean_sin.atan2(mean_cos);
-        
+
         assert!(
             (circular_mean - mu).abs() < 0.1,
             "Circular mean {:.4} too far from expected {:.4} for kappa = {}",
-            circular_mean, mu, kappa
+            circular_mean,
+            mu,
+            kappa
         );
 
         // Test 3: Higher kappa should produce more concentration (qualitative test)
-        let within_narrow = data.iter().filter(|&&x| (x - mu).abs() <= (PI / 12.0)).count();
-        let within_wide = data.iter().filter(|&&x| (x - mu).abs() <= (PI / 4.0)).count();
-        
+        let within_narrow = data
+            .iter()
+            .filter(|&&x| (x - mu).abs() <= (PI / 12.0))
+            .count();
+        let within_wide = data
+            .iter()
+            .filter(|&&x| (x - mu).abs() <= (PI / 4.0))
+            .count();
+
         let narrow_proportion = within_narrow as f64 / sample_count as f64;
         let wide_proportion = within_wide as f64 / sample_count as f64;
-        
+
         // Basic sanity checks
-        assert!(narrow_proportion <= wide_proportion, "Narrow range should have fewer samples than wide range");
-        assert!(wide_proportion > 0.0, "Should have some samples in wide range");
-        
+        assert!(
+            narrow_proportion <= wide_proportion,
+            "Narrow range should have fewer samples than wide range"
+        );
+        assert!(
+            wide_proportion > 0.0,
+            "Should have some samples in wide range"
+        );
+
         println!(
-            "kappa = {:.1}: {:.1}% within π/12, {:.1}% within π/4", 
-            kappa, narrow_proportion * 100.0, wide_proportion * 100.0
+            "kappa = {:.1}: {:.1}% within π/12, {:.1}% within π/4",
+            kappa,
+            narrow_proportion * 100.0,
+            wide_proportion * 100.0
         );
 
         // For higher kappa, expect higher concentration in narrow range
         if kappa >= 2.0 {
             assert!(
-                narrow_proportion > 0.1, 
+                narrow_proportion > 0.1,
                 "High kappa should have reasonable concentration in narrow range"
             );
         }

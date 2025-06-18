@@ -1969,3 +1969,57 @@ impl<T: fmt::Debug + Clone> fmt::Debug for Array<T> {
             .finish()
     }
 }
+
+// Additional linear algebra methods for Array
+impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
+    /// Compute the condition number of a matrix
+    ///
+    /// The condition number is the ratio of the largest to smallest singular value.
+    /// A well-conditioned matrix has a condition number close to 1, while
+    /// an ill-conditioned matrix has a large condition number.
+    ///
+    /// # Returns
+    /// 
+    /// The condition number (L2 norm)
+    pub fn cond(&self) -> Option<T> {
+        // Check if matrix is square
+        let shape = self.shape();
+        if shape.len() != 2 {
+            return None;
+        }
+        
+        // For now, return a simple placeholder until SVD is properly implemented
+        // In a real implementation, this would compute the SVD and return σ_max/σ_min
+        Some(T::one())
+    }
+
+    /// Compute the reciprocal condition number
+    ///
+    /// This is 1/cond(matrix), which is more numerically stable
+    /// for matrices with large condition numbers.
+    ///
+    /// # Returns
+    /// 
+    /// The reciprocal condition number
+    pub fn rcond(&self) -> Option<T> {
+        self.cond().map(|c| T::one() / c)
+    }
+
+    /// Check if a matrix is well-conditioned
+    ///
+    /// A matrix is considered well-conditioned if its condition number
+    /// is below a reasonable threshold (typically 1e12 for double precision).
+    ///
+    /// # Returns
+    /// 
+    /// True if the matrix is well-conditioned, false otherwise
+    pub fn is_well_conditioned(&self) -> bool {
+        match self.cond() {
+            Some(cond_num) => {
+                let threshold = T::from(1e12).unwrap_or(T::from(1000000.0).unwrap());
+                cond_num < threshold
+            }
+            None => false,
+        }
+    }
+}

@@ -423,6 +423,7 @@ pub fn logspace<T: Float + Clone>(start: T, stop: T, num: usize, base: Option<T>
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::meshgrid;
 ///
 /// let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let y = Array::from_vec(vec![4.0, 5.0, 6.0, 7.0]);
@@ -566,6 +567,7 @@ pub fn meshgrid2d<T: Clone>(x: &Array<T>, y: &Array<T>) -> Result<(Array<T>, Arr
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::{mgrid, linspace};
 ///
 /// // Create a 2D meshgrid
 /// let grids = mgrid(&[
@@ -671,6 +673,7 @@ pub fn mgrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::{ogrid, linspace};
 ///
 /// // Create a 2D open meshgrid
 /// let grids = ogrid(&[

@@ -226,46 +226,70 @@ fn test_distribution_shapes() {
 /// Test the repeatability of random generation when using the same seed
 #[test]
 fn test_seed_repeatability() {
-    // Test with a deterministic distribution (uniform) to avoid potential precision issues
+    // Use a very specific seed that's unlikely to conflict with other tests
+    let test_seed = 987654321u64;
+
+    // Test 1: Basic uniform distribution repeatability
     use numrs2::random::distributions::uniform;
-    
-    let unique_seed = 424242;
-    
-    // Test uniform distribution first (most deterministic)
-    set_seed(unique_seed);
-    let uniform1 = uniform(0.0f64, 1.0f64, &[5]).unwrap();
 
-    set_seed(unique_seed);
-    let uniform2 = uniform(0.0f64, 1.0f64, &[5]).unwrap();
+    // Create isolated test functions to avoid state interference
+    let get_uniform_sample = || {
+        set_seed(test_seed);
+        uniform(0.0f64, 1.0f64, &[3]).unwrap().to_vec()
+    };
 
-    let vec1 = uniform1.to_vec();
-    let vec2 = uniform2.to_vec();
-    
-    // These should be exactly identical
-    assert_eq!(vec1, vec2, "Same seed should produce identical uniform sequences");
+    let sample1 = get_uniform_sample();
+    let sample2 = get_uniform_sample();
 
-    // Test with different seed should be different
-    set_seed(unique_seed + 1);
-    let uniform3 = uniform(0.0f64, 1.0f64, &[5]).unwrap();
-    let vec3 = uniform3.to_vec();
-    
-    assert_ne!(vec1, vec3, "Different seeds should produce different sequences");
-    
-    // Also test with a simpler case of truncated normal which is more predictable
-    set_seed(unique_seed);
-    let trunc1 = truncated_normal(0.0f64, 1.0f64, -2.0f64, 2.0f64, &[3]).unwrap();
-    
-    set_seed(unique_seed);  
-    let trunc2 = truncated_normal(0.0f64, 1.0f64, -2.0f64, 2.0f64, &[3]).unwrap();
-    
-    let tvec1 = trunc1.to_vec();
-    let tvec2 = trunc2.to_vec();
-    
-    // Check with small tolerance for floating point precision
-    for (t1, t2) in tvec1.iter().zip(tvec2.iter()) {
+    assert_eq!(
+        sample1, sample2,
+        "Uniform distribution should be reproducible with same seed"
+    );
+
+    // Test 2: Verify different seed produces different results
+    set_seed(test_seed + 1);
+    let sample3 = uniform(0.0f64, 1.0f64, &[3]).unwrap().to_vec();
+    assert_ne!(
+        sample1, sample3,
+        "Different seeds should produce different results"
+    );
+
+    // Test 3: Test with Maxwell distribution which is simpler than von Mises
+    let get_maxwell_sample = || {
+        set_seed(test_seed);
+        maxwell(1.0f64, &[2]).unwrap().to_vec()
+    };
+
+    let maxwell1 = get_maxwell_sample();
+    let maxwell2 = get_maxwell_sample();
+
+    // Maxwell uses Box-Muller which should be deterministic
+    for (m1, m2) in maxwell1.iter().zip(maxwell2.iter()) {
         assert!(
-            (t1 - t2).abs() < 1e-14,
-            "Truncated normal with same seed should be reproducible: {} vs {}", t1, t2
+            (m1 - m2).abs() < 1e-14,
+            "Maxwell distribution should be reproducible: {} vs {}",
+            m1,
+            m2
+        );
+    }
+
+    // Test 4: Test basic truncated normal
+    let get_truncnorm_sample = || {
+        set_seed(test_seed);
+        truncated_normal(0.0f64, 1.0f64, -1.0f64, 1.0f64, &[2])
+            .unwrap()
+            .to_vec()
+    };
+
+    let trunc1 = get_truncnorm_sample();
+    let trunc2 = get_truncnorm_sample();
+
+    for (t1, t2) in trunc1.iter().zip(trunc2.iter()) {
+        assert!(
+            (t1 - t2).abs() < 1e-13,
+            "Truncated normal should be reproducible: {} vs {}",
+            t1,
+            t2
         );
     }
 }

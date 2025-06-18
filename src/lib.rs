@@ -55,6 +55,7 @@ pub mod linalg;
 pub mod linalg_extended;
 pub mod linalg_optimized;
 pub mod linalg_parallel;
+pub mod linalg_solve;
 pub mod linalg_stable;
 pub mod masked;
 pub mod math;
@@ -136,14 +137,15 @@ pub mod prelude {
     pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
     // Explicit linear algebra imports to avoid ambiguous re-exports
-    pub use crate::linalg::{inner, kron, norm, outer, tensordot, trace, vdot};
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub use crate::linalg::{
-        cholesky as cholesky_basic, eig, inv, qr as qr_basic, solve,
-        svd as svd_basic,
+        cholesky as cholesky_basic, eig, inv, qr as qr_basic, solve, svd as svd_basic,
     };
     #[cfg(feature = "lapack")]
     pub use crate::linalg::{det, matrix_power};
+    pub use crate::linalg::{inner, kron, norm, outer, tensordot, trace, vdot};
+
+    // Note: Matrix decomposition functions are available through conditional re-exports above
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub use crate::linalg::{matrix_rank, pinv};
     // Import specific advanced functions from linalg_extended (avoiding conflicts)

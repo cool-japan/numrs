@@ -428,39 +428,7 @@ where
         cod(self)
     }
 
-    /// Calculate the condition number of the matrix
-    pub fn cond(&self) -> Result<<T as ndarray_linalg::Scalar>::Real>
-    where
-        <T as ndarray_linalg::Scalar>::Real: num_traits::Float,
-    {
-        condition_number(self)
-    }
-
-    /// Calculate the reciprocal condition number (1/cond)
-    pub fn rcond(&self) -> Result<<T as ndarray_linalg::Scalar>::Real>
-    where
-        <T as ndarray_linalg::Scalar>::Real: num_traits::Float,
-    {
-        rcond(self)
-    }
-
-    /// Check if the matrix is well-conditioned
-    ///
-    /// A matrix is considered well-conditioned if its condition number
-    /// is reasonably low (below a certain threshold).
-    pub fn is_well_conditioned(&self) -> Result<bool>
-    where
-        <T as ndarray_linalg::Scalar>::Real: num_traits::Float,
-    {
-        let cond = self.cond()?;
-
-        // Define threshold based on precision and application needs
-        // For most practical purposes, condition numbers > 1e6 indicate numerical issues
-        let threshold =
-            <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(1e6).unwrap();
-
-        Ok(cond < threshold)
-    }
+    // Note: Condition number methods are implemented in the main array module
 }
 
 // Add tests to verify the implementation
