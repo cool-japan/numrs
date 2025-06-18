@@ -96,7 +96,7 @@ fn test_string_arithmetic_operations() {
 #[test]
 fn test_string_formatting_operations() {
     let format_strings = vec!["Value: %f", "Number: %d", "Float: %g"];
-    let values = vec![3.14159, 42.0, 2.71828];
+    let values = vec![std::f64::consts::PI, 42.0, std::f64::consts::E];
     let arr = array_from_strings(&format_strings, "U", None).unwrap();
     let val_arr = Array::from_vec(values).reshape(&[3]);
 

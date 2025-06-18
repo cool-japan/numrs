@@ -504,7 +504,7 @@ fn test_error_handling() {
 #[test]
 fn test_text_io_roundtrip() {
     // Create test data
-    let array = Array::from_vec(vec![1.5, 2.7, 3.14, 4.0, 5.5, 6.28]).reshape(&[2, 3]);
+    let array = Array::from_vec(vec![1.5, 2.7, std::f64::consts::PI, 4.0, 5.5, std::f64::consts::TAU]).reshape(&[2, 3]);
     let temp_file = NamedTempFile::new().unwrap();
 
     // Save using savetxt

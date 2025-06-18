@@ -12,9 +12,13 @@
 //! All functions support both feature-gated (with `matrix_decomp`) and non-feature-gated versions
 //! to maintain compatibility across different build configurations.
 
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::array::Array;
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
+#[allow(unused_imports)] // Used conditionally based on features
 use num_traits::Float;
+#[allow(unused_imports)] // Used conditionally based on features
 use std::fmt::Debug;
 
 /// Compute the rank of a matrix

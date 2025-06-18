@@ -171,7 +171,7 @@ fn test_gammaln_reference() {
     let expected_values = vec![
         0.0,                             // ln(gamma(1)) = ln(1)
         0.0,                             // ln(gamma(2)) = ln(1)
-        0.6931471805599453,              // ln(gamma(3)) = ln(2)
+        std::f64::consts::LN_2,          // ln(gamma(3)) = ln(2)
         12.801827480081469,              // ln(gamma(10)) = ln(9!)
         0.5 * std::f64::consts::PI.ln(), // ln(gamma(0.5)) = ln(sqrt(π))
     ];

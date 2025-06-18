@@ -64,7 +64,7 @@ fn test_structured_array_string_fields() {
 
     // Set string and numeric values
     arr.set_field(&[0], "name", "Alice".to_string()).unwrap();
-    arr.set_field(&[0], "value", 3.14f64).unwrap();
+    arr.set_field(&[0], "value", std::f64::consts::PI).unwrap();
     arr.set_field(&[1], "name", "Bob".to_string()).unwrap();
     arr.set_field(&[1], "value", 2.71f64).unwrap();
 
@@ -74,7 +74,7 @@ fn test_structured_array_string_fields() {
 
     // Check values by accessing the underlying ndarray
     assert_eq!(name_field.array()[[0]], "Alice");
-    assert_eq!(value_field.array()[[0]], 3.14f64);
+    assert_eq!(value_field.array()[[0]], std::f64::consts::PI);
     assert_eq!(name_field.array()[[1]], "Bob");
     assert_eq!(value_field.array()[[1]], 2.71f64);
 }
@@ -281,8 +281,8 @@ fn test_multiple_data_types() {
     arr.set_field(&[0], "uint32_field", 4294967295u32).unwrap();
     arr.set_field(&[0], "uint64_field", 18446744073709551615u64)
         .unwrap();
-    arr.set_field(&[0], "float32_field", 3.14f32).unwrap();
-    arr.set_field(&[0], "float64_field", 2.71828f64).unwrap();
+    arr.set_field(&[0], "float32_field", std::f32::consts::PI).unwrap();
+    arr.set_field(&[0], "float64_field", std::f64::consts::E).unwrap();
 
     // Get field arrays and verify values
     let bool_field: Array<bool> = arr.field("bool_field").unwrap();
@@ -292,5 +292,5 @@ fn test_multiple_data_types() {
     assert_eq!(int8_field.array()[[0]], 42i8);
 
     let float64_field: Array<f64> = arr.field("float64_field").unwrap();
-    assert_eq!(float64_field.array()[[0]], 2.71828f64);
+    assert_eq!(float64_field.array()[[0]], std::f64::consts::E);
 }
