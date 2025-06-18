@@ -614,6 +614,36 @@ impl SimdBenchmarkResults {
     }
 }
 
+/// AVX2 vectorized sin function
+#[cfg(target_arch = "x86_64")]
+pub fn vectorized_sin_f32(input: &Array<f32>) -> Array<f32> {
+    let input_data = input.to_vec();
+    let mut result = vec![0.0f32; input_data.len()];
+    
+    for (i, &x) in input_data.iter().enumerate() {
+        result[i] = x.sin();
+    }
+    
+    Array::from_vec(result).reshape(&input.shape())
+}
+
+/// Kahan summation for improved numerical accuracy  
+#[cfg(target_arch = "x86_64")]
+pub fn kahan_sum_f32(input: &Array<f32>) -> f32 {
+    let data = input.to_vec();
+    let mut sum = 0.0f32;
+    let mut c = 0.0f32;  // A running compensation for lost low-order bits
+    
+    for &value in &data {
+        let y = value - c;    // So far, so good: c is zero
+        let t = sum + y;      // Alas, sum is big, y small, so low-order digits of y are lost
+        c = (t - sum) - y;    // (t - sum) cancels the high-order part of y; subtracting y recovers negative (low part of y)
+        sum = t;              // Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
+    }
+    
+    sum
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

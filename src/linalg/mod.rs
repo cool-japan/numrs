@@ -1,9 +1,6 @@
 //! Basic linear algebra operations with Array
 //! Includes matrix multiplication, dot product, matrix inversion, etc.
 
-use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, ToPrimitive};
 use std::fmt::Debug;
 
 // Matrix decomposition submodule
