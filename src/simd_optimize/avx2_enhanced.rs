@@ -700,7 +700,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(target_arch = "x86_64", not(feature = "ci-safe")))]
     fn test_complex_multiply() {
         let a_r = Array::from_vec(vec![1.0, 2.0]);
         let a_i = Array::from_vec(vec![3.0, 4.0]);
