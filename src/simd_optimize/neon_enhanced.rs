@@ -4,6 +4,7 @@
 //! for high performance on ARM-based systems including Apple Silicon and ARM servers.
 
 use crate::array::Array;
+#[allow(unused_imports)] // Used conditionally based on target architecture
 use crate::error::{NumRs2Error, Result};
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
@@ -505,6 +506,7 @@ pub struct NeonFeatureDetector;
 impl NeonFeatureDetector {
     /// Detect available NEON features
     pub fn detect_neon_features() -> NeonFeatures {
+        #[allow(unused_mut)] // False positive - modified in conditional compilation blocks
         let mut features = NeonFeatures::default();
 
         #[cfg(target_arch = "aarch64")]

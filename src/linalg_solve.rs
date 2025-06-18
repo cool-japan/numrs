@@ -3,9 +3,13 @@
 //! This module contains functions for solving linear systems, computing matrix inverses,
 //! and computing pseudoinverses.
 
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::array::Array;
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
+#[allow(unused_imports)] // Used conditionally based on features
 use num_traits::Float;
+#[allow(unused_imports)] // Used conditionally based on features
 use std::fmt::Debug;
 
 /// Solve a linear system Ax = b

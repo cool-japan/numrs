@@ -3,9 +3,13 @@
 //! This module provides essential matrix operations that are commonly used
 //! in linear algebra computations.
 
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::array::Array;
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
+#[allow(unused_imports)] // Used conditionally based on features
 use num_traits::Float;
+#[allow(unused_imports)] // Used conditionally based on features
 use std::fmt::Debug;
 
 /// Compute the determinant of a matrix

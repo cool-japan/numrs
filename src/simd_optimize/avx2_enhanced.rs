@@ -654,7 +654,7 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_enhanced_exp() {
         let input = Array::from_vec(vec![0.0, 1.0, 2.0, -1.0]);
-        let result = vectorized_exp_f32(&input);
+        let result = EnhancedSimdOps::vectorized_exp_f32(&input);
 
         assert_relative_eq!(result.to_vec()[0], 1.0, epsilon = 1e-6);
         assert_relative_eq!(result.to_vec()[1], std::f32::consts::E, epsilon = 1e-6);
@@ -674,7 +674,7 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_enhanced_log() {
         let input = Array::from_vec(vec![1.0, std::f32::consts::E, std::f32::consts::E.powi(2)]);
-        let result = vectorized_log_f32(&input);
+        let result = EnhancedSimdOps::vectorized_log_f32(&input);
 
         assert_relative_eq!(result.to_vec()[0], 0.0, epsilon = 1e-6);
         assert_relative_eq!(result.to_vec()[1], 1.0, epsilon = 1e-5);

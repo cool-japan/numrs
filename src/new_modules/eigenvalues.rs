@@ -1,5 +1,7 @@
 use crate::array::Array;
+#[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
+#[allow(unused_imports)] // Used conditionally based on features
 use ndarray::ArrayView2;
 #[cfg(feature = "lapack")]
 use ndarray_linalg::{Eig, EigVals, Eigh, Scalar};

@@ -281,8 +281,10 @@ fn test_multiple_data_types() {
     arr.set_field(&[0], "uint32_field", 4294967295u32).unwrap();
     arr.set_field(&[0], "uint64_field", 18446744073709551615u64)
         .unwrap();
-    arr.set_field(&[0], "float32_field", std::f32::consts::PI).unwrap();
-    arr.set_field(&[0], "float64_field", std::f64::consts::E).unwrap();
+    arr.set_field(&[0], "float32_field", std::f32::consts::PI)
+        .unwrap();
+    arr.set_field(&[0], "float64_field", std::f64::consts::E)
+        .unwrap();
 
     // Get field arrays and verify values
     let bool_field: Array<bool> = arr.field("bool_field").unwrap();
