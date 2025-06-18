@@ -7,6 +7,8 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
+> **🚀 Version 0.1.0-alpha.5** - This is an alpha release focused on core functionality and API stability. While the library is functional and well-tested, the API may still evolve before the 1.0 release.
+
 ## ✨ Architecture Highlights
 
 ### 🏗️ Enhanced Design
@@ -52,7 +54,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0", features = ["scirs"] }
+numrs2 = { version = "0.1.0-alpha.5", features = ["scirs"] }
 ```
 
 Or, when building:
@@ -174,7 +176,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0"
+numrs2 = "0.1.0-alpha.5"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
