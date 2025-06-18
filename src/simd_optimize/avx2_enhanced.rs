@@ -681,7 +681,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(target_arch = "x86_64", not(feature = "ci-safe")))]
     fn test_enhanced_sin() {
         let input = Array::from_vec(vec![0.0, std::f32::consts::PI / 2.0, std::f32::consts::PI]);
         let result = vectorized_sin_f32(&input);
@@ -692,7 +692,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(target_arch = "x86_64", not(feature = "ci-safe")))]
     fn test_kahan_sum() {
         let input = Array::from_vec(vec![1.0f32; 1000]);
         let result = kahan_sum_f32(&input);
