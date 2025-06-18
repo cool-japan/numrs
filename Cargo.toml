@@ -19,6 +19,7 @@ fast = []  # Minimal feature set for fast compilation during development
 scirs = ["dep:scirs2-stats", "dep:scirs2-core", "dep:scirs2-linalg"]
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
 lapack = ["dep:ndarray-linalg", "dep:blas", "dep:lapack"]  # Enable LAPACK-dependent linear algebra operations
+ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without external dependencies
 
 [dependencies]
 ndarray = "0.16.1"  # Provides n-dimensional arrays

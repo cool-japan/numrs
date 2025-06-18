@@ -8,6 +8,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # BLAS/LAPACK configuration for Ubuntu
+  BLAS_LIB: openblas
+  LAPACK_LIB: lapack
 
 jobs:
   test:
@@ -29,10 +32,129 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libopenblas-dev liblapack-dev pkg-config libfreetype6-dev libfontconfig1-dev
+          sudo apt-get install -y \
+            build-essential \
+            libopenblas-dev \
+            liblapack-dev \
+            libblas-dev \
+            gfortran \
+            pkg-config \
+            libfreetype6-dev \
+            libfontconfig1-dev
+
+      - name: Set BLAS/LAPACK environment variables
+        run: |
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
       
-      - name: Run tests
+      - name: Check compilation (no features)
+        run: cargo check --verbose
+      
+      - name: Check compilation (with lapack)
+        run: cargo check --verbose --features="lapack"
+      
+      - name: Check compilation (all features)
+        run: cargo check --verbose --features="lapack,matrix_decomp,validation,gpu,scirs"
+      
+      - name: Run tests (no features)
         run: cargo nextest run --verbose
+      
+      - name: Run tests (with lapack)
+        run: cargo nextest run --verbose --features="lapack"
+        continue-on-error: true  # Allow this to fail if LAPACK linking issues occur
+      
+      - name: Run tests (CI-safe features)
+        run: cargo nextest run --verbose --features="ci-safe"
+
+  test-cross-platform:
+    name: Test Cross Platform
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install system dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libopenblas-dev liblapack-dev pkg-config
+
+      - name: Install system dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          # macOS uses Accelerate framework by default
+          brew install openblas lapack pkg-config
+
+      - name: Install system dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          # Windows-specific dependencies if needed
+          echo "Windows dependencies - using default math libraries"
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+      
+      - name: Run basic tests
+        run: cargo test --verbose --features="ci-safe"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libopenblas-dev liblapack-dev pkg-config
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+      
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      
+      - name: Run clippy
+        run: cargo clippy --all-targets --features="ci-safe" -- -D warnings
+
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libopenblas-dev liblapack-dev pkg-config
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+      
+      - name: Run basic usage example
+        run: cargo run --example basic_usage
+      
+      - name: Run linalg example (without lapack)
+        run: cargo run --example linalg_example
+      
+      - name: Run linalg example (with CI-safe features)
+        run: cargo run --example linalg_example --features="ci-safe"
