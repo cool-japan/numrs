@@ -18,7 +18,7 @@ use numrs2::linalg::vector_ops::{norm, trace};
 use numrs2::new_modules::eigenvalues::eigh as eigh_impl;
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
-use numrs2::new_modules::matrix_decomp::{cholesky, qr, svd, condition_number, lu};
+use numrs2::new_modules::matrix_decomp::{cholesky, condition_number, lu, qr, svd};
 
 // For eigenvalues, we need to define a wrapper that calls the correct function
 #[cfg(feature = "lapack")]

@@ -1,13 +1,13 @@
 #![allow(deprecated)]
 
-use numrs2::prelude::*;
 use numrs2::linalg;
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-use numrs2::new_modules::matrix_decomp;
 #[cfg(feature = "lapack")]
 use numrs2::linalg::matrix_ops::det;
 #[cfg(feature = "lapack")]
 use numrs2::linalg::solve::{inv, solve};
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use numrs2::new_modules::matrix_decomp;
+use numrs2::prelude::*;
 
 fn main() -> Result<()> {
     println!("NumRS Linear Algebra Example");
@@ -156,7 +156,9 @@ fn main() -> Result<()> {
     }
     #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
     {
-        println!("\nPivoted Cholesky decomposition requires the 'matrix_decomp' and 'lapack' features.");
+        println!(
+            "\nPivoted Cholesky decomposition requires the 'matrix_decomp' and 'lapack' features."
+        );
     }
 
     // LU decomposition

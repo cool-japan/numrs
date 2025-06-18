@@ -1,11 +1,11 @@
 #![allow(deprecated)]
 
-use numrs2::prelude::*;
 use numrs2::linalg;
-#[cfg(feature = "matrix_decomp")]
-use numrs2::new_modules::matrix_decomp;
 #[cfg(feature = "eigenvalues")]
 use numrs2::new_modules::eigenvalues;
+#[cfg(feature = "matrix_decomp")]
+use numrs2::new_modules::matrix_decomp;
+use numrs2::prelude::*;
 
 fn main() {
     println!("NumRS Matrix Decomposition Examples");
@@ -166,7 +166,7 @@ fn main() {
             println!("Upper triangular matrix U:");
             print_matrix(&u);
 
-            // Verify: L * U ≈ A  
+            // Verify: L * U ≈ A
             let a_reconstructed = l.matmul(&u).unwrap();
             println!("Verification - L * U:");
             print_matrix(&a_reconstructed);

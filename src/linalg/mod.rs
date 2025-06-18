@@ -1,7 +1,7 @@
 //! Basic linear algebra operations with Array
 //! Includes matrix multiplication, dot product, matrix inversion, etc.
 
-use std::fmt::Debug;
+// use std::fmt::Debug; // Unused in ci-safe mode
 
 // Matrix decomposition submodule
 #[path = "../linalg_decomposition.rs"]
@@ -36,21 +36,12 @@ pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub use crate::new_modules::matrix_decomp::{lu, pivoted_cholesky, svd as svd_enhanced};
 
-
 /// Set the number of threads for LAPACK operations
 pub fn set_lapack_threads(threads: usize) {
     // We can use blas_src's set_num_threads when it's available
     // For now, we'll just provide this as a placeholder
     let _threads = threads;
 }
-
-
-
-
-
-
-
-
 
 /// Implementation for when matrix_decomp feature is enabled
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]

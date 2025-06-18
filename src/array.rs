@@ -1979,7 +1979,7 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// an ill-conditioned matrix has a large condition number.
     ///
     /// # Returns
-    /// 
+    ///
     /// The condition number (L2 norm)
     pub fn cond(&self) -> Option<T> {
         // Check if matrix is square
@@ -1987,7 +1987,7 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
         if shape.len() != 2 {
             return None;
         }
-        
+
         // For now, return a simple placeholder until SVD is properly implemented
         // In a real implementation, this would compute the SVD and return σ_max/σ_min
         Some(T::one())
@@ -1999,7 +1999,7 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// for matrices with large condition numbers.
     ///
     /// # Returns
-    /// 
+    ///
     /// The reciprocal condition number
     pub fn rcond(&self) -> Option<T> {
         self.cond().map(|c| T::one() / c)
@@ -2011,7 +2011,7 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// is below a reasonable threshold (typically 1e12 for double precision).
     ///
     /// # Returns
-    /// 
+    ///
     /// True if the matrix is well-conditioned, false otherwise
     pub fn is_well_conditioned(&self) -> bool {
         match self.cond() {

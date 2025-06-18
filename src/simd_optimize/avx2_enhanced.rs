@@ -4,6 +4,7 @@
 //! mathematical operations, cache-aware algorithms, and specialized functions.
 
 use crate::array::Array;
+#[allow(unused_imports)] // Used in some configurations
 use crate::error::{NumRs2Error, Result};
 use crate::simd::SimdOps;
 #[cfg(target_arch = "x86_64")]
@@ -619,11 +620,11 @@ impl SimdBenchmarkResults {
 pub fn vectorized_sin_f32(input: &Array<f32>) -> Array<f32> {
     let input_data = input.to_vec();
     let mut result = vec![0.0f32; input_data.len()];
-    
+
     for (i, &x) in input_data.iter().enumerate() {
         result[i] = x.sin();
     }
-    
+
     Array::from_vec(result).reshape(&input.shape())
 }
 
@@ -632,15 +633,15 @@ pub fn vectorized_sin_f32(input: &Array<f32>) -> Array<f32> {
 pub fn kahan_sum_f32(input: &Array<f32>) -> f32 {
     let data = input.to_vec();
     let mut sum = 0.0f32;
-    let mut c = 0.0f32;  // A running compensation for lost low-order bits
-    
+    let mut c = 0.0f32; // A running compensation for lost low-order bits
+
     for &value in &data {
-        let y = value - c;    // So far, so good: c is zero
-        let t = sum + y;      // Alas, sum is big, y small, so low-order digits of y are lost
-        c = (t - sum) - y;    // (t - sum) cancels the high-order part of y; subtracting y recovers negative (low part of y)
-        sum = t;              // Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
+        let y = value - c; // So far, so good: c is zero
+        let t = sum + y; // Alas, sum is big, y small, so low-order digits of y are lost
+        c = (t - sum) - y; // (t - sum) cancels the high-order part of y; subtracting y recovers negative (low part of y)
+        sum = t; // Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
     }
-    
+
     sum
 }
 

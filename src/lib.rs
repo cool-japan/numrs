@@ -55,7 +55,7 @@ pub mod linalg;
 pub mod linalg_extended;
 pub mod linalg_optimized;
 pub mod linalg_parallel;
-pub mod linalg_solve;
+// pub mod linalg_solve; // Loaded via linalg/mod.rs
 pub mod linalg_stable;
 pub mod masked;
 pub mod math;
