@@ -5,7 +5,7 @@
 //! intrinsics for maximum performance on x86_64 CPUs with AVX-512 support.
 
 use crate::array::Array;
-use crate::error::Result;
+use crate::error::{NumRs2Error, Result};
 use std::mem;
 use std::alloc::{alloc, Layout};
 use std::ptr;
@@ -604,8 +604,6 @@ pub unsafe fn avx512_exp_f64(a: &[f64], result: &mut [f64]) {
 /// Wrapper for AVX-512-optimized element-wise addition for f32
 #[cfg(target_arch = "x86_64")]
 pub fn avx512_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
-    use crate::error::NumRs2Error;
-    
     // Check shapes match
     if a.shape() != b.shape() {
         return Err(NumRs2Error::ShapeMismatch {
@@ -657,8 +655,6 @@ pub fn avx512_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<
 /// Wrapper for AVX-512-optimized element-wise addition for f64
 #[cfg(target_arch = "x86_64")]
 pub fn avx512_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
-    use crate::error::NumRs2Error;
-    
     // Check shapes match
     if a.shape() != b.shape() {
         return Err(NumRs2Error::ShapeMismatch {
@@ -710,8 +706,6 @@ pub fn avx512_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<
 /// Wrapper for AVX-512-optimized element-wise multiplication for f32
 #[cfg(target_arch = "x86_64")]
 pub fn avx512_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
-    use crate::error::NumRs2Error;
-    
     // Check shapes match
     if a.shape() != b.shape() {
         return Err(NumRs2Error::ShapeMismatch {
@@ -763,8 +757,6 @@ pub fn avx512_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<
 /// Wrapper for AVX-512-optimized element-wise multiplication for f64
 #[cfg(target_arch = "x86_64")]
 pub fn avx512_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
-    use crate::error::NumRs2Error;
-    
     // Check shapes match
     if a.shape() != b.shape() {
         return Err(NumRs2Error::ShapeMismatch {

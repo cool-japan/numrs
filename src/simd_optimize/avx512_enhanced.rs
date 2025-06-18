@@ -6,6 +6,8 @@
 //! Note: AVX-512 features are currently unstable in Rust, so this module
 //! provides production-ready implementations using stable AVX2 instructions.
 
+use crate::error::{NumRs2Error, Result};
+
 // AVX512 operations - currently using stable AVX2 implementations
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;

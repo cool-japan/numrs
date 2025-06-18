@@ -4,6 +4,7 @@
 //! mathematical operations, cache-aware algorithms, and specialized functions.
 
 use crate::array::Array;
+use crate::error::{NumRs2Error, Result};
 use crate::simd::SimdOps;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
