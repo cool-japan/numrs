@@ -6,7 +6,9 @@ use ndarray::ArrayView2;
 #[cfg(feature = "lapack")]
 use ndarray_linalg::{Eig, EigVals, Eigh, Scalar};
 use num_complex::Complex;
+#[cfg(feature = "lapack")]
 use num_traits::{Float, NumCast, Zero};
+#[cfg(feature = "lapack")]
 use std::fmt::Debug;
 
 /// Type alias for eigenvalue/eigenvector result to reduce complexity

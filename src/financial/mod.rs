@@ -6,6 +6,7 @@
 //!
 //! # Available Functions
 //!
+//! ## Basic Time Value of Money
 //! - `pv()` - Present value calculation
 //! - `fv()` - Future value calculation  
 //! - `pmt()` - Payment calculation
@@ -13,22 +14,41 @@
 //! - `nper()` - Number of periods calculation
 //! - `npv()` - Net present value calculation
 //! - `irr()` - Internal rate of return calculation
+//!
+//! ## Bond Pricing and Analysis
+//! - `bond_price()` - Bond valuation from cash flows
+//! - `bond_duration()` - Macaulay duration calculation
+//! - `modified_duration()` - Modified duration for sensitivity
+//! - `bond_convexity()` - Convexity measurement
+//! - `bond_yield()` - Yield to maturity calculation
+//! - `accrued_interest()` - Accrued interest calculation
+//! - `bond_equivalent_yield()` - Bond equivalent yield conversion
+//!
+//! ## Options Pricing
+//! - `black_scholes()` - Black-Scholes option pricing
+//! - `black_scholes_greeks()` - Option Greeks calculation
+//! - `implied_volatility()` - Implied volatility from market prices
+//! - `binomial_option_price()` - Binomial tree option pricing
 
 use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use std::fmt::Debug;
 
+mod bond_pricing;
 mod future_value;
 mod internal_rate;
 mod net_present_value;
+mod options;
 mod payment;
 mod periods;
 mod present_value;
 mod rate_calculation;
 
+pub use bond_pricing::*;
 pub use future_value::*;
 pub use internal_rate::*;
 pub use net_present_value::*;
+pub use options::*;
 pub use payment::*;
 pub use periods::*;
 pub use present_value::*;

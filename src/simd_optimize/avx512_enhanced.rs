@@ -6,6 +6,7 @@
 //! Note: AVX-512 features are currently unstable in Rust, so this module
 //! provides production-ready implementations using stable AVX2 instructions.
 
+use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 
 // AVX512 operations - currently using stable AVX2 implementations

@@ -6,6 +6,30 @@ use std::cmp;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 
+/// Type alias for complex least squares return type
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+type LstsqResult<T> = Result<(
+    Array<T>,
+    Array<<T as ndarray_linalg::Scalar>::Real>,
+    usize,
+    Array<<T as ndarray_linalg::Scalar>::Real>,
+)>;
+
+/// Flags that describe the memory layout and properties of an array
+#[derive(Debug, Clone)]
+pub struct ArrayFlags {
+    /// Array data is stored in C-contiguous order
+    pub c_contiguous: bool,
+    /// Array data is stored in Fortran-contiguous order
+    pub f_contiguous: bool,
+    /// Array data is writeable
+    pub writeable: bool,
+    /// Array data is aligned
+    pub aligned: bool,
+    /// Array owns its data
+    pub owndata: bool,
+}
+
 /// A multi-dimensional array type that wraps ndarray
 #[derive(Clone)]
 pub struct Array<T> {
@@ -589,6 +613,34 @@ impl<T: Clone> Array<T> {
         Self::from_vec(vec).reshape(shape)
     }
 
+    /// Create a new array with a specific shape, with uninitialized values
+    ///
+    /// Note: This is similar to NumPy's empty but with safe Rust semantics.
+    /// The array will be initialized with default values instead of random memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numrs2::prelude::*;
+    ///
+    /// let empty: Array<i32> = Array::empty(&[2, 3]);
+    /// assert_eq!(empty.shape(), vec![2, 3]);
+    /// assert_eq!(empty.size(), 6);
+    /// // Values are default-initialized (zeros for numeric types)
+    /// assert_eq!(empty.to_vec(), vec![0, 0, 0, 0, 0, 0]);
+    ///
+    /// let empty_f64: Array<f64> = Array::empty(&[2, 2]);
+    /// assert_eq!(empty_f64.to_vec(), vec![0.0, 0.0, 0.0, 0.0]);
+    /// ```
+    pub fn empty(shape: &[usize]) -> Self
+    where
+        T: Default + Clone,
+    {
+        let size: usize = shape.iter().product();
+        let vec = vec![T::default(); size];
+        Self::from_vec(vec).reshape(shape)
+    }
+
     /// Create a 2D identity matrix of the specified size
     ///
     /// # Examples
@@ -1085,6 +1137,44 @@ impl<T: Clone> Array<T> {
     /// Return the total number of elements
     pub fn size(&self) -> usize {
         self.data.len()
+    }
+
+    /// Return the total bytes consumed by the elements of the array
+    pub fn nbytes(&self) -> usize {
+        self.size() * std::mem::size_of::<T>()
+    }
+
+    /// Return the length of one array element in bytes
+    pub fn itemsize(&self) -> usize {
+        std::mem::size_of::<T>()
+    }
+
+    /// Return True if array owns its data
+    pub fn owns_data(&self) -> bool {
+        // ndarray arrays always own their data when created through our interface
+        true
+    }
+
+    /// Return the memory layout of the array
+    pub fn flags(&self) -> ArrayFlags {
+        ArrayFlags {
+            c_contiguous: self.data.is_standard_layout(),
+            f_contiguous: false, // ndarray uses C-order by default
+            writeable: true,     // Our arrays are always writable
+            aligned: true,       // Rust guarantees proper alignment
+            owndata: true,       // We own the data
+        }
+    }
+
+    /// Return the strides of the array
+    pub fn strides(&self) -> Vec<isize> {
+        self.data.strides().to_vec()
+    }
+
+    /// Return the base array if this is a view, otherwise None
+    pub fn base(&self) -> Option<&Array<T>> {
+        // Since we always own data, there's no base array
+        None
     }
 
     /// Return the data as a flat vector
@@ -1701,25 +1791,41 @@ where
             });
         }
 
-        // In a complete implementation, we would use BLAS for this
-        // For now, we'll implement a simple matrix multiplication algorithm
         let m = a_shape[0];
         let n = b_shape[1];
         let k = a_shape[1];
 
+        // Implement cache-aware blocked matrix multiplication
+        // This provides significant performance improvements over naive O(n³) algorithm
+
+        // Cache-optimized implementation with improved memory access pattern
         let result = Self::zeros(&[m, n]);
         let a_data = self.to_vec();
         let b_data = other.to_vec();
         let mut c_data = result.to_vec();
 
-        // Simple matrix multiplication
-        for i in 0..m {
-            for j in 0..n {
-                let mut sum = T::zero();
-                for l in 0..k {
-                    sum = sum + a_data[i * k + l].clone() * b_data[l * n + j].clone();
+        // Cache-optimized matrix multiplication with improved memory access pattern
+        // Using i-k-j loop order for better cache locality
+        const BLOCK_SIZE: usize = 64; // Cache-friendly block size
+
+        for i_block in (0..m).step_by(BLOCK_SIZE) {
+            for k_block in (0..k).step_by(BLOCK_SIZE) {
+                for j_block in (0..n).step_by(BLOCK_SIZE) {
+                    // Process blocks to improve cache reuse
+                    let i_end = std::cmp::min(i_block + BLOCK_SIZE, m);
+                    let k_end = std::cmp::min(k_block + BLOCK_SIZE, k);
+                    let j_end = std::cmp::min(j_block + BLOCK_SIZE, n);
+
+                    for i in i_block..i_end {
+                        for k_l in k_block..k_end {
+                            let a_ik = &a_data[i * k + k_l];
+                            for j in j_block..j_end {
+                                c_data[i * n + j] = c_data[i * n + j].clone()
+                                    + a_ik.clone() * b_data[k_l * n + j].clone();
+                            }
+                        }
+                    }
                 }
-                c_data[i * n + j] = sum;
             }
         }
 
@@ -1981,6 +2087,17 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// # Returns
     ///
     /// The condition number (L2 norm)
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    pub fn cond(&self) -> Result<T::Real>
+    where
+        T: ndarray_linalg::Lapack,
+        T::Real: Clone + num_traits::Float,
+    {
+        crate::new_modules::matrix_decomp::condition_number(self)
+    }
+
+    /// Compute the condition number of a matrix (fallback implementation)
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
     pub fn cond(&self) -> Option<T> {
         // Check if matrix is square
         let shape = self.shape();
@@ -1988,8 +2105,7 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
             return None;
         }
 
-        // For now, return a simple placeholder until SVD is properly implemented
-        // In a real implementation, this would compute the SVD and return σ_max/σ_min
+        // Simple placeholder for when advanced features are not available
         Some(T::one())
     }
 
@@ -2001,6 +2117,17 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// # Returns
     ///
     /// The reciprocal condition number
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    pub fn rcond(&self) -> Result<T::Real>
+    where
+        T: ndarray_linalg::Lapack,
+        T::Real: Clone + num_traits::Float,
+    {
+        crate::new_modules::matrix_decomp::rcond(self)
+    }
+
+    /// Compute the reciprocal condition number (fallback implementation)
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
     pub fn rcond(&self) -> Option<T> {
         self.cond().map(|c| T::one() / c)
     }
@@ -2013,6 +2140,20 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// # Returns
     ///
     /// True if the matrix is well-conditioned, false otherwise
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    pub fn is_well_conditioned(&self) -> Result<bool>
+    where
+        T: ndarray_linalg::Lapack,
+        T::Real: Clone + num_traits::Float,
+    {
+        let cond = crate::new_modules::matrix_decomp::condition_number(self)?;
+        let threshold: T::Real = num_traits::NumCast::from(1e12_f64)
+            .unwrap_or_else(|| num_traits::NumCast::from(1e6_f64).unwrap());
+        Ok(cond < threshold)
+    }
+
+    /// Check if a matrix is well-conditioned (fallback implementation)
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
     pub fn is_well_conditioned(&self) -> bool {
         match self.cond() {
             Some(cond_num) => {
@@ -2021,5 +2162,44 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
             }
             None => false,
         }
+    }
+
+    /// Compute the sign and log determinant of the matrix
+    ///
+    /// This is a numerically stable way to compute the determinant for large matrices
+    /// where the determinant might overflow or underflow.
+    ///
+    /// # Returns
+    ///
+    /// A tuple (sign, logdet) where sign is -1, 0, or 1, and logdet is the natural
+    /// logarithm of the absolute value of the determinant.
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    pub fn slogdet(&self) -> Result<(i8, T::Real)>
+    where
+        T: ndarray_linalg::Lapack,
+        T::Real: Clone + num_traits::Float,
+    {
+        crate::new_modules::matrix_decomp::slogdet(self)
+    }
+
+    /// Solve a linear least-squares problem
+    ///
+    /// Computes the least-squares solution to the linear system Ax = b.
+    /// If the system is over-determined, this finds the solution that minimizes ||Ax - b||₂.
+    /// If the system is under-determined, this finds the minimum-norm solution.
+    ///
+    /// # Arguments
+    /// * `b` - Right-hand side vector or matrix
+    /// * `rcond` - Cutoff for small singular values. If None, uses machine precision.
+    ///
+    /// # Returns
+    /// A tuple (x, residuals, rank, singular_values)
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+    pub fn lstsq(&self, b: &Array<T>, rcond: Option<T::Real>) -> LstsqResult<T>
+    where
+        T: ndarray_linalg::Lapack,
+        T::Real: Clone + num_traits::Float,
+    {
+        crate::new_modules::matrix_decomp::lstsq(self, b, rcond)
     }
 }

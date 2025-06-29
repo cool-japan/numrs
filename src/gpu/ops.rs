@@ -552,7 +552,7 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
 
     // Calculate workgroup count
     let total_threads = a.size() as u32;
-    let workgroup_count = (total_threads + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+    let workgroup_count = total_threads.div_ceil(WORKGROUP_SIZE);
 
     // Run the compute pass
     context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));
@@ -673,7 +673,7 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
 
     // Calculate workgroup count
     let total_threads = a.size() as u32;
-    let workgroup_count = (total_threads + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+    let workgroup_count = total_threads.div_ceil(WORKGROUP_SIZE);
 
     // Run the compute pass
     context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));

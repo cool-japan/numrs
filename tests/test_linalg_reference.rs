@@ -37,7 +37,7 @@ fn matrix_power(a: &Array<f64>, n: i32) -> numrs2::error::Result<Array<f64>> {
     let a_view = a.view_2d().map_err(|e| {
         numrs2::error::NumRs2Error::ComputationError(format!("View conversion failed: {:?}", e))
     })?;
-    let result = scirs_matrix_power(&a_view, n).map_err(|e| {
+    let result = scirs_matrix_power(&a_view, n, None).map_err(|e| {
         numrs2::error::NumRs2Error::ComputationError(format!("SCIRS matrix_power failed: {:?}", e))
     })?;
 
@@ -88,7 +88,7 @@ fn eigh(a: &Array<f64>, _uplo: &str) -> numrs2::error::Result<(Array<f64>, Array
     let a_view = a.view_2d().map_err(|e| {
         numrs2::error::NumRs2Error::ComputationError(format!("View conversion failed: {:?}", e))
     })?;
-    let (vals, vecs) = scirs_eigh(&a_view).map_err(|e| {
+    let (vals, vecs) = scirs_eigh(&a_view, None).map_err(|e| {
         numrs2::error::NumRs2Error::ComputationError(format!("SCIRS eigh failed: {:?}", e))
     })?;
 

@@ -5,13 +5,18 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+#[cfg(target_arch = "x86_64")]
+use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
 use num_complex::Complex;
 use num_traits::Float;
 use rand::Rng;
 use std::fmt::Debug;
 
+/// Threshold for using SIMD optimizations (minimum vector size)
+const SIMD_THRESHOLD: usize = 32;
+
 /// Compute the norm of a vector or matrix
-pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign>(
+pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static>(
     a: &Array<T>,
     ord: Option<T>,
 ) -> Result<T> {
@@ -22,11 +27,49 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign>(
         // Vector norm
         if ord == T::from(1.0).unwrap() {
             // L1 norm (sum of absolute values)
+            #[cfg(target_arch = "x86_64")]
+            {
+                // Use SIMD for large f32 vectors
+                if a.len() >= SIMD_THRESHOLD
+                    && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>()
+                {
+                    // Convert to f32, compute SIMD norm, and convert back
+                    let data = a.to_vec();
+                    let f32_data: Vec<f32> =
+                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                    let f32_array = Array::from_vec(f32_data);
+                    let result = EnhancedSimdOps::vectorized_norm_l1_f32(&f32_array);
+                    return Ok(T::from(result).unwrap());
+                }
+            }
+
             let data = a.to_vec();
             let sum = data.iter().fold(T::zero(), |acc, &x| acc + x.abs());
             Ok(sum)
         } else if ord == T::from(2.0).unwrap() {
             // L2 norm (Euclidean norm)
+            #[cfg(target_arch = "x86_64")]
+            {
+                // Use SIMD for large vectors
+                if a.len() >= SIMD_THRESHOLD {
+                    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                        let data = a.to_vec();
+                        let f32_data: Vec<f32> =
+                            data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                        let f32_array = Array::from_vec(f32_data);
+                        let result = EnhancedSimdOps::vectorized_norm_l2_f32(&f32_array);
+                        return Ok(T::from(result).unwrap());
+                    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                        let data = a.to_vec();
+                        let f64_data: Vec<f64> =
+                            data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                        let f64_array = Array::from_vec(f64_data);
+                        let result = EnhancedSimdOps::vectorized_norm_l2_f64(&f64_array);
+                        return Ok(T::from(result).unwrap());
+                    }
+                }
+            }
+
             let data = a.to_vec();
             let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
             Ok(sum_squares.sqrt())
@@ -267,9 +310,10 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign>(
 }
 
 /// Compute the vectorized dot product using the complex conjugate of the first argument
-pub fn vdot<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<T> {
+/// For real arrays, this is the same as inner product with SIMD acceleration
+pub fn vdot<T: Float + Clone + Debug + 'static>(a: &Array<T>, b: &Array<T>) -> Result<T> {
     // For real arrays, this is the same as inner product
-    a.dot(b)
+    inner(a, b)
 }
 
 /// Trait for real types that support vectorized dot product (vdot)
@@ -283,7 +327,7 @@ pub trait ComplexVectorDotProduct<T> {
 }
 
 /// Implementation for real types
-impl<T: Float + Clone + Debug> RealVectorDotProduct<T> for Array<T> {
+impl<T: Float + Clone + Debug + 'static> RealVectorDotProduct<T> for Array<T> {
     fn vdot(&self, other: &Array<T>) -> Result<T> {
         vdot(self, other)
     }
@@ -331,8 +375,8 @@ pub fn complex_vdot<T: Float + Clone + Debug>(
     Ok(result)
 }
 
-/// Compute the inner product of two arrays
-pub fn inner<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<T> {
+/// Compute the inner product of two arrays with SIMD acceleration when available
+pub fn inner<T: Float + Clone + Debug + 'static>(a: &Array<T>, b: &Array<T>) -> Result<T> {
     // Check dimensions
     if a.ndim() != 1 || b.ndim() != 1 {
         return Err(NumRs2Error::DimensionMismatch(
@@ -348,7 +392,35 @@ pub fn inner<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<T> 
         });
     }
 
-    // Compute dot product
+    // Use SIMD for large vectors when available
+    #[cfg(target_arch = "x86_64")]
+    {
+        if a.len() >= SIMD_THRESHOLD {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let a_data = a.to_vec();
+                let b_data = b.to_vec();
+                let f32_a_data: Vec<f32> =
+                    a_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                let f32_b_data: Vec<f32> =
+                    b_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                let f32_a = Array::from_vec(f32_a_data);
+                let f32_b = Array::from_vec(f32_b_data);
+                let result = EnhancedSimdOps::vectorized_dot_f32(&f32_a, &f32_b)?;
+                return Ok(T::from(result).unwrap());
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let a_data = a.to_vec();
+                let b_data = b.to_vec();
+                let f64_a_data: Vec<f64> = a_data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                let f64_b_data: Vec<f64> = b_data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                let f64_a = Array::from_vec(f64_a_data);
+                let f64_b = Array::from_vec(f64_b_data);
+                let result = EnhancedSimdOps::vectorized_dot_f64(&f64_a, &f64_b)?;
+                return Ok(T::from(result).unwrap());
+            }
+        }
+    }
+
+    // Fallback to regular dot product
     a.dot(b)
 }
 
@@ -402,4 +474,81 @@ pub fn outer<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
     }
 
     Ok(result)
+}
+
+/// Compute the cross product of two vectors
+///
+/// # Parameters
+///
+/// * `a` - First input vector (1D array)
+/// * `b` - Second input vector (1D array)
+///
+/// # Returns
+///
+/// The cross product of `a` and `b`
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::vector_ops::cross;
+///
+/// // 3D cross product
+/// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+/// let b = Array::from_vec(vec![4.0, 5.0, 6.0]);
+/// let c = cross(&a, &b).unwrap();
+/// assert_eq!(c.to_vec(), vec![-3.0, 6.0, -3.0]);
+///
+/// // 2D cross product (returns scalar as 1-element array)
+/// let a2d = Array::from_vec(vec![1.0, 2.0]);
+/// let b2d = Array::from_vec(vec![3.0, 4.0]);
+/// let c2d = cross(&a2d, &b2d).unwrap();
+/// assert_eq!(c2d.to_vec(), vec![-2.0]); // 1*4 - 2*3 = -2
+/// ```
+pub fn cross<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>> {
+    let a_shape = a.shape();
+    let b_shape = b.shape();
+
+    // Validate input shapes
+    if a_shape.len() != 1 || b_shape.len() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "Cross product requires 1D arrays".to_string(),
+        ));
+    }
+
+    let a_data = a.to_vec();
+    let b_data = b.to_vec();
+
+    match (a_data.len(), b_data.len()) {
+        (2, 2) => {
+            // 2D cross product: returns scalar (z-component of 3D cross product)
+            let result = a_data[0] * b_data[1] - a_data[1] * b_data[0];
+            Ok(Array::from_vec(vec![result]))
+        }
+        (3, 3) => {
+            // 3D cross product
+            let cx = a_data[1] * b_data[2] - a_data[2] * b_data[1];
+            let cy = a_data[2] * b_data[0] - a_data[0] * b_data[2];
+            let cz = a_data[0] * b_data[1] - a_data[1] * b_data[0];
+            Ok(Array::from_vec(vec![cx, cy, cz]))
+        }
+        (a_len, b_len) if a_len == b_len => {
+            // General N-dimensional case: only support 2D and 3D
+            if a_len < 2 {
+                Err(NumRs2Error::DimensionMismatch(
+                    "Cross product requires at least 2D vectors".to_string(),
+                ))
+            } else if a_len > 3 {
+                return Err(NumRs2Error::DimensionMismatch(
+                    "Cross product only supports 2D and 3D vectors".to_string(),
+                ));
+            } else {
+                // Should not reach here due to pattern matching above
+                unreachable!()
+            }
+        }
+        _ => Err(NumRs2Error::DimensionMismatch(
+            "Cross product requires vectors of the same length".to_string(),
+        )),
+    }
 }

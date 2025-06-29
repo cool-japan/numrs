@@ -468,6 +468,284 @@ impl EnhancedSimdOps {
         }
     }
 
+    /// SIMD-optimized dot product for f32 vectors
+    #[cfg(target_arch = "x86_64")]
+    pub fn vectorized_dot_f32(x: &Array<f32>, y: &Array<f32>) -> Result<f32> {
+        if x.shape() != y.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: x.shape(),
+                actual: y.shape(),
+            });
+        }
+
+        let x_data = x.to_vec();
+        let y_data = y.to_vec();
+
+        if x_data.len() != y_data.len() {
+            return Err(NumRs2Error::DimensionMismatch(
+                "Vectors must have the same length".to_string(),
+            ));
+        }
+
+        unsafe { Ok(Self::avx2_dot_f32(&x_data, &y_data)) }
+    }
+
+    /// AVX2 optimized dot product implementation
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2,fma")]
+    unsafe fn avx2_dot_f32(x: &[f32], y: &[f32]) -> f32 {
+        let len = x.len();
+        let simd_len = len & !(AVX2_F32_LANES - 1);
+
+        let mut sum_vec = _mm256_setzero_ps();
+
+        // Process 8 elements at a time with AVX2
+        for i in (0..simd_len).step_by(AVX2_F32_LANES) {
+            // Prefetch next cache line for better memory bandwidth
+            if i + PREFETCH_DISTANCE < len {
+                _mm_prefetch(
+                    x.as_ptr().add(i + PREFETCH_DISTANCE) as *const i8,
+                    _MM_HINT_T0,
+                );
+                _mm_prefetch(
+                    y.as_ptr().add(i + PREFETCH_DISTANCE) as *const i8,
+                    _MM_HINT_T0,
+                );
+            }
+
+            let x_vec = _mm256_loadu_ps(x.as_ptr().add(i));
+            let y_vec = _mm256_loadu_ps(y.as_ptr().add(i));
+
+            // Use FMA for x * y + sum for better performance and accuracy
+            sum_vec = _mm256_fmadd_ps(x_vec, y_vec, sum_vec);
+        }
+
+        // Horizontal sum of the 8 lanes
+        let hi128 = _mm256_extractf128_ps(sum_vec, 1);
+        let lo128 = _mm256_castps256_ps128(sum_vec);
+        let sum128 = _mm_add_ps(hi128, lo128);
+        let shuf = _mm_shuffle_ps(sum128, sum128, 0x1B);
+        let sums = _mm_add_ps(sum128, shuf);
+        let shuf2 = _mm_shuffle_ps(sums, sums, 0x01);
+        let final_sum = _mm_add_ps(sums, shuf2);
+        let mut result = _mm_cvtss_f32(final_sum);
+
+        // Handle remaining elements with scalar operations
+        for i in simd_len..len {
+            result += x[i] * y[i];
+        }
+
+        result
+    }
+
+    /// SIMD-optimized dot product for f64 vectors
+    #[cfg(target_arch = "x86_64")]
+    pub fn vectorized_dot_f64(x: &Array<f64>, y: &Array<f64>) -> Result<f64> {
+        if x.shape() != y.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: x.shape(),
+                actual: y.shape(),
+            });
+        }
+
+        let x_data = x.to_vec();
+        let y_data = y.to_vec();
+
+        if x_data.len() != y_data.len() {
+            return Err(NumRs2Error::DimensionMismatch(
+                "Vectors must have the same length".to_string(),
+            ));
+        }
+
+        unsafe { Ok(Self::avx2_dot_f64(&x_data, &y_data)) }
+    }
+
+    /// AVX2 optimized dot product for f64
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2,fma")]
+    unsafe fn avx2_dot_f64(x: &[f64], y: &[f64]) -> f64 {
+        let len = x.len();
+        let simd_len = len & !(AVX2_F64_LANES - 1);
+
+        let mut sum_vec = _mm256_setzero_pd();
+
+        // Process 4 elements at a time with AVX2
+        for i in (0..simd_len).step_by(AVX2_F64_LANES) {
+            if i + PREFETCH_DISTANCE / 2 < len {
+                _mm_prefetch(
+                    x.as_ptr().add(i + PREFETCH_DISTANCE / 2) as *const i8,
+                    _MM_HINT_T0,
+                );
+                _mm_prefetch(
+                    y.as_ptr().add(i + PREFETCH_DISTANCE / 2) as *const i8,
+                    _MM_HINT_T0,
+                );
+            }
+
+            let x_vec = _mm256_loadu_pd(x.as_ptr().add(i));
+            let y_vec = _mm256_loadu_pd(y.as_ptr().add(i));
+
+            sum_vec = _mm256_fmadd_pd(x_vec, y_vec, sum_vec);
+        }
+
+        // Horizontal sum of the 4 lanes
+        let hi128 = _mm256_extractf128_pd(sum_vec, 1);
+        let lo128 = _mm256_castpd256_pd128(sum_vec);
+        let sum128 = _mm_add_pd(hi128, lo128);
+        let shuf = _mm_shuffle_pd(sum128, sum128, 0x01);
+        let final_sum = _mm_add_pd(sum128, shuf);
+        let mut result = _mm_cvtsd_f64(final_sum);
+
+        // Handle remaining elements
+        for i in simd_len..len {
+            result += x[i] * y[i];
+        }
+
+        result
+    }
+
+    /// SIMD-optimized L2 norm (Euclidean norm) for f32 vectors
+    #[cfg(target_arch = "x86_64")]
+    pub fn vectorized_norm_l2_f32(x: &Array<f32>) -> f32 {
+        let x_data = x.to_vec();
+        unsafe { Self::avx2_norm_l2_f32(&x_data).sqrt() }
+    }
+
+    /// AVX2 optimized sum of squares for L2 norm
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2,fma")]
+    unsafe fn avx2_norm_l2_f32(x: &[f32]) -> f32 {
+        let len = x.len();
+        let simd_len = len & !(AVX2_F32_LANES - 1);
+
+        let mut sum_vec = _mm256_setzero_ps();
+
+        // Process 8 elements at a time
+        for i in (0..simd_len).step_by(AVX2_F32_LANES) {
+            if i + PREFETCH_DISTANCE < len {
+                _mm_prefetch(
+                    x.as_ptr().add(i + PREFETCH_DISTANCE) as *const i8,
+                    _MM_HINT_T0,
+                );
+            }
+
+            let x_vec = _mm256_loadu_ps(x.as_ptr().add(i));
+
+            // Compute x² and accumulate using FMA
+            sum_vec = _mm256_fmadd_ps(x_vec, x_vec, sum_vec);
+        }
+
+        // Horizontal sum
+        let hi128 = _mm256_extractf128_ps(sum_vec, 1);
+        let lo128 = _mm256_castps256_ps128(sum_vec);
+        let sum128 = _mm_add_ps(hi128, lo128);
+        let shuf = _mm_shuffle_ps(sum128, sum128, 0x1B);
+        let sums = _mm_add_ps(sum128, shuf);
+        let shuf2 = _mm_shuffle_ps(sums, sums, 0x01);
+        let final_sum = _mm_add_ps(sums, shuf2);
+        let mut result = _mm_cvtss_f32(final_sum);
+
+        // Handle remaining elements
+        for i in simd_len..len {
+            result += x[i] * x[i];
+        }
+
+        result
+    }
+
+    /// SIMD-optimized L2 norm for f64 vectors
+    #[cfg(target_arch = "x86_64")]
+    pub fn vectorized_norm_l2_f64(x: &Array<f64>) -> f64 {
+        let x_data = x.to_vec();
+        unsafe { Self::avx2_norm_l2_f64(&x_data).sqrt() }
+    }
+
+    /// AVX2 optimized sum of squares for f64 L2 norm
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2,fma")]
+    unsafe fn avx2_norm_l2_f64(x: &[f64]) -> f64 {
+        let len = x.len();
+        let simd_len = len & !(AVX2_F64_LANES - 1);
+
+        let mut sum_vec = _mm256_setzero_pd();
+
+        for i in (0..simd_len).step_by(AVX2_F64_LANES) {
+            if i + PREFETCH_DISTANCE / 2 < len {
+                _mm_prefetch(
+                    x.as_ptr().add(i + PREFETCH_DISTANCE / 2) as *const i8,
+                    _MM_HINT_T0,
+                );
+            }
+
+            let x_vec = _mm256_loadu_pd(x.as_ptr().add(i));
+            sum_vec = _mm256_fmadd_pd(x_vec, x_vec, sum_vec);
+        }
+
+        // Horizontal sum
+        let hi128 = _mm256_extractf128_pd(sum_vec, 1);
+        let lo128 = _mm256_castpd256_pd128(sum_vec);
+        let sum128 = _mm_add_pd(hi128, lo128);
+        let shuf = _mm_shuffle_pd(sum128, sum128, 0x01);
+        let final_sum = _mm_add_pd(sum128, shuf);
+        let mut result = _mm_cvtsd_f64(final_sum);
+
+        for i in simd_len..len {
+            result += x[i] * x[i];
+        }
+
+        result
+    }
+
+    /// SIMD-optimized L1 norm (Manhattan norm) for f32 vectors
+    #[cfg(target_arch = "x86_64")]
+    pub fn vectorized_norm_l1_f32(x: &Array<f32>) -> f32 {
+        let x_data = x.to_vec();
+        unsafe { Self::avx2_norm_l1_f32(&x_data) }
+    }
+
+    /// AVX2 optimized L1 norm implementation
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2")]
+    unsafe fn avx2_norm_l1_f32(x: &[f32]) -> f32 {
+        let len = x.len();
+        let simd_len = len & !(AVX2_F32_LANES - 1);
+
+        let mut sum_vec = _mm256_setzero_ps();
+        let sign_mask = _mm256_set1_ps(-0.0); // 0x80000000 for each element
+
+        for i in (0..simd_len).step_by(AVX2_F32_LANES) {
+            if i + PREFETCH_DISTANCE < len {
+                _mm_prefetch(
+                    x.as_ptr().add(i + PREFETCH_DISTANCE) as *const i8,
+                    _MM_HINT_T0,
+                );
+            }
+
+            let x_vec = _mm256_loadu_ps(x.as_ptr().add(i));
+
+            // Compute absolute value by clearing the sign bit
+            let abs_x = _mm256_andnot_ps(sign_mask, x_vec);
+            sum_vec = _mm256_add_ps(sum_vec, abs_x);
+        }
+
+        // Horizontal sum
+        let hi128 = _mm256_extractf128_ps(sum_vec, 1);
+        let lo128 = _mm256_castps256_ps128(sum_vec);
+        let sum128 = _mm_add_ps(hi128, lo128);
+        let shuf = _mm_shuffle_ps(sum128, sum128, 0x1B);
+        let sums = _mm_add_ps(sum128, shuf);
+        let shuf2 = _mm_shuffle_ps(sums, sums, 0x01);
+        let final_sum = _mm_add_ps(sums, shuf2);
+        let mut result = _mm_cvtss_f32(final_sum);
+
+        // Handle remaining elements
+        for i in simd_len..len {
+            result += x[i].abs();
+        }
+
+        result
+    }
+
     /// Memory bandwidth optimized copy with prefetching
     #[cfg(target_arch = "x86_64")]
     pub fn optimized_copy_f32(src: &Array<f32>, dst: &mut Array<f32>) -> Result<()> {
@@ -708,7 +986,7 @@ mod tests {
         let b_r = Array::from_vec(vec![5.0, 6.0]);
         let b_i = Array::from_vec(vec![7.0, 8.0]);
 
-        let (c_r, c_i) = complex_multiply_f32(&a_r, &a_i, &b_r, &b_i).unwrap();
+        let (c_r, c_i) = EnhancedSimdOps::complex_multiply_f32(&a_r, &a_i, &b_r, &b_i).unwrap();
 
         // (1+3i) * (5+7i) = 5 + 7i + 15i - 21 = -16 + 22i
         assert_relative_eq!(c_r.to_vec()[0], -16.0, epsilon = 1e-6);
@@ -727,5 +1005,97 @@ mod tests {
         assert_eq!(monitor.operations_count, 1);
         assert_eq!(monitor.total_elements, 1000);
         assert_relative_eq!(monitor.vectorization_ratio, 0.8, epsilon = 1e-6);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_simd_dot_product_f32() {
+        let x = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]);
+        let y = Array::from_vec(vec![2.0f32, 3.0, 4.0, 5.0]);
+
+        let result = EnhancedSimdOps::vectorized_dot_f32(&x, &y).unwrap();
+        let expected = 1.0 * 2.0 + 2.0 * 3.0 + 3.0 * 4.0 + 4.0 * 5.0; // 40.0
+
+        assert_relative_eq!(result, expected, epsilon = 1e-6);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_simd_dot_product_f64() {
+        let x = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
+        let y = Array::from_vec(vec![2.0f64, 3.0, 4.0, 5.0]);
+
+        let result = EnhancedSimdOps::vectorized_dot_f64(&x, &y).unwrap();
+        let expected = 1.0 * 2.0 + 2.0 * 3.0 + 3.0 * 4.0 + 4.0 * 5.0; // 40.0
+
+        assert_relative_eq!(result, expected, epsilon = 1e-12);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_simd_dot_product_large() {
+        // Test with larger vectors that will use SIMD lanes fully
+        let size = 1000;
+        let x_data: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let y_data: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
+
+        let x = Array::from_vec(x_data.clone());
+        let y = Array::from_vec(y_data.clone());
+
+        let simd_result = EnhancedSimdOps::vectorized_dot_f32(&x, &y).unwrap();
+
+        // Compute expected result using scalar operations
+        let expected: f32 = x_data.iter().zip(y_data.iter()).map(|(a, b)| a * b).sum();
+
+        assert_relative_eq!(simd_result, expected, epsilon = 1e-5);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_simd_l2_norm_f32() {
+        let x = Array::from_vec(vec![3.0f32, 4.0]);
+        let result = EnhancedSimdOps::vectorized_norm_l2_f32(&x);
+        let expected = (3.0f32 * 3.0 + 4.0 * 4.0).sqrt(); // 5.0
+
+        assert_relative_eq!(result, expected, epsilon = 1e-6);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_simd_l2_norm_f64() {
+        let x = Array::from_vec(vec![3.0f64, 4.0]);
+        let result = EnhancedSimdOps::vectorized_norm_l2_f64(&x);
+        let expected = (3.0f64 * 3.0 + 4.0 * 4.0).sqrt(); // 5.0
+
+        assert_relative_eq!(result, expected, epsilon = 1e-12);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_simd_l1_norm_f32() {
+        let x = Array::from_vec(vec![-3.0f32, 4.0, -2.0, 1.0]);
+        let result = EnhancedSimdOps::vectorized_norm_l1_f32(&x);
+        let expected = 3.0f32 + 4.0 + 2.0 + 1.0; // 10.0
+
+        assert_relative_eq!(result, expected, epsilon = 1e-6);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_simd_norm_large_vector() {
+        // Test with a large vector to ensure SIMD lanes are used
+        let size = 1000;
+        let x_data: Vec<f32> = (1..=size).map(|i| i as f32).collect();
+        let x = Array::from_vec(x_data.clone());
+
+        let simd_l2 = EnhancedSimdOps::vectorized_norm_l2_f32(&x);
+        let simd_l1 = EnhancedSimdOps::vectorized_norm_l1_f32(&x);
+
+        // Compute expected results
+        let expected_l2 = x_data.iter().map(|&val| val * val).sum::<f32>().sqrt();
+        let expected_l1 = x_data.iter().map(|&val| val.abs()).sum::<f32>();
+
+        assert_relative_eq!(simd_l2, expected_l2, epsilon = 1e-2);
+        assert_relative_eq!(simd_l1, expected_l1, epsilon = 1e-5);
     }
 }

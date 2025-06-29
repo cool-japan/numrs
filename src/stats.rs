@@ -1,6 +1,10 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast, Zero};
+use rayon::prelude::*;
+
+/// Threshold for using parallel processing (minimum array size)
+const PARALLEL_THRESHOLD: usize = 10000;
 
 // Statistical functions
 pub trait Statistics<T> {
@@ -12,14 +16,24 @@ pub trait Statistics<T> {
     fn percentile(&self, q: T) -> T;
 }
 
-impl<T: Float + Clone + Zero + NumCast + std::fmt::Display> Statistics<T> for Array<T> {
+impl<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync> Statistics<T>
+    for Array<T>
+{
     fn mean(&self) -> T {
         let data = self.to_vec();
         if data.is_empty() {
             return T::zero();
         }
 
-        let sum = data.iter().fold(T::zero(), |acc, &x| acc + x);
+        let sum = if data.len() >= PARALLEL_THRESHOLD {
+            // Use parallel processing for large arrays
+            data.par_iter()
+                .map(|&x| x)
+                .reduce(|| T::zero(), |acc, x| acc + x)
+        } else {
+            // Use sequential processing for small arrays
+            data.iter().fold(T::zero(), |acc, &x| acc + x)
+        };
         sum / T::from(data.len()).unwrap()
     }
 
@@ -30,9 +44,16 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display> Statistics<T> for Ar
         }
 
         let mean = self.mean();
-        let sum_squared_diff = data
-            .iter()
-            .fold(T::zero(), |acc, &x| acc + (x - mean) * (x - mean));
+        let sum_squared_diff = if data.len() >= PARALLEL_THRESHOLD {
+            // Use parallel processing for large arrays
+            data.par_iter()
+                .map(|&x| (x - mean) * (x - mean))
+                .reduce(|| T::zero(), |acc, x| acc + x)
+        } else {
+            // Use sequential processing for small arrays
+            data.iter()
+                .fold(T::zero(), |acc, &x| acc + (x - mean) * (x - mean))
+        };
 
         sum_squared_diff / T::from(data.len()).unwrap()
     }
@@ -47,8 +68,16 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display> Statistics<T> for Ar
             return T::zero();
         }
 
-        data.iter()
-            .fold(data[0], |acc, &x| if x < acc { x } else { acc })
+        if data.len() >= PARALLEL_THRESHOLD {
+            // Use parallel processing for large arrays
+            data.par_iter()
+                .cloned()
+                .reduce(|| data[0], |acc, x| if x < acc { x } else { acc })
+        } else {
+            // Use sequential processing for small arrays
+            data.iter()
+                .fold(data[0], |acc, &x| if x < acc { x } else { acc })
+        }
     }
 
     fn max(&self) -> T {
@@ -57,8 +86,16 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display> Statistics<T> for Ar
             return T::zero();
         }
 
-        data.iter()
-            .fold(data[0], |acc, &x| if x > acc { x } else { acc })
+        if data.len() >= PARALLEL_THRESHOLD {
+            // Use parallel processing for large arrays
+            data.par_iter()
+                .cloned()
+                .reduce(|| data[0], |acc, x| if x > acc { x } else { acc })
+        } else {
+            // Use sequential processing for small arrays
+            data.iter()
+                .fold(data[0], |acc, &x| if x > acc { x } else { acc })
+        }
     }
 
     fn percentile(&self, q: T) -> T {
@@ -83,7 +120,7 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display> Statistics<T> for Ar
 /// # Returns
 ///
 /// An array with the peak-to-peak values
-pub fn ptp<T: Float + Clone + NumCast + Default>(
+pub fn ptp<T: Float + Clone + NumCast + Default + Send + Sync>(
     a: &Array<T>,
     axis: Option<usize>,
 ) -> Result<Array<T>> {
@@ -120,8 +157,8 @@ pub fn ptp<T: Float + Clone + NumCast + Default>(
     Ok(Array::from_vec(result).reshape(&min_array.shape()))
 }
 
-/// Calculate minimum values along the specified axis
-pub fn min_along_axis<T: Float + Clone + NumCast + Default>(
+/// Calculate minimum values along the specified axis with parallel processing for large arrays
+pub fn min_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
     a: &Array<T>,
     axis: usize,
 ) -> Result<Array<T>> {
@@ -153,54 +190,111 @@ pub fn min_along_axis<T: Float + Clone + NumCast + Default>(
     let mut indices = vec![0; shape.len()];
     let mut result_indices = vec![0; result_shape.len()];
 
-    // Initialize the min values with the first elements
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..result_size {
-        // Convert flat index to multi-dimensional indices
-        let mut remainder = i;
-        for j in (0..result_shape.len()).rev() {
-            result_indices[j] = remainder % result_shape[j];
-            remainder /= result_shape[j];
-        }
+    // Use parallel processing for large arrays
+    if result_size >= PARALLEL_THRESHOLD {
+        min_values
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, min_val)| {
+                // Convert flat index to multi-dimensional indices
+                let mut remainder = i;
+                let mut result_indices = vec![0; result_shape.len()];
+                for j in (0..result_shape.len()).rev() {
+                    result_indices[j] = remainder % result_shape[j];
+                    remainder /= result_shape[j];
+                }
 
-        // Copy the result indices to the array indices, accounting for the removed axis
-        let mut result_idx = 0;
+                // Copy the result indices to the array indices, accounting for the removed axis
+                let mut indices = vec![0; shape.len()];
+                let mut result_idx = 0;
+                for j in 0..shape.len() {
+                    if j == axis {
+                        indices[j] = 0; // Start at 0 for the axis we're minimizing
+                    } else {
+                        indices[j] = result_indices[result_idx];
+                        result_idx += 1;
+                    }
+                }
+
+                // Calculate the flat index in the original data
+                let mut flat_idx = 0;
+                let mut stride = 1;
+                for j in (0..shape.len()).rev() {
+                    flat_idx += indices[j] * stride;
+                    stride *= shape[j];
+                }
+
+                // Initialize min value with the first element
+                *min_val = data[flat_idx];
+
+                // Compare with remaining elements along the axis
+                for k in 1..axis_size {
+                    indices[axis] = k;
+
+                    // Calculate the new flat index
+                    let mut new_idx = 0;
+                    let mut new_stride = 1;
+                    for j in (0..shape.len()).rev() {
+                        new_idx += indices[j] * new_stride;
+                        new_stride *= shape[j];
+                    }
+
+                    // Update min if needed
+                    if data[new_idx] < *min_val {
+                        *min_val = data[new_idx];
+                    }
+                }
+            });
+    } else {
+        // Use sequential processing for small arrays
         #[allow(clippy::needless_range_loop)]
-        for j in 0..shape.len() {
-            if j == axis {
-                indices[j] = 0; // Start at 0 for the axis we're minimizing
-            } else {
-                indices[j] = result_indices[result_idx];
-                result_idx += 1;
+        for i in 0..result_size {
+            // Convert flat index to multi-dimensional indices
+            let mut remainder = i;
+            for j in (0..result_shape.len()).rev() {
+                result_indices[j] = remainder % result_shape[j];
+                remainder /= result_shape[j];
             }
-        }
 
-        // Calculate the flat index in the original data
-        let mut flat_idx = 0;
-        let mut stride = 1;
-        for j in (0..shape.len()).rev() {
-            flat_idx += indices[j] * stride;
-            stride *= shape[j];
-        }
+            // Copy the result indices to the array indices, accounting for the removed axis
+            let mut result_idx = 0;
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..shape.len() {
+                if j == axis {
+                    indices[j] = 0; // Start at 0 for the axis we're minimizing
+                } else {
+                    indices[j] = result_indices[result_idx];
+                    result_idx += 1;
+                }
+            }
 
-        // Initialize min value with the first element
-        min_values[i] = data[flat_idx];
-
-        // Compare with remaining elements along the axis
-        for k in 1..axis_size {
-            indices[axis] = k;
-
-            // Calculate the new flat index
-            let mut new_idx = 0;
-            let mut new_stride = 1;
+            // Calculate the flat index in the original data
+            let mut flat_idx = 0;
+            let mut stride = 1;
             for j in (0..shape.len()).rev() {
-                new_idx += indices[j] * new_stride;
-                new_stride *= shape[j];
+                flat_idx += indices[j] * stride;
+                stride *= shape[j];
             }
 
-            // Update min if needed
-            if data[new_idx] < min_values[i] {
-                min_values[i] = data[new_idx];
+            // Initialize min value with the first element
+            min_values[i] = data[flat_idx];
+
+            // Compare with remaining elements along the axis
+            for k in 1..axis_size {
+                indices[axis] = k;
+
+                // Calculate the new flat index
+                let mut new_idx = 0;
+                let mut new_stride = 1;
+                for j in (0..shape.len()).rev() {
+                    new_idx += indices[j] * new_stride;
+                    new_stride *= shape[j];
+                }
+
+                // Update min if needed
+                if data[new_idx] < min_values[i] {
+                    min_values[i] = data[new_idx];
+                }
             }
         }
     }
@@ -208,8 +302,8 @@ pub fn min_along_axis<T: Float + Clone + NumCast + Default>(
     Ok(Array::from_vec(min_values).reshape(&result_shape))
 }
 
-/// Calculate maximum values along the specified axis
-pub fn max_along_axis<T: Float + Clone + NumCast + Default>(
+/// Calculate maximum values along the specified axis with parallel processing for large arrays
+pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
     a: &Array<T>,
     axis: usize,
 ) -> Result<Array<T>> {
@@ -241,54 +335,111 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default>(
     let mut indices = vec![0; shape.len()];
     let mut result_indices = vec![0; result_shape.len()];
 
-    // Initialize the max values with the first elements
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..result_size {
-        // Convert flat index to multi-dimensional indices
-        let mut remainder = i;
-        for j in (0..result_shape.len()).rev() {
-            result_indices[j] = remainder % result_shape[j];
-            remainder /= result_shape[j];
-        }
+    // Use parallel processing for large arrays
+    if result_size >= PARALLEL_THRESHOLD {
+        max_values
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, max_val)| {
+                // Convert flat index to multi-dimensional indices
+                let mut remainder = i;
+                let mut result_indices = vec![0; result_shape.len()];
+                for j in (0..result_shape.len()).rev() {
+                    result_indices[j] = remainder % result_shape[j];
+                    remainder /= result_shape[j];
+                }
 
-        // Copy the result indices to the array indices, accounting for the removed axis
-        let mut result_idx = 0;
+                // Copy the result indices to the array indices, accounting for the removed axis
+                let mut indices = vec![0; shape.len()];
+                let mut result_idx = 0;
+                for j in 0..shape.len() {
+                    if j == axis {
+                        indices[j] = 0; // Start at 0 for the axis we're maximizing
+                    } else {
+                        indices[j] = result_indices[result_idx];
+                        result_idx += 1;
+                    }
+                }
+
+                // Calculate the flat index in the original data
+                let mut flat_idx = 0;
+                let mut stride = 1;
+                for j in (0..shape.len()).rev() {
+                    flat_idx += indices[j] * stride;
+                    stride *= shape[j];
+                }
+
+                // Initialize max value with the first element
+                *max_val = data[flat_idx];
+
+                // Compare with remaining elements along the axis
+                for k in 1..axis_size {
+                    indices[axis] = k;
+
+                    // Calculate the new flat index
+                    let mut new_idx = 0;
+                    let mut new_stride = 1;
+                    for j in (0..shape.len()).rev() {
+                        new_idx += indices[j] * new_stride;
+                        new_stride *= shape[j];
+                    }
+
+                    // Update max if needed
+                    if data[new_idx] > *max_val {
+                        *max_val = data[new_idx];
+                    }
+                }
+            });
+    } else {
+        // Use sequential processing for small arrays
         #[allow(clippy::needless_range_loop)]
-        for j in 0..shape.len() {
-            if j == axis {
-                indices[j] = 0; // Start at 0 for the axis we're maximizing
-            } else {
-                indices[j] = result_indices[result_idx];
-                result_idx += 1;
+        for i in 0..result_size {
+            // Convert flat index to multi-dimensional indices
+            let mut remainder = i;
+            for j in (0..result_shape.len()).rev() {
+                result_indices[j] = remainder % result_shape[j];
+                remainder /= result_shape[j];
             }
-        }
 
-        // Calculate the flat index in the original data
-        let mut flat_idx = 0;
-        let mut stride = 1;
-        for j in (0..shape.len()).rev() {
-            flat_idx += indices[j] * stride;
-            stride *= shape[j];
-        }
+            // Copy the result indices to the array indices, accounting for the removed axis
+            let mut result_idx = 0;
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..shape.len() {
+                if j == axis {
+                    indices[j] = 0; // Start at 0 for the axis we're maximizing
+                } else {
+                    indices[j] = result_indices[result_idx];
+                    result_idx += 1;
+                }
+            }
 
-        // Initialize max value with the first element
-        max_values[i] = data[flat_idx];
-
-        // Compare with remaining elements along the axis
-        for k in 1..axis_size {
-            indices[axis] = k;
-
-            // Calculate the new flat index
-            let mut new_idx = 0;
-            let mut new_stride = 1;
+            // Calculate the flat index in the original data
+            let mut flat_idx = 0;
+            let mut stride = 1;
             for j in (0..shape.len()).rev() {
-                new_idx += indices[j] * new_stride;
-                new_stride *= shape[j];
+                flat_idx += indices[j] * stride;
+                stride *= shape[j];
             }
 
-            // Update max if needed
-            if data[new_idx] > max_values[i] {
-                max_values[i] = data[new_idx];
+            // Initialize max value with the first element
+            max_values[i] = data[flat_idx];
+
+            // Compare with remaining elements along the axis
+            for k in 1..axis_size {
+                indices[axis] = k;
+
+                // Calculate the new flat index
+                let mut new_idx = 0;
+                let mut new_stride = 1;
+                for j in (0..shape.len()).rev() {
+                    new_idx += indices[j] * new_stride;
+                    new_stride *= shape[j];
+                }
+
+                // Update max if needed
+                if data[new_idx] > max_values[i] {
+                    max_values[i] = data[new_idx];
+                }
             }
         }
     }
@@ -308,7 +459,7 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default>(
 /// # Returns
 ///
 /// The weighted average or (average, sum of weights) if returned is true
-pub fn average<T: Float + Clone + Zero + NumCast>(
+pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
     a: &Array<T>,
     weights: Option<&Array<T>>,
     axis: Option<usize>,
@@ -406,7 +557,7 @@ pub fn average<T: Float + Clone + Zero + NumCast>(
 }
 
 /// Calculate the weighted sum along a specified axis
-fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast>(
+fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast + Send + Sync>(
     a: &Array<T>,
     weights: &Array<T>,
     axis: usize,
@@ -485,69 +636,243 @@ fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast>(
 }
 
 // Additional statistics functions
-pub fn cov<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
-    a: &Array<T>,
-    b: &Array<T>,
-) -> Result<T> {
-    if a.size() != b.size() {
-        return Err(NumRs2Error::ShapeMismatch {
-            expected: vec![a.size()],
-            actual: vec![b.size()],
-        });
+
+/// Estimate covariance matrix of variables with parallel processing for large datasets
+///
+/// # Parameters
+///
+/// * `x` - A 2-D array containing multiple variables and observations.
+///   Each row represents a variable, and each column a single observation
+///   of all those variables.
+/// * `y` - Optional additional data. If provided, it is appended to x
+/// * `rowvar` - If true (default), each row represents a variable, with observations in columns.
+///   Otherwise, the relationship is transposed
+/// * `bias` - If false (default), use Bessel's correction with ddof=1
+/// * `ddof` - Delta degrees of freedom. By default ddof=None -> ddof=1.
+///
+/// # Returns
+///
+/// The covariance matrix of the variables.
+pub fn cov<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync>(
+    x: &Array<T>,
+    y: Option<&Array<T>>,
+    rowvar: Option<bool>,
+    bias: Option<bool>,
+    ddof: Option<usize>,
+) -> Result<Array<T>> {
+    let rowvar_val = rowvar.unwrap_or(true);
+    let bias_val = bias.unwrap_or(false);
+    let ddof_val = if bias_val { 0 } else { ddof.unwrap_or(1) };
+
+    // Prepare data matrix - ensure 2D
+    let mut data = if x.ndim() == 1 {
+        // Convert 1D array to 2D: (n,) -> (1, n) for rowvar=true or (n, 1) for rowvar=false
+        if rowvar_val {
+            x.reshape(&[1, x.len()])
+        } else {
+            x.reshape(&[x.len(), 1])
+        }
+    } else if rowvar_val {
+        x.clone()
+    } else {
+        // Transpose if columns represent variables
+        x.transpose()
+    };
+
+    // Append y if provided
+    if let Some(y_arr) = y {
+        let y_data = if y_arr.ndim() == 1 {
+            // Convert 1D array to 2D: (n,) -> (1, n) for rowvar=true or (n, 1) for rowvar=false
+            if rowvar_val {
+                y_arr.reshape(&[1, y_arr.len()])
+            } else {
+                y_arr.reshape(&[y_arr.len(), 1])
+            }
+        } else if rowvar_val {
+            y_arr.clone()
+        } else {
+            y_arr.transpose()
+        };
+
+        // Check dimensions match
+        let x_obs = data.shape()[1];
+        let y_obs = y_data.shape()[1];
+        if x_obs != y_obs {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: vec![x_obs],
+                actual: vec![y_obs],
+            });
+        }
+
+        // Concatenate along first dimension (variables)
+        data = concatenate(&[&data, &y_data], 0)?;
     }
 
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-    let n = T::from(a_data.len()).unwrap();
+    let shape = data.shape();
+    let n_vars = shape[0];
+    let n_obs = shape[1];
 
-    // Calculate means manually
-    let a_sum = a_data.iter().fold(T::zero(), |acc, &val| acc + val);
-    let a_mean = a_sum / n;
-
-    let b_sum = b_data.iter().fold(T::zero(), |acc, &val| acc + val);
-    let b_mean = b_sum / n;
-
-    let mut sum_ab = T::zero();
-    for i in 0..a_data.len() {
-        sum_ab = sum_ab + (a_data[i] - a_mean) * (b_data[i] - b_mean);
+    if n_obs <= ddof_val {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Not enough observations ({}) for ddof ({})",
+            n_obs, ddof_val
+        )));
     }
 
-    Ok(sum_ab / n)
+    // Calculate means for each variable
+    let mut means = Vec::with_capacity(n_vars);
+    let data_vec = data.to_vec();
+
+    for i in 0..n_vars {
+        let mut sum = T::zero();
+        for j in 0..n_obs {
+            sum = sum + data_vec[i * n_obs + j];
+        }
+        means.push(sum / T::from(n_obs).unwrap());
+    }
+
+    // Calculate covariance matrix with parallel processing for large datasets
+    let mut cov_matrix = vec![T::zero(); n_vars * n_vars];
+    let factor = T::from(n_obs - ddof_val).unwrap();
+
+    if n_vars * n_obs >= PARALLEL_THRESHOLD {
+        // Use parallel processing for large covariance calculations
+        let covariances: Vec<(usize, usize, T)> = (0..n_vars)
+            .into_par_iter()
+            .flat_map(|i| {
+                let data_vec_clone = data_vec.clone();
+                let means_clone = means.clone();
+                (0..=i).into_par_iter().map(move |j| {
+                    let sum = (0..n_obs)
+                        .into_par_iter()
+                        .map(|k| {
+                            let xi = data_vec_clone[i * n_obs + k] - means_clone[i];
+                            let xj = data_vec_clone[j * n_obs + k] - means_clone[j];
+                            xi * xj
+                        })
+                        .reduce(|| T::zero(), |acc, x| acc + x);
+                    let cov_val = sum / factor;
+                    (i, j, cov_val)
+                })
+            })
+            .collect();
+
+        // Fill the covariance matrix
+        for (i, j, cov_val) in covariances {
+            cov_matrix[i * n_vars + j] = cov_val;
+            if i != j {
+                cov_matrix[j * n_vars + i] = cov_val; // Symmetric
+            }
+        }
+    } else {
+        // Use sequential processing for small datasets
+        for i in 0..n_vars {
+            for j in 0..=i {
+                // Only compute lower triangular part
+                let mut sum = T::zero();
+                for k in 0..n_obs {
+                    let xi = data_vec[i * n_obs + k] - means[i];
+                    let xj = data_vec[j * n_obs + k] - means[j];
+                    sum = sum + xi * xj;
+                }
+                let cov_val = sum / factor;
+                cov_matrix[i * n_vars + j] = cov_val;
+                if i != j {
+                    cov_matrix[j * n_vars + i] = cov_val; // Symmetric
+                }
+            }
+        }
+    }
+
+    Ok(Array::from_vec(cov_matrix).reshape(&[n_vars, n_vars]))
 }
 
-pub fn corrcoef<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
-    a: &Array<T>,
-    b: &Array<T>,
-) -> Result<T> {
-    let cov_ab = cov(a, b)?;
+/// Return Pearson product-moment correlation coefficients with parallel processing.
+///
+/// # Parameters
+///
+/// * `x` - A 2-D array containing multiple variables and observations.
+///   Each row represents a variable, and each column a single observation
+///   of all those variables.
+/// * `y` - Optional additional data. If provided, it is appended to x
+/// * `rowvar` - If true (default), each row represents a variable
+///
+/// # Returns
+///
+/// The correlation coefficient matrix of the variables.
+pub fn corrcoef<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync>(
+    x: &Array<T>,
+    y: Option<&Array<T>>,
+    rowvar: Option<bool>,
+) -> Result<Array<T>> {
+    // Get covariance matrix
+    let c = cov(x, y, rowvar, Some(false), None)?;
 
-    // Calculate std manually
-    let a_data = a.to_vec();
-    let a_sum = a_data.iter().fold(T::zero(), |acc, &val| acc + val);
-    let a_mean = a_sum / T::from(a_data.len()).unwrap();
-    let a_var_sum = a_data.iter().fold(T::zero(), |acc, &val| {
-        let diff = val - a_mean;
-        acc + diff * diff
-    });
-    let std_a = (a_var_sum / T::from(a_data.len()).unwrap()).sqrt();
+    // Get standard deviations (diagonal of covariance matrix)
+    let shape = c.shape();
+    let n = shape[0];
+    let c_vec = c.to_vec();
 
-    let b_data = b.to_vec();
-    let b_sum = b_data.iter().fold(T::zero(), |acc, &val| acc + val);
-    let b_mean = b_sum / T::from(b_data.len()).unwrap();
-    let b_var_sum = b_data.iter().fold(T::zero(), |acc, &val| {
-        let diff = val - b_mean;
-        acc + diff * diff
-    });
-    let std_b = (b_var_sum / T::from(b_data.len()).unwrap()).sqrt();
-
-    if std_a == T::zero() || std_b == T::zero() {
-        return Err(NumRs2Error::InvalidOperation(
-            "Cannot calculate correlation coefficient with zero standard deviation".to_string(),
-        ));
+    let mut d = Vec::with_capacity(n);
+    for i in 0..n {
+        let var = c_vec[i * n + i];
+        if var < T::zero() {
+            return Err(NumRs2Error::InvalidOperation(
+                "Negative variance encountered".to_string(),
+            ));
+        }
+        d.push(var.sqrt());
     }
 
-    Ok(cov_ab / (std_a * std_b))
+    // Normalize to get correlation coefficients with parallel processing for large matrices
+    let mut corr_matrix = vec![T::zero(); n * n];
+
+    if n * n >= PARALLEL_THRESHOLD {
+        // Use parallel processing for large correlation matrices
+        let correlations: Vec<(usize, T)> = (0..n * n)
+            .into_par_iter()
+            .map(|idx| {
+                let i = idx / n;
+                let j = idx % n;
+                let corr_val = if d[i] == T::zero() || d[j] == T::zero() {
+                    // Handle zero variance
+                    if i == j {
+                        T::one()
+                    } else {
+                        T::zero()
+                    }
+                } else {
+                    c_vec[i * n + j] / (d[i] * d[j])
+                };
+                (idx, corr_val)
+            })
+            .collect();
+
+        for (idx, corr_val) in correlations {
+            corr_matrix[idx] = corr_val;
+        }
+    } else {
+        // Use sequential processing for small matrices
+        for i in 0..n {
+            for j in 0..n {
+                if d[i] == T::zero() || d[j] == T::zero() {
+                    // Handle zero variance
+                    if i == j {
+                        corr_matrix[i * n + j] = T::one();
+                    } else {
+                        corr_matrix[i * n + j] = T::zero();
+                    }
+                } else {
+                    corr_matrix[i * n + j] = c_vec[i * n + j] / (d[i] * d[j]);
+                }
+            }
+        }
+    }
+
+    Ok(Array::from_vec(corr_matrix).reshape(&[n, n]))
 }
+
+use crate::array_ops::joining::concatenate;
 
 /// Compute the quantiles of a dataset
 ///
@@ -565,7 +890,7 @@ pub fn corrcoef<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
 /// # Returns
 ///
 /// Array of quantile values
-pub fn quantile<T: Float + Clone + NumCast + std::fmt::Display>(
+pub fn quantile<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>(
     a: &Array<T>,
     q: &Array<T>,
     method: Option<&str>,
@@ -656,7 +981,7 @@ pub fn quantile<T: Float + Clone + NumCast + std::fmt::Display>(
 /// # Returns
 ///
 /// Array of percentile values
-pub fn percentile<T: Float + Clone + NumCast + std::fmt::Display>(
+pub fn percentile<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>(
     a: &Array<T>,
     q: &Array<T>,
     method: Option<&str>,
@@ -668,7 +993,7 @@ pub fn percentile<T: Float + Clone + NumCast + std::fmt::Display>(
     quantile(a, &quantiles, method)
 }
 
-/// Calculate a histogram of a dataset
+/// Calculate a histogram of a dataset with parallel processing for large arrays
 ///
 /// # Parameters
 ///
@@ -680,7 +1005,7 @@ pub fn percentile<T: Float + Clone + NumCast + std::fmt::Display>(
 /// # Returns
 ///
 /// A tuple of (histogram counts, bin edges)
-pub fn histogram<T: Float + Clone + NumCast + std::fmt::Display>(
+pub fn histogram<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>(
     a: &Array<T>,
     bins: usize,
     range: Option<(T, T)>,
@@ -714,48 +1039,121 @@ pub fn histogram<T: Float + Clone + NumCast + std::fmt::Display>(
         bin_edges.push(min_val + step * T::from(i).unwrap());
     }
 
-    // Count values in each bin with optional weights
+    // Count values in each bin with optional weights using parallel processing for large datasets
     let mut counts = vec![T::zero(); bins];
 
-    if let Some(w) = weights {
-        let weights_data = w.to_vec();
+    if data.len() >= PARALLEL_THRESHOLD {
+        // Use parallel processing for large datasets
+        if let Some(w) = weights {
+            let weights_data = w.to_vec();
 
-        if weights_data.len() != data.len() {
-            return Err(NumRs2Error::ShapeMismatch {
-                expected: vec![data.len()],
-                actual: vec![weights_data.len()],
-            });
-        }
-
-        for (i, &val) in data.iter().enumerate() {
-            if val < min_val || val > max_val {
-                continue; // Skip values outside the range
+            if weights_data.len() != data.len() {
+                return Err(NumRs2Error::ShapeMismatch {
+                    expected: vec![data.len()],
+                    actual: vec![weights_data.len()],
+                });
             }
 
-            if val == max_val {
-                // Handle edge case for the maximum value
-                counts[bins - 1] = counts[bins - 1] + weights_data[i];
-            } else {
-                let bin_idx = ((val - min_val) / step).to_usize().unwrap();
-                if bin_idx < bins {
-                    counts[bin_idx] = counts[bin_idx] + weights_data[i];
+            // Parallel reduction to compute bin counts with weights
+            let bin_contributions: Vec<Vec<T>> = data
+                .par_iter()
+                .zip(weights_data.par_iter())
+                .enumerate()
+                .map(|(_i, (&val, &weight))| {
+                    let mut local_counts = vec![T::zero(); bins];
+
+                    if val >= min_val && val <= max_val {
+                        if val == max_val {
+                            // Handle edge case for the maximum value
+                            local_counts[bins - 1] = weight;
+                        } else {
+                            let bin_idx = ((val - min_val) / step).to_usize().unwrap();
+                            if bin_idx < bins {
+                                local_counts[bin_idx] = weight;
+                            }
+                        }
+                    }
+                    local_counts
+                })
+                .collect();
+
+            // Sum up all contributions
+            for contribution in bin_contributions {
+                for (i, &contrib) in contribution.iter().enumerate() {
+                    counts[i] = counts[i] + contrib;
+                }
+            }
+        } else {
+            // No weights - parallel counting
+            let bin_contributions: Vec<Vec<T>> = data
+                .par_iter()
+                .map(|&val| {
+                    let mut local_counts = vec![T::zero(); bins];
+
+                    if val >= min_val && val <= max_val {
+                        if val == max_val {
+                            // Handle edge case for the maximum value
+                            local_counts[bins - 1] = T::one();
+                        } else {
+                            let bin_idx = ((val - min_val) / step).to_usize().unwrap();
+                            if bin_idx < bins {
+                                local_counts[bin_idx] = T::one();
+                            }
+                        }
+                    }
+                    local_counts
+                })
+                .collect();
+
+            // Sum up all contributions
+            for contribution in bin_contributions {
+                for (i, &contrib) in contribution.iter().enumerate() {
+                    counts[i] = counts[i] + contrib;
                 }
             }
         }
     } else {
-        // No weights - just count occurrences
-        for &val in &data {
-            if val < min_val || val > max_val {
-                continue; // Skip values outside the range
+        // Use sequential processing for small datasets
+        if let Some(w) = weights {
+            let weights_data = w.to_vec();
+
+            if weights_data.len() != data.len() {
+                return Err(NumRs2Error::ShapeMismatch {
+                    expected: vec![data.len()],
+                    actual: vec![weights_data.len()],
+                });
             }
 
-            if val == max_val {
-                // Handle edge case for the maximum value
-                counts[bins - 1] = counts[bins - 1] + T::one();
-            } else {
-                let bin_idx = ((val - min_val) / step).to_usize().unwrap();
-                if bin_idx < bins {
-                    counts[bin_idx] = counts[bin_idx] + T::one();
+            for (i, &val) in data.iter().enumerate() {
+                if val < min_val || val > max_val {
+                    continue; // Skip values outside the range
+                }
+
+                if val == max_val {
+                    // Handle edge case for the maximum value
+                    counts[bins - 1] = counts[bins - 1] + weights_data[i];
+                } else {
+                    let bin_idx = ((val - min_val) / step).to_usize().unwrap();
+                    if bin_idx < bins {
+                        counts[bin_idx] = counts[bin_idx] + weights_data[i];
+                    }
+                }
+            }
+        } else {
+            // No weights - just count occurrences
+            for &val in &data {
+                if val < min_val || val > max_val {
+                    continue; // Skip values outside the range
+                }
+
+                if val == max_val {
+                    // Handle edge case for the maximum value
+                    counts[bins - 1] = counts[bins - 1] + T::one();
+                } else {
+                    let bin_idx = ((val - min_val) / step).to_usize().unwrap();
+                    if bin_idx < bins {
+                        counts[bin_idx] = counts[bin_idx] + T::one();
+                    }
                 }
             }
         }
@@ -778,7 +1176,7 @@ pub fn histogram<T: Float + Clone + NumCast + std::fmt::Display>(
 /// # Returns
 ///
 /// A tuple of (histogram counts, x_edges, y_edges)
-pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display>(
+pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>(
     x: &Array<T>,
     y: &Array<T>,
     bins: impl Into<HistBins>,
@@ -819,7 +1217,16 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display>(
             }
             (min, max)
         }
-        None => (x.min(), x.max()),
+        None => {
+            let x_data = x.to_vec();
+            let x_min = x_data
+                .iter()
+                .fold(x_data[0], |acc, &val| if val < acc { val } else { acc });
+            let x_max = x_data
+                .iter()
+                .fold(x_data[0], |acc, &val| if val > acc { val } else { acc });
+            (x_min, x_max)
+        }
     };
 
     let (y_min, y_max) = match range {
@@ -832,7 +1239,16 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display>(
             }
             (min, max)
         }
-        None => (y.min(), y.max()),
+        None => {
+            let y_data = y.to_vec();
+            let y_min = y_data
+                .iter()
+                .fold(y_data[0], |acc, &val| if val < acc { val } else { acc });
+            let y_max = y_data
+                .iter()
+                .fold(y_data[0], |acc, &val| if val > acc { val } else { acc });
+            (y_min, y_max)
+        }
     };
 
     // Create bin edges
@@ -943,7 +1359,7 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display>(
 /// # Returns
 ///
 /// An array of counts for each value (assuming values are integers from 0 to n-1)
-pub fn bincount<T: Float + Clone + NumCast>(
+pub fn bincount<T: Float + Clone + NumCast + Send + Sync>(
     a: &Array<T>,
     weights: Option<&Array<T>>,
     minlength: Option<usize>,
@@ -1031,7 +1447,7 @@ pub fn bincount<T: Float + Clone + NumCast>(
 /// # Returns
 ///
 /// Array of indices the same shape as x
-pub fn digitize<T: Float + Clone + NumCast>(
+pub fn digitize<T: Float + Clone + NumCast + Send + Sync>(
     x: &Array<T>,
     bins: &Array<T>,
     right: Option<bool>,
@@ -1106,6 +1522,234 @@ pub enum HistBins {
     Tuple(usize, usize),
 }
 
+/// Calculate a multi-dimensional histogram of a dataset
+///
+/// # Parameters
+///
+/// * `sample` - Array of shape (N, D) containing N samples in D dimensions
+/// * `bins` - Number of bins for each dimension. Can be:
+///   - A single usize: Same number of bins for all dimensions
+///   - A vector of usize: Different number of bins for each dimension
+/// * `range` - Optional vector of (min, max) tuples for each dimension
+/// * `weights` - Optional array of weights for each sample
+///
+/// # Returns
+///
+/// A tuple of (histogram counts, vector of bin edges for each dimension)
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Create 2D data points
+/// let data = Array::from_vec(vec![
+///     0.0, 0.0,
+///     0.5, 0.5,
+///     1.0, 1.0,
+///     0.3, 0.7,
+/// ]).reshape(&[4, 2]);
+///
+/// // Compute 2D histogram with 2 bins in each dimension
+/// let (hist, edges) = histogram_dd(&data, &[2, 2], None, None).unwrap();
+/// assert_eq!(hist.shape(), vec![2, 2]);
+/// ```
+pub fn histogram_dd<T: Float + Clone + NumCast + std::fmt::Display>(
+    sample: &Array<T>,
+    bins: &[usize],
+    range: Option<Vec<(T, T)>>,
+    weights: Option<&Array<T>>,
+) -> Result<(Array<T>, Vec<Array<T>>)> {
+    let shape = sample.shape();
+    if shape.len() != 2 {
+        return Err(NumRs2Error::InvalidOperation(
+            "histogram_dd requires 2D input array of shape (N, D)".to_string(),
+        ));
+    }
+
+    let n_samples = shape[0];
+    let n_dims = shape[1];
+
+    if n_samples == 0 || n_dims == 0 {
+        return Err(NumRs2Error::InvalidOperation(
+            "Cannot compute histogram of empty data".to_string(),
+        ));
+    }
+
+    // Validate bins
+    if bins.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "bins array cannot be empty".to_string(),
+        ));
+    }
+
+    let bin_counts = if bins.len() == 1 {
+        // Use same number of bins for all dimensions
+        vec![bins[0]; n_dims]
+    } else if bins.len() == n_dims {
+        bins.to_vec()
+    } else {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "bins length {} does not match number of dimensions {}",
+            bins.len(),
+            n_dims
+        )));
+    };
+
+    // Check for zero bins
+    for &b in &bin_counts {
+        if b == 0 {
+            return Err(NumRs2Error::InvalidOperation(
+                "Number of bins must be greater than 0".to_string(),
+            ));
+        }
+    }
+
+    // Validate weights if provided
+    if let Some(w) = weights {
+        if w.shape()[0] != n_samples {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: vec![n_samples],
+                actual: w.shape().to_vec(),
+            });
+        }
+    }
+
+    // Determine ranges for each dimension
+    let mut ranges = Vec::with_capacity(n_dims);
+    let sample_data = sample.to_vec();
+
+    if let Some(r) = range {
+        if r.len() != n_dims {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "range length {} does not match number of dimensions {}",
+                r.len(),
+                n_dims
+            )));
+        }
+        ranges = r;
+    } else {
+        // Compute min and max for each dimension
+        for d in 0..n_dims {
+            let mut min_val = sample_data[d];
+            let mut max_val = sample_data[d];
+
+            for i in 0..n_samples {
+                let val = sample_data[i * n_dims + d];
+                if val < min_val {
+                    min_val = val;
+                }
+                if val > max_val {
+                    max_val = val;
+                }
+            }
+
+            // Add small epsilon to max to ensure last value is included
+            let epsilon = T::from(1e-10).unwrap();
+            max_val = max_val + epsilon;
+
+            ranges.push((min_val, max_val));
+        }
+    }
+
+    // Create bin edges for each dimension
+    let mut edges = Vec::with_capacity(n_dims);
+    let mut bin_steps = Vec::with_capacity(n_dims);
+
+    for (d, &n_bins) in bin_counts.iter().enumerate() {
+        let (min_val, max_val) = ranges[d];
+        let step = (max_val - min_val) / T::from(n_bins).unwrap();
+        bin_steps.push(step);
+
+        let mut dim_edges = Vec::with_capacity(n_bins + 1);
+        for i in 0..=n_bins {
+            dim_edges.push(min_val + step * T::from(i).unwrap());
+        }
+        edges.push(Array::from_vec(dim_edges));
+    }
+
+    // Initialize multi-dimensional histogram
+    let hist_shape: Vec<usize> = bin_counts.clone();
+    let total_bins: usize = hist_shape.iter().product();
+    let mut hist_data = vec![T::zero(); total_bins];
+
+    // Helper function to convert multi-dimensional indices to linear index
+    let indices_to_linear = |indices: &[usize]| -> usize {
+        let mut linear = 0;
+        let mut stride = 1;
+        for i in (0..n_dims).rev() {
+            linear += indices[i] * stride;
+            stride *= hist_shape[i];
+        }
+        linear
+    };
+
+    // Fill the histogram
+    if let Some(w) = weights {
+        let weights_data = w.to_vec();
+
+        for i in 0..n_samples {
+            let mut indices = Vec::with_capacity(n_dims);
+            let mut in_bounds = true;
+
+            for d in 0..n_dims {
+                let val = sample_data[i * n_dims + d];
+                let (min_val, max_val) = ranges[d];
+
+                if val < min_val || val > max_val {
+                    in_bounds = false;
+                    break;
+                }
+
+                let mut idx = ((val - min_val) / bin_steps[d]).to_usize().unwrap();
+                // Handle edge case where value equals max
+                if idx >= bin_counts[d] {
+                    idx = bin_counts[d] - 1;
+                }
+                indices.push(idx);
+            }
+
+            if in_bounds {
+                let linear_idx = indices_to_linear(&indices);
+                hist_data[linear_idx] = hist_data[linear_idx] + weights_data[i];
+            }
+        }
+    } else {
+        // No weights, just count
+        for i in 0..n_samples {
+            let mut indices = Vec::with_capacity(n_dims);
+            let mut in_bounds = true;
+
+            for d in 0..n_dims {
+                let val = sample_data[i * n_dims + d];
+                let (min_val, max_val) = ranges[d];
+
+                if val < min_val || val > max_val {
+                    in_bounds = false;
+                    break;
+                }
+
+                let mut idx = ((val - min_val) / bin_steps[d]).to_usize().unwrap();
+                // Handle edge case where value equals max
+                if idx >= bin_counts[d] {
+                    idx = bin_counts[d] - 1;
+                }
+                indices.push(idx);
+            }
+
+            if in_bounds {
+                let linear_idx = indices_to_linear(&indices);
+                hist_data[linear_idx] = hist_data[linear_idx] + T::one();
+            }
+        }
+    }
+
+    // Create the histogram array with proper shape
+    let hist = Array::from_vec(hist_data).reshape(&hist_shape);
+
+    Ok((hist, edges))
+}
+
 impl From<usize> for HistBins {
     fn from(val: usize) -> Self {
         HistBins::Single(val)
@@ -1115,5 +1759,532 @@ impl From<usize> for HistBins {
 impl From<(usize, usize)> for HistBins {
     fn from(val: (usize, usize)) -> Self {
         HistBins::Tuple(val.0, val.1)
+    }
+}
+
+/// Compute the arithmetic mean along the specified axis, ignoring NaNs with parallel processing
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which the mean is computed (None for all elements)
+/// * `keepdims` - Whether to keep the dimensions of the result
+///
+/// # Returns
+///
+/// Array with NaN values ignored in the mean calculation
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::nanmean;
+///
+/// let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0]);
+/// let result = nanmean(&a, None, false).unwrap();
+/// assert_eq!(result.to_vec()[0], 8.0 / 3.0); // (1 + 3 + 4) / 3
+/// ```
+pub fn nanmean<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    _keepdims: bool,
+) -> Result<Array<T>> {
+    match axis {
+        None => {
+            // Compute mean of all elements with parallel processing for large arrays
+            let data = array.to_vec();
+
+            if data.len() >= PARALLEL_THRESHOLD {
+                // Use parallel processing
+                let (sum, count) = data
+                    .par_iter()
+                    .filter(|x| !x.is_nan())
+                    .fold(
+                        || (T::zero(), 0usize),
+                        |(sum, count), &x| (sum + x, count + 1),
+                    )
+                    .reduce(
+                        || (T::zero(), 0usize),
+                        |(sum1, count1), (sum2, count2)| (sum1 + sum2, count1 + count2),
+                    );
+
+                if count == 0 {
+                    Ok(Array::from_vec(vec![T::nan()]))
+                } else {
+                    let mean = sum / T::from(count).unwrap();
+                    Ok(Array::from_vec(vec![mean]))
+                }
+            } else {
+                // Use sequential processing for small arrays
+                let filtered: Vec<T> = data.into_iter().filter(|x| !x.is_nan()).collect();
+
+                if filtered.is_empty() {
+                    Ok(Array::from_vec(vec![T::nan()]))
+                } else {
+                    let sum = filtered.iter().fold(T::zero(), |acc, &x| acc + x);
+                    let mean = sum / T::from(filtered.len()).unwrap();
+                    Ok(Array::from_vec(vec![mean]))
+                }
+            }
+        }
+        Some(_) => {
+            // For now, implement simple version - could be extended for axis support
+            nanmean(array, None, _keepdims)
+        }
+    }
+}
+
+/// Compute the standard deviation along the specified axis, ignoring NaNs
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which the std is computed (None for all elements)
+/// * `ddof` - Delta degrees of freedom (default 0)
+/// * `keepdims` - Whether to keep the dimensions of the result
+///
+/// # Returns
+///
+/// Array with NaN values ignored in the std calculation
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::nanstd;
+///
+/// let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0]);
+/// let result = nanstd(&a, None, Some(0), false).unwrap();
+/// // Standard deviation of [1, 3, 4]
+/// ```
+pub fn nanstd<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    ddof: Option<usize>,
+    _keepdims: bool,
+) -> Result<Array<T>> {
+    let variance = nanvar(array, axis, ddof, _keepdims)?;
+    Ok(variance.map(|x| x.sqrt()))
+}
+
+/// Compute the variance along the specified axis, ignoring NaNs with parallel processing
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which the var is computed (None for all elements)
+/// * `ddof` - Delta degrees of freedom (default 0)
+/// * `keepdims` - Whether to keep the dimensions of the result
+///
+/// # Returns
+///
+/// Array with NaN values ignored in the variance calculation
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::nanvar;
+///
+/// let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0]);
+/// let result = nanvar(&a, None, Some(0), false).unwrap();
+/// // Variance of [1, 3, 4]
+/// ```
+pub fn nanvar<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    ddof: Option<usize>,
+    _keepdims: bool,
+) -> Result<Array<T>> {
+    let ddof_val = ddof.unwrap_or(0);
+
+    match axis {
+        None => {
+            // Compute variance of all elements with parallel processing for large arrays
+            let data = array.to_vec();
+
+            if data.len() >= PARALLEL_THRESHOLD {
+                // Use parallel processing
+                let (sum, count) = data
+                    .par_iter()
+                    .filter(|x| !x.is_nan())
+                    .fold(
+                        || (T::zero(), 0usize),
+                        |(sum, count), &x| (sum + x, count + 1),
+                    )
+                    .reduce(
+                        || (T::zero(), 0usize),
+                        |(sum1, count1), (sum2, count2)| (sum1 + sum2, count1 + count2),
+                    );
+
+                if count <= ddof_val {
+                    Ok(Array::from_vec(vec![T::nan()]))
+                } else {
+                    let mean = sum / T::from(count).unwrap();
+
+                    let sum_squared_diff = data
+                        .par_iter()
+                        .filter(|x| !x.is_nan())
+                        .map(|&x| (x - mean) * (x - mean))
+                        .reduce(|| T::zero(), |acc, x| acc + x);
+
+                    let variance = sum_squared_diff / T::from(count - ddof_val).unwrap();
+                    Ok(Array::from_vec(vec![variance]))
+                }
+            } else {
+                // Use sequential processing for small arrays
+                let filtered: Vec<T> = data.into_iter().filter(|x| !x.is_nan()).collect();
+
+                if filtered.len() <= ddof_val {
+                    Ok(Array::from_vec(vec![T::nan()]))
+                } else {
+                    let mean = filtered.iter().fold(T::zero(), |acc, &x| acc + x)
+                        / T::from(filtered.len()).unwrap();
+
+                    let sum_squared_diff = filtered
+                        .iter()
+                        .fold(T::zero(), |acc, &x| acc + (x - mean) * (x - mean));
+
+                    let variance = sum_squared_diff / T::from(filtered.len() - ddof_val).unwrap();
+                    Ok(Array::from_vec(vec![variance]))
+                }
+            }
+        }
+        Some(_) => {
+            // For now, implement simple version - could be extended for axis support
+            nanvar(array, None, ddof, _keepdims)
+        }
+    }
+}
+
+/// Compute the minimum of an array along the specified axis, ignoring NaNs
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which the minimum is computed (None for all elements)
+/// * `keepdims` - Whether to keep the dimensions of the result
+///
+/// # Returns
+///
+/// Array with minimum values ignoring NaNs
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::nanmin;
+///
+/// let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 0.5]);
+/// let result = nanmin(&a, None, false).unwrap();
+/// assert_eq!(result.to_vec()[0], 0.5);
+/// ```
+pub fn nanmin<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    _keepdims: bool,
+) -> Result<Array<T>> {
+    match axis {
+        None => {
+            let data = array.to_vec();
+            let filtered: Vec<T> = data.into_iter().filter(|x| !x.is_nan()).collect();
+
+            if filtered.is_empty() {
+                Ok(Array::from_vec(vec![T::nan()]))
+            } else {
+                let min_val = filtered.iter().fold(filtered[0], |acc, &x| acc.min(x));
+                Ok(Array::from_vec(vec![min_val]))
+            }
+        }
+        Some(_) => {
+            // For now, implement simple version
+            nanmin(array, None, _keepdims)
+        }
+    }
+}
+
+/// Compute the maximum of an array along the specified axis, ignoring NaNs
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which the maximum is computed (None for all elements)
+/// * `keepdims` - Whether to keep the dimensions of the result
+///
+/// # Returns
+///
+/// Array with maximum values ignoring NaNs
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::nanmax;
+///
+/// let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 0.5]);
+/// let result = nanmax(&a, None, false).unwrap();
+/// assert_eq!(result.to_vec()[0], 3.0);
+/// ```
+pub fn nanmax<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    _keepdims: bool,
+) -> Result<Array<T>> {
+    match axis {
+        None => {
+            let data = array.to_vec();
+            let filtered: Vec<T> = data.into_iter().filter(|x| !x.is_nan()).collect();
+
+            if filtered.is_empty() {
+                Ok(Array::from_vec(vec![T::nan()]))
+            } else {
+                let max_val = filtered.iter().fold(filtered[0], |acc, &x| acc.max(x));
+                Ok(Array::from_vec(vec![max_val]))
+            }
+        }
+        Some(_) => {
+            // For now, implement simple version
+            nanmax(array, None, _keepdims)
+        }
+    }
+}
+
+/// Compute the sum of an array along the specified axis, ignoring NaNs with parallel processing
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which the sum is computed (None for all elements)
+/// * `keepdims` - Whether to keep the dimensions of the result
+///
+/// # Returns
+///
+/// Array with sum values ignoring NaNs
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::nansum;
+///
+/// let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 2.0]);
+/// let result = nansum(&a, None, false).unwrap();
+/// assert_eq!(result.to_vec()[0], 6.0); // 1 + 3 + 2
+/// ```
+pub fn nansum<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    _keepdims: bool,
+) -> Result<Array<T>> {
+    match axis {
+        None => {
+            let data = array.to_vec();
+
+            let sum = if data.len() >= PARALLEL_THRESHOLD {
+                // Use parallel processing for large arrays
+                data.par_iter()
+                    .filter(|x| !x.is_nan())
+                    .cloned()
+                    .reduce(|| T::zero(), |acc, x| acc + x)
+            } else {
+                // Use sequential processing for small arrays
+                data.iter()
+                    .fold(T::zero(), |acc, &x| if x.is_nan() { acc } else { acc + x })
+            };
+            Ok(Array::from_vec(vec![sum]))
+        }
+        Some(_) => {
+            // For now, implement simple version
+            nansum(array, None, _keepdims)
+        }
+    }
+}
+
+/// Compute the product of an array along the specified axis, ignoring NaNs
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which the product is computed (None for all elements)
+/// * `keepdims` - Whether to keep the dimensions of the result
+///
+/// # Returns
+///
+/// Array with product values ignoring NaNs
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::nanprod;
+///
+/// let a = Array::from_vec(vec![2.0, f64::NAN, 3.0, 4.0]);
+/// let result = nanprod(&a, None, false).unwrap();
+/// assert_eq!(result.to_vec()[0], 24.0); // 2 * 3 * 4
+/// ```
+pub fn nanprod<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    _keepdims: bool,
+) -> Result<Array<T>> {
+    match axis {
+        None => {
+            let data = array.to_vec();
+            let product = data
+                .iter()
+                .fold(T::one(), |acc, &x| if x.is_nan() { acc } else { acc * x });
+            Ok(Array::from_vec(vec![product]))
+        }
+        Some(_) => {
+            // For now, implement simple version
+            nanprod(array, None, _keepdims)
+        }
+    }
+}
+
+/// Compute the mode (most frequent value) of an array
+///
+/// The mode is the value that appears most often in a dataset. This implementation
+/// returns the most frequent value along with its count. For arrays with multiple
+/// modes (equally frequent values), the smallest value is returned.
+///
+/// # Arguments
+///
+/// * `array` - Input array
+/// * `axis` - Axis along which to compute the mode (None for flattened array)
+/// * `nan_policy` - How to handle NaN values:
+///   - "propagate": Return NaN if any NaN values are present (default)
+///   - "omit": Ignore NaN values in computation
+///   - "raise": Raise an error if any NaN values are present
+///
+/// # Returns
+///
+/// A tuple of (mode, count) where:
+/// - mode: Array containing the most frequent values
+/// - count: Array containing the counts of the mode values
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::stats::mode;
+///
+/// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 2.0, 1.0, 1.0]);
+/// let (mode_val, count) = mode(&a, None, None).unwrap();
+/// assert_eq!(mode_val.to_vec()[0], 1.0);  // 1.0 appears 3 times
+/// assert_eq!(count.to_vec()[0], 3.0);     // Count is 3
+///
+/// // Example with multiple values having same frequency
+/// let b = Array::from_vec(vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0]);
+/// let (mode_val, count) = mode(&b, None, None).unwrap();
+/// assert_eq!(mode_val.to_vec()[0], 1.0);  // Smallest value with max frequency
+/// assert_eq!(count.to_vec()[0], 2.0);     // Each appears 2 times
+/// ```
+pub fn mode<T>(
+    array: &Array<T>,
+    axis: Option<usize>,
+    nan_policy: Option<&str>,
+) -> Result<(Array<T>, Array<T>)>
+where
+    T: Float + Clone + PartialOrd + std::fmt::Display + NumCast,
+{
+    let policy = nan_policy.unwrap_or("propagate");
+
+    match axis {
+        None => {
+            // Flatten the array and compute mode
+            let data = array.to_vec();
+
+            if data.is_empty() {
+                return Err(NumRs2Error::InvalidOperation(
+                    "Cannot compute mode of empty array".to_string(),
+                ));
+            }
+
+            // Handle NaN policy
+            let filtered_data: Vec<T> = match policy {
+                "propagate" => {
+                    // Check if any NaN values exist
+                    if data.iter().any(|x| x.is_nan()) {
+                        return Ok((
+                            Array::from_vec(vec![T::nan()]),
+                            Array::from_vec(vec![T::zero()]),
+                        ));
+                    }
+                    data
+                }
+                "omit" => {
+                    // Filter out NaN values
+                    data.into_iter().filter(|x| !x.is_nan()).collect()
+                }
+                "raise" => {
+                    // Check for NaN values and raise error if found
+                    if data.iter().any(|x| x.is_nan()) {
+                        return Err(NumRs2Error::InvalidOperation(
+                            "NaN values found in array with nan_policy='raise'".to_string(),
+                        ));
+                    }
+                    data
+                }
+                _ => {
+                    return Err(NumRs2Error::InvalidOperation(format!(
+                        "Invalid nan_policy '{}'. Use 'propagate', 'omit', or 'raise'",
+                        policy
+                    )));
+                }
+            };
+
+            if filtered_data.is_empty() {
+                return Err(NumRs2Error::InvalidOperation(
+                    "No valid (non-NaN) values found".to_string(),
+                ));
+            }
+
+            // Count frequency of each value
+            use std::collections::HashMap;
+            let mut counts: HashMap<String, (T, usize)> = HashMap::new();
+
+            for &value in &filtered_data {
+                let key = format!("{:.15}", value); // Use string key for floating point comparison
+                let entry = counts.entry(key).or_insert((value, 0));
+                entry.1 += 1;
+            }
+
+            // Find the value(s) with maximum frequency
+            let max_count = counts.values().map(|(_, count)| *count).max().unwrap();
+
+            // Among values with max frequency, find the smallest one
+            let mut mode_candidates: Vec<T> = counts
+                .values()
+                .filter(|(_, count)| *count == max_count)
+                .map(|(value, _)| *value)
+                .collect();
+
+            mode_candidates.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+            let mode_value = mode_candidates[0];
+            let mode_count = T::from(max_count).unwrap();
+
+            Ok((
+                Array::from_vec(vec![mode_value]),
+                Array::from_vec(vec![mode_count]),
+            ))
+        }
+        Some(axis_val) => {
+            // For axis-specific mode computation
+            let shape = array.shape();
+            if axis_val >= shape.len() {
+                return Err(NumRs2Error::DimensionMismatch(format!(
+                    "Axis {} out of bounds for array of dimension {}",
+                    axis_val,
+                    shape.len()
+                )));
+            }
+
+            // This is a simplified implementation - for a full implementation,
+            // we would need to iterate along the specified axis
+            // For now, fall back to the flattened version
+            mode(array, None, nan_policy)
+        }
     }
 }

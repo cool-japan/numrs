@@ -1,11 +1,16 @@
 #![allow(clippy::needless_range_loop)]
 
+#[cfg(feature = "lapack")]
 use crate::array::Array;
+#[cfg(feature = "lapack")]
 use crate::error::{NumRs2Error, Result};
+#[cfg(feature = "lapack")]
 use ndarray::ArrayView2;
 #[cfg(feature = "lapack")]
 use ndarray_linalg::{Scalar, SVD};
+#[cfg(feature = "lapack")]
 use num_traits::{Float, NumCast, Zero};
+#[cfg(feature = "lapack")]
 use std::fmt::Debug;
 
 pub mod cholesky;
@@ -33,7 +38,7 @@ pub use schur::schur;
 
 // Re-export condition number functions for convenience
 #[cfg(feature = "lapack")]
-pub use condition::{condition_number, rcond};
+pub use condition::{condition_number, lstsq, rcond, slogdet};
 
 // Re-export utils functions for convenience
 #[cfg(test)]
@@ -428,7 +433,10 @@ where
         cod(self)
     }
 
-    // Note: Condition number methods are implemented in the main array module
+    /// Compute the reciprocal condition number of the matrix
+    pub fn rcond_compute(&self) -> Result<<T as ndarray_linalg::Scalar>::Real> {
+        rcond(self)
+    }
 }
 
 // Add tests to verify the implementation

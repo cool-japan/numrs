@@ -506,6 +506,80 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
     }
 }
 
+/// Calculate the differences between consecutive elements of an array
+///
+/// This function is equivalent to `arr[1:] - arr[:-1]` with options for
+/// prepending and appending values to the differences array.
+///
+/// # Parameters
+///
+/// * `ary` - Input array
+/// * `to_end` - Values to append at the end of the returned differences
+/// * `to_begin` - Values to prepend to the beginning of the returned differences
+///
+/// # Returns
+///
+/// The differences between consecutive elements, with optional values prepended/appended
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::set_ops::ediff1d;
+///
+/// let a = Array::from_vec(vec![1, 2, 4, 7, 0]);
+/// let result = ediff1d(&a, None, None).unwrap();
+/// assert_eq!(result.to_vec(), vec![1, 2, 3, -7]);
+///
+/// // With to_begin and to_end
+/// let result_full = ediff1d(&a, Some(&Array::from_vec(vec![99])), Some(&Array::from_vec(vec![-99]))).unwrap();
+/// assert_eq!(result_full.to_vec(), vec![-99, 1, 2, 3, -7, 99]);
+/// ```
+pub fn ediff1d<T>(
+    ary: &Array<T>,
+    to_end: Option<&Array<T>>,
+    to_begin: Option<&Array<T>>,
+) -> Result<Array<T>>
+where
+    T: Clone + std::ops::Sub<Output = T>,
+{
+    let data = ary.to_vec();
+    if data.len() < 2 {
+        // For arrays with less than 2 elements, differences array is empty
+        let mut result = Vec::new();
+
+        // But we still need to add to_begin and to_end if provided
+        if let Some(begin_array) = to_begin {
+            result.extend(begin_array.to_vec());
+        }
+
+        if let Some(end_array) = to_end {
+            result.extend(end_array.to_vec());
+        }
+
+        return Ok(Array::from_vec(result));
+    }
+
+    let mut differences = Vec::with_capacity(data.len() - 1);
+
+    // Add to_begin values if provided
+    if let Some(begin_array) = to_begin {
+        differences.extend(begin_array.to_vec());
+    }
+
+    // Calculate consecutive differences
+    for i in 1..data.len() {
+        differences.push(data[i].clone() - data[i - 1].clone());
+    }
+
+    // Add to_end values if provided
+    if let Some(end_array) = to_end {
+        differences.extend(end_array.to_vec());
+    }
+
+    Ok(Array::from_vec(differences))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,5 +644,28 @@ mod tests {
         assert_eq!(indices.to_vec(), vec![0, 2, 4]);
         assert_eq!(inverse.to_vec(), vec![0, 0, 1, 1, 2, 2]);
         assert_eq!(counts.to_vec(), vec![2, 2, 2]);
+    }
+
+    #[test]
+    fn test_ediff1d() {
+        let a = Array::from_vec(vec![1, 2, 4, 7, 0]);
+        let result = ediff1d(&a, None, None).unwrap();
+        assert_eq!(result.to_vec(), vec![1, 2, 3, -7]);
+
+        // With to_begin and to_end
+        let begin = Array::from_vec(vec![-99]);
+        let end = Array::from_vec(vec![99]);
+        let result_full = ediff1d(&a, Some(&end), Some(&begin)).unwrap();
+        assert_eq!(result_full.to_vec(), vec![-99, 1, 2, 3, -7, 99]);
+
+        // Test with single element array
+        let single = Array::from_vec(vec![42]);
+        let result_single = ediff1d(&single, None, None).unwrap();
+        assert_eq!(result_single.to_vec(), Vec::<i32>::new());
+
+        // Test with empty array
+        let empty = Array::from_vec(Vec::<i32>::new());
+        let result_empty = ediff1d(&empty, None, None).unwrap();
+        assert_eq!(result_empty.to_vec(), Vec::<i32>::new());
     }
 }

@@ -47,8 +47,11 @@ fn main() -> numrs2::error::Result<()> {
     // Covariance and correlation
     println!("Data1: {}", data1);
     println!("Data2: {}", data2);
-    println!("Covariance:   {}", cov(&data1, &data2)?);
-    println!("Correlation:  {}", corrcoef(&data1, &data2)?);
+    println!(
+        "Covariance:   {}",
+        cov(&data1, Some(&data2), None, None, None)?
+    );
+    println!("Correlation:  {}", corrcoef(&data1, Some(&data2), None)?);
 
     // Create positively correlated data
     let data3 = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
@@ -57,8 +60,11 @@ fn main() -> numrs2::error::Result<()> {
     println!("\nPositively correlated data:");
     println!("Data3: {}", data3);
     println!("Data4: {}", data4);
-    println!("Covariance:   {}", cov(&data3, &data4)?);
-    println!("Correlation:  {}", corrcoef(&data3, &data4)?);
+    println!(
+        "Covariance:   {}",
+        cov(&data3, Some(&data4), None, None, None)?
+    );
+    println!("Correlation:  {}", corrcoef(&data3, Some(&data4), None)?);
 
     println!("\nPart 3: Histograms");
     println!("-----------------");

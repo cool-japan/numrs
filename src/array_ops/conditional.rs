@@ -338,3 +338,237 @@ pub fn select<T: Clone + num_traits::Zero>(
 
     Ok(result)
 }
+
+/// Construct an array from an index array and a list of arrays to choose from
+///
+/// Given an array of indices and a list of choices, construct a new array where each element
+/// is taken from the choice array corresponding to the index at that position.
+///
+/// # Parameters
+///
+/// * `a` - Array of indices. Each value must be in the range 0..choices.len()
+/// * `choices` - List of arrays to choose from. All arrays must be broadcastable to the same shape
+/// * `mode` - How to handle out-of-bounds indices: "raise" (error), "clip" (clip to bounds), or "wrap" (wrap around)
+///
+/// # Returns
+///
+/// A new array with the same shape as `a`, where each element is chosen from the corresponding choice array
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Simple example with 1D arrays
+/// let indices = Array::from_vec(vec![0, 1, 0, 2]);
+/// let choices = vec![
+///     Array::from_vec(vec![10, 11, 12, 13]),
+///     Array::from_vec(vec![20, 21, 22, 23]),
+///     Array::from_vec(vec![30, 31, 32, 33]),
+/// ];
+/// let result = choose(&indices, &choices.iter().collect::<Vec<_>>(), "raise").unwrap();
+/// assert_eq!(result.to_vec(), vec![10, 21, 12, 33]);
+///
+/// // Example with broadcasting
+/// let indices = Array::from_vec(vec![0, 1, 1, 0]);
+/// let choices = vec![
+///     Array::from_vec(vec![5]),  // will broadcast
+///     Array::from_vec(vec![7]),  // will broadcast
+/// ];
+/// let result = choose(&indices, &choices.iter().collect::<Vec<_>>(), "raise").unwrap();
+/// assert_eq!(result.to_vec(), vec![5, 7, 7, 5]);
+/// ```
+pub fn choose<T: Clone + num_traits::Zero>(
+    a: &Array<usize>,
+    choices: &[&Array<T>],
+    mode: &str,
+) -> Result<Array<T>> {
+    if choices.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "choices cannot be empty".to_string(),
+        ));
+    }
+
+    let n_choices = choices.len();
+
+    // Find the broadcast shape for all choice arrays and the index array
+    let mut broadcast_shape = a.shape();
+    for choice in choices.iter() {
+        broadcast_shape = Array::<T>::broadcast_shape(&broadcast_shape, &choice.shape())?;
+    }
+
+    // Broadcast all choice arrays to the common shape
+    let mut choice_broadcasts = Vec::with_capacity(n_choices);
+    for choice in choices.iter() {
+        choice_broadcasts.push(choice.broadcast_to(&broadcast_shape)?);
+    }
+
+    // Create result array
+    let mut result_data = Vec::with_capacity(a.len());
+
+    // Process each index
+    for (i, &idx) in a.to_vec().iter().enumerate() {
+        let actual_idx = match mode {
+            "raise" => {
+                if idx >= n_choices {
+                    return Err(NumRs2Error::IndexOutOfBounds(format!(
+                        "index {} is out of bounds for choices of size {}",
+                        idx, n_choices
+                    )));
+                }
+                idx
+            }
+            "clip" => {
+                if idx >= n_choices {
+                    n_choices - 1
+                } else {
+                    idx
+                }
+            }
+            "wrap" => idx % n_choices,
+            _ => {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Invalid mode '{}'. Use 'raise', 'clip', or 'wrap'",
+                    mode
+                )))
+            }
+        };
+
+        // Get element from the appropriate choice array
+        let chosen_array = &choice_broadcasts[actual_idx];
+
+        // Calculate multi-dimensional indices from flat index i
+        let mut indices = Vec::with_capacity(a.ndim());
+        let mut temp = i;
+        for &dim in a.shape().iter().rev() {
+            indices.insert(0, temp % dim);
+            temp /= dim;
+        }
+
+        // Get value from chosen array
+        let value = chosen_array.get(&indices)?;
+        result_data.push(value);
+    }
+
+    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+}
+
+/// Evaluate a piecewise-defined function
+///
+/// Given a set of conditions and corresponding functions, evaluate the piecewise
+/// function defined by:
+///   - where condition[0] is True: func[0](x)
+///   - where condition[1] is True: func[1](x)
+///   - ...
+///   - otherwise: fill_value
+///
+/// # Parameters
+///
+/// * `x` - The input array
+/// * `condlist` - List of boolean arrays or functions that return boolean arrays when called with x
+/// * `funclist` - List of functions to apply where the corresponding condition is True.
+///   Each function must accept x and return an array of the same shape
+/// * `fill_value` - Value to use where no condition is True (default is 0)
+///
+/// # Returns
+///
+/// A new array with the same shape as x, with values computed by the piecewise function
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Simple piecewise linear function:
+/// // f(x) = -x     for x < 0
+/// //        0      for 0 <= x < 1
+/// //        x      for x >= 1
+/// let x = Array::from_vec(vec![-2.0, -1.0, 0.0, 0.5, 1.0, 2.0]);
+///
+/// let cond1 = x.map(|val| val < &0.0);
+/// let cond2 = x.map(|val| val >= &0.0 && val < &1.0);
+/// let cond3 = x.map(|val| val >= &1.0);
+///
+/// let func1 = |arr: &Array<f64>| arr.map(|x| -x);
+/// let func2 = |arr: &Array<f64>| arr.map(|_| 0.0);
+/// let func3 = |arr: &Array<f64>| arr.clone();
+///
+/// let result = piecewise(&x, &[&cond1, &cond2, &cond3], &[&func1, &func2, &func3], Some(0.0)).unwrap();
+/// assert_eq!(result.to_vec(), vec![2.0, 1.0, 0.0, 0.0, 1.0, 2.0]);
+/// ```
+pub fn piecewise<T, F>(
+    x: &Array<T>,
+    condlist: &[&Array<bool>],
+    funclist: &[&F],
+    fill_value: Option<T>,
+) -> Result<Array<T>>
+where
+    T: Clone + num_traits::Zero,
+    F: Fn(&Array<T>) -> Array<T>,
+{
+    if condlist.len() != funclist.len() {
+        return Err(NumRs2Error::InvalidOperation(
+            "condlist and funclist must have the same length".to_string(),
+        ));
+    }
+
+    if condlist.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "condlist and funclist cannot be empty".to_string(),
+        ));
+    }
+
+    // Verify all conditions have compatible shapes with x
+    for cond in condlist {
+        if cond.shape() != x.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: x.shape(),
+                actual: cond.shape(),
+            });
+        }
+    }
+
+    // Initialize result with fill value
+    let fill_val = fill_value.unwrap_or_else(T::zero);
+    let mut result = Array::full(&x.shape(), fill_val);
+    let mut mask_used = Array::full(&x.shape(), false);
+
+    // Apply functions where conditions are true
+    for (cond, func) in condlist.iter().zip(funclist.iter()) {
+        let func_result = func(x);
+
+        // Verify function result has correct shape
+        if func_result.shape() != x.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: x.shape(),
+                actual: func_result.shape(),
+            });
+        }
+
+        // Apply function result where condition is true and we haven't already set a value
+        let cond_data = cond.to_vec();
+        let mask_data = mask_used.to_vec();
+        let func_data = func_result.to_vec();
+        let mut result_data = result.to_vec();
+
+        for i in 0..cond_data.len() {
+            if cond_data[i] && !mask_data[i] {
+                result_data[i] = func_data[i].clone();
+            }
+        }
+
+        // Update result and mask
+        result = Array::from_vec(result_data).reshape(&x.shape());
+
+        // Update mask to track which elements have been set
+        let mut new_mask_data = mask_used.to_vec();
+        for i in 0..cond_data.len() {
+            if cond_data[i] {
+                new_mask_data[i] = true;
+            }
+        }
+        mask_used = Array::from_vec(new_mask_data).reshape(&x.shape());
+    }
+
+    Ok(result)
+}

@@ -301,3 +301,465 @@ pub fn c_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
         concatenate(arrays, 1)
     }
 }
+
+/// Stack arrays in sequence vertically (row wise).
+///
+/// This is equivalent to concatenation along the first axis after 1-D arrays
+/// of shape (N,) have been reshaped to (1,N). Rebuilds arrays divided by vsplit.
+///
+/// # Arguments
+///
+/// * `arrays` - A slice of arrays to stack
+///
+/// # Returns
+///
+/// The array formed by stacking the given arrays
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let b = Array::from_vec(vec![4, 5, 6]);
+/// let stacked = vstack(&[&a, &b]).unwrap();
+/// assert_eq!(stacked.shape(), vec![2, 3]);
+/// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
+///
+/// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
+/// let stacked = vstack(&[&c, &d]).unwrap();
+/// assert_eq!(stacked.shape(), vec![4, 2]);
+/// ```
+pub fn vstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
+    if arrays.is_empty() {
+        return Err(NumRs2Error::InvalidOperation("No arrays to stack".into()));
+    }
+
+    // Convert 1D arrays to 2D arrays with shape (1, N)
+    let mut reshaped_arrays = Vec::with_capacity(arrays.len());
+    for &arr in arrays {
+        if arr.ndim() == 1 {
+            let shape = arr.shape();
+            reshaped_arrays.push(arr.reshape(&[1, shape[0]]));
+        } else {
+            reshaped_arrays.push(arr.clone());
+        }
+    }
+
+    // Create references for concatenation
+    let array_refs: Vec<&Array<T>> = reshaped_arrays.iter().collect();
+    concatenate(&array_refs, 0)
+}
+
+/// Stack arrays in sequence horizontally (column wise).
+///
+/// This is equivalent to concatenation along the second axis, except for 1-D
+/// arrays where it concatenates along the first axis.
+///
+/// # Arguments
+///
+/// * `arrays` - A slice of arrays to stack
+///
+/// # Returns
+///
+/// The array formed by stacking the given arrays
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let b = Array::from_vec(vec![4, 5, 6]);
+/// let stacked = hstack(&[&a, &b]).unwrap();
+/// assert_eq!(stacked.shape(), vec![6]);
+/// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
+///
+/// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
+/// let stacked = hstack(&[&c, &d]).unwrap();
+/// assert_eq!(stacked.shape(), vec![2, 4]);
+/// ```
+pub fn hstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
+    if arrays.is_empty() {
+        return Err(NumRs2Error::InvalidOperation("No arrays to stack".into()));
+    }
+
+    // Check if all arrays are 1D
+    let all_1d = arrays.iter().all(|arr| arr.ndim() == 1);
+
+    if all_1d {
+        // For 1D arrays, concatenate along axis 0
+        concatenate(arrays, 0)
+    } else {
+        // For arrays with 2+ dimensions, concatenate along axis 1
+        concatenate(arrays, 1)
+    }
+}
+
+/// Stack arrays in sequence depth wise (along third axis).
+///
+/// This is equivalent to concatenation along the third axis after 2-D arrays
+/// of shape (M,N) have been reshaped to (M,N,1) and 1-D arrays of shape (N,)
+/// have been reshaped to (1,N,1).
+///
+/// # Arguments
+///
+/// * `arrays` - A slice of arrays to stack
+///
+/// # Returns
+///
+/// The array formed by stacking the given arrays
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let b = Array::from_vec(vec![4, 5, 6]);
+/// let stacked = dstack(&[&a, &b]).unwrap();
+/// assert_eq!(stacked.shape(), vec![1, 3, 2]);
+///
+/// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
+/// let stacked = dstack(&[&c, &d]).unwrap();
+/// assert_eq!(stacked.shape(), vec![2, 2, 2]);
+/// ```
+pub fn dstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
+    if arrays.is_empty() {
+        return Err(NumRs2Error::InvalidOperation("No arrays to stack".into()));
+    }
+
+    // Reshape arrays to have at least 3 dimensions
+    let mut reshaped_arrays = Vec::with_capacity(arrays.len());
+    for &arr in arrays {
+        let shape = arr.shape();
+        let reshaped = match arr.ndim() {
+            1 => {
+                // 1D array: reshape from (N,) to (1, N, 1)
+                arr.reshape(&[1, shape[0], 1])
+            }
+            2 => {
+                // 2D array: reshape from (M, N) to (M, N, 1)
+                arr.reshape(&[shape[0], shape[1], 1])
+            }
+            _ => {
+                // 3D+ array: use as is
+                arr.clone()
+            }
+        };
+        reshaped_arrays.push(reshaped);
+    }
+
+    // Create references for concatenation
+    let array_refs: Vec<&Array<T>> = reshaped_arrays.iter().collect();
+    concatenate(&array_refs, 2)
+}
+
+/// Stack arrays as rows.
+///
+/// This is an alias for vstack. Stack arrays in sequence vertically (row wise).
+///
+/// # Arguments
+///
+/// * `arrays` - A slice of arrays to stack
+///
+/// # Returns
+///
+/// The array formed by stacking the given arrays
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let b = Array::from_vec(vec![4, 5, 6]);
+/// let stacked = row_stack(&[&a, &b]).unwrap();
+/// assert_eq!(stacked.shape(), vec![2, 3]);
+/// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
+/// ```
+pub fn row_stack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
+    vstack(arrays)
+}
+
+/// Stack 1-D arrays as columns into a 2-D array.
+///
+/// Take a sequence of 1-D arrays and stack them as columns to make a single 2-D array.
+/// 2-D arrays are stacked as-is, similar to hstack.
+///
+/// # Arguments
+///
+/// * `arrays` - A slice of arrays to stack
+///
+/// # Returns
+///
+/// 2-D array formed by stacking the given arrays
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// // Stack 1-D arrays as columns
+/// let a = Array::from_vec(vec![1, 2, 3]);
+/// let b = Array::from_vec(vec![4, 5, 6]);
+/// let stacked = column_stack(&[&a, &b]).unwrap();
+/// assert_eq!(stacked.shape(), vec![3, 2]);
+/// assert_eq!(stacked.to_vec(), vec![1, 4, 2, 5, 3, 6]);
+///
+/// // 2-D arrays are stacked horizontally
+/// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
+/// let stacked = column_stack(&[&c, &d]).unwrap();
+/// assert_eq!(stacked.shape(), vec![2, 4]);
+/// assert_eq!(stacked.to_vec(), vec![1, 2, 5, 6, 3, 4, 7, 8]);
+/// ```
+pub fn column_stack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
+    if arrays.is_empty() {
+        return Err(NumRs2Error::InvalidOperation("No arrays to stack".into()));
+    }
+
+    // Check if all arrays are 1D
+    let all_1d = arrays.iter().all(|arr| arr.ndim() == 1);
+
+    if all_1d {
+        // For 1D arrays, reshape them to column vectors and then concatenate horizontally
+        let mut column_vectors = Vec::with_capacity(arrays.len());
+        for &arr in arrays {
+            let shape = arr.shape();
+            let new_shape = vec![shape[0], 1]; // Convert [n] to [n, 1]
+            column_vectors.push(arr.reshape(&new_shape));
+        }
+
+        // Create references for concatenation
+        let column_refs: Vec<&Array<T>> = column_vectors.iter().collect();
+        concatenate(&column_refs, 1)
+    } else {
+        // For arrays with 2+ dimensions, use hstack
+        hstack(arrays)
+    }
+}
+
+/// Interpret an object as a matrix and build a matrix from string representations
+///
+/// This function emulates NumPy's `bmat` functionality, allowing you to create
+/// matrices from string representations like "A B; C D" or nested arrays.
+///
+/// # Arguments
+///
+/// * `obj` - String description of the matrix or nested array structure
+///
+/// # Returns
+///
+/// A 2D array built from the specified blocks
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::array_ops::joining::bmat_from_string;
+///
+/// // Create a 2x2 block matrix from string description
+/// // "A B; C D" where A, B, C, D are variable names in scope
+/// let a = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let b = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
+/// let c = Array::from_vec(vec![9, 10, 11, 12]).reshape(&[2, 2]);
+/// let d = Array::from_vec(vec![13, 14, 15, 16]).reshape(&[2, 2]);
+///
+/// // The result would be a 4x4 matrix with these blocks
+/// ```
+pub fn bmat_from_string<T: Clone>(_description: &str) -> Result<Array<T>> {
+    // This is a simplified implementation - in practice, this would need
+    // a more sophisticated parser to handle variable references
+    Err(NumRs2Error::InvalidOperation(
+        "String-based bmat not yet implemented - use bmat_from_arrays instead".to_string(),
+    ))
+}
+
+/// Create a matrix from an array-like object or nested sequence of arrays
+///
+/// This function creates a matrix by treating each sub-array as a block.
+/// It's similar to `block()` but specifically designed for 2D matrix construction.
+///
+/// # Arguments
+///
+/// * `obj` - Nested array structure representing the matrix blocks
+///
+/// # Returns
+///
+/// A 2D array built from the specified blocks
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::array_ops::joining::bmat_from_arrays;
+///
+/// // Create individual matrices
+/// let a = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let b = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
+/// let c = Array::from_vec(vec![9, 10, 11, 12]).reshape(&[2, 2]);
+/// let d = Array::from_vec(vec![13, 14, 15, 16]).reshape(&[2, 2]);
+///
+/// // Create a 2x2 block matrix: [A B]
+/// //                            [C D]
+/// let blocks = vec![
+///     vec![&a, &b],
+///     vec![&c, &d],
+/// ];
+/// let result = bmat_from_arrays(&blocks).unwrap();
+///
+/// // Result is a 4x4 matrix:
+/// // [ 1  2  5  6]
+/// // [ 3  4  7  8]
+/// // [ 9 10 13 14]
+/// // [11 12 15 16]
+/// assert_eq!(result.shape(), vec![4, 4]);
+/// ```
+pub fn bmat_from_arrays<T: Clone>(obj: &[Vec<&Array<T>>]) -> Result<Array<T>> {
+    if obj.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Empty block matrix specification".to_string(),
+        ));
+    }
+
+    // Ensure all arrays in the matrix are 2D
+    for (row_idx, row) in obj.iter().enumerate() {
+        if row.is_empty() {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Empty row {} in block matrix",
+                row_idx
+            )));
+        }
+
+        for (col_idx, &arr) in row.iter().enumerate() {
+            match arr.ndim() {
+                0 => {
+                    return Err(NumRs2Error::InvalidOperation(format!(
+                        "Scalar at position ({}, {}) - bmat requires 2D arrays",
+                        row_idx, col_idx
+                    )));
+                }
+                1 => {
+                    return Err(NumRs2Error::InvalidOperation(format!(
+                        "1D array at position ({}, {}) - bmat requires 2D arrays",
+                        row_idx, col_idx
+                    )));
+                }
+                2 => {} // Good - this is what we expect
+                _ => {
+                    return Err(NumRs2Error::InvalidOperation(format!(
+                        "{}D array at position ({}, {}) - bmat requires 2D arrays",
+                        arr.ndim(),
+                        row_idx,
+                        col_idx
+                    )));
+                }
+            }
+        }
+    }
+
+    // Verify that all rows have the same number of columns
+    let num_cols = obj[0].len();
+    for (row_idx, row) in obj.iter().enumerate() {
+        if row.len() != num_cols {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Row {} has {} blocks, expected {}",
+                row_idx,
+                row.len(),
+                num_cols
+            )));
+        }
+    }
+
+    // Verify that blocks in each row have compatible heights
+    // and blocks in each column have compatible widths
+    for row_idx in 0..obj.len() {
+        let row = &obj[row_idx];
+        let expected_height = row[0].shape()[0];
+
+        for (col_idx, &arr) in row.iter().enumerate() {
+            let height = arr.shape()[0];
+            if height != expected_height {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Block at ({}, {}) has height {}, but row {} requires height {}",
+                    row_idx, col_idx, height, row_idx, expected_height
+                )));
+            }
+        }
+    }
+
+    for col_idx in 0..num_cols {
+        let expected_width = obj[0][col_idx].shape()[1];
+
+        for (row_idx, row) in obj.iter().enumerate() {
+            let width = row[col_idx].shape()[1];
+            if width != expected_width {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Block at ({}, {}) has width {}, but column {} requires width {}",
+                    row_idx, col_idx, width, col_idx, expected_width
+                )));
+            }
+        }
+    }
+
+    // Now we can safely concatenate
+    // First, concatenate each row horizontally
+    let mut concatenated_rows = Vec::with_capacity(obj.len());
+
+    for row in obj.iter() {
+        if row.len() == 1 {
+            // Single block in this row
+            concatenated_rows.push(row[0].clone());
+        } else {
+            // Multiple blocks - concatenate horizontally
+            let concatenated_row = concatenate(row, 1)?;
+            concatenated_rows.push(concatenated_row);
+        }
+    }
+
+    // Then concatenate all rows vertically
+    if concatenated_rows.len() == 1 {
+        Ok(concatenated_rows[0].clone())
+    } else {
+        let row_refs: Vec<&Array<T>> = concatenated_rows.iter().collect();
+        concatenate(&row_refs, 0)
+    }
+}
+
+/// Convenient alias for bmat_from_arrays
+///
+/// This provides the main `bmat` functionality for creating block matrices.
+///
+/// # Arguments
+///
+/// * `obj` - Nested array structure representing the matrix blocks
+///
+/// # Returns
+///
+/// A 2D array built from the specified blocks
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::array_ops::joining::bmat;
+///
+/// let a = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let b = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
+/// let c = Array::from_vec(vec![9, 10, 11, 12]).reshape(&[2, 2]);
+/// let d = Array::from_vec(vec![13, 14, 15, 16]).reshape(&[2, 2]);
+///
+/// let blocks = vec![
+///     vec![&a, &b],
+///     vec![&c, &d],
+/// ];
+/// let result = bmat(&blocks).unwrap();
+/// assert_eq!(result.shape(), vec![4, 4]);
+/// ```
+pub fn bmat<T: Clone>(obj: &[Vec<&Array<T>>]) -> Result<Array<T>> {
+    bmat_from_arrays(obj)
+}
