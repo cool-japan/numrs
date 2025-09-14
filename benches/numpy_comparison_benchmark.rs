@@ -42,7 +42,9 @@ fn generate_test_data_f64(size: usize) -> Vec<f64> {
 
 fn generate_test_data_i32(size: usize) -> Vec<i32> {
     let mut rng = RandomState::new();
-    (0..size).map(|_| (rng.uniform(0.0, 1000.0, &[1]).unwrap().to_vec()[0] as i32)).collect()
+    (0..size)
+        .map(|_| (rng.uniform(0.0, 1000.0, &[1]).unwrap().to_vec()[0] as i32))
+        .collect()
 }
 
 /// Benchmark basic array creation operations

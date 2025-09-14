@@ -295,7 +295,7 @@ pub fn serialize_to_file<T: Clone, W: Write + Seek>(
         let mut zip_writer = ZipWriter::new(writer);
 
         // Add the NPY file to the ZIP archive
-        let options = FileOptions::default()
+        let options: FileOptions<'_, ()> = FileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .unix_permissions(0o644);
 

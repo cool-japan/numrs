@@ -748,10 +748,7 @@ mod tests {
         );
 
         // Test is_well_conditioned
-        assert!(
-            a.is_well_conditioned(),
-            "Matrix should be well-conditioned"
-        );
+        assert!(a.is_well_conditioned(), "Matrix should be well-conditioned");
     }
 
     #[test]

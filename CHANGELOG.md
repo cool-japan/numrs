@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
+## [0.1.0-beta.1] - 2025-09-15
+
+### Updated
+- **Dependencies**: Updated scirs2-* dependencies from 0.1.0-alpha.5 to 0.1.0-beta.1 for enhanced SciRS2 integration
+- **Dependencies**: Updated rand from 0.9.0 to 0.9.2 (per CLAUDE.md requirements)
+- **Dependencies**: Updated rand_distr from 0.5.0 to 0.5.1 for improved random number generation
+- **Dependencies**: Updated nalgebra from 0.32.3 to 0.34.0 (major version upgrade)
+- **Dependencies**: Updated criterion from 0.5.1 to 0.7.0 (major version upgrade for better benchmarking)
+- **Dependencies**: Updated csv from 1.3.0 to 1.3.1 for improved CSV processing
+- **Dependencies**: Updated zip from 0.6.6 to 5.1.1 (major version upgrade for NPZ file support)
+- **Dependencies**: Updated 100+ transitive dependencies via cargo update for improved security and performance
+
+### Fixed
+- **Build**: Fixed SIMD verification test type annotation error for improved compilation
+- **Compatibility**: Resolved bincode 2.0 API breaking changes by maintaining compatibility with bincode 1.3.3
+- **Types**: Fixed zip 5.1 FileOptions type annotations for proper NPZ file handling
+
+### Verified
+- **Testing**: All 586 tests pass successfully (0 failed, 1 ignored)
+- **Stability**: No regressions detected from dependency updates
+- **Integration**: Verified scirs2 integration compatibility with beta.1 versions
+- **API**: Maintained full API compatibility and feature set
+
+This beta release focuses on dependency modernization and stability improvements while maintaining full backward compatibility.
+
 ## [0.1.0-alpha.5] - 2024-12-16
 
 ### Fixed

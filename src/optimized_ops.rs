@@ -1,25 +1,25 @@
 //! Optimized operations using scirs2-core features
-//! 
+//!
 //! This module demonstrates the integration of SIMD, GPU, and parallel
 //! processing capabilities from scirs2-core into NumRS2.
 
 #[cfg(feature = "scirs")]
-use scirs2_core::simd_ops::{SimdUnifiedOps, AutoOptimizer, PlatformCapabilities};
-#[cfg(feature = "scirs")]
 use scirs2_core::parallel_ops::*;
+#[cfg(feature = "scirs")]
+use scirs2_core::simd_ops::{AutoOptimizer, PlatformCapabilities, SimdUnifiedOps};
 
 // Submodules for specialized optimizations
-#[cfg(feature = "scirs")]
-pub mod simd_complex;
 #[cfg(all(feature = "scirs", target_arch = "x86_64"))]
 pub mod avx512;
 #[cfg(all(feature = "scirs", target_arch = "aarch64"))]
 pub mod neon;
+#[cfg(feature = "scirs")]
+pub mod simd_complex;
 
-use crate::{prelude::Array, Result};
 #[cfg(feature = "lapack")]
 use crate::linalg::det;
-use ndarray::{ArrayView1, ArrayView2, Array1, Array2, Axis, s, Zip};
+use crate::{prelude::Array, Result};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, Zip};
 
 /// Get information about available optimizations
 #[cfg(feature = "scirs")]
@@ -52,17 +52,20 @@ pub fn get_optimization_info() -> String {
 #[cfg(feature = "scirs")]
 pub fn simd_matmul(a: &ArrayView2<f32>, b: &ArrayView2<f32>) -> Result<Array<f32>> {
     if a.ncols() != b.nrows() {
-        return Err(crate::NumRs2Error::DimensionMismatch(
-            format!("Matrix dimensions incompatible for multiplication: ({}, {}) x ({}, {})",
-                a.nrows(), a.ncols(), b.nrows(), b.ncols())
-        ));
+        return Err(crate::NumRs2Error::DimensionMismatch(format!(
+            "Matrix dimensions incompatible for multiplication: ({}, {}) x ({}, {})",
+            a.nrows(),
+            a.ncols(),
+            b.nrows(),
+            b.ncols()
+        )));
     }
-    
+
     let mut result = Array2::zeros((a.nrows(), b.ncols()));
-    
+
     // Use unified SIMD operations from scirs2-core
     f32::simd_gemm(1.0, a, b, 0.0, &mut result);
-    
+
     Ok(Array::from_ndarray(result.into_dyn()))
 }
 
@@ -70,11 +73,13 @@ pub fn simd_matmul(a: &ArrayView2<f32>, b: &ArrayView2<f32>) -> Result<Array<f32
 #[cfg(feature = "scirs")]
 pub fn simd_elementwise_ops(a: &ArrayView1<f64>, b: &ArrayView1<f64>) -> Result<SimdOpsResult> {
     if a.len() != b.len() {
-        return Err(crate::NumRs2Error::DimensionMismatch(
-            format!("Array lengths must match: {} != {}", a.len(), b.len())
-        ));
+        return Err(crate::NumRs2Error::DimensionMismatch(format!(
+            "Array lengths must match: {} != {}",
+            a.len(),
+            b.len()
+        )));
     }
-    
+
     Ok(SimdOpsResult {
         add: Array::from_ndarray(f64::simd_add(a, b).into_dyn()),
         sub: Array::from_ndarray(f64::simd_sub(a, b).into_dyn()),
@@ -120,7 +125,7 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
     if matrices.is_empty() {
         return Ok(Vec::new());
     }
-    
+
     // Use parallel iterators from scirs2-core
     let determinants: Vec<f64> = matrices
         .into_par_iter()
@@ -129,7 +134,7 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
             det(matrix).unwrap_or(0.0)
         })
         .collect();
-    
+
     Ok(determinants)
 }
 
@@ -139,7 +144,7 @@ pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     let optimizer = AutoOptimizer::new();
     let caps = PlatformCapabilities::detect();
     let size = data.len();
-    
+
     if optimizer.should_use_gpu(size) {
         // GPU path would be implemented here if GPU support is available
         // For now, fall back to SIMD
@@ -170,18 +175,24 @@ fn adaptive_array_sum_simd(data: &ArrayView1<f64>) -> f64 {
 #[cfg(feature = "scirs")]
 pub fn parallel_column_statistics(data: &ArrayView2<f64>) -> Vec<ColumnStats> {
     // Process each column in parallel
-    let stats: Vec<ColumnStats> = data.axis_iter(Axis(1))
+    let stats: Vec<ColumnStats> = data
+        .axis_iter(Axis(1))
         .into_par_iter()
         .map(|column| {
             let mean = column.mean().unwrap_or(0.0);
             let sum = column.sum();
             let min = column.fold(f64::INFINITY, |a, &b| a.min(b));
             let max = column.fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            
-            ColumnStats { mean, sum, min, max }
+
+            ColumnStats {
+                mean,
+                sum,
+                min,
+                max,
+            }
         })
         .collect();
-    
+
     stats
 }
 
@@ -224,8 +235,8 @@ pub fn should_use_parallel(data_size: usize) -> bool {
 #[cfg(feature = "scirs")]
 pub mod enhanced_math {
     use super::*;
-    use ndarray::{ArrayView1, Array1, Zip};
-    
+    use ndarray::{Array1, ArrayView1, Zip};
+
     /// Parallel trigonometric sine function
     pub fn parallel_sin(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -238,7 +249,7 @@ pub mod enhanced_math {
             data.map(|&x| x.sin())
         }
     }
-    
+
     /// Parallel trigonometric cosine function
     pub fn parallel_cos(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -251,7 +262,7 @@ pub mod enhanced_math {
             data.map(|&x| x.cos())
         }
     }
-    
+
     /// Parallel trigonometric tangent function
     pub fn parallel_tan(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -264,7 +275,7 @@ pub mod enhanced_math {
             data.map(|&x| x.tan())
         }
     }
-    
+
     /// Parallel sine and cosine (computed together for efficiency)
     pub fn parallel_sincos(data: &ArrayView1<f64>) -> (Array1<f64>, Array1<f64>) {
         if should_use_parallel(data.len()) {
@@ -285,7 +296,7 @@ pub mod enhanced_math {
             (sin_result, cos_result)
         }
     }
-    
+
     /// Parallel inverse sine (arcsin)
     pub fn parallel_asin(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -298,7 +309,7 @@ pub mod enhanced_math {
             data.map(|&x| x.asin())
         }
     }
-    
+
     /// Parallel inverse cosine (arccos)
     pub fn parallel_acos(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -311,7 +322,7 @@ pub mod enhanced_math {
             data.map(|&x| x.acos())
         }
     }
-    
+
     /// Parallel inverse tangent (arctan)
     pub fn parallel_atan(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -324,15 +335,17 @@ pub mod enhanced_math {
             data.map(|&x| x.atan())
         }
     }
-    
+
     /// Parallel atan2
     pub fn parallel_atan2(y: &ArrayView1<f64>, x: &ArrayView1<f64>) -> Result<Array1<f64>> {
         if y.len() != x.len() {
-            return Err(crate::NumRs2Error::DimensionMismatch(
-                format!("Array lengths must match for atan2: {} != {}", y.len(), x.len())
-            ));
+            return Err(crate::NumRs2Error::DimensionMismatch(format!(
+                "Array lengths must match for atan2: {} != {}",
+                y.len(),
+                x.len()
+            )));
         }
-        
+
         if should_use_parallel(y.len()) {
             let mut result = Array1::zeros(y.len());
             Zip::from(&mut result)
@@ -346,7 +359,7 @@ pub mod enhanced_math {
                 .map_collect(|&y_val, &x_val| y_val.atan2(x_val)))
         }
     }
-    
+
     /// Parallel hyperbolic sine
     pub fn parallel_sinh(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -359,7 +372,7 @@ pub mod enhanced_math {
             data.map(|&x| x.sinh())
         }
     }
-    
+
     /// Parallel hyperbolic cosine
     pub fn parallel_cosh(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -372,7 +385,7 @@ pub mod enhanced_math {
             data.map(|&x| x.cosh())
         }
     }
-    
+
     /// Parallel hyperbolic tangent
     pub fn parallel_tanh(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -391,8 +404,8 @@ pub mod enhanced_math {
 #[cfg(feature = "scirs")]
 pub mod enhanced_exp {
     use super::*;
-    use ndarray::{ArrayView1, Array1, Zip};
-    
+    use ndarray::{Array1, ArrayView1, Zip};
+
     /// Parallel exponential function (e^x)
     pub fn parallel_exp(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -405,7 +418,7 @@ pub mod enhanced_exp {
             data.map(|&x| x.exp())
         }
     }
-    
+
     /// Parallel base-2 exponential (2^x)
     pub fn parallel_exp2(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -418,7 +431,7 @@ pub mod enhanced_exp {
             data.map(|&x| x.exp2())
         }
     }
-    
+
     /// Parallel expm1 (e^x - 1, accurate for small x)
     pub fn parallel_expm1(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -431,7 +444,7 @@ pub mod enhanced_exp {
             data.map(|&x| x.exp_m1())
         }
     }
-    
+
     /// Parallel natural logarithm
     pub fn parallel_ln(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -444,7 +457,7 @@ pub mod enhanced_exp {
             data.map(|&x| x.ln())
         }
     }
-    
+
     /// Parallel base-2 logarithm
     pub fn parallel_log2(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -457,7 +470,7 @@ pub mod enhanced_exp {
             data.map(|&x| x.log2())
         }
     }
-    
+
     /// Parallel base-10 logarithm
     pub fn parallel_log10(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -470,7 +483,7 @@ pub mod enhanced_exp {
             data.map(|&x| x.log10())
         }
     }
-    
+
     /// Parallel ln(1 + x), accurate for small x
     pub fn parallel_ln1p(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -483,15 +496,17 @@ pub mod enhanced_exp {
             data.map(|&x| x.ln_1p())
         }
     }
-    
+
     /// Parallel power function (x^y)
     pub fn parallel_pow(base: &ArrayView1<f64>, exp: &ArrayView1<f64>) -> Result<Array1<f64>> {
         if base.len() != exp.len() {
-            return Err(crate::NumRs2Error::DimensionMismatch(
-                format!("Array lengths must match for pow: {} != {}", base.len(), exp.len())
-            ));
+            return Err(crate::NumRs2Error::DimensionMismatch(format!(
+                "Array lengths must match for pow: {} != {}",
+                base.len(),
+                exp.len()
+            )));
         }
-        
+
         if should_use_parallel(base.len()) {
             let mut result = Array1::zeros(base.len());
             Zip::from(&mut result)
@@ -500,17 +515,15 @@ pub mod enhanced_exp {
                 .par_for_each(|out, &b, &e| *out = b.powf(e));
             Ok(result)
         } else {
-            Ok(Zip::from(base)
-                .and(exp)
-                .map_collect(|&b, &e| b.powf(e)))
+            Ok(Zip::from(base).and(exp).map_collect(|&b, &e| b.powf(e)))
         }
     }
-    
+
     /// SIMD-optimized square root (actually uses SIMD from scirs2-core)
     pub fn simd_sqrt(data: &ArrayView1<f64>) -> Array1<f64> {
         f64::simd_sqrt(data)
     }
-    
+
     /// Parallel cube root
     pub fn parallel_cbrt(data: &ArrayView1<f64>) -> Array1<f64> {
         if should_use_parallel(data.len()) {
@@ -532,11 +545,7 @@ pub struct SimdMathOps;
 #[cfg(feature = "scirs")]
 impl SimdMathOps {
     /// Apply a SIMD-optimized math function with automatic chunking for large arrays
-    pub fn apply_chunked<F>(
-        data: &ArrayView1<f64>,
-        chunk_size: usize,
-        simd_fn: F,
-    ) -> Array1<f64>
+    pub fn apply_chunked<F>(data: &ArrayView1<f64>, chunk_size: usize, simd_fn: F) -> Array1<f64>
     where
         F: Fn(&ArrayView1<f64>) -> Array1<f64> + Send + Sync,
     {
@@ -549,22 +558,24 @@ impl SimdMathOps {
                 .into_par_iter()
                 .map(|chunk| simd_fn(&chunk))
                 .collect();
-            
+
             // Concatenate results
             let total_len: usize = chunks.iter().map(|c| c.len()).sum();
             let mut result = Array1::zeros(total_len);
             let mut offset = 0;
-            
+
             for chunk in chunks {
                 let chunk_len = chunk.len();
-                result.slice_mut(s![offset..offset + chunk_len]).assign(&chunk);
+                result
+                    .slice_mut(s![offset..offset + chunk_len])
+                    .assign(&chunk);
                 offset += chunk_len;
             }
-            
+
             result
         }
     }
-    
+
     /// Adaptive function selection based on data size and platform capabilities
     pub fn adaptive_math_function<F, G>(
         data: &ArrayView1<f64>,
@@ -576,7 +587,7 @@ impl SimdMathOps {
         G: Fn(f64) -> f64,
     {
         let optimizer = AutoOptimizer::new();
-        
+
         if optimizer.should_use_simd(data.len()) {
             simd_fn(data)
         } else {
@@ -600,25 +611,27 @@ where
     if data.is_empty() {
         return Ok(Array1::from_vec(vec![]));
     }
-    
+
     let chunks: Vec<Array1<T>> = data
         .axis_chunks_iter(Axis(0), chunk_size)
         .into_par_iter()
         .map(|chunk| processor(&chunk))
         .collect();
-    
+
     // Calculate total length
     let total_len: usize = chunks.iter().map(|c| c.len()).sum();
     let mut result = Array1::from_elem(total_len, T::default());
-    
+
     // Concatenate chunks
     let mut offset = 0;
     for chunk in chunks {
         let chunk_len = chunk.len();
-        result.slice_mut(s![offset..offset + chunk_len]).assign(&chunk);
+        result
+            .slice_mut(s![offset..offset + chunk_len])
+            .assign(&chunk);
         offset += chunk_len;
     }
-    
+
     Ok(result)
 }
 
@@ -626,7 +639,7 @@ where
 mod tests {
     use super::*;
     use ndarray::array;
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_optimization_info() {
@@ -635,15 +648,15 @@ mod tests {
         assert!(info.contains("SIMD:"));
         assert!(info.contains("Parallel threads:"));
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_simd_matmul() {
         let a = array![[1.0f32, 2.0], [3.0, 4.0]];
         let b = array![[5.0f32, 6.0], [7.0, 8.0]];
-        
+
         let result = simd_matmul(&a.view(), &b.view()).unwrap();
-        
+
         // Expected: [[1*5+2*7, 1*6+2*8], [3*5+4*7, 3*6+4*8]]
         //         = [[19, 22], [43, 50]]
         assert_eq!(result.shape(), &[2, 2]);
@@ -653,33 +666,33 @@ mod tests {
         assert_eq!(result_2d[[1, 0]], 43.0);
         assert_eq!(result_2d[[1, 1]], 50.0);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_simd_elementwise_ops() {
         let a = array![1.0, 2.0, 3.0, 4.0];
         let b = array![5.0, 6.0, 7.0, 8.0];
-        
+
         let result = simd_elementwise_ops(&a.view(), &b.view()).unwrap();
-        
+
         let add_vec = result.add.to_vec();
         let sub_vec = result.sub.to_vec();
         let mul_vec = result.mul.to_vec();
         let div_vec = result.div.to_vec();
-        
+
         assert_eq!(add_vec[0], 6.0);
         assert_eq!(sub_vec[0], -4.0);
         assert_eq!(mul_vec[0], 5.0);
         assert_eq!(div_vec[0], 0.2);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_simd_vector_ops() {
         let v = array![1.0f32, 2.0, 3.0, 4.0];
-        
+
         let result = simd_vector_ops(&v.view());
-        
+
         assert_eq!(result.sum, 10.0);
         assert_eq!(result.mean, 2.5);
         assert_eq!(result.min, 1.0);
@@ -687,7 +700,7 @@ mod tests {
         // norm = sqrt(1^2 + 2^2 + 3^2 + 4^2) = sqrt(30) ≈ 5.477
         assert!((result.norm - 5.477).abs() < 0.01);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_adaptive_array_sum() {
@@ -695,33 +708,31 @@ mod tests {
         let sum = adaptive_array_sum(&data.view());
         assert_eq!(sum, 10000.0);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_parallel_column_statistics() {
         let data = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
         let stats = parallel_column_statistics(&data.view());
-        
+
         assert_eq!(stats.len(), 3);
         assert_eq!(stats[0].mean, 2.5); // (1+4)/2
-        assert_eq!(stats[0].sum, 5.0);   // 1+4
+        assert_eq!(stats[0].sum, 5.0); // 1+4
         assert_eq!(stats[0].min, 1.0);
         assert_eq!(stats[0].max, 4.0);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_chunked_processing() {
         let data = Array1::from_vec((0..100).map(|x| x as f64).collect());
-        
-        let sums = chunked_array_processing(&data.view(), 10, |chunk| {
-            chunk.iter().sum::<f64>()
-        });
-        
+
+        let sums = chunked_array_processing(&data.view(), 10, |chunk| chunk.iter().sum::<f64>());
+
         assert_eq!(sums.len(), 10);
         assert_eq!(sums[0], 45.0); // 0+1+2+...+9 = 45
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_adaptive_math_function() {
@@ -730,30 +741,30 @@ mod tests {
         let small_result = SimdMathOps::adaptive_math_function(
             &small_data.view(),
             |data| enhanced_exp::simd_sqrt(data),
-            |x| x.sqrt()
+            |x| x.sqrt(),
         );
         assert_eq!(small_result.len(), 3);
         assert!((small_result[0] - 1.0).abs() < 1e-10);
         assert!((small_result[1] - 2.0).abs() < 1e-10);
         assert!((small_result[2] - 3.0).abs() < 1e-10);
-        
+
         // Large array - should use SIMD
         let large_data = Array1::from_vec((0..10000).map(|x| (x + 1) as f64).collect());
         let large_result = SimdMathOps::adaptive_math_function(
             &large_data.view(),
             |data| enhanced_exp::simd_sqrt(data),
-            |x| x.sqrt()
+            |x| x.sqrt(),
         );
         assert_eq!(large_result.len(), 10000);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_enhanced_trig_functions() {
         use std::f64::consts::PI;
-        
+
         let angles = array![0.0, PI / 6.0, PI / 4.0, PI / 3.0, PI / 2.0];
-        
+
         // Test sine
         let sin_result = enhanced_math::parallel_sin(&angles.view());
         assert!((sin_result[0] - 0.0).abs() < 1e-10);
@@ -761,7 +772,7 @@ mod tests {
         assert!((sin_result[2] - (2.0_f64.sqrt() / 2.0)).abs() < 1e-10);
         assert!((sin_result[3] - (3.0_f64.sqrt() / 2.0)).abs() < 1e-10);
         assert!((sin_result[4] - 1.0).abs() < 1e-10);
-        
+
         // Test cosine
         let cos_result = enhanced_math::parallel_cos(&angles.view());
         assert!((cos_result[0] - 1.0).abs() < 1e-10);
@@ -769,14 +780,14 @@ mod tests {
         assert!((cos_result[2] - (2.0_f64.sqrt() / 2.0)).abs() < 1e-10);
         assert!((cos_result[3] - 0.5).abs() < 1e-10);
         assert!((cos_result[4] - 0.0).abs() < 1e-10);
-        
+
         // Test sincos
         let (sin_res, cos_res) = enhanced_math::parallel_sincos(&angles.view());
         for i in 0..angles.len() {
             assert!((sin_res[i] - sin_result[i]).abs() < 1e-10);
             assert!((cos_res[i] - cos_result[i]).abs() < 1e-10);
         }
-        
+
         // Test tangent
         let tan_result = enhanced_math::parallel_tan(&angles.view());
         assert!((tan_result[0] - 0.0).abs() < 1e-10);
@@ -784,25 +795,25 @@ mod tests {
         assert!((tan_result[2] - 1.0).abs() < 1e-10);
         assert!((tan_result[3] - 3.0_f64.sqrt()).abs() < 1e-10);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_enhanced_exp_functions() {
         let x = array![0.0, 1.0, 2.0, -1.0, 0.5];
-        
+
         // Test exponential
         let exp_result = enhanced_exp::parallel_exp(&x.view());
         assert!((exp_result[0] - 1.0).abs() < 1e-10);
         assert!((exp_result[1] - std::f64::consts::E).abs() < 1e-10);
         assert!((exp_result[2] - std::f64::consts::E.powi(2)).abs() < 1e-10);
         assert!((exp_result[3] - (1.0 / std::f64::consts::E)).abs() < 1e-10);
-        
+
         // Test logarithm
         let positive_x = array![1.0, std::f64::consts::E, 10.0, 100.0];
         let ln_result = enhanced_exp::parallel_ln(&positive_x.view());
         assert!((ln_result[0] - 0.0).abs() < 1e-10);
         assert!((ln_result[1] - 1.0).abs() < 1e-10);
-        
+
         // Test sqrt using SIMD
         let sqrt_input = array![0.0, 1.0, 4.0, 9.0, 16.0];
         let sqrt_result = enhanced_exp::simd_sqrt(&sqrt_input.view());
@@ -812,18 +823,15 @@ mod tests {
         assert!((sqrt_result[3] - 3.0).abs() < 1e-10);
         assert!((sqrt_result[4] - 4.0).abs() < 1e-10);
     }
-    
+
     #[test]
     #[cfg(feature = "scirs")]
     fn test_process_large_array() {
         let large_data = Array1::from_vec((0..1000).map(|x| x as f64).collect());
-        
-        let result = process_large_array(
-            &large_data.view(),
-            100,
-            |chunk| chunk.map(|&x| x * 2.0)
-        ).unwrap();
-        
+
+        let result =
+            process_large_array(&large_data.view(), 100, |chunk| chunk.map(|&x| x * 2.0)).unwrap();
+
         assert_eq!(result.len(), 1000);
         assert_eq!(result[0], 0.0);
         assert_eq!(result[999], 1998.0);

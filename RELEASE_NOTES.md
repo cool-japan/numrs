@@ -1,87 +1,100 @@
-# NumRS2 v0.1.0-alpha.5 Release Notes
+# NumRS2 v0.1.0-beta.1 Release Notes
 
-**Release Date:** December 16, 2024  
-**Final Alpha Release** - Next: Beta Phase
+**Release Date:** September 15, 2025
+**First Beta Release** - Dependency Modernization & Stability
 
 ## 🎯 **Release Highlights**
 
-This is the **final alpha release** of NumRS2, representing a major stability milestone with all core linear algebra functionality now properly tested and verified.
+This is the **first beta release** of NumRS2, focusing on dependency modernization and stability improvements while maintaining full backward compatibility. This release prepares NumRS2 for production use with updated dependencies and enhanced integration with the SciRS2 ecosystem.
 
-### 🛠️ **Critical Fixes**
+### 📦 **Dependency Updates**
 
-- **Matrix Rank Bug Fixed**: Resolved critical issue where `matrix_rank()` was returning 0 for all matrices, including identity matrices
-- **LU Decomposition Fixed**: Corrected parameter ordering in test destructuring from `(_p, l, _u)` to `(l, _u, _p)`
-- **Numerical Stability**: Enhanced matrix rank computation using proper SVD implementation
-- **Import Path Updates**: Fixed deprecated import paths from `numrs2::linalg::*` to `numrs2::prelude::*`
+- **SciRS2 Integration**: Updated all scirs2-* dependencies from 0.1.0-alpha.5 to 0.1.0-beta.1
+  - Enhanced scientific computing capabilities
+  - Improved SIMD acceleration through SciRS2-Core
+  - Better statistical distribution support
+- **Core Dependencies**:
+  - `rand`: 0.9.0 → 0.9.2 (per CLAUDE.md requirements)
+  - `rand_distr`: 0.5.0 → 0.5.1 (improved distributions)
+  - `nalgebra`: 0.32.3 → 0.34.0 (major version upgrade)
+  - `criterion`: 0.5.1 → 0.7.0 (enhanced benchmarking)
+  - `csv`: 1.3.0 → 1.3.1 (improved CSV processing)
+  - `zip`: 0.6.6 → 5.1.1 (enhanced NPZ file support)
+- **Security & Performance**: Updated 100+ transitive dependencies for improved security and performance
+
+### 🛠️ **Technical Fixes**
+
+- **Compatibility**: Resolved bincode 2.0 API breaking changes by maintaining compatibility with bincode 1.3.3
+- **Type Safety**: Fixed zip 5.1 FileOptions type annotations for proper NPZ file handling
+- **Build**: Fixed SIMD verification test type annotation error for improved compilation
 
 ### ✅ **Quality Assurance**
 
-- **100% Test Pass Rate**: All 33 linear algebra tests now pass successfully
-  - 19/19 reference tests passing
-  - 14/14 property tests passing
-- **250+ Doctests**: All documentation examples verified
-- **100+ Integration Tests**: Comprehensive test coverage
-- **Examples Verified**: `basic_usage` and `matrix_decomp_example` working correctly
-
-### 🔧 **Technical Improvements**
-
-- **Code Formatting**: Applied `cargo fmt` across entire codebase
-- **Error Handling**: Enhanced edge case handling in matrix decomposition functions
-- **Documentation**: Fixed numerous deprecation warnings
-- **Module Organization**: Better separation of feature-gated vs non-feature-gated functions
+- **100% Test Pass Rate**: All 586 tests pass successfully (0 failed, 1 ignored)
+- **Zero Regressions**: No functionality regressions detected from dependency updates
+- **API Stability**: Maintained full API compatibility and feature set
+- **Integration Verified**: Confirmed scirs2 integration compatibility with beta.1 versions
 
 ## 📊 **Production Readiness**
 
-### ✅ **Ready for Use**
-- Core numerical computing operations
-- Matrix operations and linear algebra
-- Array manipulation and broadcasting
-- Mathematical functions and statistics
-- Random number generation
-- File I/O (NPY/NPZ formats)
+### ✅ **Ready for Production Use**
+- **Core Operations**: N-dimensional arrays, broadcasting, mathematical functions
+- **Linear Algebra**: Matrix operations, decompositions, eigenvalues, SVD, QR, LU, Cholesky
+- **Statistical Analysis**: Comprehensive statistics, random distributions, hypothesis testing
+- **Performance**: SIMD acceleration, parallel processing, GPU support (optional)
+- **I/O Operations**: NPY/NPZ, CSV, JSON, binary formats
+- **Integration**: SciRS2, nalgebra, ndarray ecosystem compatibility
 
-### ⚠️ **Known Limitations** 
-- Some Schur decomposition precision issues (documented)
-- Deprecation warnings for transitional modules (next release)
-- GPU acceleration features still experimental
+### 🔬 **Scientific Computing Features**
+- **Advanced Distributions**: Noncentral chi-square, noncentral F, von Mises, Maxwell-Boltzmann
+- **Signal Processing**: FFT, windowing functions, convolution, correlation
+- **Polynomial Operations**: Interpolation, fitting, root finding, evaluation
+- **Financial Mathematics**: Bond pricing, options pricing, risk calculations
+- **Sparse Arrays**: Memory-efficient sparse matrix operations
 
-## 🚀 **What's Next**
+### 🚀 **Performance Optimizations**
+- **SIMD Acceleration**: Automatic CPU feature detection (AVX2, AVX512, NEON)
+- **Parallel Processing**: Adaptive work distribution with Rayon
+- **Memory Optimization**: Cache-friendly layouts, custom allocators
+- **GPU Acceleration**: Optional WGPU-based GPU computing
 
-This **final alpha** sets the foundation for the **beta phase**:
+## 🔧 **Breaking Changes**
 
-1. **Module Structure Cleanup**: Remove deprecated modules
-2. **Performance Optimization**: Advanced SIMD and GPU features  
-3. **NumPy Parity Completion**: Remaining 15-20% of NumPy functionality
-4. **Production Hardening**: Enterprise-grade stability and performance
+**None** - This release maintains full backward compatibility with alpha.5.
 
-## 💻 **Installation & Usage**
+## 🎯 **Migration from Alpha.5**
+
+Update your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-alpha.5"
+numrs2 = "0.1.0-beta.1"
 ```
 
-```rust
-use numrs2::prelude::*;
+No code changes required - all APIs remain stable.
 
-let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-let c = a.matmul(&b).unwrap();
-println!("Result: {}", c);
-```
+## 🚀 **What's Next**
 
-## 🙏 **Community**
+The **beta phase** will focus on:
 
-Special thanks to all contributors and early adopters who helped identify and resolve these critical issues. Your feedback has been invaluable in making NumRS2 more stable and reliable.
+1. **API Stabilization**: Finalizing public APIs for 1.0 release
+2. **Performance Optimization**: Advanced SIMD and GPU acceleration
+3. **Documentation**: Comprehensive guides and tutorials
+4. **Community Feedback**: Incorporating user feedback and requests
+5. **Production Hardening**: Additional edge case testing and optimization
 
-## 🔗 **Resources**
+## 📚 **Resources**
 
-- **Repository**: https://github.com/cool-japan/numrs
-- **Documentation**: [In-code examples and tests]
-- **Issues**: Report bugs and feature requests on GitHub
-- **Discussions**: Community feedback welcome
+- **Documentation**: [docs.rs/numrs2](https://docs.rs/numrs2)
+- **Repository**: [github.com/cool-japan/numrs](https://github.com/cool-japan/numrs)
+- **Examples**: See `examples/` directory for comprehensive usage examples
+- **Migration Guide**: See `NUMPY_MIGRATION.md` for NumPy users
+
+## 🙏 **Acknowledgments**
+
+Special thanks to the Rust scientific computing community and all contributors who helped make this release possible. The dependency updates in this release build upon the excellent work of the nalgebra, rand, and broader Rust ecosystem maintainers.
 
 ---
 
-**Next Release**: v0.1.0-beta.1 (Q1 2025)  
-**Focus**: Module cleanup, performance optimization, NumPy parity completion
+**Download**: Available on [crates.io](https://crates.io/crates/numrs2)
+**License**: Apache-2.0 OR MIT

@@ -271,7 +271,7 @@ fn main() -> Result<()> {
     println!("\nHow to Enable SciRS2 Integration");
     println!("------------------------------");
     println!("Add the following to your Cargo.toml:");
-    println!("numrs2 = {{ version = \"0.1.0-alpha.4\", features = [\"scirs\"] }}");
+    println!("numrs2 = {{ version = \"0.1.0-beta.1\", features = [\"scirs\"] }}");
     println!("Or when building: cargo build --features scirs");
 
     Ok(())

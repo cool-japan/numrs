@@ -39,8 +39,6 @@ pub mod array;
 pub mod array_ops;
 pub mod array_ops_legacy;
 pub mod arrays;
-#[cfg(feature = "scirs")]
-pub mod optimized_ops;
 pub mod axis_ops;
 pub mod bitwise_ops;
 pub mod blas;
@@ -60,6 +58,8 @@ pub mod linalg;
 pub mod linalg_extended;
 pub mod linalg_optimized;
 pub mod linalg_parallel;
+#[cfg(feature = "scirs")]
+pub mod optimized_ops;
 // pub mod linalg_solve; // Loaded via linalg/mod.rs
 pub mod linalg_stable;
 pub mod masked;
@@ -352,14 +352,14 @@ pub mod prelude {
     };
 
     // Optimized operations from scirs2-core
-    #[cfg(feature = "scirs")]
-    pub use crate::optimized_ops::{
-        adaptive_array_sum, chunked_array_processing, get_optimization_info, parallel_column_statistics,
-        should_use_parallel, simd_elementwise_ops, simd_matmul, simd_vector_ops,
-        ColumnStats, SimdOpsResult, SimdVectorResult,
-    };
     #[cfg(all(feature = "scirs", feature = "lapack"))]
     pub use crate::optimized_ops::parallel_matrix_ops;
+    #[cfg(feature = "scirs")]
+    pub use crate::optimized_ops::{
+        adaptive_array_sum, chunked_array_processing, get_optimization_info,
+        parallel_column_statistics, should_use_parallel, simd_elementwise_ops, simd_matmul,
+        simd_vector_ops, ColumnStats, SimdOpsResult, SimdVectorResult,
+    };
 
     // GPU acceleration
     #[cfg(feature = "gpu")]
