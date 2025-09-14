@@ -1,3 +1,6 @@
+// This file requires nightly Rust for benchmarking
+// Comment out to avoid build errors on stable
+/*
 #![feature(test)]
 
 extern crate numrs2;
@@ -813,3 +816,4 @@ mod scirs_benchmarks {
         print_comparison("vonmises_medium", b.bench(test::black_box).unwrap().median);
     }
 }
+*/

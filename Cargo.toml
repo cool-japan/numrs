@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.1.0-alpha.5"
+version = "0.1.0-beta.1"
 edition = "2021"
 authors = ["cool-japan/NumRS2 (KitaSan) Team"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -29,8 +29,8 @@ lapack = { version = "0.20.0", optional = true }  # LAPACK bindings
 num-traits = "0.2.19"  # Numeric traits for generic math
 num-complex = "0.4.6"  # Complex number implementation
 # Type conversions are handled by num-traits::NumCast
-rand = "0.9.0"      # Random number generation
-rand_distr = "0.5.0"  # Additional random distributions
+rand = "0.9.2"      # Random number generation
+rand_distr = "0.5.1"  # Additional random distributions
 rayon = "1.10.0"     # Parallel computation
 simba = "0.9.0"     # SIMD abstraction
 paste = "1.0.15"    # For macro development
@@ -49,9 +49,9 @@ num_cpus = "1.16.0"
 regex = "1.10.2"    # Regular expressions for string operations
 
 # Optional SciRS2 dependencies
-scirs2-stats = { version = "0.1.0-alpha.6", optional = true }
-scirs2-core = { version = "0.1.0-alpha.6", optional = true }
-scirs2-linalg = { version = "0.1.0-alpha.6", optional = true }
+scirs2-stats = { version = "0.1.0-beta.1", optional = true }
+scirs2-core = { version = "0.1.0-beta.1", optional = true }
+scirs2-linalg = { version = "0.1.0-beta.1", optional = true }
 
 # Optional GPU acceleration dependencies
 wgpu = { version = "0.19.1", optional = true }
@@ -67,6 +67,7 @@ approx = "0.5.1"     # Approximate floating-point comparisons for tests
 tempfile = "3.8.1"   # Temporary files for testing I/O functionality
 # For performance benchmarks in bench.rs
 serde_json = "1.0.114"  # For loading NumPy benchmark results
+tokio = { version = "1.36.0", features = ["rt", "macros"] }  # For GPU tests
 
 [[bench]]
 name = "numpy_comparison"

@@ -160,7 +160,7 @@ pub fn linear_algebra_benchmark(c: &mut Criterion) {
                 }
                 let matrix = Array::from_vec(data).reshape(&[size, size]);
 
-                bench.iter(|| black_box(matrix.inv().unwrap()));
+                // bench.iter(|| black_box(matrix.inv().unwrap())); // inv requires lapack feature
             },
         );
 
@@ -182,7 +182,7 @@ pub fn linear_algebra_benchmark(c: &mut Criterion) {
                 let a = Array::from_vec(a_data).reshape(&[size, size]);
                 let b: Array<f32> = Array::ones(&[size]);
 
-                bench.iter(|| black_box(numrs2::linalg::solve(&a, &b).unwrap()));
+                // bench.iter(|| black_box(numrs2::linalg::solve(&a, &b).unwrap())); // solve requires lapack feature
             },
         );
     }

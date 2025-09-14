@@ -749,7 +749,7 @@ mod tests {
 
         // Test is_well_conditioned
         assert!(
-            a.is_well_conditioned().unwrap(),
+            a.is_well_conditioned(),
             "Matrix should be well-conditioned"
         );
     }
@@ -775,7 +775,7 @@ mod tests {
 
         // Test is_well_conditioned - should return false
         assert!(
-            !a.is_well_conditioned().unwrap(),
+            !a.is_well_conditioned(),
             "Matrix should be ill-conditioned with condition number {}",
             cond
         );
@@ -808,7 +808,7 @@ mod tests {
 
         // Test is_well_conditioned - should return false
         assert!(
-            !a.is_well_conditioned().unwrap(),
+            !a.is_well_conditioned(),
             "Singular matrix should not be well-conditioned"
         );
     }
@@ -841,7 +841,7 @@ mod tests {
 
         // Test is_well_conditioned - we don't explicitly test the result since the
         // threshold is dynamically calculated and might vary by implementation
-        let _ = hilbert.is_well_conditioned().unwrap();
+        let _ = hilbert.is_well_conditioned();
     }
 
     #[test]

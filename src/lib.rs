@@ -39,6 +39,8 @@ pub mod array;
 pub mod array_ops;
 pub mod array_ops_legacy;
 pub mod arrays;
+#[cfg(feature = "scirs")]
+pub mod optimized_ops;
 pub mod axis_ops;
 pub mod bitwise_ops;
 pub mod blas;
@@ -348,6 +350,16 @@ pub mod prelude {
         polyhermite, polyint, polylaguerre, polylegendre, polymul, polyscale, polysub, polytrim,
         CubicSpline, Polynomial, PolynomialInterpolation,
     };
+
+    // Optimized operations from scirs2-core
+    #[cfg(feature = "scirs")]
+    pub use crate::optimized_ops::{
+        adaptive_array_sum, chunked_array_processing, get_optimization_info, parallel_column_statistics,
+        should_use_parallel, simd_elementwise_ops, simd_matmul, simd_vector_ops,
+        ColumnStats, SimdOpsResult, SimdVectorResult,
+    };
+    #[cfg(all(feature = "scirs", feature = "lapack"))]
+    pub use crate::optimized_ops::parallel_matrix_ops;
 
     // GPU acceleration
     #[cfg(feature = "gpu")]

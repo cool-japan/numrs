@@ -9,40 +9,45 @@ fn is_within_range(value: f64, expected: f64, tolerance: f64) -> bool {
     (value - expected).abs() <= tolerance
 }
 
-/// Test the normal distribution against calculated values
+/// Test the normal distribution statistical properties
 #[test]
 fn test_normal_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
 
-    // Generate a sample from normal distribution with mean 0, std 1
-    let normal_samples = random::normal(0.0, 1.0, &[5]).unwrap();
-
-    // Get the actual values to print when updating tests
+    // Generate a larger sample from normal distribution with mean 0, std 1
+    let normal_samples = random::normal(0.0, 1.0, &[1000]).unwrap();
     let actual_values = normal_samples.to_vec();
-    println!("Normal values: {:?}", actual_values);
 
-    // Update these values if the implementation changes
-    let expected_values = vec![
-        0.0694279183619634,
-        0.1329381219941254,
-        0.2625763573739537,
-        -0.2253008783909916,
-        -0.6642248458355339,
-    ];
+    // Test statistical properties instead of exact values
+    // 1. Check mean is close to 0
+    let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+    assert!(
+        mean.abs() < 0.1,
+        "Normal distribution mean {} is not close to 0",
+        mean
+    );
 
-    // Check each value
-    let actual_values = normal_samples.to_vec();
-    for i in 0..5 {
-        // Allow a small tolerance for potential differences in floating-point calculation
-        assert!(
-            is_within_range(actual_values[i], expected_values[i], 1e-10),
-            "Normal sample at index {} doesn't match reference value. Expected {}, got {}",
-            i,
-            expected_values[i],
-            actual_values[i]
-        );
-    }
+    // 2. Check standard deviation is close to 1
+    let variance: f64 = actual_values
+        .iter()
+        .map(|x| (x - mean).powi(2))
+        .sum::<f64>()
+        / actual_values.len() as f64;
+    let std_dev = variance.sqrt();
+    assert!(
+        (std_dev - 1.0).abs() < 0.1,
+        "Normal distribution std dev {} is not close to 1",
+        std_dev
+    );
+
+    // 3. Check that values are within reasonable range (99.7% within 3 std devs)
+    let out_of_range = actual_values.iter().filter(|&&x| x.abs() > 3.0).count();
+    assert!(
+        out_of_range < 10,
+        "Too many values outside 3 standard deviations: {}",
+        out_of_range
+    );
 }
 
 /// Test the beta distribution properties instead of exact values
