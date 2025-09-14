@@ -78,7 +78,7 @@ fn test_simd_cache_aware_matmul() {
 
     let b = Array::from_vec(vec![7.0f32, 8.0, 9.0, 10.0, 11.0, 12.0]).reshape(&[3, 2]);
 
-    let mut c = Array::zeros(&[2, 2]);
+    let mut c: Array<f32> = Array::zeros(&[2, 2]);
 
     #[cfg(target_arch = "x86_64")]
     {
