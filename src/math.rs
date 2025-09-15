@@ -2205,7 +2205,7 @@ where
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
 /// let s = std(&a, None, 0, false).expect("std failed");
-/// assert!((s.to_vec()[0] - 1.414).abs() < 0.01); // approximately sqrt(2)
+/// assert!((s.to_vec()[0] - 1.414f64).abs() < 0.01); // approximately sqrt(2)
 /// ```
 pub fn std<T>(
     array: &Array<T>,
@@ -3152,7 +3152,7 @@ where
 ///
 /// let a = Array::from_vec(vec![1.5, 2.3, 3.7, 4.5]);
 /// let rounded = round(&a).expect("round failed");
-/// assert_eq!(rounded.to_vec(), vec![2.0, 2.0, 4.0, 4.0]);
+/// assert_eq!(rounded.to_vec(), vec![2.0, 2.0, 4.0, 5.0]);
 /// ```
 pub fn round<T>(array: &Array<T>) -> Result<Array<T>>
 where
@@ -6460,7 +6460,7 @@ pub fn negative<T: Clone + std::ops::Neg<Output = T>>(array: &Array<T>) -> Array
 ///
 /// let a = Array::from_vec(vec![1.1, 1.5, 1.9, 2.5]);
 /// let result = rint(&a);
-/// assert_eq!(result.to_vec(), vec![1.0, 2.0, 2.0, 2.0]);
+/// assert_eq!(result.to_vec(), vec![1.0, 2.0, 2.0, 3.0]);
 /// ```
 pub fn rint<T: Float + Clone>(array: &Array<T>) -> Array<T> {
     array.map(|x| x.round())

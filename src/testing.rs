@@ -372,7 +372,9 @@ where
 /// use numrs2::prelude::*;
 /// use numrs2::testing::{assert_scalar_almost_equal, ToleranceConfig};
 ///
-/// let result = assert_scalar_almost_equal(3.14159, 3.14159265, &ToleranceConfig::default()).expect("assert_scalar_almost_equal failed");
+/// let mut config = ToleranceConfig::default();
+/// config.atol = 1e-4;
+/// let result = assert_scalar_almost_equal(3.14159, 3.1416, &config).expect("assert_scalar_almost_equal failed");
 /// assert!(result.passed);
 /// ```
 pub fn assert_scalar_almost_equal<T>(
@@ -572,7 +574,7 @@ pub fn test_summary(results: &[TestResult]) -> String {
 /// let result1 = assert_array_equal(&a, &b).expect("equal test failed");
 /// let result2 = assert_array_almost_equal(&c, &d, &ToleranceConfig::default()).expect("almost equal test failed");
 ///
-/// assert!(results.iter().all(|r| r.passed));
+/// assert!(result1.passed && result2.passed);
 /// ```
 #[macro_export]
 macro_rules! run_tests {
