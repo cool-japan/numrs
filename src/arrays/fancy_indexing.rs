@@ -615,7 +615,7 @@ pub struct FancyIndexResult<T> {
 
 impl<T> FancyIndexResult<T> {
     /// Convert to ArrayView
-    pub fn to_view(&self) -> Result<ArrayView<T>> {
+    pub fn to_view(&self) -> Result<ArrayView<'_, T>> {
         ArrayView::from_data(&self.data, self.shape.clone())
     }
 }

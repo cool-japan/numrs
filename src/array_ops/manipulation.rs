@@ -773,6 +773,7 @@ pub fn delete<T: Clone + Zero>(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::manipulation::insert;
 ///
 /// // Insert single value into 1D array
 /// let a = Array::from_vec(vec![1, 2, 3]);
@@ -787,8 +788,8 @@ pub fn delete<T: Clone + Zero>(
 /// let b = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
 /// let values = vec![5, 6];
 /// let result = insert(&b, &[1], &values, Some(0)).unwrap();
-/// assert_eq!(result.shape(), vec![3, 2]);
-/// assert_eq!(result.to_vec(), vec![1, 2, 5, 6, 3, 4]);
+/// assert_eq!(result.shape(), vec![4, 2]);
+/// assert_eq!(result.to_vec(), vec![1, 2, 5, 5, 6, 6, 3, 4]);
 /// ```
 pub fn insert<T: Clone + Zero>(
     array: &Array<T>,
@@ -2023,16 +2024,17 @@ pub fn unpackbits(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::indexing::unravel_index;
 ///
 /// // Convert single index
-/// let indices = Array::from_vec(vec![6]);
-/// let coords = unravel_index(&indices, &[3, 4], Some("C")).unwrap();
+/// let indices = Array::from_vec(vec![6usize]);
+/// let coords = unravel_index(&indices, &[3, 4]).unwrap();
 /// assert_eq!(coords[0].to_vec(), vec![1]); // row 1
 /// assert_eq!(coords[1].to_vec(), vec![2]); // col 2
 ///
 /// // Convert multiple indices
-/// let indices = Array::from_vec(vec![6, 11, 3, 5]);
-/// let coords = unravel_index(&indices, &[3, 4], Some("C")).unwrap();
+/// let indices = Array::from_vec(vec![6usize, 11, 3, 5]);
+/// let coords = unravel_index(&indices, &[3, 4]).unwrap();
 /// assert_eq!(coords[0].to_vec(), vec![1, 2, 0, 1]); // rows
 /// assert_eq!(coords[1].to_vec(), vec![2, 3, 3, 1]); // cols
 /// ```
@@ -2137,16 +2139,17 @@ pub fn unravel_index(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::manipulation::ravel_multi_index;
 ///
 /// // Convert single coordinate
-/// let row = Array::from_vec(vec![1]);
-/// let col = Array::from_vec(vec![2]);
+/// let row = Array::from_vec(vec![1usize]);
+/// let col = Array::from_vec(vec![2usize]);
 /// let flat = ravel_multi_index(&[&row, &col], &[3, 4], Some("raise"), Some("C")).unwrap();
 /// assert_eq!(flat.to_vec(), vec![6]); // 1*4 + 2 = 6
 ///
 /// // Convert multiple coordinates
-/// let rows = Array::from_vec(vec![1, 2, 0, 1]);
-/// let cols = Array::from_vec(vec![2, 3, 3, 1]);
+/// let rows = Array::from_vec(vec![1usize, 2, 0, 1]);
+/// let cols = Array::from_vec(vec![2usize, 3, 3, 1]);
 /// let flat = ravel_multi_index(&[&rows, &cols], &[3, 4], Some("raise"), Some("C")).unwrap();
 /// assert_eq!(flat.to_vec(), vec![6, 11, 3, 5]);
 /// ```

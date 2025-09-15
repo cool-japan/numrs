@@ -232,16 +232,17 @@ pub fn dsplit<T: Clone>(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::splitting::array_split;
 ///
 /// // Split a 10-element array into 3 unequal parts
 /// let a = Array::from_vec(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-/// let parts = array_split(&a, 3.into(), 0).unwrap();
+/// let parts = array_split(&a, 3, 0).unwrap();
 /// assert_eq!(parts[0].to_vec(), vec![0, 1, 2, 3]);  // 4 elements
 /// assert_eq!(parts[1].to_vec(), vec![4, 5, 6]);     // 3 elements
 /// assert_eq!(parts[2].to_vec(), vec![7, 8, 9]);     // 3 elements
 ///
 /// // Split using explicit indices
-/// let parts = array_split(&a, vec![3, 5].into(), 0).unwrap();
+/// let parts = array_split(&a, vec![3, 5], 0).unwrap();
 /// assert_eq!(parts[0].to_vec(), vec![0, 1, 2]);
 /// assert_eq!(parts[1].to_vec(), vec![3, 4]);
 /// assert_eq!(parts[2].to_vec(), vec![5, 6, 7, 8, 9]);

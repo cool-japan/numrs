@@ -1127,21 +1127,22 @@ mod tests {
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::comparisons::count_nonzero;
 ///
 /// let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
 /// assert_eq!(count_nonzero(&a, None).unwrap().to_vec()[0], 3);
 ///
-/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]).unwrap();
+/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
 /// // Count over all elements
 /// assert_eq!(count_nonzero(&b, None).unwrap().to_vec()[0], 3);
 ///
 /// // Count along axis 0 (columns)
 /// let c = count_nonzero(&b, Some(0)).unwrap();
-/// assert_eq!(c.to_vec(), vec![0, 1, 0, 1, 0, 1]);
+/// assert_eq!(c.to_vec(), vec![1, 1, 1]);
 ///
 /// // Count along axis 1 (rows)  
 /// let d = count_nonzero(&b, Some(1)).unwrap();
-/// assert_eq!(d.to_vec(), vec![2, 1]);
+/// assert_eq!(d.to_vec(), vec![1, 2]);
 /// ```
 pub fn count_nonzero<T>(a: &Array<T>, axis: Option<usize>) -> Result<Array<usize>>
 where
@@ -1210,12 +1211,13 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::comparisons::flatnonzero;
 ///
 /// let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
 /// let indices = flatnonzero(&a).unwrap();
 /// assert_eq!(indices.to_vec(), vec![1, 3, 5]);
 ///
-/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]).unwrap();
+/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
 /// let indices = flatnonzero(&b).unwrap();
 /// assert_eq!(indices.to_vec(), vec![1, 3, 5]);
 /// ```

@@ -2201,9 +2201,10 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::std;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
-/// let s = std(&a, None, 0, false).unwrap();
+/// let s = std(&a, None, 0, false).expect("std failed");
 /// assert!((s.to_vec()[0] - 1.414).abs() < 0.01); // approximately sqrt(2)
 /// ```
 pub fn std<T>(
@@ -3147,9 +3148,10 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::round;
 ///
 /// let a = Array::from_vec(vec![1.5, 2.3, 3.7, 4.5]);
-/// let rounded = round(&a).unwrap();
+/// let rounded = round(&a).expect("round failed");
 /// assert_eq!(rounded.to_vec(), vec![2.0, 2.0, 4.0, 4.0]);
 /// ```
 pub fn round<T>(array: &Array<T>) -> Result<Array<T>>
@@ -3294,10 +3296,11 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::nanmean;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, f64::NAN, 4.0]);
-/// let mean = nanmean(&a, None).unwrap();
-/// assert_eq!(mean.to_vec(), vec![2.333333333333333]);
+/// let mean = nanmean(&a, None).expect("nanmean failed");
+/// assert!((mean.to_vec()[0] - 2.333333333333333).abs() < 1e-10);
 /// ```
 pub fn nanmean<T>(array: &Array<T>, axis: Option<isize>) -> Result<Array<T>>
 where
@@ -3450,34 +3453,12 @@ where
 {
     let mean = nanmean(array, axis)?;
 
-    if axis.is_none() {
-        // Compute variance for flattened array
-        let mean_val = mean.to_vec()[0];
-        let mut sum_sq = T::zero();
-        let mut count = 0;
-
-        let array_vec = array.to_vec();
-        for value in array_vec.iter() {
-            if !value.is_nan() {
-                let diff = *value - mean_val;
-                sum_sq = sum_sq + diff * diff;
-                count += 1;
-            }
-        }
-
-        if count <= ddof {
-            Ok(Array::from_vec(vec![T::nan()]))
-        } else {
-            Ok(Array::from_vec(vec![
-                sum_sq / T::from(count - ddof).unwrap(),
-            ]))
-        }
-    } else {
+    if let Some(axis_val) = axis {
         // Compute variance along axis
-        let ax = if axis.unwrap() < 0 {
-            (array.ndim() as isize + axis.unwrap()) as usize
+        let ax = if axis_val < 0 {
+            (array.ndim() as isize + axis_val) as usize
         } else {
-            axis.unwrap() as usize
+            axis_val as usize
         };
 
         // Expand mean for broadcasting
@@ -3546,6 +3527,28 @@ where
                 s / adjusted_count
             }
         })?)
+    } else {
+        // Compute variance for flattened array
+        let mean_val = mean.to_vec()[0];
+        let mut sum_sq = T::zero();
+        let mut count = 0;
+
+        let array_vec = array.to_vec();
+        for value in array_vec.iter() {
+            if !value.is_nan() {
+                let diff = *value - mean_val;
+                sum_sq = sum_sq + diff * diff;
+                count += 1;
+            }
+        }
+
+        if count <= ddof {
+            Ok(Array::from_vec(vec![T::nan()]))
+        } else {
+            Ok(Array::from_vec(vec![
+                sum_sq / T::from(count - ddof).unwrap(),
+            ]))
+        }
     }
 }
 
@@ -3748,9 +3751,10 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::nancumsum;
 ///
 /// let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0]);
-/// let cumsum = nancumsum(&a, None).unwrap();
+/// let cumsum = nancumsum(&a, None).expect("nancumsum failed");
 /// assert_eq!(cumsum.to_vec(), vec![1.0, 1.0, 4.0, 8.0]);
 /// ```
 pub fn nancumsum<T>(array: &Array<T>, axis: Option<isize>) -> Result<Array<T>>
@@ -3846,9 +3850,10 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::nanprod;
 ///
 /// let a = Array::from_vec(vec![2.0, f64::NAN, 3.0, 4.0]);
-/// let prod = nanprod(&a, None).unwrap();
+/// let prod = nanprod(&a, None).expect("nanprod failed");
 /// assert_eq!(prod.to_vec(), vec![24.0]);
 /// ```
 pub fn nanprod<T>(array: &Array<T>, axis: Option<isize>) -> Result<Array<T>>
@@ -3938,9 +3943,10 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::nanpercentile;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, f64::NAN, 4.0, 5.0]);
-/// let p50 = nanpercentile(&a, 50.0, None, None).unwrap();
+/// let p50 = nanpercentile(&a, 50.0, None, None).expect("nanpercentile failed");
 /// assert_eq!(p50.to_vec(), vec![3.0]);
 /// ```
 pub fn nanpercentile<T>(
@@ -3974,10 +3980,11 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::nanquantile;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, f64::NAN, 4.0, 5.0]);
 /// let q = Array::from_vec(vec![0.5]);
-/// let median = nanquantile(&a, &q, None, None).unwrap();
+/// let median = nanquantile(&a, &q, None, None).expect("nanquantile failed");
 /// assert_eq!(median.to_vec(), vec![3.0]);
 /// ```
 pub fn nanquantile<T>(
@@ -4383,28 +4390,12 @@ where
 {
     let mut result = array.clone();
 
-    if axis.is_none() {
-        // Partition flattened array
-        let mut data_vec = result.to_vec();
-        if kth >= data_vec.len() {
-            return Err(crate::error::NumRs2Error::IndexOutOfBounds(format!(
-                "kth ({}) out of bounds for array of size {}",
-                kth,
-                data_vec.len()
-            )));
-        }
-
-        data_vec.select_nth_unstable_by(kth, |a, b| {
-            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        Ok(Array::from_vec(data_vec).reshape(&array.shape()))
-    } else {
+    if let Some(axis_val) = axis {
         // Partition along axis
-        let ax = if axis.unwrap() < 0 {
-            (array.ndim() as isize + axis.unwrap()) as usize
+        let ax = if axis_val < 0 {
+            (array.ndim() as isize + axis_val) as usize
         } else {
-            axis.unwrap() as usize
+            axis_val as usize
         };
         let shape = array.shape();
         let axis_len = shape[ax];
@@ -4470,6 +4461,22 @@ where
         }
 
         Ok(result)
+    } else {
+        // Partition flattened array
+        let mut data_vec = result.to_vec();
+        if kth >= data_vec.len() {
+            return Err(crate::error::NumRs2Error::IndexOutOfBounds(format!(
+                "kth ({}) out of bounds for array of size {}",
+                kth,
+                data_vec.len()
+            )));
+        }
+
+        data_vec.select_nth_unstable_by(kth, |a, b| {
+            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        Ok(Array::from_vec(data_vec).reshape(&array.shape()))
     }
 }
 
@@ -4799,6 +4806,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::isposinf;
 ///
 /// let a = Array::from_vec(vec![1.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN]);
 /// let posinf_mask = isposinf(&a);
@@ -4825,6 +4833,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::isneginf;
 ///
 /// let a = Array::from_vec(vec![1.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN]);
 /// let neginf_mask = isneginf(&a);
@@ -4851,6 +4860,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::isnormal;
 ///
 /// let a = Array::from_vec(vec![1.0, 0.0, f64::INFINITY, f64::NAN]);
 /// let normal_mask = isnormal(&a);
@@ -4877,6 +4887,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::isreal;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let real_mask = isreal(&a);
@@ -4903,6 +4914,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::iscomplex;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let complex_mask = iscomplex(&a);
@@ -4981,9 +4993,10 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::count_nonzero;
 ///
 /// let a = Array::from_vec(vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0]);
-/// let count = count_nonzero(&a, None, false).unwrap();
+/// let count = count_nonzero(&a, None, false).expect("count_nonzero failed");
 /// assert_eq!(count.to_vec(), vec![3]); // 3 non-zero elements
 /// ```
 pub fn count_nonzero<T>(
@@ -5098,11 +5111,13 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::math::nonzero;
 ///
 /// let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]).reshape(&[2, 3]);
-/// let (row_indices, col_indices) = nonzero(&a).unwrap();
-/// assert_eq!(row_indices.to_vec(), vec![0, 1, 1]);
-/// assert_eq!(col_indices.to_vec(), vec![1, 0, 2]);
+/// let indices = nonzero(&a).expect("nonzero failed");
+/// assert_eq!(indices.len(), 2); // 2D array has 2 index arrays
+/// assert_eq!(indices[0].to_vec(), vec![0, 1, 1]);
+/// assert_eq!(indices[1].to_vec(), vec![1, 0, 2]);
 /// ```
 pub fn nonzero<T>(array: &Array<T>) -> Result<Vec<Array<usize>>>
 where
@@ -5708,13 +5723,17 @@ where
 /// # Examples
 ///
 /// ```
-/// use numrs2::prelude::*;
-///
+/// # use numrs2::prelude::*;
+/// # use numrs2::math::divmod;
+/// # use numrs2::Result;
+/// # fn main() -> Result<()> {
 /// let x = Array::from_vec(vec![7.0, -7.0, 8.0]);
 /// let y = Array::from_vec(vec![3.0, 3.0, 3.0]);
 /// let (quot, rem) = divmod(&x, &y)?;
 /// // quot = [2.0, -2.0, 2.0]
 /// // rem = [1.0, -1.0, 2.0]
+/// # Ok(())
+/// # }
 /// ```
 pub fn divmod<T>(x: &Array<T>, y: &Array<T>) -> Result<(Array<T>, Array<T>)>
 where
@@ -5764,12 +5783,16 @@ where
 /// # Examples
 ///
 /// ```
-/// use numrs2::prelude::*;
-///
+/// # use numrs2::prelude::*;
+/// # use numrs2::math::remainder;
+/// # use numrs2::Result;
+/// # fn main() -> Result<()> {
 /// let x = Array::from_vec(vec![7.0, -7.0, 8.0]);
 /// let y = Array::from_vec(vec![3.0, 3.0, 3.0]);
 /// let rem = remainder(&x, &y)?;
 /// // rem = [1.0, -1.0, 2.0]
+/// # Ok(())
+/// # }
 /// ```
 pub fn remainder<T>(x: &Array<T>, y: &Array<T>) -> Result<Array<T>>
 where
@@ -5813,12 +5836,16 @@ where
 /// # Examples
 ///
 /// ```
-/// use numrs2::prelude::*;
-///
+/// # use numrs2::prelude::*;
+/// # use numrs2::math::fmod;
+/// # use numrs2::Result;
+/// # fn main() -> Result<()> {
 /// let x = Array::from_vec(vec![7.0, -7.0, 8.0]);
 /// let y = Array::from_vec(vec![3.0, 3.0, 3.0]);
 /// let rem = fmod(&x, &y)?;
 /// // rem = [1.0, -1.0, 2.0]
+/// # Ok(())
+/// # }
 /// ```
 pub fn fmod<T>(x: &Array<T>, y: &Array<T>) -> Result<Array<T>>
 where

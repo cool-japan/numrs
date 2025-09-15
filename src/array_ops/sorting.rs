@@ -26,18 +26,19 @@ use num_traits::{NumCast, ToPrimitive, Zero};
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::sorting::partition;
 ///
 /// // Partition a 1D array
-/// let a = Array::from_vec(vec![9, 4, 1, 7, 5, 3, 8, 2, 6]);
+/// let a = Array::from_vec(vec![9.0, 4.0, 1.0, 7.0, 5.0, 3.0, 8.0, 2.0, 6.0]);
 /// let partitioned = partition(&a, 3, None).unwrap();
-/// // The 4th element (index 3) is now 4, all elements before are <= 4,
-/// // and all elements after are >= 4
-/// assert_eq!(partitioned.get(&[3]).unwrap(), 4);
+/// // The 4th element (index 3) is now 4.0, all elements before are <= 4.0,
+/// // and all elements after are >= 4.0
+/// assert_eq!(partitioned.get(&[3]).unwrap(), 4.0);
 /// for i in 0..3 {
-///     assert!(partitioned.get(&[i]).unwrap() <= 4);
+///     assert!(partitioned.get(&[i]).unwrap() <= 4.0);
 /// }
 /// for i in 4..9 {
-///     assert!(partitioned.get(&[i]).unwrap() >= 4);
+///     assert!(partitioned.get(&[i]).unwrap() >= 4.0);
 /// }
 /// ```
 pub fn partition<T: Clone + PartialOrd>(
@@ -239,12 +240,13 @@ fn partition_around_pivot<T: Clone + PartialOrd>(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::sorting::searchsorted;
 ///
 /// // Create a sorted array
-/// let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
+/// let a = Array::from_vec(vec![1.0, 3.0, 5.0, 7.0, 9.0]);
 ///
 /// // Find insertion points for values
-/// let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
+/// let v = Array::from_vec(vec![0.0, 1.0, 2.0, 4.0, 8.0, 10.0]);
 /// let indices = searchsorted(&a, &v, Some("left"), None).unwrap();
 /// assert_eq!(indices.to_vec(), vec![0, 0, 1, 2, 4, 5]);
 ///
@@ -624,17 +626,18 @@ mod tests {
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::sorting::bincount;
 ///
 /// // Basic bincount
 /// let x = Array::from_vec(vec![0, 1, 1, 3, 2, 1, 7]);
-/// let counts = bincount(&x, None, None).unwrap();
+/// let counts: Array<i32> = bincount(&x, None, None).unwrap();
 /// // counts = [1, 3, 1, 1, 0, 0, 0, 1] (8 elements, up to max value 7)
 /// assert_eq!(counts.shape(), vec![8]);
 /// assert_eq!(counts.get(&[1]).unwrap(), 3); // value 1 appears 3 times
 ///
 /// // With weights
 /// let weights = Array::from_vec(vec![0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 2.0]);
-/// let weighted_counts = bincount(&x, Some(&weights), None).unwrap();
+/// let weighted_counts: Array<f64> = bincount(&x, Some(&weights), None).unwrap();
 /// assert_eq!(weighted_counts.get(&[1]).unwrap(), 1.5); // sum of weights where x=1
 /// ```
 pub fn bincount<T, W>(

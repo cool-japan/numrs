@@ -360,20 +360,21 @@ pub fn diagonal<T: Clone + num_traits::Zero>(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::diagonal::fill_diagonal;
 ///
 /// // Fill diagonal of a 3x3 matrix
 /// let mut a = Array::zeros(&[3, 3]);
-/// fill_diagonal(&mut a, 5).unwrap();
+/// fill_diagonal(&mut a, 5, false).unwrap();
 /// assert_eq!(a.to_vec(), vec![5, 0, 0, 0, 5, 0, 0, 0, 5]);
 ///
 /// // Fill diagonal of a 4x3 matrix
 /// let mut b = Array::zeros(&[4, 3]);
-/// fill_diagonal(&mut b, 7).unwrap();
+/// fill_diagonal(&mut b, 7, false).unwrap();
 /// assert_eq!(b.to_vec(), vec![7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0]);
 ///
 /// // Fill diagonal of a 3D array
 /// let mut c = Array::zeros(&[3, 3, 3]);
-/// fill_diagonal(&mut c, 1).unwrap();
+/// fill_diagonal(&mut c, 1, false).unwrap();
 /// // Only elements where all indices are equal get filled
 /// let expected = vec![
 ///     1, 0, 0, 0, 0, 0, 0, 0, 0,  // c[0,:,:]

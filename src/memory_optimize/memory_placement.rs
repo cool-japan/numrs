@@ -243,19 +243,19 @@ pub fn get_optimal_simd_width<T>() -> usize {
         if is_avx512_available() {
             64 / type_size // 512-bit registers
         } else if is_avx2_available() || is_avx_available() {
-            return 32 / type_size; // 256-bit registers
+            32 / type_size // 256-bit registers
         } else {
-            return 16 / type_size; // 128-bit SSE registers
+            16 / type_size // 128-bit SSE registers
         }
     }
 
     #[cfg(target_arch = "aarch64")]
     {
-        return 16 / type_size; // 128-bit NEON registers
+        16 / type_size // 128-bit NEON registers
     }
 
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
-        return 4 / type_size; // Conservative default
+        4 / type_size // Conservative default
     }
 }

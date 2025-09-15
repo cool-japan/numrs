@@ -108,7 +108,7 @@ where
         let mut sum = T::zero();
 
         // Compute sum(a[m] * b[n - m])
-        let m_start = if n >= b_len - 1 { n - (b_len - 1) } else { 0 };
+        let m_start = n.saturating_sub(b_len - 1);
         let m_end = (n + 1).min(a_len);
 
         for m in m_start..m_end {
@@ -201,10 +201,11 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::signal::convolve2d;
 ///
-/// let input = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]).unwrap();
-/// let kernel = Array::from_vec(vec![1.0, 0.0, 0.0, -1.0]).reshape(&[2, 2]).unwrap();
-/// let result = convolve2d(&input, &kernel, "full").unwrap();
+/// let input = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+/// let kernel = Array::from_vec(vec![1.0, 0.0, 0.0, -1.0]).reshape(&[2, 2]);
+/// let result = convolve2d(&input, &kernel, "full").expect("convolve2d failed");
 /// // Applies 2D convolution with the kernel
 /// ```
 pub fn convolve2d<T>(input: &Array<T>, kernel: &Array<T>, mode: &str) -> Result<Array<T>>
@@ -307,10 +308,11 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::signal::correlate2d;
 ///
-/// let input = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]).unwrap();
-/// let template = Array::from_vec(vec![1.0, 0.0, 0.0, 1.0]).reshape(&[2, 2]).unwrap();
-/// let result = correlate2d(&input, &template, "valid").unwrap();
+/// let input = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+/// let template = Array::from_vec(vec![1.0, 0.0, 0.0, 1.0]).reshape(&[2, 2]);
+/// let result = correlate2d(&input, &template, "valid").expect("correlate2d failed");
 /// // Finds where template matches in the input
 /// ```
 pub fn correlate2d<T>(input: &Array<T>, template: &Array<T>, mode: &str) -> Result<Array<T>>

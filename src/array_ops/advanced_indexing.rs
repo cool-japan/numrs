@@ -516,14 +516,15 @@ where
 /// let arr = Array::from_vec(vec![
 ///     1.0, 2.0, 3.0, 4.0,
 ///     5.0, 6.0, 7.0, 8.0
-/// ]).reshape(&[2, 2, 2]);
+/// ]);
+/// let arr = arr.reshape(&[2, 2, 2]);
 ///
 /// let result = apply_over_axes(
-///     |a: &Array<f64>| -> Result<Array<f64>> { Ok(Array::from_vec(vec![a.sum()])) },
+///     |a: &Array<f64>| -> Result<Array<f64>> { a.sum_axis(0) },
 ///     &arr,
-///     &[1, 2]
+///     &[1]
 /// ).unwrap();
-/// // Sums over axes 1 and 2, leaving axis 0: [10.0, 26.0]
+/// // Sums over axis 1, reducing dimension by 1
 /// ```
 pub fn apply_over_axes<T, F>(func: F, array: &Array<T>, axes: &[usize]) -> Result<Array<T>>
 where

@@ -1123,6 +1123,7 @@ pub fn ix_<T: Clone>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>> {
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::indexing::put;
 ///
 /// // Create an array
 /// let mut a: Array<i32> = Array::zeros(&[5]);
@@ -1131,7 +1132,7 @@ pub fn ix_<T: Clone>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>> {
 /// let indices = Array::from_vec(vec![0, 2, 4]);
 /// let values = Array::from_vec(vec![10, 20, 30]);
 ///
-/// put(&mut a, &indices, &values, None).unwrap();
+/// put(&mut a, &indices, &values, None).expect("put failed");
 /// assert_eq!(a.to_vec(), vec![10, 0, 20, 0, 30]);
 ///
 /// // Test with wrap mode
@@ -1139,7 +1140,7 @@ pub fn ix_<T: Clone>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>> {
 /// let indices = Array::from_vec(vec![0, 1, 2, 3, 4, 5]);
 /// let values = Array::from_vec(vec![10, 20, 30, 40, 50, 60]);
 ///
-/// put(&mut b, &indices, &values, Some("wrap")).unwrap();
+/// put(&mut b, &indices, &values, Some("wrap")).expect("put failed");
 /// // Indices 3,4,5 wrap around to 0,1,2
 /// assert_eq!(b.to_vec(), vec![40, 50, 60]);
 /// ```
@@ -2247,14 +2248,16 @@ pub fn triu_indices(n: usize, k: isize, m: Option<usize>) -> Result<(Array<usize
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::indexing::diag_indices;
 ///
 /// // Get diagonal indices for a 3x3 array
-/// let (rows, cols) = diag_indices(3, Some(2)).unwrap();
-/// assert_eq!(rows.to_vec(), vec![0, 1, 2]);
-/// assert_eq!(cols.to_vec(), vec![0, 1, 2]);
+/// let indices = diag_indices(3, Some(2)).expect("diag_indices failed");
+/// assert_eq!(indices.len(), 2);
+/// assert_eq!(indices[0].to_vec(), vec![0, 1, 2]);
+/// assert_eq!(indices[1].to_vec(), vec![0, 1, 2]);
 ///
 /// // For 3D array (3x3x3)
-/// let indices = diag_indices(3, Some(3)).unwrap();
+/// let indices = diag_indices(3, Some(3)).expect("diag_indices failed");
 /// assert_eq!(indices.len(), 3);
 /// for dim_indices in &indices {
 ///     assert_eq!(dim_indices.to_vec(), vec![0, 1, 2]);
@@ -2295,16 +2298,17 @@ pub fn diag_indices(n: usize, ndim: Option<usize>) -> Result<Vec<Array<usize>>> 
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::indexing::diag_indices_from;
 ///
 /// // Get diagonal indices from a 3x4 array
-/// let a = Array::zeros(&[3, 4]);
-/// let indices = diag_indices_from(&a).unwrap();
+/// let a: Array<f64> = Array::zeros(&[3, 4]);
+/// let indices = diag_indices_from(&a).expect("diag_indices_from failed");
 /// assert_eq!(indices[0].to_vec(), vec![0, 1, 2]);
 /// assert_eq!(indices[1].to_vec(), vec![0, 1, 2]);
 ///
 /// // With a 3D array
-/// let b = Array::zeros(&[3, 3, 3]);
-/// let indices = diag_indices_from(&b).unwrap();
+/// let b: Array<f64> = Array::zeros(&[3, 3, 3]);
+/// let indices = diag_indices_from(&b).expect("diag_indices_from failed");
 /// assert_eq!(indices.len(), 3);
 /// for dim_indices in &indices {
 ///     assert_eq!(dim_indices.to_vec(), vec![0, 1, 2]);
@@ -2341,15 +2345,16 @@ pub fn diag_indices_from<T: Clone>(arr: &Array<T>) -> Result<Vec<Array<usize>>> 
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::indexing::tril_indices_from;
 ///
 /// // Get lower triangle indices from a 3x3 array
-/// let a = Array::zeros(&[3, 3]);
-/// let (rows, cols) = tril_indices_from(&a, Some(0)).unwrap();
+/// let a: Array<f64> = Array::zeros(&[3, 3]);
+/// let (rows, cols) = tril_indices_from(&a, Some(0)).expect("tril_indices_from failed");
 /// assert_eq!(rows.to_vec(), vec![0, 1, 1, 2, 2, 2]);
 /// assert_eq!(cols.to_vec(), vec![0, 0, 1, 0, 1, 2]);
 ///
 /// // With k=1 (include first diagonal above main)
-/// let (rows, cols) = tril_indices_from(&a, Some(1)).unwrap();
+/// let (rows, cols) = tril_indices_from(&a, Some(1)).expect("tril_indices_from failed");
 /// assert_eq!(rows.to_vec(), vec![0, 0, 1, 1, 1, 2, 2, 2]);
 /// assert_eq!(cols.to_vec(), vec![0, 1, 0, 1, 2, 0, 1, 2]);
 /// ```
@@ -2387,15 +2392,16 @@ pub fn tril_indices_from<T: Clone>(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::indexing::triu_indices_from;
 ///
 /// // Get upper triangle indices from a 3x3 array
-/// let a = Array::zeros(&[3, 3]);
-/// let (rows, cols) = triu_indices_from(&a, Some(0)).unwrap();
+/// let a: Array<f64> = Array::zeros(&[3, 3]);
+/// let (rows, cols) = triu_indices_from(&a, Some(0)).expect("triu_indices_from failed");
 /// assert_eq!(rows.to_vec(), vec![0, 0, 0, 1, 1, 2]);
 /// assert_eq!(cols.to_vec(), vec![0, 1, 2, 1, 2, 2]);
 ///
 /// // With k=1 (exclude main diagonal)
-/// let (rows, cols) = triu_indices_from(&a, Some(1)).unwrap();
+/// let (rows, cols) = triu_indices_from(&a, Some(1)).expect("triu_indices_from failed");
 /// assert_eq!(rows.to_vec(), vec![0, 0, 1]);
 /// assert_eq!(cols.to_vec(), vec![1, 2, 2]);
 /// ```

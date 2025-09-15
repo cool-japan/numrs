@@ -5,6 +5,7 @@ use numrs2::random::{self, set_seed};
 /// with known expected values. This helps ensure the implementation is correct.
 
 // Helper function to check if a value is within expected range
+#[allow(dead_code)]
 fn is_within_range(value: f64, expected: f64, tolerance: f64) -> bool {
     (value - expected).abs() <= tolerance
 }

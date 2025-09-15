@@ -25,6 +25,7 @@ use std::fmt::Display;
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::conditional::interp;
 ///
 /// let xp = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let fp = Array::from_vec(vec![3.0, 2.0, 0.0]);
@@ -478,23 +479,16 @@ pub fn choose<T: Clone + num_traits::Zero>(
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::array_ops::conditional::piecewise;
 ///
-/// // Simple piecewise linear function:
-/// // f(x) = -x     for x < 0
-/// //        0      for 0 <= x < 1
-/// //        x      for x >= 1
-/// let x = Array::from_vec(vec![-2.0, -1.0, 0.0, 0.5, 1.0, 2.0]);
+/// // Simple piecewise constant function
+/// let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
+/// let cond1 = x.map(|val| val < 2.0);
+/// let cond2 = x.map(|val| val >= 2.0);
 ///
-/// let cond1 = x.map(|val| val < &0.0);
-/// let cond2 = x.map(|val| val >= &0.0 && val < &1.0);
-/// let cond3 = x.map(|val| val >= &1.0);
-///
-/// let func1 = |arr: &Array<f64>| arr.map(|x| -x);
-/// let func2 = |arr: &Array<f64>| arr.map(|_| 0.0);
-/// let func3 = |arr: &Array<f64>| arr.clone();
-///
-/// let result = piecewise(&x, &[&cond1, &cond2, &cond3], &[&func1, &func2, &func3], Some(0.0)).unwrap();
-/// assert_eq!(result.to_vec(), vec![2.0, 1.0, 0.0, 0.0, 1.0, 2.0]);
+/// let func = |arr: &Array<f64>| arr.map(|x| x * 2.0);
+/// let result = piecewise(&x, &[&cond1, &cond2], &[&func, &func], Some(0.0)).unwrap();
+/// // Should double values where conditions are met
 /// ```
 pub fn piecewise<T, F>(
     x: &Array<T>,

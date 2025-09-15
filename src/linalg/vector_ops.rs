@@ -539,9 +539,9 @@ pub fn cross<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
                     "Cross product requires at least 2D vectors".to_string(),
                 ))
             } else if a_len > 3 {
-                return Err(NumRs2Error::DimensionMismatch(
+                Err(NumRs2Error::DimensionMismatch(
                     "Cross product only supports 2D and 3D vectors".to_string(),
-                ));
+                ))
             } else {
                 // Should not reach here due to pattern matching above
                 unreachable!()

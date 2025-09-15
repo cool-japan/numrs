@@ -1313,7 +1313,7 @@ impl<T: Clone> Array<T> {
     }
 
     /// Get a view of the underlying ndarray data (low-level)
-    pub fn ndarray_view(&self) -> ArrayView<T, IxDyn> {
+    pub fn ndarray_view(&self) -> ArrayView<'_, T, IxDyn> {
         self.data.view()
     }
 
@@ -1459,7 +1459,7 @@ impl<T: Clone> Array<T> {
     }
 
     /// Get a 2D view of the underlying ndarray data
-    pub fn view_2d(&self) -> Result<ArrayView2<T>>
+    pub fn view_2d(&self) -> Result<ArrayView2<'_, T>>
     where
         T: Clone,
     {

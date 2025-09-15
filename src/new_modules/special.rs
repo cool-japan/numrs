@@ -991,7 +991,7 @@ where
             return pi_half * (bessel_i_scalar(-n - 1, x) + bessel_i_scalar(n - 1, x));
         }
 
-        return pi_half * (i_minus_n - i_n) / sin_term;
+        pi_half * (i_minus_n - i_n) / sin_term
     }
     // Large argument case (x ≥ 8*n)
     else {
@@ -1029,7 +1029,7 @@ where
             }
         }
 
-        return factor * sum;
+        factor * sum
     }
 }
 
