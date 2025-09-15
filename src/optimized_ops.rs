@@ -19,12 +19,12 @@ pub mod simd_complex;
 #[cfg(feature = "lapack")]
 use crate::linalg::det;
 use crate::{prelude::Array, Result};
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, Zip};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 
 /// Get information about available optimizations
 #[cfg(feature = "scirs")]
 pub fn get_optimization_info() -> String {
-    let caps = PlatformCapabilities::detect();
+    let _caps = PlatformCapabilities::detect();
     format!(
         "NumRS2 Optimizations Available:\n\
          - SIMD: {}\n\
@@ -36,14 +36,14 @@ pub fn get_optimization_info() -> String {
          - AVX512: {}\n\
          - NEON: {}\n\
          - Parallel threads: {}",
-        caps.simd_available,
-        caps.gpu_available,
-        caps.cuda_available,
-        caps.opencl_available,
-        caps.metal_available,
-        caps.avx2_available,
-        caps.avx512_available,
-        caps.neon_available,
+        _caps.simd_available,
+        _caps.gpu_available,
+        _caps.cuda_available,
+        _caps.opencl_available,
+        _caps.metal_available,
+        _caps.avx2_available,
+        _caps.avx512_available,
+        _caps.neon_available,
         num_threads()
     )
 }
@@ -142,7 +142,7 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
 #[cfg(feature = "scirs")]
 pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     let optimizer = AutoOptimizer::new();
-    let caps = PlatformCapabilities::detect();
+    let _caps = PlatformCapabilities::detect();
     let size = data.len();
 
     if optimizer.should_use_gpu(size) {

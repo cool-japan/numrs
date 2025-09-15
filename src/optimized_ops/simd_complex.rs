@@ -3,11 +3,11 @@
 //! This module provides SIMD-accelerated implementations for complex number
 //! operations including arithmetic, transcendental functions, and FFT.
 
-use crate::{prelude::Array, Result};
+use crate::Result;
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
 use num_complex::Complex;
 #[cfg(feature = "scirs")]
-use scirs2_core::simd_ops::{AutoOptimizer, SimdUnifiedOps};
+use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::f64::consts::PI;
 
 /// SIMD-optimized complex number operations

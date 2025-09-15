@@ -107,10 +107,9 @@ impl Avx512Ops {
         // Validate indices
         for &idx in indices {
             if idx >= data.len() {
-                return Err(crate::NumRs2Error::IndexOutOfBounds {
-                    index: idx,
-                    shape: vec![data.len()],
-                });
+                return Err(crate::NumRs2Error::IndexOutOfBounds(
+                    format!("Index {} out of bounds for array of size {}", idx, data.len())
+                ));
             }
         }
 
@@ -160,10 +159,9 @@ impl Avx512Ops {
         // Validate indices
         for &idx in indices {
             if idx >= output_size {
-                return Err(crate::NumRs2Error::IndexOutOfBounds {
-                    index: idx,
-                    shape: vec![output_size],
-                });
+                return Err(crate::NumRs2Error::IndexOutOfBounds(
+                    format!("Index {} out of bounds for output size {}", idx, output_size)
+                ));
             }
         }
 
@@ -253,7 +251,7 @@ impl Avx512Ops {
         let mut result = Array1::zeros(data.len());
         let chunk_size = 8;
 
-        for (i, chunk) in data.chunks(chunk_size).enumerate() {
+        for (i, chunk) in data.exact_chunks(chunk_size).into_iter().enumerate() {
             let start = i * chunk_size;
             for (j, &val) in chunk.iter().enumerate() {
                 result[start + j] = val as f32;
