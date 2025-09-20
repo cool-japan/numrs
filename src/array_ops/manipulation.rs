@@ -828,7 +828,7 @@ pub fn insert<T: Clone + Zero>(
                 1
             } else {
                 // Values should be a multiple of indices.len()
-                if values.len() % indices.len() != 0 {
+                if !values.len().is_multiple_of(indices.len()) {
                     return Err(NumRs2Error::InvalidOperation(
                         "Values length must be 1, equal to indices length, or a multiple of indices length".into()
                     ));
@@ -2469,7 +2469,7 @@ pub fn append<T: Clone + Zero>(
                 .product();
 
             // Check if values can be reshaped appropriately
-            if values.len() % expected_values_size != 0 {
+            if !values.len().is_multiple_of(expected_values_size) {
                 return Err(NumRs2Error::ShapeMismatch {
                     expected: vec![expected_values_size],
                     actual: vec![values.len()],

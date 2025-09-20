@@ -7,7 +7,6 @@ mod gpu_reduction_tests {
     use numrs2::gpu::{self, GpuArray, GpuContext};
 
     fn create_gpu_context() -> Result<GpuContext> {
-
         // Create a simple runtime for the async GPU context creation
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()

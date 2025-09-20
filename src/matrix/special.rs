@@ -285,7 +285,7 @@ pub fn companion(coefficients: Vec<f64>) -> Result<Matrix<f64>> {
 /// Returns an error if n is not a valid order for a Hadamard matrix
 pub fn hadamard(n: usize) -> Result<Matrix<f64>> {
     // Check if the order is valid
-    if n != 1 && n != 2 && n % 4 != 0 {
+    if n != 1 && n != 2 && !n.is_multiple_of(4) {
         return Err(crate::error::NumRs2Error::InvalidOperation(format!(
             "Hadamard matrices are only defined for orders 1, 2, or multiples of 4, got {}",
             n

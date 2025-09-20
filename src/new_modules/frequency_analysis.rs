@@ -112,7 +112,7 @@ impl FrequencyAnalyzer {
             // Compute power spectral density for this segment
             let n_freqs = nfft / 2 + 1;
             for k in 0..n_freqs {
-                let power = if k == 0 || (nfft % 2 == 0 && k == nfft / 2) {
+                let power = if k == 0 || (nfft.is_multiple_of(2) && k == nfft / 2) {
                     // DC and Nyquist components (if present) are not doubled
                     fft_data[k].norm_sqr()
                 } else {
@@ -427,7 +427,7 @@ impl FrequencyAnalyzer {
         let sample_rate = T::one();
 
         for k in 0..n_freqs {
-            let power = if k == 0 || (n % 2 == 0 && k == n / 2) {
+            let power = if k == 0 || (n.is_multiple_of(2) && k == n / 2) {
                 fft_data[k].norm_sqr()
             } else {
                 <T as NumCast>::from(2.0).unwrap() * fft_data[k].norm_sqr()

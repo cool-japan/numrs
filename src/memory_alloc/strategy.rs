@@ -193,7 +193,7 @@ impl MemoryAllocator for AutoAllocator {
         // For SIMD operations, we typically want aligned memory
         // This is a simplification - in a real implementation, we would detect
         // if the allocation is for SIMD usage
-        if size % 16 == 0 && size >= 16 {
+        if size.is_multiple_of(16) && size >= 16 {
             return self.aligned.allocate(size);
         }
 

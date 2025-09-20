@@ -135,7 +135,10 @@ where
 
         // Check if we should generate a report
         let metrics = tuner.get_current_metrics();
-        if metrics.total_allocations % self.config.report_frequency == 0 {
+        if metrics
+            .total_allocations
+            .is_multiple_of(self.config.report_frequency)
+        {
             println!("=== Allocation Performance Report ===");
             println!("{}", tuner.generate_performance_report());
 

@@ -615,7 +615,7 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
     let total_elements = a.size() as u32;
 
     // Calculate number of workgroups needed
-    let workgroup_count = (total_elements + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+    let workgroup_count = total_elements.div_ceil(WORKGROUP_SIZE);
 
     // Create output buffer for partial results (one per workgroup)
     let partial_results_size = workgroup_count as usize * std::mem::size_of::<f32>();
@@ -792,7 +792,7 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
     let total_elements = a.size() as u32;
 
     // Calculate number of workgroups needed
-    let workgroup_count = (total_elements + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+    let workgroup_count = total_elements.div_ceil(WORKGROUP_SIZE);
 
     // Create output buffer for partial results (one per workgroup)
     let partial_results_size = workgroup_count as usize * std::mem::size_of::<f64>();

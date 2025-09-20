@@ -250,7 +250,7 @@ impl AllocatorBenchmark {
             // Determine if we should allocate or deallocate
             let should_allocate = active_allocations.len() < self.config.concurrent_allocations
                 || (active_allocations.len() < self.config.concurrent_allocations * 2
-                    && self.next_random() % 2 == 0);
+                    && self.next_random().is_multiple_of(2));
 
             if should_allocate {
                 // Perform allocation
