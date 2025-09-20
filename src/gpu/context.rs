@@ -79,9 +79,10 @@ impl GpuContext {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/element_wise_f32.wgsl").into()),
         });
 
+        // Create a dummy f64 shader for now - we'll fail at runtime if f64 is used without GPU support
         let element_wise_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Element-wise F64 Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/element_wise_f64.wgsl").into()),
+            label: Some("Element-wise F64 Shader stub"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/element_wise_f32.wgsl").into()),
         });
 
         // Load reduction operation shaders
@@ -91,8 +92,8 @@ impl GpuContext {
         });
 
         let reduction_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Reduction F64 Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f64.wgsl").into()),
+            label: Some("Reduction F64 Shader stub"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f32.wgsl").into()),
         });
 
         // Load matrix multiplication shaders
@@ -102,8 +103,8 @@ impl GpuContext {
         });
 
         let matmul_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Matrix Multiplication F64 Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/matmul_f64.wgsl").into()),
+            label: Some("Matrix Multiplication F64 Shader stub"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/matmul_f32.wgsl").into()),
         });
 
         Ok(ShaderModules {

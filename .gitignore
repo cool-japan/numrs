@@ -21,3 +21,5 @@ Cargo.lock
 output.*
 
 **/.claude/settings.local.json
+**/.ipynb_checkpoints/
+./.ipynb_checkpoints/

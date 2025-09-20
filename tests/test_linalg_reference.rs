@@ -295,12 +295,31 @@ fn test_svd_reference() {
     // are approximately 9.508032 and 0.77286964
     let (_, s, _) = svd(&m).unwrap();
 
+    // Extract the diagonal values (singular values) from the S matrix
+    let s_diag = if s.shape().len() == 2 {
+        // S is a diagonal matrix, extract diagonal
+        let min_dim = s.shape()[0].min(s.shape()[1]);
+        let mut singular_values = Vec::new();
+        for i in 0..min_dim {
+            if let Ok(val) = s.get(&[i, i]) {
+                if val.abs() > 1e-10 {
+                    // Only include non-zero values
+                    singular_values.push(val);
+                }
+            }
+        }
+        singular_values
+    } else {
+        // S is already a vector of singular values
+        s.to_vec()
+    };
+
     // Check that we have the right number of singular values
-    assert_eq!(s.size(), 2);
+    assert_eq!(s_diag.len(), 2);
 
     // Check against expected values (within tolerance)
-    assert!(is_within_range(s.get(&[0]).unwrap(), 9.508032, 0.01));
-    assert!(is_within_range(s.get(&[1]).unwrap(), 0.77286964, 0.01));
+    assert!(is_within_range(s_diag[0], 9.508032, 0.01));
+    assert!(is_within_range(s_diag[1], 0.77286964, 0.01));
 }
 
 #[test]
