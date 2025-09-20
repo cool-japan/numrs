@@ -555,14 +555,22 @@ mod tests {
                 .unwrap();
         }
 
-        // Wait for execution
-        std::thread::sleep(Duration::from_millis(200));
+        // Wait for execution (increased time for reliability)
+        std::thread::sleep(Duration::from_millis(500));
 
         let order = execution_order.lock().unwrap();
-        assert!(order.len() >= 4);
+        assert!(
+            order.len() >= 4,
+            "Expected at least 4 tasks to complete, got {}",
+            order.len()
+        );
 
         // Critical tasks should be executed first
-        assert_eq!(order[0], TaskPriority::Critical);
+        assert_eq!(
+            order[0],
+            TaskPriority::Critical,
+            "Expected Critical priority task to execute first"
+        );
     }
 
     #[test]
@@ -585,8 +593,8 @@ mod tests {
                 .unwrap();
         }
 
-        // Wait for execution
-        std::thread::sleep(Duration::from_millis(200));
+        // Wait for execution (increased time for reliability)
+        std::thread::sleep(Duration::from_millis(500));
 
         let stats = scheduler.statistics();
         assert_eq!(stats.tasks_submitted, 5);

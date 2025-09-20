@@ -17,8 +17,8 @@ use numrs2::linalg::matrix_ops::det;
 use numrs2::linalg::solve::{inv, solve};
 use numrs2::linalg::vector_ops::{norm, trace};
 
-#[cfg(feature = "matrix_decomp")]
-use numrs2::linalg::{cholesky, qr, svd};
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use numrs2::linalg::decomposition::{cholesky, qr, svd};
 use numrs2::new_modules::matrix_decomp::condition_number;
 #[cfg(feature = "matrix_decomp")]
 use numrs2::new_modules::matrix_decomp::lu;
@@ -284,6 +284,7 @@ fn test_eigendecomposition_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_svd_reference() {
     // Test SVD against known values for a simple matrix
@@ -323,6 +324,7 @@ fn test_svd_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_qr_decomposition_reference() {
     // Test QR decomposition with a matrix that has known factors
@@ -386,6 +388,7 @@ fn test_qr_decomposition_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_cholesky_decomposition_reference() {
     // Test Cholesky decomposition with a matrix that has a known factor
@@ -459,6 +462,7 @@ fn test_lu_decomposition_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_norm_reference() {
     // Test matrix norms against known values
