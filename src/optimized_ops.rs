@@ -156,7 +156,7 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
 #[cfg(feature = "scirs")]
 pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     let optimizer = AutoOptimizer::new();
-    let _caps = PlatformCapabilities::detect();
+    let caps = PlatformCapabilities::detect();
     let size = data.len();
 
     if optimizer.should_use_gpu(size) {
