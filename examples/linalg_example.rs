@@ -103,7 +103,7 @@ fn main() -> Result<()> {
     );
     println!(
         "Is well-conditioned: {}",
-        well_conditioned.is_well_conditioned()
+        well_conditioned.is_well_conditioned().unwrap_or(false)
     );
 
     // SVD decomposition
@@ -184,7 +184,10 @@ fn main() -> Result<()> {
     // Calculate condition number
     let cond_hilbert = hilbert.cond().unwrap_or(f64::NAN);
     println!("Condition number: {}", cond_hilbert);
-    println!("Is well-conditioned: {}", hilbert.is_well_conditioned());
+    println!(
+        "Is well-conditioned: {}",
+        hilbert.is_well_conditioned().unwrap_or(false)
+    );
 
     Ok(())
 }

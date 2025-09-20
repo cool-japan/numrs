@@ -48,7 +48,7 @@ fn benchmark_trigonometric_functions() {
         let data_view = data.view();
 
         // Standard implementation
-        let _std_ops = benchmark_operation("Standard sin (scalar)", size, 100, || {
+        let std_ops = benchmark_operation("Standard sin (scalar)", size, 100, || {
             let _ = data_view.map(|&x| x.sin());
         });
 
@@ -80,7 +80,7 @@ fn benchmark_exponential_functions() {
         let data_view = data.view();
 
         // Standard sqrt
-        let _std_ops = benchmark_operation("Standard sqrt (scalar)", size, 100, || {
+        let std_ops = benchmark_operation("Standard sqrt (scalar)", size, 100, || {
             let _ = data_view.map(|&x| x.sqrt());
         });
 
@@ -119,11 +119,11 @@ fn benchmark_matrix_operations() {
         )
         .unwrap();
 
-        let _a_view = a.view();
-        let _b_view = b.view();
+        let a_view = a.view();
+        let b_view = b.view();
 
         // Standard matmul
-        let _std_ops = benchmark_operation("Standard matmul", size * size, 10, || {
+        let std_ops = benchmark_operation("Standard matmul", size * size, 10, || {
             let _ = a.dot(&b);
         });
 
@@ -143,7 +143,7 @@ fn benchmark_large_array_processing() {
     println!("\n=== Large Array Processing Benchmarks ===");
 
     let size = 1_000_000;
-    let _chunk_sizes = vec![1000, 10000, 100000];
+    let chunk_sizes = vec![1000, 10000, 100000];
 
     let data = Array1::from_vec((0..size).map(|x| x as f64 * 0.001).collect::<Vec<_>>());
     let data_view = data.view();
@@ -182,7 +182,7 @@ fn benchmark_large_array_processing() {
 fn benchmark_adaptive_algorithms() {
     println!("\n=== Adaptive Algorithm Benchmarks ===");
 
-    let _sizes = vec![10, 100, 1000, 10000, 100000];
+    let sizes = vec![10, 100, 1000, 10000, 100000];
 
     println!("\nTesting adaptive algorithm selection for sqrt:");
 

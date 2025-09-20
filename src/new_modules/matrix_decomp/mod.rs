@@ -748,7 +748,10 @@ mod tests {
         );
 
         // Test is_well_conditioned
-        assert!(a.is_well_conditioned(), "Matrix should be well-conditioned");
+        assert!(
+            a.is_well_conditioned().unwrap(),
+            "Matrix should be well-conditioned"
+        );
     }
 
     #[test]
@@ -772,7 +775,7 @@ mod tests {
 
         // Test is_well_conditioned - should return false
         assert!(
-            !a.is_well_conditioned(),
+            !a.is_well_conditioned().unwrap(),
             "Matrix should be ill-conditioned with condition number {}",
             cond
         );
@@ -805,7 +808,7 @@ mod tests {
 
         // Test is_well_conditioned - should return false
         assert!(
-            !a.is_well_conditioned(),
+            !a.is_well_conditioned().unwrap(),
             "Singular matrix should not be well-conditioned"
         );
     }

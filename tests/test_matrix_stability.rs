@@ -5,7 +5,7 @@ use approx::assert_relative_eq;
 use num_traits::Float;
 use numrs2::array::Array;
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-use numrs2::linalg;
+use numrs2::linalg::decomposition;
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 use numrs2::new_modules::matrix_decomp::{condition_number, lu, pivoted_cholesky};
@@ -71,6 +71,7 @@ fn near_singular_matrix<T: Float + From<f64>>(n: usize, condition: f64) -> Array
 
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_condition_number_accuracy() {
     // Test matrices with known condition numbers
@@ -113,6 +114,7 @@ fn test_condition_number_accuracy() {
 
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_decomposition_stability_well_conditioned() {
     // Test decompositions on well-conditioned matrices
@@ -145,7 +147,7 @@ fn test_decomposition_stability_well_conditioned() {
     );
 
     // Test QR decomposition
-    let (q, r) = linalg::qr(&a).unwrap();
+    let (q, r) = decomposition::qr(&a).unwrap();
     let qr_product = q.matmul(&r).unwrap();
 
     // Check reconstruction error for QR
@@ -163,7 +165,7 @@ fn test_decomposition_stability_well_conditioned() {
     );
 
     // Test Cholesky decomposition
-    let l_chol = linalg::cholesky(&a).unwrap();
+    let l_chol = decomposition::cholesky(&a).unwrap();
     let lt_chol = l_chol.transpose();
     let chol_product = l_chol.matmul(&lt_chol).unwrap();
 
@@ -201,6 +203,7 @@ fn test_decomposition_stability_well_conditioned() {
 
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_decomposition_stability_ill_conditioned() {
     // Test decompositions on ill-conditioned matrices
@@ -211,7 +214,7 @@ fn test_decomposition_stability_ill_conditioned() {
     let a = hilbert_matrix::<f64>(n);
 
     // Test SVD first as it's the most stable
-    let (u, s, vt) = linalg::svd(&a).unwrap();
+    let (u, s, vt) = decomposition::svd(&a).unwrap();
 
     // Create diagonal matrix from singular values
     let mut s_diag = Array::zeros(&[n, n]);
@@ -271,7 +274,7 @@ fn test_decomposition_stability_ill_conditioned() {
     );
 
     // Test QR decomposition
-    let (q, r) = linalg::qr(&a).unwrap();
+    let (q, r) = decomposition::qr(&a).unwrap();
     let qr_product = q.matmul(&r).unwrap();
 
     // Check reconstruction error for QR
@@ -319,7 +322,7 @@ fn test_decomposition_stability_ill_conditioned() {
     );
 
     // Hilbert matrix is symmetric positive definite, so Cholesky should work
-    let l_chol = linalg::cholesky(&a).unwrap();
+    let l_chol = decomposition::cholesky(&a).unwrap();
     let lt_chol = l_chol.transpose();
     let chol_product = l_chol.matmul(&lt_chol).unwrap();
 
@@ -346,6 +349,7 @@ fn test_decomposition_stability_ill_conditioned() {
 
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_pivoted_cholesky_vs_standard() {
     // Verify both Cholesky implementations run on the same input
@@ -361,7 +365,7 @@ fn test_pivoted_cholesky_vs_standard() {
     }
 
     // Compute standard Cholesky
-    let l_std = linalg::cholesky(&a_symm).unwrap();
+    let l_std = decomposition::cholesky(&a_symm).unwrap();
 
     // Check it's lower triangular
     for i in 0..n {
@@ -394,6 +398,7 @@ fn test_pivoted_cholesky_vs_standard() {
 
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_decompositions_with_scaling() {
     // Test that our decompositions handle matrices with large values correctly
@@ -409,7 +414,7 @@ fn test_decompositions_with_scaling() {
     }
 
     // SVD should handle scaling
-    let (u, s, vt) = linalg::svd(&large_matrix).unwrap();
+    let (u, s, vt) = decomposition::svd(&large_matrix).unwrap();
     let mut s_diag = Array::zeros(&[n, n]);
     for i in 0..s.size() {
         s_diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
@@ -432,7 +437,7 @@ fn test_decompositions_with_scaling() {
     );
 
     // QR should handle scaling
-    let (q, r) = linalg::qr(&large_matrix).unwrap();
+    let (q, r) = decomposition::qr(&large_matrix).unwrap();
     let qr_product = q.matmul(&r).unwrap();
 
     let mut max_qr_error = 0.0;
@@ -453,6 +458,7 @@ fn test_decompositions_with_scaling() {
 
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_relative_errors_between_decompositions() {
     // Compare accuracy of different decompositions on the same ill-conditioned matrix
@@ -460,8 +466,8 @@ fn test_relative_errors_between_decompositions() {
     let a = hilbert_matrix::<f64>(n);
 
     // Compute decompositions
-    let (u, s, vt) = linalg::svd(&a).unwrap();
-    let (q, r) = linalg::qr(&a).unwrap();
+    let (u, s, vt) = decomposition::svd(&a).unwrap();
+    let (q, r) = decomposition::qr(&a).unwrap();
     let (l, u_lu, p) = lu(&a).unwrap();
 
     // Reconstruction for SVD

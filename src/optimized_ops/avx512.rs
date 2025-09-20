@@ -107,9 +107,11 @@ impl Avx512Ops {
         // Validate indices
         for &idx in indices {
             if idx >= data.len() {
-                return Err(crate::NumRs2Error::IndexOutOfBounds(
-                    format!("Index {} out of bounds for array of size {}", idx, data.len())
-                ));
+                return Err(crate::NumRs2Error::IndexOutOfBounds(format!(
+                    "Index {} out of bounds for array of size {}",
+                    idx,
+                    data.len()
+                )));
             }
         }
 
@@ -159,9 +161,10 @@ impl Avx512Ops {
         // Validate indices
         for &idx in indices {
             if idx >= output_size {
-                return Err(crate::NumRs2Error::IndexOutOfBounds(
-                    format!("Index {} out of bounds for output size {}", idx, output_size)
-                ));
+                return Err(crate::NumRs2Error::IndexOutOfBounds(format!(
+                    "Index {} out of bounds for output size {}",
+                    idx, output_size
+                )));
             }
         }
 

@@ -780,23 +780,22 @@ where
 
     /// Compute the singular value decomposition of a matrix
     pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
-        // Check that the matrix is 2D
-        let shape = self.shape();
-        if shape.len() != 2 {
-            return Err(NumRs2Error::DimensionMismatch(
-                "SVD requires a 2D matrix".to_string(),
-            ));
-        }
+        // Use the implementation from new_modules::matrix_decomp
+        use crate::new_modules::matrix_decomp::svd;
+        let (u, s_real, vt) = svd(self)?;
 
-        // This would use ndarray-linalg's SVD implementation in a full version
-        // For now, we'll just return placeholder values
-        let m = shape[0];
-        let n = shape[1];
-        let k = std::cmp::min(m, n);
-
-        let u = Array::zeros(&[m, k]);
-        let s = Array::zeros(&[k]);
-        let vt = Array::zeros(&[k, n]);
+        // Convert singular values from Real to T
+        // Since T is a Float type and Real is its real component type,
+        // for real-valued matrices T == Real, so this is safe
+        let s_vec: Vec<T> = s_real
+            .to_vec()
+            .into_iter()
+            .map(|val| {
+                // Convert from Real to T (for real matrices, this is identity)
+                num_traits::NumCast::from(val).unwrap_or(T::zero())
+            })
+            .collect();
+        let s = Array::from_vec(s_vec);
 
         Ok((u, s, vt))
     }
@@ -823,41 +822,16 @@ where
 
     /// Compute the Cholesky decomposition of a matrix
     pub fn cholesky(&self) -> Result<Array<T>> {
-        // Check if the matrix is square
-        let shape = self.shape();
-        if shape.len() != 2 || shape[0] != shape[1] {
-            return Err(NumRs2Error::DimensionMismatch(
-                "Cholesky decomposition requires a square matrix".to_string(),
-            ));
-        }
-
-        // This would use ndarray-linalg's Cholesky decomposition in a full version
-        // For now, we'll just return a placeholder
-        let n = shape[0];
-        let l = Array::zeros(&[n, n]);
-
-        Ok(l)
+        // Use the implementation from new_modules::matrix_decomp
+        use crate::new_modules::matrix_decomp::cholesky;
+        cholesky(self)
     }
 
     /// Compute the QR decomposition of a matrix
     pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
-        // Check that the matrix is 2D
-        let shape = self.shape();
-        if shape.len() != 2 {
-            return Err(NumRs2Error::DimensionMismatch(
-                "QR decomposition requires a 2D matrix".to_string(),
-            ));
-        }
-
-        // This would use ndarray-linalg's QR decomposition in a full version
-        // For now, we'll just return placeholder values
-        let m = shape[0];
-        let n = shape[1];
-
-        let q = Array::zeros(&[m, m]);
-        let r = Array::zeros(&[m, n]);
-
-        Ok((q, r))
+        // Use the implementation from new_modules::matrix_decomp
+        use crate::new_modules::matrix_decomp::qr;
+        qr(self)
     }
 }
 
@@ -1630,23 +1604,22 @@ where
 
     /// Compute the singular value decomposition of a matrix
     pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
-        // Check that the matrix is 2D
-        let shape = self.shape();
-        if shape.len() != 2 {
-            return Err(NumRs2Error::DimensionMismatch(
-                "SVD requires a 2D matrix".to_string(),
-            ));
-        }
+        // Use the implementation from new_modules::matrix_decomp
+        use crate::new_modules::matrix_decomp::svd;
+        let (u, s_real, vt) = svd(self)?;
 
-        // This would use ndarray-linalg's SVD implementation in a full version
-        // For now, we'll just return placeholder values
-        let m = shape[0];
-        let n = shape[1];
-        let k = std::cmp::min(m, n);
-
-        let u = Array::zeros(&[m, k]);
-        let s = Array::zeros(&[k]);
-        let vt = Array::zeros(&[k, n]);
+        // Convert singular values from Real to T
+        // Since T is a Float type and Real is its real component type,
+        // for real-valued matrices T == Real, so this is safe
+        let s_vec: Vec<T> = s_real
+            .to_vec()
+            .into_iter()
+            .map(|val| {
+                // Convert from Real to T (for real matrices, this is identity)
+                num_traits::NumCast::from(val).unwrap_or(T::zero())
+            })
+            .collect();
+        let s = Array::from_vec(s_vec);
 
         Ok((u, s, vt))
     }
@@ -1673,40 +1646,15 @@ where
 
     /// Compute the Cholesky decomposition of a matrix
     pub fn cholesky(&self) -> Result<Array<T>> {
-        // Check if the matrix is square
-        let shape = self.shape();
-        if shape.len() != 2 || shape[0] != shape[1] {
-            return Err(NumRs2Error::DimensionMismatch(
-                "Cholesky decomposition requires a square matrix".to_string(),
-            ));
-        }
-
-        // This would use ndarray-linalg's Cholesky decomposition in a full version
-        // For now, we'll just return a placeholder
-        let n = shape[0];
-        let l = Array::zeros(&[n, n]);
-
-        Ok(l)
+        // Use the implementation from new_modules::matrix_decomp
+        use crate::new_modules::matrix_decomp::cholesky;
+        cholesky(self)
     }
 
     /// Compute the QR decomposition of a matrix
     pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
-        // Check that the matrix is 2D
-        let shape = self.shape();
-        if shape.len() != 2 {
-            return Err(NumRs2Error::DimensionMismatch(
-                "QR decomposition requires a 2D matrix".to_string(),
-            ));
-        }
-
-        // This would use ndarray-linalg's QR decomposition in a full version
-        // For now, we'll just return placeholder values
-        let m = shape[0];
-        let n = shape[1];
-
-        let q = Array::zeros(&[m, m]);
-        let r = Array::zeros(&[m, n]);
-
-        Ok((q, r))
+        // Use the implementation from new_modules::matrix_decomp
+        use crate::new_modules::matrix_decomp::qr;
+        qr(self)
     }
 }
