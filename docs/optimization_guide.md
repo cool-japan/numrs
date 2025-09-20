@@ -68,7 +68,7 @@ Enable GPU support in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-beta.1", features = ["gpu"] }
+numrs2 = { version = "0.1.0-beta.2", features = ["gpu"] }
 ```
 
 ### Basic GPU Operations

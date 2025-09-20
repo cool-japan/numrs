@@ -188,7 +188,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-beta.1"
+numrs2 = "0.1.0-beta.2"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
