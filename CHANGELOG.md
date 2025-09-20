@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
+## [0.1.0-beta.2] - 2025-09-20
+
+### Updated
+- **Dependencies**: Updated all scirs2-* dependencies from 0.1.0-beta.1 to 0.1.0-beta.2 for better integration
+- **Version**: Bumped version to 0.1.0-beta.2 for second beta release
+
+### Added
+- **Mathematical Functions**: Extended mathematical operations with over 100 new functions
+- **Error Handling**: Comprehensive error recovery system with context-aware messages
+- **Advanced Indexing**: Boolean indexing, fancy indexing, and multi-dimensional slicing capabilities
+- **Financial Computing**: Options pricing models, bond valuation, and financial metrics
+- **Signal Processing**: Enhanced FFT, convolution, correlation, and filtering operations
+- **Testing Framework**: Comprehensive testing utilities for numerical validation
+
+### Improved
+- **Performance**: Optimized SIMD operations for AVX512 and ARM NEON architectures
+- **Memory Management**: Enhanced memory alignment and cache utilization
+- **Documentation**: Expanded examples and migration guides
+- **NumPy Compatibility**: Improved compatibility layer for easier migration
+
 ## [0.1.0-beta.1] - 2025-09-15
 
 ### Updated
