@@ -359,7 +359,7 @@ fn benchmark_matrix_operations(size: usize) -> Result<()> {
 }
 
 #[allow(dead_code)]
-fn benchmark_memory_transfer(size: usize) -> Result<()> {
+fn benchmark_memory_transfer(_size: usize) -> Result<()> {
     #[cfg(feature = "gpu")]
     {
         println!("\n=== Memory Transfer Overhead ===");
