@@ -1,3 +1,4 @@
+pub mod advanced_indexing;
 pub mod array_requirements;
 pub mod atleast;
 pub mod axis_ops;
@@ -13,6 +14,11 @@ pub mod string_ops;
 pub mod tiling;
 
 // Re-export all public functions
+// Import advanced_indexing selectively to avoid conflicts with manipulation
+pub use advanced_indexing::{
+    apply_along_axis, apply_over_axes, compress as adv_compress, extract as adv_extract,
+    place as adv_place, put as adv_put, putmask, take_along_axis,
+};
 pub use array_requirements::*;
 pub use atleast::*;
 pub use axis_ops::*;
@@ -20,7 +26,10 @@ pub use broadcasting::*;
 pub use conditional::*;
 pub use creation::*;
 pub use diagonal::*;
-pub use joining::*;
+pub use joining::{
+    block, bmat, bmat_from_arrays, bmat_from_string, c_, column_stack, concatenate, dstack, hstack,
+    r_, row_stack, stack, vstack,
+};
 pub use manipulation::*;
 pub use sorting::*;
 pub use splitting::*;

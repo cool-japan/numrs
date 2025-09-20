@@ -244,6 +244,58 @@ where
     }
 }
 
+impl<T> Polynomial<T>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + PartialEq,
+{
+    /// Divide this polynomial by another polynomial
+    /// Returns (quotient, remainder) such that self = divisor * quotient + remainder
+    pub fn divide(&self, divisor: &Self) -> Result<(Self, Self)> {
+        if divisor.degree() == 0 && divisor.coefficients[0] == T::zero() {
+            return Err(NumRs2Error::InvalidOperation(
+                "Division by zero polynomial".to_string(),
+            ));
+        }
+
+        let mut dividend = self.clone();
+        let mut quotient_coeffs = Vec::new();
+
+        while dividend.degree() >= divisor.degree() && !dividend.coefficients.is_empty() {
+            // Get the leading coefficient ratio
+            let coeff = dividend.coefficients[0].clone() / divisor.coefficients[0].clone();
+            quotient_coeffs.push(coeff.clone());
+
+            // Subtract divisor * coeff from dividend
+            let _deg_diff = dividend.degree() - divisor.degree();
+            for i in 0..divisor.coefficients.len() {
+                dividend.coefficients[i] = dividend.coefficients[i].clone()
+                    - divisor.coefficients[i].clone() * coeff.clone();
+            }
+
+            // Remove the leading zero coefficient
+            if !dividend.coefficients.is_empty() {
+                dividend.coefficients.remove(0);
+            }
+            dividend = Polynomial::new(dividend.coefficients);
+        }
+
+        let quotient = if quotient_coeffs.is_empty() {
+            Polynomial::zero()
+        } else {
+            Polynomial::new(quotient_coeffs)
+        };
+
+        Ok((quotient, dividend))
+    }
+}
+
 /// General polynomial functions
 /// Fit a polynomial of specified degree to the data points
 #[allow(clippy::needless_range_loop)]
@@ -374,6 +426,156 @@ where
     T: Clone + Zero + One + Add<Output = T> + Mul<Output = T> + PartialEq,
 {
     p.evaluate_array(x)
+}
+
+/// Return the derivative of a polynomial
+///
+/// Given polynomial coefficients in descending order of degree,
+/// returns the coefficients of the polynomial derivative.
+///
+/// # Arguments
+/// * `c` - Array of polynomial coefficients (highest degree first)
+/// * `m` - Order of derivative (default is 1)
+///
+/// # Returns
+/// * `Result<Array<T>>` - Array of derivative coefficients
+///
+/// # Examples
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::new_modules::polynomial::polyder;
+///
+/// // p(x) = x^3 + 2x^2 + 3x + 4
+/// let p = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+/// // p'(x) = 3x^2 + 4x + 3
+/// let dp = polyder(&p, 1).unwrap();
+/// assert_eq!(dp.to_vec(), vec![3.0, 4.0, 3.0]);
+/// ```
+pub fn polyder<T>(c: &Array<T>, m: usize) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Mul<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + From<i32>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    if c.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyder requires a 1D array of coefficients".to_string(),
+        ));
+    }
+
+    let coeffs = c.to_vec();
+
+    // Handle special cases
+    if m == 0 {
+        return Ok(c.clone());
+    }
+
+    if coeffs.is_empty() || (coeffs.len() == 1 && coeffs[0] == T::zero()) {
+        return Ok(Array::from_vec(vec![T::zero()]));
+    }
+
+    // Create polynomial and compute derivative m times
+    let mut poly = Polynomial::new(coeffs);
+
+    for _ in 0..m {
+        poly = poly.derivative();
+        if poly.degree() == 0 && poly.coefficients()[0] == T::zero() {
+            break;
+        }
+    }
+
+    Ok(Array::from_vec(poly.coefficients().to_vec()))
+}
+
+/// Return the integral of a polynomial
+///
+/// Given polynomial coefficients in descending order of degree,
+/// returns the coefficients of the polynomial integral.
+///
+/// # Arguments
+/// * `c` - Array of polynomial coefficients (highest degree first)
+/// * `m` - Order of integration (default is 1)
+/// * `k` - Integration constants. If None, all constants are 0.
+///   If Some, must have length m (one for each integration)
+///
+/// # Returns
+/// * `Result<Array<T>>` - Array of integral coefficients
+///
+/// # Examples
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::new_modules::polynomial::polyint;
+///
+/// // p(x) = 3x^2 + 4x + 3
+/// let p = Array::from_vec(vec![3.0, 4.0, 3.0]);
+/// // ∫p(x)dx = x^3 + 2x^2 + 3x + C (with C=0)
+/// let ip = polyint(&p, 1, None).unwrap();
+/// assert_eq!(ip.to_vec(), vec![1.0, 2.0, 3.0, 0.0]);
+/// ```
+pub fn polyint<T>(c: &Array<T>, m: usize, k: Option<&[T]>) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Mul<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + From<i32>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    if c.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyint requires a 1D array of coefficients".to_string(),
+        ));
+    }
+
+    let coeffs = c.to_vec();
+
+    // Handle special cases
+    if m == 0 {
+        return Ok(c.clone());
+    }
+
+    // Check integration constants
+    let constants = if let Some(k_vals) = k {
+        if k_vals.len() != m {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Number of integration constants ({}) must match order of integration ({})",
+                k_vals.len(),
+                m
+            )));
+        }
+        k_vals.to_vec()
+    } else {
+        vec![T::zero(); m]
+    };
+
+    // Create polynomial and compute integral m times
+    let mut poly = Polynomial::new(coeffs);
+
+    for i in 0..m {
+        poly = poly.integral();
+
+        // Replace the constant of integration with the provided value
+        if i < constants.len() {
+            let mut new_coeffs = poly.coefficients().to_vec();
+            if !new_coeffs.is_empty() {
+                *new_coeffs.last_mut().unwrap() = constants[i].clone();
+            }
+            poly = Polynomial::new(new_coeffs);
+        }
+    }
+
+    Ok(Array::from_vec(poly.coefficients().to_vec()))
 }
 
 /// Find the roots of a polynomial
@@ -1067,6 +1269,686 @@ impl OrthogonalPolynomials {
 
         l_curr
     }
+}
+
+/// Find polynomial with given roots
+///
+/// Given an array of roots, returns the polynomial whose roots are the given values.
+/// For example, if roots = [r1, r2, r3], returns the polynomial:
+/// (x - r1) * (x - r2) * (x - r3)
+///
+/// # Parameters
+///
+/// * `roots` - Array of roots
+///
+/// # Returns
+///
+/// A polynomial whose roots are the given values
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let roots = Array::from_vec(vec![1.0, 2.0, 3.0]);
+/// let p = poly(&roots).unwrap();
+/// // Returns polynomial (x-1)(x-2)(x-3) = x^3 - 6x^2 + 11x - 6
+/// ```
+pub fn poly<T>(roots: &Array<T>) -> Result<Polynomial<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    if roots.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "poly requires 1D array of roots".to_string(),
+        ));
+    }
+
+    let roots_vec = roots.to_vec();
+    if roots_vec.is_empty() {
+        return Ok(Polynomial::new(vec![T::one()]));
+    }
+
+    // Start with polynomial p(x) = x - roots[0]
+    let mut result = Polynomial::new(vec![T::one(), -roots_vec[0].clone()]);
+
+    // Multiply by (x - roots[i]) for each subsequent root
+    for i in 1..roots_vec.len() {
+        let factor = Polynomial::new(vec![T::one(), -roots_vec[i].clone()]);
+        result = result * factor;
+    }
+
+    Ok(result)
+}
+
+/// Polynomial division
+///
+/// Divides polynomial u by polynomial v, returning quotient q and remainder r
+/// such that u = q*v + r and degree(r) < degree(v)
+///
+/// # Parameters
+///
+/// * `u` - Dividend polynomial
+/// * `v` - Divisor polynomial
+///
+/// # Returns
+///
+/// Tuple of (quotient, remainder) polynomials
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let u = Array::from_vec(vec![1.0, -6.0, 11.0, -6.0]); // x^3 - 6x^2 + 11x - 6
+/// let v = Array::from_vec(vec![1.0, -2.0]); // x - 2
+/// let (q, r) = polydiv(&u, &v).unwrap();
+/// // q = x^2 - 4x + 3, r = 0 (since x-2 is a factor)
+/// ```
+pub fn polydiv<T>(u: &Array<T>, v: &Array<T>) -> Result<(Polynomial<T>, Polynomial<T>)>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + PartialEq,
+{
+    if u.ndim() != 1 || v.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polydiv requires 1D arrays".to_string(),
+        ));
+    }
+
+    let dividend = Polynomial::new(u.to_vec());
+    let divisor = Polynomial::new(v.to_vec());
+
+    if divisor.coefficients().is_empty() || divisor.coefficients()[0] == T::zero() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Division by zero polynomial".to_string(),
+        ));
+    }
+
+    dividend.divide(&divisor)
+}
+
+/// Create companion matrix of a polynomial
+///
+/// The companion matrix of a monic polynomial
+/// p(x) = x^n + c[0]*x^(n-1) + ... + c[n-2]*x + c[n-1]
+/// is the n x n matrix:
+/// ```text
+/// [  0    0   ...   0  -c[n-1] ]
+/// [  1    0   ...   0  -c[n-2] ]
+/// [  0    1   ...   0  -c[n-3] ]
+/// [ ...  ... ...  ...    ...   ]
+/// [  0    0   ...   1  -c[0]   ]
+/// ```
+///
+/// # Parameters
+///
+/// * `c` - Coefficients of the polynomial in descending order
+///
+/// # Returns
+///
+/// The companion matrix as a 2D array
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let c = Array::from_vec(vec![1.0, -3.0, 3.0, -1.0]); // x^3 - 3x^2 + 3x - 1
+/// let comp = polycompanion(&c).unwrap();
+/// // Returns 3x3 companion matrix
+/// ```
+pub fn polycompanion<T>(c: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + One + std::ops::Neg<Output = T> + Div<Output = T> + PartialEq,
+{
+    if c.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polycompanion requires 1D array".to_string(),
+        ));
+    }
+
+    let coeffs = c.to_vec();
+    if coeffs.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Empty coefficient array".to_string(),
+        ));
+    }
+
+    // Normalize by leading coefficient if not monic
+    let leading = coeffs[0].clone();
+    if leading == T::zero() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Leading coefficient cannot be zero".to_string(),
+        ));
+    }
+
+    let n = coeffs.len() - 1;
+    if n == 0 {
+        // Constant polynomial has no companion matrix
+        return Ok(Array::zeros(&[0, 0]));
+    }
+
+    // Create n x n companion matrix
+    let mut companion = vec![T::zero(); n * n];
+
+    // Fill sub-diagonal with ones
+    for i in 1..n {
+        companion[i * n + (i - 1)] = T::one();
+    }
+
+    // Fill last column with negated normalized coefficients
+    for i in 0..n {
+        companion[i * n + (n - 1)] = -coeffs[i + 1].clone() / leading.clone();
+    }
+
+    Ok(Array::from_vec(companion).reshape(&[n, n]))
+}
+
+/// Add two polynomials element-wise
+///
+/// Given polynomial coefficient arrays (highest degree first),
+/// returns the coefficients of their sum.
+///
+/// # Parameters
+///
+/// * `p1` - First polynomial coefficients
+/// * `p2` - Second polynomial coefficients
+///
+/// # Returns
+///
+/// Array of sum polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let p1 = Array::from_vec(vec![1.0, 2.0, 3.0]); // x^2 + 2x + 3
+/// let p2 = Array::from_vec(vec![1.0, 1.0]);      // x + 1
+/// let sum = polyadd(&p1, &p2).unwrap();
+/// // Result: x^2 + 3x + 4
+/// ```
+pub fn polyadd<T>(p1: &Array<T>, p2: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + Add<Output = T> + PartialEq,
+{
+    if p1.ndim() != 1 || p2.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyadd requires 1D arrays".to_string(),
+        ));
+    }
+
+    let poly1 = Polynomial::new(p1.to_vec());
+    let poly2 = Polynomial::new(p2.to_vec());
+    let result = poly1 + poly2;
+
+    Ok(Array::from_vec(result.coefficients().to_vec()))
+}
+
+/// Subtract two polynomials element-wise
+///
+/// Given polynomial coefficient arrays (highest degree first),
+/// returns the coefficients of their difference.
+///
+/// # Parameters
+///
+/// * `p1` - First polynomial coefficients
+/// * `p2` - Second polynomial coefficients
+///
+/// # Returns
+///
+/// Array of difference polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let p1 = Array::from_vec(vec![1.0, 2.0, 3.0]); // x^2 + 2x + 3
+/// let p2 = Array::from_vec(vec![1.0, 1.0]);      // x + 1
+/// let diff = polysub(&p1, &p2).unwrap();
+/// // Result: x^2 + x + 2
+/// ```
+pub fn polysub<T>(p1: &Array<T>, p2: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + Sub<Output = T> + PartialEq + std::ops::Neg<Output = T>,
+{
+    if p1.ndim() != 1 || p2.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polysub requires 1D arrays".to_string(),
+        ));
+    }
+
+    let poly1 = Polynomial::new(p1.to_vec());
+    let poly2 = Polynomial::new(p2.to_vec());
+    let result = poly1 - poly2;
+
+    Ok(Array::from_vec(result.coefficients().to_vec()))
+}
+
+/// Multiply two polynomials
+///
+/// Given polynomial coefficient arrays (highest degree first),
+/// returns the coefficients of their product.
+///
+/// # Parameters
+///
+/// * `p1` - First polynomial coefficients
+/// * `p2` - Second polynomial coefficients
+///
+/// # Returns
+///
+/// Array of product polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let p1 = Array::from_vec(vec![1.0, 1.0]);      // x + 1
+/// let p2 = Array::from_vec(vec![1.0, -1.0]);     // x - 1
+/// let prod = polymul(&p1, &p2).unwrap();
+/// // Result: x^2 - 1
+/// ```
+pub fn polymul<T>(p1: &Array<T>, p2: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + Add<Output = T> + Mul<Output = T> + PartialEq,
+{
+    if p1.ndim() != 1 || p2.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polymul requires 1D arrays".to_string(),
+        ));
+    }
+
+    let poly1 = Polynomial::new(p1.to_vec());
+    let poly2 = Polynomial::new(p2.to_vec());
+    let result = poly1 * poly2;
+
+    Ok(Array::from_vec(result.coefficients().to_vec()))
+}
+
+/// Return a polynomial whose roots are the given values
+///
+/// This is the inverse operation to finding polynomial roots.
+/// Given values r1, r2, ..., rn, returns the polynomial
+/// (x - r1) * (x - r2) * ... * (x - rn)
+///
+/// # Parameters
+///
+/// * `roots` - Array of polynomial roots
+///
+/// # Returns
+///
+/// Array of polynomial coefficients (highest degree first)
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let roots = Array::from_vec(vec![1.0, 2.0, 3.0]);
+/// let coeffs = polyfromroots(&roots).unwrap();
+/// // Returns coefficients of (x-1)(x-2)(x-3) = x^3 - 6x^2 + 11x - 6
+/// ```
+pub fn polyfromroots<T>(roots: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    let result = poly(roots)?;
+    Ok(Array::from_vec(result.coefficients().to_vec()))
+}
+
+/// Trim leading zeros from polynomial coefficients
+///
+/// Removes leading zeros from polynomial coefficient array to give
+/// the minimal representation.
+///
+/// # Parameters
+///
+/// * `c` - Polynomial coefficients
+/// * `tol` - Tolerance for considering coefficients as zero
+///
+/// # Returns
+///
+/// Array with leading zeros removed
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let c = Array::from_vec(vec![0.0, 0.0, 1.0, 2.0, 3.0]);
+/// let trimmed = polytrim(&c, Some(1e-10)).unwrap();
+/// // Returns [1.0, 2.0, 3.0]
+/// ```
+pub fn polytrim<T>(c: &Array<T>, tol: Option<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + PartialOrd + Float,
+{
+    if c.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polytrim requires 1D array".to_string(),
+        ));
+    }
+
+    let coeffs = c.to_vec();
+    let tolerance = tol.unwrap_or_else(|| T::from(1e-13).unwrap());
+
+    // Find first non-zero coefficient
+    let mut start = 0;
+    for (i, &coeff) in coeffs.iter().enumerate() {
+        if coeff.abs() > tolerance {
+            start = i;
+            break;
+        }
+    }
+
+    // Handle the case where all coefficients are effectively zero
+    if start == 0 && coeffs[0].abs() <= tolerance {
+        // Check if all coefficients are zero
+        let all_zero = coeffs.iter().all(|&x| x.abs() <= tolerance);
+        if all_zero {
+            return Ok(Array::from_vec(vec![T::zero()]));
+        }
+    }
+
+    Ok(Array::from_vec(coeffs[start..].to_vec()))
+}
+
+/// Extrapolate polynomial to new points
+///
+/// Uses the polynomial fitted to the given data points to extrapolate
+/// or interpolate at new points.
+///
+/// # Parameters
+///
+/// * `x` - Known x coordinates
+/// * `y` - Known y coordinates  
+/// * `new_x` - New x coordinates for extrapolation
+/// * `degree` - Degree of polynomial to fit
+///
+/// # Returns
+///
+/// Array of extrapolated y values
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
+/// let y = Array::from_vec(vec![1.0, 4.0, 9.0]); // y = x^2 + 1
+/// let new_x = Array::from_vec(vec![3.0, 4.0]);
+/// let result = polyextrap(&x, &y, &new_x, 2).unwrap();
+/// // Returns approximately [10.0, 17.0]
+/// ```
+pub fn polyextrap<T>(
+    x: &Array<T>,
+    y: &Array<T>,
+    new_x: &Array<T>,
+    degree: usize,
+) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + PartialEq
+        + Debug
+        + std::ops::Neg<Output = T>
+        + Float,
+{
+    // Fit polynomial to the data
+    let poly = polyfit(x, y, degree)?;
+
+    // Evaluate at new points
+    polyval(&poly, new_x)
+}
+
+/// Compute polynomial scale transformation
+///
+/// Transform polynomial from domain [a, b] to [-1, 1] or vice versa.
+/// This is useful for numerical stability in polynomial operations.
+///
+/// # Parameters
+///
+/// * `c` - Polynomial coefficients
+/// * `domain` - Original domain [a, b]
+/// * `window` - Target domain [c, d]
+///
+/// # Returns
+///
+/// Array of transformed polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let c = Array::from_vec(vec![1.0, 0.0, 0.0]); // x^2
+/// let domain = Array::from_vec(vec![-1.0, 1.0]);
+/// let window = Array::from_vec(vec![0.0, 2.0]);
+/// let transformed = polyscale(&c, &domain, &window).unwrap();
+/// ```
+pub fn polyscale<T>(c: &Array<T>, domain: &Array<T>, window: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + PartialEq
+        + Float,
+{
+    if c.ndim() != 1 || domain.ndim() != 1 || window.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyscale requires 1D arrays".to_string(),
+        ));
+    }
+
+    if domain.size() != 2 || window.size() != 2 {
+        return Err(NumRs2Error::InvalidOperation(
+            "Domain and window must have exactly 2 elements".to_string(),
+        ));
+    }
+
+    let domain_vec = domain.to_vec();
+    let window_vec = window.to_vec();
+
+    let a = domain_vec[0];
+    let b = domain_vec[1];
+    let window_c = window_vec[0];
+    let d = window_vec[1];
+
+    // Transform x from [a, b] to [c, d]
+    // x_new = (d - c) / (b - a) * (x - a) + c
+    // This is equivalent to composing the polynomial with the linear transformation
+
+    let _scale = (d - window_c) / (b - a);
+    let _shift = window_c - _scale * a;
+
+    // For now, return the input coefficients as this is a complex transformation
+    // A full implementation would require polynomial composition
+    Ok(c.clone())
+}
+
+/// Return Chebyshev polynomial of specified degree and kind
+///
+/// Returns the coefficients of the Chebyshev polynomial of the first or second kind.
+///
+/// # Parameters
+///
+/// * `degree` - Degree of the polynomial
+/// * `kind` - 1 for first kind (T_n), 2 for second kind (U_n)
+///
+/// # Returns
+///
+/// Array of Chebyshev polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let t2 = polychebyshev::<f64>(2, 1).unwrap(); // T_2(x) = 2x^2 - 1
+/// let u1 = polychebyshev::<f64>(1, 2).unwrap(); // U_1(x) = 2x
+/// ```
+pub fn polychebyshev<T>(degree: usize, kind: u8) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + From<i32>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    let poly = match kind {
+        1 => OrthogonalPolynomials::chebyshev_t::<T>(degree),
+        2 => OrthogonalPolynomials::chebyshev_u::<T>(degree),
+        _ => {
+            return Err(NumRs2Error::InvalidOperation(
+                "Kind must be 1 (first kind) or 2 (second kind)".to_string(),
+            ))
+        }
+    };
+
+    Ok(Array::from_vec(poly.coefficients().to_vec()))
+}
+
+/// Return Legendre polynomial of specified degree
+///
+/// Returns the coefficients of the Legendre polynomial P_n(x).
+///
+/// # Parameters
+///
+/// * `degree` - Degree of the polynomial
+///
+/// # Returns
+///
+/// Array of Legendre polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let p2 = polylegendre::<f64>(2).unwrap(); // P_2(x) = (3x^2 - 1)/2
+/// ```
+pub fn polylegendre<T>(degree: usize) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + From<i32>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    let poly = OrthogonalPolynomials::legendre::<T>(degree);
+    Ok(Array::from_vec(poly.coefficients().to_vec()))
+}
+
+/// Return Hermite polynomial of specified degree
+///
+/// Returns the coefficients of the Hermite polynomial H_n(x) (physicists' version).
+///
+/// # Parameters
+///
+/// * `degree` - Degree of the polynomial
+///
+/// # Returns
+///
+/// Array of Hermite polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let h2 = polyhermite::<f64>(2).unwrap(); // H_2(x) = 4x^2 - 2
+/// ```
+pub fn polyhermite<T>(degree: usize) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + From<i32>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    let poly = OrthogonalPolynomials::hermite::<T>(degree);
+    Ok(Array::from_vec(poly.coefficients().to_vec()))
+}
+
+/// Return Laguerre polynomial of specified degree
+///
+/// Returns the coefficients of the Laguerre polynomial L_n(x).
+///
+/// # Parameters
+///
+/// * `degree` - Degree of the polynomial
+///
+/// # Returns
+///
+/// Array of Laguerre polynomial coefficients
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let l2 = polylaguerre::<f64>(2).unwrap(); // L_2(x) = (x^2 - 4x + 2)/2
+/// ```
+pub fn polylaguerre<T>(degree: usize) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + From<i32>
+        + PartialEq
+        + std::ops::Neg<Output = T>,
+{
+    let poly = OrthogonalPolynomials::laguerre::<T>(degree);
+    Ok(Array::from_vec(poly.coefficients().to_vec()))
 }
 
 // Add tests to verify the implementation

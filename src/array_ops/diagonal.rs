@@ -342,3 +342,105 @@ pub fn diagonal<T: Clone + num_traits::Zero>(
 
     Ok(Array::from_vec(result_vec).reshape(&result_shape))
 }
+
+/// Fill the main diagonal of the given array of any dimensionality.
+///
+/// For an array `a` with `a.ndim >= 2`, the diagonal is the list of
+/// locations with indices `a[i, ..., i]` all identical. This function
+/// modifies the input array in-place, it does not return a value.
+///
+/// # Arguments
+///
+/// * `array` - Array whose diagonal is to be filled, it gets modified in-place
+/// * `val` - Value to be written on the diagonal
+/// * `wrap` - For tall matrices in NumPy version 1.13, the diagonal "wraps" after N columns.
+///   This behavior is deprecated, but you can specify wrap=true to continue using it.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::array_ops::diagonal::fill_diagonal;
+///
+/// // Fill diagonal of a 3x3 matrix
+/// let mut a = Array::zeros(&[3, 3]);
+/// fill_diagonal(&mut a, 5, false).unwrap();
+/// assert_eq!(a.to_vec(), vec![5, 0, 0, 0, 5, 0, 0, 0, 5]);
+///
+/// // Fill diagonal of a 4x3 matrix
+/// let mut b = Array::zeros(&[4, 3]);
+/// fill_diagonal(&mut b, 7, false).unwrap();
+/// assert_eq!(b.to_vec(), vec![7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0]);
+///
+/// // Fill diagonal of a 3D array
+/// let mut c = Array::zeros(&[3, 3, 3]);
+/// fill_diagonal(&mut c, 1, false).unwrap();
+/// // Only elements where all indices are equal get filled
+/// let expected = vec![
+///     1, 0, 0, 0, 0, 0, 0, 0, 0,  // c[0,:,:]
+///     0, 0, 0, 0, 1, 0, 0, 0, 0,  // c[1,:,:]
+///     0, 0, 0, 0, 0, 0, 0, 0, 1   // c[2,:,:]
+/// ];
+/// assert_eq!(c.to_vec(), expected);
+/// ```
+pub fn fill_diagonal<T: Clone>(array: &mut Array<T>, val: T, wrap: bool) -> Result<()> {
+    let ndim = array.ndim();
+
+    if ndim < 2 {
+        return Err(NumRs2Error::InvalidOperation(
+            "Array must be at least 2D".to_string(),
+        ));
+    }
+
+    let shape = array.shape();
+
+    // For 2D arrays
+    if ndim == 2 {
+        let n_rows = shape[0];
+        let n_cols = shape[1];
+        let diag_len = if wrap {
+            n_rows
+        } else {
+            std::cmp::min(n_rows, n_cols)
+        };
+
+        let array_data = array
+            .array_mut()
+            .as_slice_mut()
+            .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to get mutable slice".into()))?;
+
+        for i in 0..diag_len {
+            let col = if wrap { i % n_cols } else { i };
+            if col < n_cols {
+                let idx = i * n_cols + col;
+                array_data[idx] = val.clone();
+            }
+        }
+    } else {
+        // For N-dimensional arrays where N > 2
+        // Fill positions where all indices are equal
+        let min_dim = shape.iter().min().copied().unwrap_or(0);
+
+        let array_data = array
+            .array_mut()
+            .as_slice_mut()
+            .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to get mutable slice".into()))?;
+
+        // Calculate strides
+        let mut strides = vec![1; ndim];
+        for i in (0..ndim - 1).rev() {
+            strides[i] = strides[i + 1] * shape[i + 1];
+        }
+
+        // Fill diagonal elements where all indices are equal
+        for i in 0..min_dim {
+            let mut idx = 0;
+            for &stride in &strides {
+                idx += i * stride;
+            }
+            array_data[idx] = val.clone();
+        }
+    }
+
+    Ok(())
+}

@@ -40,11 +40,14 @@ pub mod array_ops;
 pub mod array_ops_legacy;
 pub mod arrays;
 pub mod axis_ops;
+pub mod bitwise_ops;
 pub mod blas;
 pub mod char;
 pub mod comparisons;
+pub mod complex_ops;
 pub mod conversions;
 pub mod error;
+pub mod error_handling;
 pub mod financial;
 #[cfg(feature = "gpu")]
 pub mod gpu;
@@ -55,6 +58,8 @@ pub mod linalg;
 pub mod linalg_extended;
 pub mod linalg_optimized;
 pub mod linalg_parallel;
+#[cfg(feature = "scirs")]
+pub mod optimized_ops;
 // pub mod linalg_solve; // Loaded via linalg/mod.rs
 pub mod linalg_stable;
 pub mod masked;
@@ -76,6 +81,7 @@ pub mod sparse;
 pub mod sparse_enhanced;
 pub mod stats;
 pub mod stride_tricks;
+pub mod testing;
 pub mod traits;
 pub mod types;
 pub mod ufuncs;
@@ -121,20 +127,67 @@ pub mod prelude {
     // String and character operations
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
+    pub use crate::bitwise_ops::{
+        bitwise_and, bitwise_not, bitwise_or, bitwise_xor, invert, left_shift, left_shift_scalar,
+        right_shift, right_shift_scalar,
+    };
     pub use crate::char;
     pub use crate::char::{array_from_strings, StringArray, StringElement};
     pub use crate::comparisons::{
-        all, allclose, allclose_with_tol, any, array_equal, equal, greater, greater_equal, isclose,
-        isclose_array, less, less_equal, not_equal,
+        all, allclose, allclose_with_tol, any, array_equal, count_nonzero, equal, flatnonzero,
+        greater, greater_equal, isclose, isclose_array, less, less_equal, logical_and, logical_not,
+        logical_or, logical_xor, not_equal,
+    };
+    pub use crate::complex_ops::{
+        absolute as complex_abs, angle as complex_angle, conj as complex_conj, from_polar,
+        imag as complex_imag, iscomplex, iscomplexobj, isreal, isrealobj, real as complex_real,
+        to_complex,
     };
     pub use crate::conversions::*;
     pub use crate::error::{NumRs2Error, Result};
-    pub use crate::financial::{
-        fv, fv_array, irr, irr_multiple_series, mirr, nper, nper_array, npv, npv_multiple_series,
-        npv_rates, pmt, pmt_array, pv, pv_array, rate, rate_array,
+    pub use crate::error_handling::{
+        errstate, geterr, geterrcall, handle_error, seterr, seterrcall, ErrorAction, ErrorState,
+        ErrorStateBuilder, ErrorStateGuard, FloatingPointError,
     };
-    pub use crate::indexing::*;
-    pub use crate::indexing::{extract, put_along_axis, take, take_along_axis};
+    pub use crate::financial::{
+        // Bond pricing and analysis
+        accrued_interest,
+        // Options pricing
+        binomial_option_price,
+        black_scholes,
+        black_scholes_greeks,
+        bond_convexity,
+        bond_duration,
+        bond_equivalent_yield,
+        bond_price,
+        bond_yield,
+        // Basic time value of money
+        fv,
+        fv_array,
+        implied_volatility,
+        irr,
+        irr_multiple_series,
+        mirr,
+        modified_duration,
+        nper,
+        nper_array,
+        npv,
+        npv_multiple_series,
+        npv_rates,
+        pmt,
+        pmt_array,
+        pv,
+        pv_array,
+        rate,
+        rate_array,
+    };
+    // Import indexing selectively to avoid conflicts with array_ops
+    pub use crate::indexing::{
+        diag_indices, diag_indices_from, extract, indices_grid, ix_, mask_indices,
+        put as indexing_put, put_along_axis, putmask as indexing_putmask, ravel_multi_index, take,
+        take_along_axis, tril_indices, tril_indices_from, triu_indices, triu_indices_from,
+        unravel_index, IndexSpec,
+    };
     pub use crate::io::{array_to_vec2d, vec2d_to_array, vec_to_array, SerializeFormat};
     // Explicit linear algebra imports to avoid ambiguous re-exports
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
@@ -163,7 +216,19 @@ pub mod prelude {
     // Extended math functions (avoiding conflicts with core math)
     pub use crate::math_extended::{erf, erfc, gamma, gammaln};
     // Note: bessel_i0, bessel_j0, bessel_y0, loggamma not available - use bessel_i(0), etc.
-    pub use crate::matrix::{BandedMatrix, Matrix};
+    // Math array creation and operations
+    pub use crate::math::{
+        amax, amin, angle, arange, argmax, argmin, argpartition, argsort, around, bartlett,
+        bincount, blackman, clip, conj, copysign, cumprod, cumsum, cumulative_prod, cumulative_sum,
+        diff, digitize, divmod, ediff1d, empty, fmod, frexp, gcd, geomspace, gradient, hamming,
+        hanning, heaviside, i0, imag, interp, isfinite, isinf, isnan, kaiser, lcm, ldexp, linspace,
+        logspace, max, mean, median, min, modf, nan_to_num, nanmax, nanmean, nanmin, nanstd,
+        nansum, nanvar, nextafter, nonzero, ones, partition, prod, real, real_if_close, remainder,
+        resize, searchsorted, sinc, sort, std, sum, trapz, var, zeros, ElementWiseMath,
+    };
+    pub use crate::matrix::{
+        asmatrix, matrix, matrix_from_nested, matrix_from_scalar, BandedMatrix, Matrix,
+    };
     pub use crate::mmap::MmapArray;
     pub use crate::random::advanced_distributions;
     pub use crate::random::distributions;
@@ -172,7 +237,7 @@ pub mod prelude {
     pub use crate::set_ops::{
         in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options,
     };
-    pub use crate::signal;
+    pub use crate::signal::{convolve, convolve2d, correlate, correlate2d};
     // Explicit SIMD imports to avoid glob conflicts
     pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
     pub use crate::simd_optimize::{detect_cpu_features, CpuFeatures, SimdImplementation};
@@ -180,12 +245,20 @@ pub mod prelude {
     pub use crate::sparse_enhanced::SparseOpsAdvanced;
     // Explicit stats imports to avoid potential conflicts
     pub use crate::stats::{
-        average, corrcoef, cov, histogram, max_along_axis, min_along_axis, percentile, ptp,
-        quantile, HistBins, Statistics,
+        average, corrcoef, cov, histogram, histogram_dd, max_along_axis, min_along_axis, mode,
+        percentile, ptp, quantile, HistBins, Statistics,
     };
     pub use crate::stride_tricks::{
         as_strided, broadcast_arrays, broadcast_to, byte_strides, set_strides, sliding_window_view,
     };
+    // Testing utilities
+    pub use crate::testing::{
+        arrays_close, assert_array_all_finite, assert_array_almost_equal, assert_array_equal,
+        assert_array_no_nan, assert_array_same_shape, assert_scalar_almost_equal, is_finite_array,
+        test_summary, tolerances, TestResult, ToleranceConfig,
+    };
+    // Macro exported at crate root
+    pub use crate::run_tests;
     // Explicit trait imports
     pub use crate::traits::{
         ArrayIndexing, ArrayMath, ArrayOps, ArrayReduction, ComplexElement, FloatingPoint,
@@ -272,7 +345,21 @@ pub mod prelude {
     pub use crate::new_modules::matrix_decomp::{
         cholesky, cod, condition_number, lu, pivoted_cholesky, qr, rcond, schur, svd,
     };
-    pub use crate::new_modules::polynomial::{CubicSpline, Polynomial, PolynomialInterpolation};
+    pub use crate::new_modules::polynomial::{
+        poly, polyadd, polychebyshev, polycompanion, polyder, polydiv, polyextrap, polyfromroots,
+        polyhermite, polyint, polylaguerre, polylegendre, polymul, polyscale, polysub, polytrim,
+        CubicSpline, Polynomial, PolynomialInterpolation,
+    };
+
+    // Optimized operations from scirs2-core
+    #[cfg(all(feature = "scirs", feature = "lapack"))]
+    pub use crate::optimized_ops::parallel_matrix_ops;
+    #[cfg(feature = "scirs")]
+    pub use crate::optimized_ops::{
+        adaptive_array_sum, chunked_array_processing, get_optimization_info,
+        parallel_column_statistics, should_use_parallel, simd_elementwise_ops, simd_matmul,
+        simd_vector_ops, ColumnStats, SimdOpsResult, SimdVectorResult,
+    };
 
     // GPU acceleration
     #[cfg(feature = "gpu")]
@@ -282,20 +369,32 @@ pub mod prelude {
     };
     pub use crate::new_modules::sparse::{SparseArray, SparseMatrix, SparseMatrixFormat};
     pub use crate::new_modules::special::{
-        bessel_i, bessel_j, bessel_k, bessel_y, digamma, ellipe, ellipk, erfcinv, erfinv, gammainc,
+        airy_ai, airy_bi, bessel_i, bessel_j, bessel_k, bessel_y, beta, betainc, digamma, ellipe,
+        ellipk, erfcinv, erfinv, exp1, expi, fresnel, gammainc, shichi, sici, zeta,
     };
     // Note: erf, erfc, gamma, gammaln already imported from math_extended
 
     // Advanced array operations (Phase 3)
     pub use crate::arrays::{
         ArrayView, BooleanCombineOp, BroadcastEngine, BroadcastOp, BroadcastReduction,
-        FancyIndexEngine, FancyIndexResult, IndexSpec, ResolvedIndex, Shape, SpecializedIndexing,
+        FancyIndexEngine, FancyIndexResult, ResolvedIndex, Shape, SpecializedIndexing,
     };
 
     // Re-export advanced types
     pub use crate::types::custom::CustomDType;
     pub use crate::types::datetime::{
-        business_days, datetime_array, DateTime64, DateTimeUnit, DateUnit, TimeDelta64, Timezone,
+        business_days,
+        // NumPy-compatible API functions
+        datetime64,
+        datetime_array,
+        datetime_as_string,
+        datetime_data,
+        timedelta64,
+        DateTime64,
+        DateTimeUnit,
+        DateUnit,
+        TimeDelta64,
+        Timezone,
         TimezoneDateTime,
     };
     pub use crate::types::structured::{DType, Field, RecordArray, StructuredArray};
@@ -853,8 +952,10 @@ mod tests {
 
         // Test covariance and correlation
         let b = Array::<f64>::from_vec(vec![5.0, 4.0, 3.0, 2.0, 1.0]);
-        assert_relative_eq!(cov(&a, &b).unwrap(), -2.0, epsilon = 1e-10);
-        assert_relative_eq!(corrcoef(&a, &b).unwrap(), -1.0, epsilon = 1e-10);
+        let cov_result = cov(&a, Some(&b), None, None, None).unwrap();
+        assert_relative_eq!(cov_result.get(&[0, 1]).unwrap(), -2.5, epsilon = 1e-10);
+        let corrcoef_result = corrcoef(&a, Some(&b), None).unwrap();
+        assert_relative_eq!(corrcoef_result.get(&[0, 1]).unwrap(), -1.0, epsilon = 1e-10);
 
         // Test histogram
         let data = Array::<f64>::from_vec(vec![1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]);

@@ -1706,3 +1706,376 @@ mod tests {
         assert_eq!(diff.unit, DateTimeUnit::Second);
     }
 }
+
+// NumPy-compatible API functions
+/// NumPy-compatible constructor for datetime64 values
+///
+/// Creates a DateTime64 from a string representation, similar to np.datetime64()
+///
+/// # Arguments
+/// * `value` - String representation of datetime (e.g., "2023-01-01", "2023-01-01T12:00:00")
+/// * `unit` - Optional unit specification (e.g., "D", "s", "ms")
+///
+/// # Examples
+/// ```
+/// use numrs2::types::datetime::datetime64;
+///
+/// let dt = datetime64("2023-01-01", Some("D")).unwrap();
+/// let dt_auto = datetime64("2023-01-01T12:00:00", None).unwrap();
+/// ```
+pub fn datetime64(value: &str, unit: Option<&str>) -> Result<DateTime64> {
+    let parsed_unit = if let Some(u) = unit {
+        parse_unit_string(u)?
+    } else {
+        // Auto-detect unit based on string format
+        if value.contains('T') || value.contains(' ') {
+            if value.contains('.') {
+                DateTimeUnit::Microsecond
+            } else {
+                DateTimeUnit::Second
+            }
+        } else {
+            DateTimeUnit::Day
+        }
+    };
+
+    DateTime64::from_str(value).map(|dt| dt.to_unit(parsed_unit))
+}
+
+/// NumPy-compatible constructor for timedelta64 values
+///
+/// Creates a TimeDelta64 from a numeric value and unit, similar to np.timedelta64()
+///
+/// # Arguments
+/// * `value` - Numeric value for the timedelta
+/// * `unit` - Unit specification (e.g., "D", "s", "ms")
+///
+/// # Examples
+/// ```
+/// use numrs2::types::datetime::timedelta64;
+///
+/// let td = timedelta64(5, "D").unwrap();  // 5 days
+/// let td_hours = timedelta64(24, "h").unwrap();  // 24 hours
+/// ```
+pub fn timedelta64(value: i64, unit: &str) -> Result<TimeDelta64> {
+    let parsed_unit = parse_unit_string(unit)?;
+    Ok(TimeDelta64::new(value, parsed_unit))
+}
+
+/// Convert datetime64 to string representation
+///
+/// Similar to np.datetime_as_string(), converts a DateTime64 to its string representation
+///
+/// # Arguments
+/// * `dt` - DateTime64 value to convert
+/// * `unit` - Optional unit for output format
+/// * `timezone` - Optional timezone for formatting (UTC default)
+///
+/// # Examples
+/// ```
+/// use numrs2::types::datetime::{datetime64, datetime_as_string};
+///
+/// let dt = datetime64("2023-01-01", Some("D")).unwrap();
+/// let s = datetime_as_string(&dt, None, None).unwrap();
+/// ```
+pub fn datetime_as_string(
+    dt: &DateTime64,
+    unit: Option<&str>,
+    _timezone: Option<&str>,
+) -> Result<String> {
+    let target_unit = if let Some(u) = unit {
+        parse_unit_string(u)?
+    } else {
+        dt.unit()
+    };
+
+    let converted_dt = dt.to_unit(target_unit);
+
+    match target_unit {
+        DateTimeUnit::Year => Ok(format!("{:04}", 1970 + converted_dt.value())),
+        DateTimeUnit::Month => {
+            let years = converted_dt.value() / 12;
+            let months = converted_dt.value() % 12;
+            Ok(format!("{:04}-{:02}", 1970 + years, months + 1))
+        }
+        DateTimeUnit::Day => {
+            // Convert days since epoch to date
+            let days = converted_dt.value();
+            let (year, month, day) = days_to_date(days);
+            Ok(format!("{:04}-{:02}-{:02}", year, month, day))
+        }
+        DateTimeUnit::Second => {
+            let secs = converted_dt.value();
+            let days = secs / 86400;
+            let remaining_secs = secs % 86400;
+            let hours = remaining_secs / 3600;
+            let minutes = (remaining_secs % 3600) / 60;
+            let seconds = remaining_secs % 60;
+
+            let (year, month, day) = days_to_date(days);
+            Ok(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+                year, month, day, hours, minutes, seconds
+            ))
+        }
+        DateTimeUnit::Millisecond => {
+            let millis = converted_dt.value();
+            let secs = millis / 1000;
+            let subsec_millis = millis % 1000;
+            let days = secs / 86400;
+            let remaining_secs = secs % 86400;
+            let hours = remaining_secs / 3600;
+            let minutes = (remaining_secs % 3600) / 60;
+            let seconds = remaining_secs % 60;
+
+            let (year, month, day) = days_to_date(days);
+            Ok(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+                year, month, day, hours, minutes, seconds, subsec_millis
+            ))
+        }
+        DateTimeUnit::Microsecond => {
+            let micros = converted_dt.value();
+            let secs = micros / 1_000_000;
+            let subsec_micros = micros % 1_000_000;
+            let days = secs / 86400;
+            let remaining_secs = secs % 86400;
+            let hours = remaining_secs / 3600;
+            let minutes = (remaining_secs % 3600) / 60;
+            let seconds = remaining_secs % 60;
+
+            let (year, month, day) = days_to_date(days);
+            Ok(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:06}Z",
+                year, month, day, hours, minutes, seconds, subsec_micros
+            ))
+        }
+        DateTimeUnit::Nanosecond => {
+            let nanos = converted_dt.value();
+            let secs = nanos / 1_000_000_000;
+            let subsec_nanos = nanos % 1_000_000_000;
+            let days = secs / 86400;
+            let remaining_secs = secs % 86400;
+            let hours = remaining_secs / 3600;
+            let minutes = (remaining_secs % 3600) / 60;
+            let seconds = remaining_secs % 60;
+
+            let (year, month, day) = days_to_date(days);
+            Ok(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:09}Z",
+                year, month, day, hours, minutes, seconds, subsec_nanos
+            ))
+        }
+        _ => {
+            // For other units, convert to day and format
+            let as_days = converted_dt.to_unit(DateTimeUnit::Day);
+            datetime_as_string(&as_days, Some("D"), None)
+        }
+    }
+}
+
+/// Helper function to convert days since Unix epoch to (year, month, day)
+fn days_to_date(days: i64) -> (i32, u32, u32) {
+    // Simple algorithm for converting days since epoch to date
+    // This is a simplified version - for production use, a more robust algorithm would be preferred
+    let mut year = 1970i32;
+    let mut remaining_days = days;
+
+    // Handle years
+    while remaining_days >= 365 {
+        let days_in_year = if is_leap_year_date_conversion(year) {
+            366
+        } else {
+            365
+        };
+        if remaining_days >= days_in_year {
+            remaining_days -= days_in_year;
+            year += 1;
+        } else {
+            break;
+        }
+    }
+
+    // Handle months
+    let days_in_months = if is_leap_year_date_conversion(year) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut month = 1u32;
+    for &days_in_month in &days_in_months {
+        if remaining_days >= days_in_month as i64 {
+            remaining_days -= days_in_month as i64;
+            month += 1;
+        } else {
+            break;
+        }
+    }
+
+    let day = (remaining_days + 1) as u32;
+    (year, month, day)
+}
+
+/// Helper function to check if a year is a leap year (private version for date conversion)
+fn is_leap_year_date_conversion(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+/// Get unit and count information from datetime64 dtype
+///
+/// Similar to np.datetime_data(), returns the unit and count for a DateTime64
+///
+/// # Arguments
+/// * `dt` - DateTime64 value to analyze
+///
+/// # Returns
+/// Tuple of (unit_string, count) where count is always 1 for DateTime64
+///
+/// # Examples
+/// ```
+/// use numrs2::types::datetime::{datetime64, datetime_data};
+///
+/// let dt = datetime64("2023-01-01", Some("D")).unwrap();
+/// let (unit, count) = datetime_data(&dt);
+/// assert_eq!(unit, "D");
+/// assert_eq!(count, 1);
+/// ```
+pub fn datetime_data(dt: &DateTime64) -> (String, i64) {
+    let unit_str = match dt.unit() {
+        DateTimeUnit::Year => "Y",
+        DateTimeUnit::Month => "M",
+        DateTimeUnit::Week => "W",
+        DateTimeUnit::Day => "D",
+        DateTimeUnit::Hour => "h",
+        DateTimeUnit::Minute => "m",
+        DateTimeUnit::Second => "s",
+        DateTimeUnit::Millisecond => "ms",
+        DateTimeUnit::Microsecond => "us",
+        DateTimeUnit::Nanosecond => "ns",
+    };
+    (unit_str.to_string(), 1)
+}
+
+/// Array-based datetime operations
+pub mod array_ops {
+    use super::*;
+    use crate::array::Array;
+
+    /// Convert an array of datetime64 values to string representations
+    pub fn datetime_as_string_array(
+        dts: &Array<DateTime64>,
+        unit: Option<&str>,
+        timezone: Option<&str>,
+    ) -> Result<Array<String>> {
+        let data = dts.to_vec();
+        let strings: Result<Vec<_>> = data
+            .iter()
+            .map(|dt| datetime_as_string(dt, unit, timezone))
+            .collect();
+
+        let string_vec = strings?;
+        let shape = dts.shape();
+        Ok(Array::from_vec(string_vec).reshape(&shape))
+    }
+
+    /// Check if datetime64 values are business days
+    pub fn is_busday_array(dts: &Array<DateTime64>) -> Result<Array<bool>> {
+        let data = dts.to_vec();
+        let results: Result<Vec<bool>> = data.iter().map(business_days::is_busday).collect();
+
+        let result_vec = results?;
+        let shape = dts.shape();
+        Ok(Array::from_vec(result_vec).reshape(&shape))
+    }
+
+    /// Apply business day offset to datetime64 array
+    pub fn busday_offset_array(
+        dts: &Array<DateTime64>,
+        offsets: &Array<i32>,
+        _roll: Option<&str>,
+    ) -> Result<Array<DateTime64>> {
+        if dts.len() != offsets.len() {
+            return Err(NumRs2Error::ValueError(
+                "Arrays must have same length".to_string(),
+            ));
+        }
+
+        let dt_data = dts.to_vec();
+        let offset_data = offsets.to_vec();
+        let results: Result<Vec<_>> = dt_data
+            .iter()
+            .zip(offset_data.iter())
+            .map(|(dt, &offset)| business_days::busday_offset(dt, offset as i64))
+            .collect();
+
+        let result_vec = results?;
+        let shape = dts.shape();
+        Ok(Array::from_vec(result_vec).reshape(&shape))
+    }
+}
+
+/// Helper function to parse unit strings in NumPy format
+fn parse_unit_string(unit: &str) -> Result<DateTimeUnit> {
+    match unit.to_lowercase().as_str() {
+        "y" | "year" | "years" => Ok(DateTimeUnit::Year),
+        "m" | "month" | "months" => Ok(DateTimeUnit::Month),
+        "w" | "week" | "weeks" => Ok(DateTimeUnit::Week),
+        "d" | "day" | "days" => Ok(DateTimeUnit::Day),
+        "h" | "hour" | "hours" => Ok(DateTimeUnit::Hour),
+        "min" | "minute" | "minutes" => Ok(DateTimeUnit::Minute),
+        "s" | "sec" | "second" | "seconds" => Ok(DateTimeUnit::Second),
+        "ms" | "millisecond" | "milliseconds" => Ok(DateTimeUnit::Millisecond),
+        "us" | "microsecond" | "microseconds" => Ok(DateTimeUnit::Microsecond),
+        "ns" | "nanosecond" | "nanoseconds" => Ok(DateTimeUnit::Nanosecond),
+        _ => Err(NumRs2Error::ValueError(format!("Unknown unit: {}", unit))),
+    }
+}
+
+#[cfg(test)]
+mod numpy_api_tests {
+    use super::*;
+
+    #[test]
+    fn test_datetime64_constructor() {
+        let dt = datetime64("2023-01-01", Some("D")).unwrap();
+        assert_eq!(dt.unit(), DateTimeUnit::Day);
+
+        let dt_auto = datetime64("2023-01-01T12:00:00", None).unwrap();
+        assert_eq!(dt_auto.unit(), DateTimeUnit::Second);
+    }
+
+    #[test]
+    fn test_timedelta64_constructor() {
+        let td = timedelta64(5, "D").unwrap();
+        assert_eq!(td.unit(), DateTimeUnit::Day);
+        assert_eq!(td.value(), 5);
+
+        let td_hours = timedelta64(24, "h").unwrap();
+        assert_eq!(td_hours.unit(), DateTimeUnit::Hour);
+        assert_eq!(td_hours.value(), 24);
+    }
+
+    #[test]
+    fn test_datetime_as_string() {
+        let dt = datetime64("2023-01-01", Some("D")).unwrap();
+        let s = datetime_as_string(&dt, None, None).unwrap();
+        assert!(s.contains("2023"));
+    }
+
+    #[test]
+    fn test_datetime_data() {
+        let dt = datetime64("2023-01-01", Some("D")).unwrap();
+        let (unit, count) = datetime_data(&dt);
+        assert_eq!(unit, "D");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_parse_unit_string() {
+        assert_eq!(parse_unit_string("D").unwrap(), DateTimeUnit::Day);
+        assert_eq!(parse_unit_string("s").unwrap(), DateTimeUnit::Second);
+        assert_eq!(parse_unit_string("ms").unwrap(), DateTimeUnit::Millisecond);
+        assert!(parse_unit_string("invalid").is_err());
+    }
+}

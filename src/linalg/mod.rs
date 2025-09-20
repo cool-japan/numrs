@@ -1,7 +1,14 @@
 //! Basic linear algebra operations with Array
 //! Includes matrix multiplication, dot product, matrix inversion, etc.
 
-// use std::fmt::Debug; // Unused in ci-safe mode
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use crate::array::Array;
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use crate::error::{NumRs2Error, Result};
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use num_traits::{Float, ToPrimitive};
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use std::fmt::Debug;
 
 // Matrix decomposition submodule
 #[path = "../linalg_decomposition.rs"]
@@ -29,12 +36,14 @@ pub use decomposition::matrix_rank;
 pub use matrix_ops::{det, matrix_power};
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub use solve::pinv;
-pub use tensor_ops::{kron, tensordot};
+pub use tensor_ops::{einsum, kron, tensordot};
 pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
 
 // Additional standalone functions for improved compatibility
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub use crate::new_modules::matrix_decomp::{lu, pivoted_cholesky, svd as svd_enhanced};
+pub use crate::new_modules::matrix_decomp::{
+    lstsq, lu, pivoted_cholesky, slogdet, svd as svd_enhanced,
+};
 
 /// Set the number of threads for LAPACK operations
 pub fn set_lapack_threads(threads: usize) {

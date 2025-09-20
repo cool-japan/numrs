@@ -863,7 +863,7 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(view.get(&[0, 0]).unwrap(), 1);
     /// assert_eq!(view.shape(), vec![2, 2]);
     /// ```
-    pub fn view(&self) -> ArrayView<T> {
+    pub fn view(&self) -> ArrayView<'_, T> {
         ArrayView::from_ndarray_view(self.array().view())
     }
 
@@ -891,7 +891,7 @@ impl<T: Clone> Array<T> {
     /// // The change is reflected in the original array
     /// assert_eq!(array.get(&[0, 0]).unwrap(), 10);
     /// ```
-    pub fn view_mut(&mut self) -> ArrayViewMut<T> {
+    pub fn view_mut(&mut self) -> ArrayViewMut<'_, T> {
         ArrayViewMut::from_ndarray_view_mut(self.array_mut().view_mut())
     }
 

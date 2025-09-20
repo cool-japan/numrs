@@ -4,6 +4,7 @@
 use approx::assert_relative_eq;
 use num_traits::Float;
 use numrs2::array::Array;
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 use numrs2::linalg;
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
@@ -14,6 +15,7 @@ use numrs2::new_modules::matrix_decomp::{condition_number, lu, pivoted_cholesky}
 /// Generate a Hilbert matrix of size n x n
 /// Hilbert matrices are famously ill-conditioned and provide a good stress test
 /// for numerical algorithms.
+#[allow(dead_code)]
 fn hilbert_matrix<T: Float + From<f64>>(n: usize) -> Array<T> {
     let mut result = Array::zeros(&[n, n]);
     for i in 0..n {
@@ -26,6 +28,7 @@ fn hilbert_matrix<T: Float + From<f64>>(n: usize) -> Array<T> {
 }
 
 /// Generate a nearly singular matrix with a known condition number
+#[allow(dead_code)]
 fn near_singular_matrix<T: Float + From<f64>>(n: usize, condition: f64) -> Array<T> {
     // Create a matrix with eigenvalues 1, 1, 1, ..., 1/condition
     let mut d = vec![<T as From<f64>>::from(1.0); n]; // Diagonal matrix with eigenvalues

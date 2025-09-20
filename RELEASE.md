@@ -94,6 +94,29 @@ Before beginning a release, ensure you have:
 
 ## Current Release Status
 
+### Version 0.1.0-beta.1 (Released: September 15, 2025)
+
+This is the **first beta release** of NumRS2, focusing on dependency modernization and stability improvements:
+
+**Key Updates:**
+- Updated scirs2-* dependencies from 0.1.0-alpha.5 to 0.1.0-beta.1
+- Major dependency upgrades: nalgebra (0.32.3 → 0.34.0), criterion (0.5.1 → 0.7.0), zip (0.6.6 → 5.1.1)
+- Updated rand ecosystem: rand (0.9.0 → 0.9.2), rand_distr (0.5.0 → 0.5.1)
+- Updated 100+ transitive dependencies for improved security and performance
+
+**Technical Fixes:**
+- Resolved bincode 2.0 API breaking changes by maintaining compatibility with bincode 1.3.3
+- Fixed zip 5.1 FileOptions type annotations for proper NPZ file handling
+- Fixed SIMD verification test type annotation error
+
+**Quality Assurance:**
+- All 586 tests pass successfully (0 failed, 1 ignored)
+- Zero regressions detected from dependency updates
+- Maintained full API compatibility and feature set
+- Verified scirs2 integration compatibility with beta.1 versions
+
+This beta release maintains 100% backward compatibility while providing updated dependencies and enhanced stability.
+
 ### Version 0.1.0-alpha.4 (Released: June 15, 2025)
 
 This release focuses on comprehensive NumPy parity roadmap and enhanced documentation:

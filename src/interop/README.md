@@ -41,8 +41,8 @@ The SciRS2 integration has been updated to use the correct module paths with Sci
 
 ### Resources
 
-- SciRS2 Core: `~/.cargo/registry/src/index.crates.io-*/scirs2-core-0.1.0-alpha.4/`
-- SciRS2 Stats: `~/.cargo/registry/src/index.crates.io-*/scirs2-stats-0.1.0-alpha.4/`
+- SciRS2 Core: `~/.cargo/registry/src/index.crates.io-*/scirs2-core-0.1.0-beta.1/`
+- SciRS2 Stats: `~/.cargo/registry/src/index.crates.io-*/scirs2-stats-0.1.0-beta.1/`
 
 ## Usage
 
@@ -50,7 +50,7 @@ To use the SciRS2 integration, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.4", features = ["scirs"] }
+numrs2 = { version = "0.1.0-beta.1", features = ["scirs"] }
 ```
 
 Then import the SciRS2 compatibility module:

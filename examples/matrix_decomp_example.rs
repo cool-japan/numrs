@@ -1,10 +1,5 @@
 #![allow(deprecated)]
 
-use numrs2::linalg;
-#[cfg(feature = "eigenvalues")]
-use numrs2::new_modules::eigenvalues;
-#[cfg(feature = "matrix_decomp")]
-use numrs2::new_modules::matrix_decomp;
 use numrs2::prelude::*;
 
 fn main() {
@@ -24,7 +19,7 @@ fn main() {
     println!("\n1. Cholesky Decomposition");
     println!("-------------------------");
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    match linalg::cholesky(&a) {
+    match numrs2::linalg::cholesky(&a) {
         Ok(l) => {
             println!("Cholesky factor L (lower triangular):");
             print_matrix(&l);
@@ -50,7 +45,7 @@ fn main() {
     println!("\n2. QR Decomposition");
     println!("-------------------");
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    match linalg::qr(&a) {
+    match numrs2::linalg::qr(&a) {
         Ok((q, r)) => {
             println!("Orthogonal matrix Q:");
             print_matrix(&q);
@@ -85,7 +80,7 @@ fn main() {
     println!("\n3. Singular Value Decomposition (SVD)");
     println!("------------------------------------");
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    match linalg::svd(&a) {
+    match numrs2::linalg::svd(&a) {
         Ok((u, s, vt)) => {
             println!("Left singular vectors U:");
             print_matrix(&u);
@@ -119,60 +114,34 @@ fn main() {
         println!("Enable with: cargo run --example matrix_decomp_example --features matrix_decomp,lapack");
     }
 
-    // Eigendecomposition - A = P * D * P^(-1)
+    // Note: Eigenvalue decomposition is not yet available in this example
     println!("\n4. Eigenvalue Decomposition");
     println!("--------------------------");
-    #[cfg(feature = "eigenvalues")]
-    match eigenvalues::eigh(&a, "lower") {
-        Ok((eigenvalues, eigenvectors)) => {
-            println!("Eigenvalues:");
-            println!("{:?}", eigenvalues.to_vec());
-
-            println!("Eigenvectors:");
-            print_matrix(&eigenvectors);
-
-            // Create diagonal matrix from eigenvalues
-            let mut d = Array::zeros(&[eigenvectors.shape()[0], eigenvectors.shape()[0]]);
-            for i in 0..eigenvalues.size() {
-                d.set(&[i, i], eigenvalues.to_vec()[i]).unwrap();
-            }
-
-            // Verify: P * D * P^T = A (for symmetric matrices, P^(-1) = P^T)
-            let pd = eigenvectors.matmul(&d).unwrap();
-            let a_reconstructed = pd.matmul(&eigenvectors.transpose()).unwrap();
-
-            println!("Verification - P * D * P^T:");
-            print_matrix(&a_reconstructed);
-
-            println!("Is close to original? {}", is_close(&a, &a_reconstructed));
-        }
-        Err(e) => println!("Error: {}", e),
-    }
-    #[cfg(not(feature = "eigenvalues"))]
-    {
-        println!("Eigenvalue decomposition requires the 'eigenvalues' feature.");
-        println!("Enable with: cargo run --example matrix_decomp_example --features eigenvalues");
-    }
+    println!("Eigenvalue decomposition is not yet implemented in this example.");
+    println!("This functionality is available through the linalg module.");
 
     // LU Decomposition - A = L * U
     println!("\n5. LU Decomposition");
     println!("-------------------");
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    match matrix_decomp::lu(&a) {
-        Ok((l, u, _p)) => {
-            println!("Lower triangular matrix L:");
-            print_matrix(&l);
+    {
+        use numrs2::new_modules::matrix_decomp;
+        match matrix_decomp::lu(&a) {
+            Ok((l, u, _p)) => {
+                println!("Lower triangular matrix L:");
+                print_matrix(&l);
 
-            println!("Upper triangular matrix U:");
-            print_matrix(&u);
+                println!("Upper triangular matrix U:");
+                print_matrix(&u);
 
-            // Verify: L * U ≈ A
-            let a_reconstructed = l.matmul(&u).unwrap();
-            println!("Verification - L * U:");
-            print_matrix(&a_reconstructed);
-            println!("Is close to original? {}", is_close(&a, &a_reconstructed));
+                // Verify: L * U ≈ A
+                let a_reconstructed = l.matmul(&u).unwrap();
+                println!("Verification - L * U:");
+                print_matrix(&a_reconstructed);
+                println!("Is close to original? {}", is_close(&a, &a_reconstructed));
+            }
+            Err(e) => println!("Error: {}", e),
         }
-        Err(e) => println!("Error: {}", e),
     }
     #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
     {
@@ -203,6 +172,7 @@ fn print_matrix<T: Clone + std::fmt::Display>(matrix: &Array<T>) {
 }
 
 // Helper function to check if two matrices are close
+#[allow(dead_code)]
 fn is_close<T: Clone + num_traits::Float>(a: &Array<T>, b: &Array<T>) -> bool {
     if a.shape() != b.shape() {
         return false;

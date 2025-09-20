@@ -920,18 +920,23 @@ mod statistical_operations_tests {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let b = Array::from_vec(vec![2.0, 4.0, 6.0, 8.0, 10.0]); // Perfect correlation
 
-        // Covariance should be positive
-        let cov_result = cov(&a, &b).unwrap();
-        assert!(cov_result > 0.0);
+        // Test covariance - should return a 2x2 matrix
+        let cov_result = cov(&a, Some(&b), None, None, None).unwrap();
+        assert_eq!(cov_result.shape(), vec![2, 2]);
+        assert!(cov_result.get(&[0, 1]).unwrap() > 0.0);
 
-        // Correlation should be 1.0 (perfect positive correlation)
-        let corr_result = corrcoef(&a, &b).unwrap();
-        assert_relative_eq!(corr_result, 1.0, epsilon = 1e-10);
+        // Test correlation - should return a 2x2 matrix
+        let corr_result = corrcoef(&a, Some(&b), None).unwrap();
+        assert_eq!(corr_result.shape(), vec![2, 2]);
+        let corr_val: f64 = corr_result.get(&[0, 1]).unwrap();
+        assert!((corr_val - 1.0).abs() < 1e-10);
 
         // Test with negative correlation
         let c = Array::from_vec(vec![5.0, 4.0, 3.0, 2.0, 1.0]);
-        let corr_neg = corrcoef(&a, &c).unwrap();
-        assert_relative_eq!(corr_neg, -1.0, epsilon = 1e-10);
+        let corr_neg = corrcoef(&a, Some(&c), None).unwrap();
+        assert_eq!(corr_neg.shape(), vec![2, 2]);
+        let corr_neg_val: f64 = corr_neg.get(&[0, 1]).unwrap();
+        assert!((corr_neg_val - (-1.0)).abs() < 1e-10);
     }
 
     #[test]
@@ -1030,11 +1035,11 @@ mod sorting_searching_tests {
 
     #[test]
     fn test_searchsorted() {
-        let sorted_arr = Array::from_vec(vec![1, 3, 5, 7, 9]);
-        let values = Array::from_vec(vec![0, 2, 4, 6, 8, 10]);
+        let sorted_arr = Array::from_vec(vec![1.0, 3.0, 5.0, 7.0, 9.0]);
+        let values = Array::from_vec(vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
 
-        // searchsorted signature: (a, v, side, sorter) where sorter is optional
-        let indices = searchsorted(&sorted_arr, &values, None, None).unwrap();
+        // searchsorted signature: (a, v, side)
+        let indices = searchsorted(&sorted_arr, &values, "left").unwrap();
 
         // Check that indices are reasonable
         assert_eq!(indices.size(), 6);

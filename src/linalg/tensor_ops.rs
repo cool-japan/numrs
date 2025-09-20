@@ -6,6 +6,323 @@ use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use std::fmt::Debug;
 
+/// Einstein summation convention for tensor contractions
+///
+/// Evaluates the Einstein summation convention on the operands. This function provides
+/// a general way to compute tensor contractions, element-wise products, matrix products,
+/// traces, and more operations through index notation.
+///
+/// # Arguments
+/// * `subscripts` - String specifying the subscripts for summation (e.g., "ij,jk->ik" for matrix multiplication)
+/// * `operands` - Vector of arrays to operate on
+///
+/// # Returns
+/// * `Result<Array<T>>` - The result of the Einstein summation
+///
+/// # Examples
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::tensor_ops::einsum;
+///
+/// // Matrix multiplication: C_ik = A_ij * B_jk
+/// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+/// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
+/// let result = einsum("ij,jk->ik", &[&a, &b]).unwrap();
+///
+/// // Trace: sum_i A_ii
+/// let trace = einsum("ii->", &[&a]).unwrap();
+///
+/// // Dot product: sum_i a_i * b_i
+/// let v1 = Array::from_vec(vec![1.0, 2.0, 3.0]);
+/// let v2 = Array::from_vec(vec![4.0, 5.0, 6.0]);
+/// let dot = einsum("i,i->", &[&v1, &v2]).unwrap();
+/// ```
+pub fn einsum<T: Float + Clone + Debug + std::ops::AddAssign + 'static>(
+    subscripts: &str,
+    operands: &[&Array<T>],
+) -> Result<Array<T>> {
+    // Parse the subscripts string
+    let parts: Vec<&str> = subscripts.split("->").collect();
+    if parts.len() != 2 {
+        return Err(NumRs2Error::InvalidOperation(
+            "einsum subscripts must contain exactly one '->'".to_string(),
+        ));
+    }
+
+    let input_spec = parts[0];
+    let output_spec = parts[1];
+
+    // Split input spec by comma to get individual operand specs
+    let operand_specs: Vec<&str> = input_spec.split(',').collect();
+
+    if operand_specs.len() != operands.len() {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Number of operand specs ({}) doesn't match number of operands ({})",
+            operand_specs.len(),
+            operands.len()
+        )));
+    }
+
+    // Handle common cases with optimized implementations
+
+    // Matrix multiplication: "ij,jk->ik"
+    if operand_specs.len() == 2
+        && operand_specs[0] == "ij"
+        && operand_specs[1] == "jk"
+        && output_spec == "ik"
+    {
+        return operands[0].matmul(operands[1]);
+    }
+
+    // Vector dot product: "i,i->"
+    if operand_specs.len() == 2
+        && operand_specs[0] == "i"
+        && operand_specs[1] == "i"
+        && output_spec.is_empty()
+    {
+        use crate::linalg::vector_ops::vdot;
+        let result = vdot(operands[0], operands[1])?;
+        return Ok(Array::from_vec(vec![result]));
+    }
+
+    // Trace: "ii->"
+    if operand_specs.len() == 1 && operand_specs[0] == "ii" && output_spec.is_empty() {
+        use crate::linalg::vector_ops::trace;
+        let result = trace(operands[0])?;
+        return Ok(Array::from_vec(vec![result]));
+    }
+
+    // Transpose: "ij->ji"
+    if operand_specs.len() == 1 && operand_specs[0] == "ij" && output_spec == "ji" {
+        return Ok(operands[0].transpose());
+    }
+
+    // Diagonal: "ii->i"
+    if operand_specs.len() == 1 && operand_specs[0] == "ii" && output_spec == "i" {
+        use crate::array_ops::diagonal::diag;
+        return diag(operands[0], None);
+    }
+
+    // Outer product: "i,j->ij"
+    if operand_specs.len() == 2
+        && operand_specs[0] == "i"
+        && operand_specs[1] == "j"
+        && output_spec == "ij"
+    {
+        use crate::linalg::vector_ops::outer;
+        return outer(operands[0], operands[1]);
+    }
+
+    // Element-wise multiplication: "ij,ij->ij"
+    if operand_specs.len() == 2
+        && operand_specs[0] == operand_specs[1]
+        && operand_specs[0] == output_spec
+    {
+        // Element-wise multiplication
+        let a_data = operands[0].to_vec();
+        let b_data = operands[1].to_vec();
+        let result_data: Vec<T> = a_data
+            .iter()
+            .zip(b_data.iter())
+            .map(|(a, b)| *a * *b)
+            .collect();
+        return Ok(Array::from_vec(result_data).reshape(&operands[0].shape()));
+    }
+
+    // Sum over axis: "ij->i" (sum over j) or "ij->j" (sum over i)
+    if operand_specs.len() == 1 && operand_specs[0].len() == 2 && output_spec.len() == 1 {
+        let input_chars: Vec<char> = operand_specs[0].chars().collect();
+        let output_char = output_spec.chars().next().unwrap();
+
+        if input_chars.contains(&output_char) {
+            // Find which axis to sum over
+            let sum_axis = if input_chars[0] == output_char { 1 } else { 0 };
+            return operands[0].sum_axis(sum_axis);
+        }
+    }
+
+    // For more complex cases, use a general (but slower) implementation
+    einsum_general(subscripts, operands)
+}
+
+/// General implementation of einsum for arbitrary index patterns
+fn einsum_general<T: Float + Clone + Debug + std::ops::AddAssign>(
+    subscripts: &str,
+    operands: &[&Array<T>],
+) -> Result<Array<T>> {
+    // Parse subscripts
+    let parts: Vec<&str> = subscripts.split("->").collect();
+    let input_spec = parts[0];
+    let output_spec = parts[1];
+    let operand_specs: Vec<&str> = input_spec.split(',').collect();
+
+    // Collect all unique indices
+    let mut all_indices = std::collections::HashSet::new();
+    for spec in &operand_specs {
+        for ch in spec.chars() {
+            if ch.is_alphabetic() {
+                all_indices.insert(ch);
+            }
+        }
+    }
+
+    // Determine output indices
+    let output_indices: Vec<char> = output_spec.chars().filter(|c| c.is_alphabetic()).collect();
+
+    // Determine summation indices (those not in output)
+    let summation_indices: Vec<char> = all_indices
+        .iter()
+        .filter(|&&idx| !output_indices.contains(&idx))
+        .copied()
+        .collect();
+
+    // Map indices to dimensions for each operand
+    let mut index_sizes = std::collections::HashMap::new();
+
+    for (op_idx, &operand) in operands.iter().enumerate() {
+        let spec = operand_specs[op_idx];
+        let shape = operand.shape();
+
+        for (dim_idx, idx_char) in spec.chars().enumerate() {
+            if idx_char.is_alphabetic() {
+                let size = shape[dim_idx];
+
+                // Check consistency
+                if let Some(&existing_size) = index_sizes.get(&idx_char) {
+                    if existing_size != size {
+                        return Err(NumRs2Error::DimensionMismatch(format!(
+                            "Index '{}' has inconsistent sizes: {} and {}",
+                            idx_char, existing_size, size
+                        )));
+                    }
+                } else {
+                    index_sizes.insert(idx_char, size);
+                }
+            }
+        }
+    }
+
+    // Determine output shape
+    let output_shape: Vec<usize> = output_indices
+        .iter()
+        .map(|&idx| index_sizes[&idx])
+        .collect();
+
+    // Handle scalar output case
+    let output_shape = if output_shape.is_empty() {
+        vec![1]
+    } else {
+        output_shape
+    };
+
+    // Create output array
+    let mut result = Array::zeros(&output_shape);
+
+    // Compute einsum using nested loops
+    // This is a simple but inefficient implementation
+    // A production implementation would optimize loop order and use blocking
+
+    let total_output_size: usize = output_shape.iter().product();
+
+    for output_idx in 0..total_output_size {
+        // Convert linear index to multi-dimensional indices for output
+        let mut output_multi_idx = vec![0; output_shape.len()];
+        let mut temp = output_idx;
+        for i in (0..output_shape.len()).rev() {
+            output_multi_idx[i] = temp % output_shape[i];
+            temp /= output_shape[i];
+        }
+
+        // Map output indices to their values
+        let mut index_values = std::collections::HashMap::new();
+        for (i, &idx_char) in output_indices.iter().enumerate() {
+            if !output_shape.is_empty() && output_shape[0] != 1 {
+                index_values.insert(idx_char, output_multi_idx[i]);
+            }
+        }
+
+        // Sum over all combinations of summation indices
+        let mut sum = T::zero();
+
+        // Calculate ranges for summation indices
+        let summation_ranges: Vec<usize> = summation_indices
+            .iter()
+            .map(|&idx| index_sizes[&idx])
+            .collect();
+
+        if summation_ranges.is_empty() {
+            // No summation needed, just multiply the elements
+            let mut product = T::one();
+
+            for (op_idx, &operand) in operands.iter().enumerate() {
+                let spec = operand_specs[op_idx];
+                let op_shape = operand.shape();
+
+                // Build indices for this operand
+                let mut op_indices = vec![0; op_shape.len()];
+                for (dim_idx, idx_char) in spec.chars().enumerate() {
+                    if idx_char.is_alphabetic() {
+                        op_indices[dim_idx] = index_values[&idx_char];
+                    }
+                }
+
+                product = product * operand.get(&op_indices)?;
+            }
+
+            sum += product;
+        } else {
+            // Iterate over all combinations of summation indices
+            let total_summation_size: usize = summation_ranges.iter().product();
+
+            for sum_idx in 0..total_summation_size {
+                // Convert linear index to multi-dimensional indices for summation
+                let mut sum_multi_idx = vec![0; summation_ranges.len()];
+                let mut temp = sum_idx;
+                for i in (0..summation_ranges.len()).rev() {
+                    sum_multi_idx[i] = temp % summation_ranges[i];
+                    temp /= summation_ranges[i];
+                }
+
+                // Update index values with summation indices
+                for (i, &idx_char) in summation_indices.iter().enumerate() {
+                    index_values.insert(idx_char, sum_multi_idx[i]);
+                }
+
+                // Compute product for this combination
+                let mut product = T::one();
+
+                for (op_idx, &operand) in operands.iter().enumerate() {
+                    let spec = operand_specs[op_idx];
+                    let op_shape = operand.shape();
+
+                    // Build indices for this operand
+                    let mut op_indices = vec![0; op_shape.len()];
+                    for (dim_idx, idx_char) in spec.chars().enumerate() {
+                        if idx_char.is_alphabetic() {
+                            op_indices[dim_idx] = index_values[&idx_char];
+                        }
+                    }
+
+                    product = product * operand.get(&op_indices)?;
+                }
+
+                sum += product;
+            }
+        }
+
+        // Store result
+        if output_shape[0] == 1 && output_shape.len() == 1 {
+            // Scalar output
+            result.set(&[0], sum)?;
+        } else {
+            result.set(&output_multi_idx, sum)?;
+        }
+    }
+
+    // If output was scalar, reshape to remove the dummy dimension
+    Ok(result)
+}
+
 /// Compute the Kronecker product of two arrays
 ///
 /// The Kronecker product is a matrix operation that takes two matrices A (m×n) and B (p×q)

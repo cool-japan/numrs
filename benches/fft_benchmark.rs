@@ -219,13 +219,13 @@ fn bench_fft_signal_types(c: &mut Criterion) {
     impulse_data[0] = 1.0;
     let impulse_signal = Array::from_vec(impulse_data);
 
-    // 5. Complex exponential
-    let mut complex_exp_data = Vec::with_capacity(size);
-    for i in 0..size {
-        let angle = 2.0 * PI * 10.0 * i as f64 / size as f64;
-        complex_exp_data.push(Complex64::new(angle.cos(), angle.sin()));
-    }
-    let complex_exp_signal = Array::from_vec(complex_exp_data);
+    // 5. Complex exponential - commented out as FFT::fft expects real input
+    // let mut complex_exp_data = Vec::with_capacity(size);
+    // for i in 0..size {
+    //     let angle = 2.0 * PI * 10.0 * i as f64 / size as f64;
+    //     complex_exp_data.push(Complex64::new(angle.cos(), angle.sin()));
+    // }
+    // let complex_exp_signal = Array::from_vec(complex_exp_data);
 
     // Benchmark FFT on different signal types
     group.bench_function("fft_random", |b| {
@@ -242,9 +242,9 @@ fn bench_fft_signal_types(c: &mut Criterion) {
         b.iter(|| black_box(FFT::fft(&impulse_signal)))
     });
 
-    group.bench_function("fft_complex_exp", |b| {
-        b.iter(|| black_box(FFT::fft(&complex_exp_signal)))
-    });
+    // group.bench_function("fft_complex_exp", |b| {
+    //     b.iter(|| black_box(FFT::fft(&complex_exp_signal)))
+    // });
 
     group.finish();
 }

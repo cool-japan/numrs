@@ -453,7 +453,7 @@ impl OptimizedBlas {
     /// Optimized vector dot product with SIMD support
     pub fn dot<T>(x: &Array<T>, y: &Array<T>) -> Result<T>
     where
-        T: Float + Clone + Debug,
+        T: Float + Clone + Debug + 'static,
     {
         let x_shape = x.shape();
         let y_shape = y.shape();
@@ -479,10 +479,35 @@ impl OptimizedBlas {
     /// SIMD-optimized dot product
     fn dot_simd<T>(x: &[T], y: &[T]) -> Result<T>
     where
-        T: Float + Clone,
+        T: Float + Clone + 'static,
     {
-        // For now, fall back to naive implementation
-        // In a full implementation, this would use SIMD intrinsics
+        // Use actual SIMD implementation for supported types
+        #[cfg(target_arch = "x86_64")]
+        {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let f32_x_data: Vec<f32> =
+                    x.iter().map(|&val| val.to_f64().unwrap() as f32).collect();
+                let f32_y_data: Vec<f32> =
+                    y.iter().map(|&val| val.to_f64().unwrap() as f32).collect();
+                let x_array = Array::from_vec(f32_x_data);
+                let y_array = Array::from_vec(f32_y_data);
+
+                use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
+                let result = EnhancedSimdOps::vectorized_dot_f32(&x_array, &y_array)?;
+                return Ok(T::from(result).unwrap());
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let f64_x_data: Vec<f64> = x.iter().map(|&val| val.to_f64().unwrap()).collect();
+                let f64_y_data: Vec<f64> = y.iter().map(|&val| val.to_f64().unwrap()).collect();
+                let x_array = Array::from_vec(f64_x_data);
+                let y_array = Array::from_vec(f64_y_data);
+
+                use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
+                let result = EnhancedSimdOps::vectorized_dot_f64(&x_array, &y_array)?;
+                return Ok(T::from(result).unwrap());
+            }
+        }
+
+        // Fallback to naive implementation for unsupported types/architectures
         Self::dot_naive(x, y)
     }
 

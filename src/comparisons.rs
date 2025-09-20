@@ -1,6 +1,6 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::Float;
+use num_traits::{Float, Zero};
 use std::fmt::Debug;
 
 /// Comparison utilities for NumRS Arrays
@@ -849,6 +849,146 @@ where
     Ok(Array::from_vec(result).reshape(&broadcast_shape))
 }
 
+/// Element-wise logical AND of two arrays
+///
+/// # Parameters
+///
+/// * `x1` - First input array
+/// * `x2` - Second input array
+///
+/// # Returns
+///
+/// Boolean array with the same shape as the inputs
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![true, true, false, false]);
+/// let b = Array::from_vec(vec![true, false, true, false]);
+/// let result = logical_and(&a, &b).unwrap();
+/// assert_eq!(result.to_vec(), vec![true, false, false, false]);
+/// ```
+pub fn logical_and(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
+    // Broadcast arrays to common shape
+    let broadcast_shape = Array::<bool>::broadcast_shape(&x1.shape(), &x2.shape())?;
+    let x1_broadcast = x1.broadcast_to(&broadcast_shape)?;
+    let x2_broadcast = x2.broadcast_to(&broadcast_shape)?;
+
+    // Apply logical AND element-wise
+    let result_data: Vec<bool> = x1_broadcast
+        .to_vec()
+        .iter()
+        .zip(x2_broadcast.to_vec().iter())
+        .map(|(&a, &b)| a && b)
+        .collect();
+
+    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+}
+
+/// Element-wise logical OR of two arrays
+///
+/// # Parameters
+///
+/// * `x1` - First input array
+/// * `x2` - Second input array
+///
+/// # Returns
+///
+/// Boolean array with the same shape as the inputs
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![true, true, false, false]);
+/// let b = Array::from_vec(vec![true, false, true, false]);
+/// let result = logical_or(&a, &b).unwrap();
+/// assert_eq!(result.to_vec(), vec![true, true, true, false]);
+/// ```
+pub fn logical_or(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
+    // Broadcast arrays to common shape
+    let broadcast_shape = Array::<bool>::broadcast_shape(&x1.shape(), &x2.shape())?;
+    let x1_broadcast = x1.broadcast_to(&broadcast_shape)?;
+    let x2_broadcast = x2.broadcast_to(&broadcast_shape)?;
+
+    // Apply logical OR element-wise
+    let result_data: Vec<bool> = x1_broadcast
+        .to_vec()
+        .iter()
+        .zip(x2_broadcast.to_vec().iter())
+        .map(|(&a, &b)| a || b)
+        .collect();
+
+    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+}
+
+/// Element-wise logical NOT of an array
+///
+/// # Parameters
+///
+/// * `x` - Input array
+///
+/// # Returns
+///
+/// Boolean array with the same shape as the input
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![true, false, true, false]);
+/// let result = logical_not(&a).unwrap();
+/// assert_eq!(result.to_vec(), vec![false, true, false, true]);
+/// ```
+pub fn logical_not(x: &Array<bool>) -> Result<Array<bool>> {
+    // Apply logical NOT element-wise
+    let result_data: Vec<bool> = x.to_vec().iter().map(|&a| !a).collect();
+
+    Ok(Array::from_vec(result_data).reshape(&x.shape()))
+}
+
+/// Element-wise logical XOR of two arrays
+///
+/// # Parameters
+///
+/// * `x1` - First input array
+/// * `x2` - Second input array
+///
+/// # Returns
+///
+/// Boolean array with the same shape as the inputs
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let a = Array::from_vec(vec![true, true, false, false]);
+/// let b = Array::from_vec(vec![true, false, true, false]);
+/// let result = logical_xor(&a, &b).unwrap();
+/// assert_eq!(result.to_vec(), vec![false, true, true, false]);
+/// ```
+pub fn logical_xor(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
+    // Broadcast arrays to common shape
+    let broadcast_shape = Array::<bool>::broadcast_shape(&x1.shape(), &x2.shape())?;
+    let x1_broadcast = x1.broadcast_to(&broadcast_shape)?;
+    let x2_broadcast = x2.broadcast_to(&broadcast_shape)?;
+
+    // Apply logical XOR element-wise
+    let result_data: Vec<bool> = x1_broadcast
+        .to_vec()
+        .iter()
+        .zip(x2_broadcast.to_vec().iter())
+        .map(|(&a, &b)| a ^ b)
+        .collect();
+
+    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -970,4 +1110,127 @@ mod tests {
         let result = isclose_array(&a, &b, 1e-10, 0.0).unwrap();
         assert_eq!(result.to_vec(), vec![false, false, false]);
     }
+}
+
+/// Count the number of non-zero values in the array
+///
+/// # Parameters
+///
+/// * `a` - Input array
+/// * `axis` - If None, count over the flattened array. If Some(axis), count along the specified axis.
+///
+/// # Returns
+///
+/// Number of non-zero values as a scalar or array
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::comparisons::count_nonzero;
+///
+/// let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
+/// assert_eq!(count_nonzero(&a, None).unwrap().to_vec()[0], 3);
+///
+/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
+/// // Count over all elements
+/// assert_eq!(count_nonzero(&b, None).unwrap().to_vec()[0], 3);
+///
+/// // Count along axis 0 (columns)
+/// let c = count_nonzero(&b, Some(0)).unwrap();
+/// assert_eq!(c.to_vec(), vec![1, 1, 1]);
+///
+/// // Count along axis 1 (rows)  
+/// let d = count_nonzero(&b, Some(1)).unwrap();
+/// assert_eq!(d.to_vec(), vec![1, 2]);
+/// ```
+pub fn count_nonzero<T>(a: &Array<T>, axis: Option<usize>) -> Result<Array<usize>>
+where
+    T: Clone + Zero + PartialEq,
+{
+    if let Some(ax) = axis {
+        if ax >= a.ndim() {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "axis {} is out of bounds for array of dimension {}",
+                ax,
+                a.ndim()
+            )));
+        }
+
+        // Count along specific axis
+        let shape = a.shape();
+        let mut new_shape = shape.clone();
+        new_shape.remove(ax);
+
+        if new_shape.is_empty() {
+            new_shape = vec![1];
+        }
+
+        let axis_size = shape[ax];
+        let stride_before: usize = shape[..ax].iter().product();
+        let stride_after: usize = shape[ax + 1..].iter().product();
+        let total_size = stride_before * stride_after;
+
+        let mut counts = vec![0usize; total_size];
+        let data = a.to_vec();
+
+        for i in 0..stride_before {
+            for j in 0..axis_size {
+                for k in 0..stride_after {
+                    let idx = i * axis_size * stride_after + j * stride_after + k;
+                    let out_idx = i * stride_after + k;
+                    if data[idx] != T::zero() {
+                        counts[out_idx] += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(Array::from_vec(counts).reshape(&new_shape))
+    } else {
+        // Count over flattened array
+        let count = a.to_vec().into_iter().filter(|x| *x != T::zero()).count();
+        Ok(Array::from_vec(vec![count]))
+    }
+}
+
+/// Return indices that are non-zero in the flattened version of the array
+///
+/// This is equivalent to calling nonzero(a.ravel()) and returning only the first element
+/// of the tuple.
+///
+/// # Parameters
+///
+/// * `a` - Input array
+///
+/// # Returns
+///
+/// Array of indices of non-zero elements in the flattened array
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::comparisons::flatnonzero;
+///
+/// let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
+/// let indices = flatnonzero(&a).unwrap();
+/// assert_eq!(indices.to_vec(), vec![1, 3, 5]);
+///
+/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
+/// let indices = flatnonzero(&b).unwrap();
+/// assert_eq!(indices.to_vec(), vec![1, 3, 5]);
+/// ```
+pub fn flatnonzero<T>(a: &Array<T>) -> Result<Array<usize>>
+where
+    T: Clone + Zero + PartialEq,
+{
+    let data = a.to_vec();
+    let indices: Vec<usize> = data
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, val)| if val != T::zero() { Some(idx) } else { None })
+        .collect();
+
+    Ok(Array::from_vec(indices))
 }

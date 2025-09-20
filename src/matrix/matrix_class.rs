@@ -471,3 +471,195 @@ where
         Ok(())
     }
 }
+
+/// Create a matrix from an array-like object
+///
+/// This function is equivalent to NumPy's `matrix()` constructor. It converts various
+/// input types into a Matrix instance. The primary purpose is to provide matrix
+/// multiplication behavior (using `*` operator) instead of element-wise multiplication.
+///
+/// # Arguments
+///
+/// * `data` - Input data that can be converted to a matrix. Can be:
+///   - A 2D Array
+///   - A 1D Array (converted to row vector)
+///   - A scalar (converted to 1x1 matrix)
+///   - A nested vector
+///   - An existing Matrix (passed through)
+///
+/// # Returns
+///
+/// A Matrix instance
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::matrix::matrix;
+///
+/// // From 2D array
+/// let arr = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let mat = matrix(arr).unwrap();
+///
+/// // From 1D array (becomes row vector)
+/// let arr_1d = Array::from_vec(vec![1, 2, 3]);
+/// let mat_1d = matrix(arr_1d).unwrap();
+/// assert_eq!(mat_1d.shape(), (1, 3));
+///
+/// // From nested vector
+/// let nested = vec![vec![1, 2], vec![3, 4]];
+/// let mat_nested = matrix_from_nested(nested).unwrap();
+/// assert_eq!(mat_nested.shape(), (2, 2));
+/// ```
+pub fn matrix<T>(data: Array<T>) -> Result<Matrix<T>>
+where
+    T: Clone + Zero + One + PartialEq + Default + PartialOrd,
+{
+    match data.ndim() {
+        0 => {
+            // Scalar: convert to 1x1 matrix
+            let scalar_value = data.get(&[]).unwrap().clone();
+            let scalar_array = Array::from_vec(vec![scalar_value]).reshape(&[1, 1]);
+            Matrix::new(scalar_array)
+        }
+        1 => {
+            // 1D array: convert to row vector (1 x n)
+            let shape = data.shape();
+            let row_vector = data.reshape(&[1, shape[0]]);
+            Matrix::new(row_vector)
+        }
+        2 => {
+            // 2D array: convert directly
+            Matrix::new(data)
+        }
+        _ => {
+            // Higher dimensions: flatten to 2D
+            // NumPy's matrix() with >2D arrays flattens them
+            let total_size = data.size();
+            let flattened = data.flatten(None);
+            let matrix_2d = flattened.reshape(&[1, total_size]);
+            Matrix::new(matrix_2d)
+        }
+    }
+}
+
+/// Create a matrix from a nested vector
+///
+/// Helper function to create a matrix from nested vectors, which is a common
+/// use case for matrix creation.
+///
+/// # Arguments
+///
+/// * `nested_vec` - A nested vector representing matrix rows
+///
+/// # Returns
+///
+/// A Matrix instance
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::matrix::matrix_from_nested;
+///
+/// let data = vec![
+///     vec![1, 2, 3],
+///     vec![4, 5, 6],
+/// ];
+/// let mat = matrix_from_nested(data).unwrap();
+/// assert_eq!(mat.shape(), (2, 3));
+/// ```
+pub fn matrix_from_nested<T>(nested_vec: Vec<Vec<T>>) -> Result<Matrix<T>>
+where
+    T: Clone + Zero + One + PartialEq + Default + PartialOrd,
+{
+    Matrix::from_nested_vec(nested_vec)
+}
+
+/// Create a matrix from a scalar value
+///
+/// Creates a 1x1 matrix containing the scalar value.
+///
+/// # Arguments
+///
+/// * `scalar` - The scalar value
+///
+/// # Returns
+///
+/// A 1x1 Matrix instance
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::matrix::matrix_from_scalar;
+///
+/// let mat = matrix_from_scalar(42);
+/// assert_eq!(mat.shape(), (1, 1));
+/// assert_eq!(mat.get(0, 0).unwrap(), 42);
+/// ```
+pub fn matrix_from_scalar<T>(scalar: T) -> Matrix<T>
+where
+    T: Clone + Zero + One + PartialEq + Default + PartialOrd,
+{
+    let scalar_array = Array::from_vec(vec![scalar]).reshape(&[1, 1]);
+    Matrix::new(scalar_array).unwrap()
+}
+
+/// Convert input to a matrix (alias for `matrix()`)
+///
+/// This function is equivalent to NumPy's `asmatrix()` function. It converts
+/// various input types to a Matrix instance. This is an alias for the `matrix()`
+/// function to provide NumPy compatibility.
+///
+/// # Arguments
+///
+/// * `data` - Input data to convert to a matrix
+///
+/// # Returns
+///
+/// A Matrix instance
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::matrix::asmatrix;
+///
+/// let arr = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+/// let mat = asmatrix(arr).unwrap();
+/// assert_eq!(mat.shape(), (2, 2));
+/// ```
+pub fn asmatrix<T>(data: Array<T>) -> Result<Matrix<T>>
+where
+    T: Clone + Zero + One + PartialEq + Default + PartialOrd,
+{
+    matrix(data)
+}
+
+/// Convert input to a matrix from nested vector (alias for `matrix_from_nested()`)
+///
+/// This provides an alternative interface for `asmatrix()` when working with
+/// nested vectors.
+///
+/// # Arguments
+///
+/// * `nested_vec` - Nested vector to convert to a matrix
+///
+/// # Returns
+///
+/// A Matrix instance
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::matrix::asmatrix_from_nested;
+///
+/// let data = vec![vec![1, 2], vec![3, 4]];
+/// let mat = asmatrix_from_nested(data).unwrap();
+/// assert_eq!(mat.shape(), (2, 2));
+/// ```
+pub fn asmatrix_from_nested<T>(nested_vec: Vec<Vec<T>>) -> Result<Matrix<T>>
+where
+    T: Clone + Zero + One + PartialEq + Default + PartialOrd,
+{
+    matrix_from_nested(nested_vec)
+}

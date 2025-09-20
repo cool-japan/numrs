@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **🚀 Version 0.1.0-alpha.5** - This is an alpha release focused on core functionality and API stability. While the library is functional and well-tested, the API may still evolve before the 1.0 release.
+> **🚀 Version 0.1.0-beta.1** - This beta release includes significant performance optimizations through SciRS2-Core integration, providing SIMD acceleration, parallel processing, and adaptive algorithm selection. The API is stabilizing as we approach the 1.0 release.
 
 ## ✨ Architecture Highlights
 
@@ -31,8 +31,8 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
 - **Polynomial Functions**: Interpolation, evaluation, and arithmetic operations
 - **Fast Fourier Transform**: Optimized FFT implementation with 1D/2D transforms, real FFT specialization, frequency shifting, and various windowing functions
 - **Sparse Arrays**: Memory-efficient representation for sparse data
-- **SIMD Acceleration**: Vectorized math operations using SIMD instructions
-- **Parallel Computing**: Multi-threaded execution with Rayon
+- **SIMD Acceleration**: Enhanced vectorized operations via SciRS2-Core with AVX2/AVX512/NEON support
+- **Parallel Computing**: Advanced multi-threaded execution with adaptive chunking and work-stealing
 - **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
 - **Mathematical Functions**: Comprehensive set of element-wise mathematical operations
 - **Statistical Analysis**: Descriptive statistics, probability distributions, and more
@@ -54,7 +54,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-alpha.5", features = ["scirs"] }
+numrs2 = { version = "0.1.0-beta.1", features = ["scirs"] }
 ```
 
 Or, when building:
@@ -62,6 +62,18 @@ Or, when building:
 ```bash
 cargo build --features scirs
 ```
+
+### 🚀 Performance Optimizations (New in 0.1.0-beta.1)
+
+NumRS2 now leverages SciRS2-Core for cutting-edge performance optimizations:
+
+- **Unified SIMD Operations**: All SIMD code goes through SciRS2-Core's SimdUnifiedOps trait
+- **Adaptive Algorithm Selection**: AutoOptimizer automatically chooses between scalar, SIMD, or GPU implementations
+- **Platform Detection**: Automatic detection of AVX2, AVX512, NEON, and GPU capabilities
+- **Parallel Operations**: Optimized parallel processing with intelligent work distribution
+- **Memory-Efficient Chunking**: Process large datasets without memory bottlenecks
+
+See the [optimization example](examples/scirs2_optimization.rs) for usage details.
 
 ### SciRS2 Integration
 
@@ -176,7 +188,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-alpha.5"
+numrs2 = "0.1.0-beta.1"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:

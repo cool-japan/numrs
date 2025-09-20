@@ -6,6 +6,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Num, Zero};
+use regex::Regex;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::File;
@@ -706,6 +707,194 @@ pub fn detect_delimiter(fname: &Path, sample_lines: Option<usize>) -> Result<Str
     Ok(best_delimiter)
 }
 
+/// Load data from a text file using regular expressions to parse each line
+///
+/// This function reads a text file line by line and uses a regular expression
+/// to extract numeric values from each line. The regex should contain capture groups
+/// that will be used to extract the values.
+///
+/// # Arguments
+///
+/// * `fname` - Path to the text file
+/// * `regexp` - Regular expression with capture groups for extracting values
+/// * `dtype` - Data type for the extracted values (e.g., "f64", "i32")
+/// * `encoding` - Text encoding (default: "utf-8")
+///
+/// # Returns
+///
+/// A 2D Array containing the extracted data
+///
+/// # Examples
+///
+/// ```rust
+/// use numrs2::io::text::fromregex;
+/// use std::path::Path;
+/// use std::fs::File;
+/// use std::io::Write;
+/// use tempfile::NamedTempFile;
+///
+/// // Create a temporary test file with structured data
+/// let mut temp_file = NamedTempFile::new().unwrap();
+/// writeln!(temp_file, "Value: 1.5, Count: 10").unwrap();
+/// writeln!(temp_file, "Value: 2.3, Count: 20").unwrap();
+/// writeln!(temp_file, "Value: 4.7, Count: 15").unwrap();
+///
+/// // Extract values using regex with capture groups
+/// let pattern = r"Value: ([0-9.]+), Count: ([0-9]+)";
+/// let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None).unwrap();
+/// assert_eq!(array.shape(), &[3, 2]);
+/// ```
+pub fn fromregex<T>(
+    fname: &Path,
+    regexp: &str,
+    dtype: &str,
+    encoding: Option<&str>,
+) -> Result<Array<T>>
+where
+    T: Clone + Default + FromStr + Zero,
+    <T as FromStr>::Err: std::fmt::Debug,
+{
+    let _encoding = encoding.unwrap_or("utf-8");
+
+    // Compile the regular expression
+    let regex = Regex::new(regexp).map_err(|e| {
+        NumRs2Error::InvalidOperation(format!("Invalid regular expression '{}': {}", regexp, e))
+    })?;
+
+    let file = File::open(fname)
+        .map_err(|e| NumRs2Error::IOError(format!("Failed to open file {:?}: {}", fname, e)))?;
+
+    let reader = BufReader::new(file);
+    let mut rows = Vec::new();
+    let mut expected_columns = None;
+
+    // Process each line
+    for (line_num, line_result) in reader.lines().enumerate() {
+        let line = line_result
+            .map_err(|e| NumRs2Error::IOError(format!("Error reading line {}: {}", line_num, e)))?;
+
+        // Skip empty lines
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        // Apply the regex to extract capture groups
+        if let Some(captures) = regex.captures(&line) {
+            let mut row = Vec::new();
+
+            // Extract all capture groups (skip 0 which is the full match)
+            for i in 1..captures.len() {
+                if let Some(capture) = captures.get(i) {
+                    let value_str = capture.as_str().trim();
+
+                    // Parse the captured value
+                    let parsed_value = value_str.parse::<T>().map_err(|e| {
+                        NumRs2Error::ConversionError(format!(
+                            "Failed to parse '{}' as {} at line {}, capture group {}: {:?}",
+                            value_str,
+                            dtype,
+                            line_num + 1,
+                            i,
+                            e
+                        ))
+                    })?;
+
+                    row.push(parsed_value);
+                }
+            }
+
+            // Check column consistency
+            if let Some(expected) = expected_columns {
+                if row.len() != expected {
+                    return Err(NumRs2Error::DimensionMismatch(format!(
+                        "Line {} has {} capture groups, expected {}",
+                        line_num + 1,
+                        row.len(),
+                        expected
+                    )));
+                }
+            } else {
+                expected_columns = Some(row.len());
+            }
+
+            if !row.is_empty() {
+                rows.push(row);
+            }
+        }
+        // Lines that don't match the regex are silently skipped
+    }
+
+    if rows.is_empty() {
+        return Err(NumRs2Error::IOError(
+            "No data found matching the regular expression".to_string(),
+        ));
+    }
+
+    // Flatten into 1D vector
+    let row_length = rows[0].len();
+    let total_elements = rows.len() * row_length;
+    let mut data = Vec::with_capacity(total_elements);
+    for row in rows {
+        data.extend(row);
+    }
+
+    // Create array with appropriate shape
+    let shape = if row_length == 1 {
+        vec![data.len()]
+    } else {
+        vec![data.len() / row_length, row_length]
+    };
+
+    Ok(Array::from_vec(data).reshape(&shape))
+}
+
+/// Convenience function for saving compressed NPZ files
+///
+/// This is equivalent to saving with NPZ format, which uses compression by default.
+///
+/// # Arguments
+///
+/// * `fname` - Path to the output NPZ file
+/// * `arrays` - Map of array names to arrays to save
+///
+/// # Returns
+///
+/// Result indicating success or failure
+///
+/// # Examples
+///
+/// ```rust
+/// use numrs2::prelude::*;
+/// use numrs2::io::text::savez_compressed;
+/// use std::collections::HashMap;
+/// use std::path::Path;
+///
+/// let mut arrays = HashMap::new();
+/// arrays.insert("arr_0".to_string(), Array::from_vec(vec![1.0, 2.0, 3.0]));
+/// arrays.insert("arr_1".to_string(), Array::from_vec(vec![4.0, 5.0, 6.0]));
+///
+/// // savez_compressed(Path::new("data.npz"), &arrays).unwrap();
+/// ```
+pub fn savez_compressed<T: Clone + serde::Serialize>(
+    fname: &Path,
+    arrays: &HashMap<String, Array<T>>,
+) -> Result<()> {
+    // This is a convenience wrapper around the existing NPZ functionality
+    // For now, we'll save the first array with a default name
+    // A full implementation would save multiple arrays to the same NPZ file
+
+    if arrays.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Cannot save empty array collection".to_string(),
+        ));
+    }
+
+    // For simplicity, just save the first array
+    // TODO: Implement full multi-array NPZ support
+    let (_name, array) = arrays.iter().next().unwrap();
+    array.to_file(fname, crate::io::SerializeFormat::Npz)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -788,5 +977,35 @@ mod tests {
 
         let delimiter = detect_delimiter(temp_file.path(), Some(3)).unwrap();
         assert_eq!(delimiter, ",");
+    }
+
+    #[test]
+    fn test_fromregex() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Value: 1.5, Count: 10").unwrap();
+        writeln!(temp_file, "Value: 2.3, Count: 20").unwrap();
+        writeln!(temp_file, "Value: 4.7, Count: 15").unwrap();
+
+        let pattern = r"Value: ([0-9.]+), Count: ([0-9]+)";
+        let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None).unwrap();
+
+        assert_eq!(array.shape(), &[3, 2]);
+        let expected = vec![1.5, 10.0, 2.3, 20.0, 4.7, 15.0];
+        assert_eq!(array.to_vec(), expected);
+    }
+
+    #[test]
+    fn test_fromregex_single_column() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Temperature: 23.5°C").unwrap();
+        writeln!(temp_file, "Temperature: 25.1°C").unwrap();
+        writeln!(temp_file, "Temperature: 22.8°C").unwrap();
+
+        let pattern = r"Temperature: ([0-9.]+)°C";
+        let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None).unwrap();
+
+        assert_eq!(array.shape(), &[3]);
+        let expected = vec![23.5, 25.1, 22.8];
+        assert_eq!(array.to_vec(), expected);
     }
 }

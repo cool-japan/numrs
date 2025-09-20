@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 use numrs2::linalg;
 #[cfg(feature = "lapack")]
 use numrs2::linalg::matrix_ops::det;
@@ -134,10 +135,10 @@ fn main() -> Result<()> {
 
     // Cholesky decomposition
     // Create a symmetric positive definite matrix
-    let spd = Array::from_vec(vec![4.0, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
+    let _spd = Array::from_vec(vec![4.0, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     {
-        let l = linalg::cholesky(&spd)?;
+        let l = linalg::cholesky(&_spd)?;
         println!("\nCholesky decomposition (L):");
         println!("{}", l);
     }
@@ -149,7 +150,7 @@ fn main() -> Result<()> {
     // Pivoted Cholesky for improved numerical stability
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     {
-        let (l_piv, p) = matrix_decomp::pivoted_cholesky(&spd)?;
+        let (l_piv, p) = matrix_decomp::pivoted_cholesky(&_spd)?;
         println!("\nPivoted Cholesky decomposition:");
         println!("L = {}", l_piv);
         println!("Permutation = {}", p);

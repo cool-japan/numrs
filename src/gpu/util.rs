@@ -29,7 +29,7 @@ pub fn is_gpu_available() -> bool {
         .enable_all()
         .build();
 
-    if let Err(_) = rt {
+    if rt.is_err() {
         return false;
     }
 

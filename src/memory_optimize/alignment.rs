@@ -67,6 +67,7 @@ pub fn align_data<T: Copy>(data: &mut [T], strategy: AlignmentStrategy) {
 }
 
 /// Get the appropriate alignment for SIMD operations based on runtime CPU detection
+#[allow(clippy::nonminimal_bool)]
 fn get_simd_alignment<T>() -> usize {
     let type_size = mem::size_of::<T>();
 

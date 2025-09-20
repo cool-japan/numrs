@@ -552,12 +552,415 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
 
     // Calculate workgroup count
     let total_threads = a.size() as u32;
-    let workgroup_count = (total_threads + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+    let workgroup_count = total_threads.div_ceil(WORKGROUP_SIZE);
 
     // Run the compute pass
     context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));
 
     Ok(result)
+}
+
+/// Enumerates the types of reduction operations
+#[derive(Clone, Copy)]
+enum ReductionOp {
+    Sum = 0,
+    Mean = 1,
+    Max = 2,
+    Min = 3,
+}
+
+/// Computes the sum of all elements in a GPU array (f32 version)
+pub fn sum_f32(a: &GpuArray<f32>) -> Result<f32> {
+    reduction_op_f32(a, ReductionOp::Sum)
+}
+
+/// Computes the sum of all elements in a GPU array (f64 version)
+pub fn sum_f64(a: &GpuArray<f64>) -> Result<f64> {
+    reduction_op_f64(a, ReductionOp::Sum)
+}
+
+/// Computes the mean of all elements in a GPU array (f32 version)
+pub fn mean_f32(a: &GpuArray<f32>) -> Result<f32> {
+    reduction_op_f32(a, ReductionOp::Mean)
+}
+
+/// Computes the mean of all elements in a GPU array (f64 version)
+pub fn mean_f64(a: &GpuArray<f64>) -> Result<f64> {
+    reduction_op_f64(a, ReductionOp::Mean)
+}
+
+/// Computes the maximum value in a GPU array (f32 version)
+pub fn max_f32(a: &GpuArray<f32>) -> Result<f32> {
+    reduction_op_f32(a, ReductionOp::Max)
+}
+
+/// Computes the maximum value in a GPU array (f64 version)
+pub fn max_f64(a: &GpuArray<f64>) -> Result<f64> {
+    reduction_op_f64(a, ReductionOp::Max)
+}
+
+/// Computes the minimum value in a GPU array (f32 version)
+pub fn min_f32(a: &GpuArray<f32>) -> Result<f32> {
+    reduction_op_f32(a, ReductionOp::Min)
+}
+
+/// Computes the minimum value in a GPU array (f64 version)
+pub fn min_f64(a: &GpuArray<f64>) -> Result<f64> {
+    reduction_op_f64(a, ReductionOp::Min)
+}
+
+/// Helper function for f32 reduction operations
+fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
+    let context = a.context().clone();
+    let total_elements = a.size() as u32;
+
+    // Calculate number of workgroups needed
+    let workgroup_count = (total_elements + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+
+    // Create output buffer for partial results (one per workgroup)
+    let partial_results_size = workgroup_count as usize * std::mem::size_of::<f32>();
+    let partial_results_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Reduction Partial Results"),
+        size: partial_results_size as u64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+
+    // Create bind group layout
+    let bind_group_layout =
+        context
+            .device()
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("NumRS2 Reduction Bind Group Layout"),
+                entries: &[
+                    // Input array
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Output partial results
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Parameters (operation type, array size)
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+    let shader = context.reduction_f32_shader();
+
+    // Create pipeline
+    let pipeline_layout =
+        context
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("NumRS2 Reduction Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+    let pipeline = context
+        .device()
+        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("NumRS2 Reduction Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: shader,
+            entry_point: "reduction",
+        });
+
+    // Create uniform buffer with operation type and size
+    let params = [op as u32, total_elements, 0, 0];
+
+    let params_buffer = context
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Reduction Op Params"),
+            contents: bytemuck::cast_slice(&params),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+    // Create bind group
+    let bind_group = context
+        .device()
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("NumRS2 Reduction Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: a.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: partial_results_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+    // Run the compute pass
+    context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));
+
+    // Read back partial results
+    let staging_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Reduction Staging Buffer"),
+        size: partial_results_size as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+
+    // Copy from GPU to staging buffer
+    let mut encoder = context
+        .device()
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Reduction Copy Encoder"),
+        });
+
+    encoder.copy_buffer_to_buffer(
+        &partial_results_buffer,
+        0,
+        &staging_buffer,
+        0,
+        partial_results_size as u64,
+    );
+
+    context.queue().submit(Some(encoder.finish()));
+
+    // Map the staging buffer and read results
+    let buffer_slice = staging_buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+        tx.send(result).unwrap();
+    });
+
+    context.device().poll(wgpu::Maintain::Wait);
+    rx.recv()
+        .unwrap()
+        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
+
+    let data = buffer_slice.get_mapped_range();
+    let partial_results: &[f32] = bytemuck::cast_slice(&data);
+
+    // Perform final reduction on CPU
+    let final_result = match op {
+        ReductionOp::Sum => partial_results.iter().sum(),
+        ReductionOp::Mean => partial_results.iter().sum::<f32>() / total_elements as f32,
+        ReductionOp::Max => partial_results
+            .iter()
+            .cloned()
+            .fold(f32::NEG_INFINITY, f32::max),
+        ReductionOp::Min => partial_results
+            .iter()
+            .cloned()
+            .fold(f32::INFINITY, f32::min),
+    };
+
+    drop(data);
+    staging_buffer.unmap();
+
+    Ok(final_result)
+}
+
+/// Helper function for f64 reduction operations
+fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
+    let context = a.context().clone();
+    let total_elements = a.size() as u32;
+
+    // Calculate number of workgroups needed
+    let workgroup_count = (total_elements + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+
+    // Create output buffer for partial results (one per workgroup)
+    let partial_results_size = workgroup_count as usize * std::mem::size_of::<f64>();
+    let partial_results_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Reduction Partial Results"),
+        size: partial_results_size as u64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+
+    // Create bind group layout
+    let bind_group_layout =
+        context
+            .device()
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("NumRS2 Reduction Bind Group Layout"),
+                entries: &[
+                    // Input array
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Output partial results
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Parameters (operation type, array size)
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+    let shader = context.reduction_f64_shader();
+
+    // Create pipeline
+    let pipeline_layout =
+        context
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("NumRS2 Reduction Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+    let pipeline = context
+        .device()
+        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("NumRS2 Reduction Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: shader,
+            entry_point: "reduction",
+        });
+
+    // Create uniform buffer with operation type and size
+    let params = [op as u32, total_elements, 0, 0];
+
+    let params_buffer = context
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Reduction Op Params"),
+            contents: bytemuck::cast_slice(&params),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+    // Create bind group
+    let bind_group = context
+        .device()
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("NumRS2 Reduction Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: a.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: partial_results_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+    // Run the compute pass
+    context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));
+
+    // Read back partial results
+    let staging_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Reduction Staging Buffer"),
+        size: partial_results_size as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+
+    // Copy from GPU to staging buffer
+    let mut encoder = context
+        .device()
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Reduction Copy Encoder"),
+        });
+
+    encoder.copy_buffer_to_buffer(
+        &partial_results_buffer,
+        0,
+        &staging_buffer,
+        0,
+        partial_results_size as u64,
+    );
+
+    context.queue().submit(Some(encoder.finish()));
+
+    // Map the staging buffer and read results
+    let buffer_slice = staging_buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+        tx.send(result).unwrap();
+    });
+
+    context.device().poll(wgpu::Maintain::Wait);
+    rx.recv()
+        .unwrap()
+        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
+
+    let data = buffer_slice.get_mapped_range();
+    let partial_results: &[f64] = bytemuck::cast_slice(&data);
+
+    // Perform final reduction on CPU
+    let final_result = match op {
+        ReductionOp::Sum => partial_results.iter().sum(),
+        ReductionOp::Mean => partial_results.iter().sum::<f64>() / total_elements as f64,
+        ReductionOp::Max => partial_results
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max),
+        ReductionOp::Min => partial_results
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, f64::min),
+    };
+
+    drop(data);
+    staging_buffer.unmap();
+
+    Ok(final_result)
 }
 
 /// Helper function for element-wise unary operations
@@ -673,7 +1076,7 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
 
     // Calculate workgroup count
     let total_threads = a.size() as u32;
-    let workgroup_count = (total_threads + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+    let workgroup_count = total_threads.div_ceil(WORKGROUP_SIZE);
 
     // Run the compute pass
     context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));

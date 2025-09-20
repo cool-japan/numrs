@@ -176,3 +176,210 @@ pub fn fast_sum<T: Float + Send + Sync>(array: &Array<T>) -> T {
     let data = array.to_vec();
     data.par_iter().cloned().reduce(|| T::zero(), |a, b| a + b)
 }
+
+/// Check if a value is a scalar (0-dimensional)
+///
+/// # Arguments
+///
+/// * `value` - Any value to check
+///
+/// # Returns
+///
+/// True if the value is a scalar, false otherwise
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::util::isscalar;
+///
+/// assert!(isscalar(&5.0));
+/// assert!(isscalar(&42));
+/// assert!(!isscalar(&Array::from_vec(vec![1, 2, 3])));
+/// ```
+pub fn isscalar<T>(_value: &T) -> bool {
+    // In NumPy, a scalar is a 0-dimensional value
+    // For Rust, we consider primitive types as scalars
+    std::mem::size_of::<T>() <= 16 && !std::any::type_name::<T>().starts_with("numrs2::")
+}
+
+/// Check if a given array is a scalar (0-dimensional array)
+///
+/// # Arguments
+///
+/// * `array` - Array to check
+///
+/// # Returns
+///
+/// True if the array is 0-dimensional, false otherwise
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::util::isscalar_array;
+///
+/// let scalar_array = Array::from_vec(vec![42.0]).reshape(&[]);
+/// let vector_array = Array::from_vec(vec![1.0, 2.0, 3.0]);
+///
+/// assert!(isscalar_array(&scalar_array));
+/// assert!(!isscalar_array(&vector_array));
+/// ```
+pub fn isscalar_array<T: Clone>(array: &Array<T>) -> bool {
+    array.ndim() == 0
+}
+
+/// Check if a data type can be cast to another data type
+///
+/// # Arguments
+///
+/// * `from_type` - Source type name
+/// * `to_type` - Target type name
+/// * `casting` - Casting rule ("no", "equiv", "safe", "same_kind", "unsafe")
+///
+/// # Returns
+///
+/// True if the cast is allowed under the given casting rule, false otherwise
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::util::can_cast;
+///
+/// assert!(can_cast("i32", "f64", "safe"));
+/// assert!(!can_cast("f64", "i32", "safe"));
+/// assert!(can_cast("f64", "i32", "unsafe"));
+/// ```
+pub fn can_cast(from_type: &str, to_type: &str, casting: &str) -> bool {
+    match casting {
+        "no" => from_type == to_type,
+        "equiv" => from_type == to_type,
+        "safe" => {
+            // Define safe casting rules
+            matches!(
+                (from_type, to_type),
+                ("i8", "i16" | "i32" | "i64" | "f32" | "f64")
+                    | ("i16", "i32" | "i64" | "f32" | "f64")
+                    | ("i32", "i64" | "f64")
+                    | ("i64", "f64")
+                    | (
+                        "u8",
+                        "u16" | "u32" | "u64" | "i16" | "i32" | "i64" | "f32" | "f64"
+                    )
+                    | ("u16", "u32" | "u64" | "i32" | "i64" | "f32" | "f64")
+                    | ("u32", "u64" | "i64" | "f64")
+                    | ("u64", "f64")
+                    | ("f32", "f64")
+            ) || from_type == to_type
+        }
+        "same_kind" => {
+            // Allow within same kind (int->int, float->float, etc.)
+            let from_kind = get_type_kind(from_type);
+            let to_kind = get_type_kind(to_type);
+            from_kind == to_kind || can_cast(from_type, to_type, "safe")
+        }
+        "unsafe" => true, // Allow all casts
+        _ => false,
+    }
+}
+
+/// Get the kind of a type (integer, float, complex, etc.)
+fn get_type_kind(type_name: &str) -> &str {
+    match type_name {
+        "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" => "integer",
+        "f32" | "f64" => "float",
+        "bool" => "bool",
+        _ => "other",
+    }
+}
+
+/// Find the common type that can represent all input types
+///
+/// # Arguments
+///
+/// * `types` - Slice of type names
+///
+/// # Returns
+///
+/// The common type name that can represent all input types
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::util::common_type;
+///
+/// assert_eq!(common_type(&["i32", "f32"]), "f32");
+/// assert_eq!(common_type(&["i32", "i64"]), "i64");
+/// assert_eq!(common_type(&["f32", "f64"]), "f64");
+/// ```
+pub fn common_type(types: &[&str]) -> &'static str {
+    if types.is_empty() {
+        return "f64"; // Default
+    }
+
+    let mut result = find_common_type_static(types[0]);
+    for &type_name in &types[1..] {
+        result = find_common_type(result, type_name);
+    }
+    result
+}
+
+/// Find the common type between two types
+fn find_common_type(type1: &str, type2: &str) -> &'static str {
+    if type1 == type2 {
+        return find_common_type_static(type1);
+    }
+
+    // Type promotion hierarchy
+    let promotion_order = [
+        "bool", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64",
+    ];
+
+    let pos1 = promotion_order.iter().position(|&x| x == type1);
+    let pos2 = promotion_order.iter().position(|&x| x == type2);
+
+    match (pos1, pos2) {
+        (Some(p1), Some(p2)) => promotion_order[p1.max(p2)],
+        _ => "f64", // Default to f64 for unknown types
+    }
+}
+
+/// Convert a type name to static string
+fn find_common_type_static(type_name: &str) -> &'static str {
+    match type_name {
+        "bool" => "bool",
+        "i8" => "i8",
+        "u8" => "u8",
+        "i16" => "i16",
+        "u16" => "u16",
+        "i32" => "i32",
+        "u32" => "u32",
+        "i64" => "i64",
+        "u64" => "u64",
+        "f32" => "f32",
+        "f64" => "f64",
+        _ => "f64",
+    }
+}
+
+/// Determine the result type of an operation on given types
+///
+/// # Arguments
+///
+/// * `types` - Slice of type names involved in the operation
+///
+/// # Returns
+///
+/// The result type name
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::util::result_type;
+///
+/// assert_eq!(result_type(&["i32", "f32"]), "f32");
+/// assert_eq!(result_type(&["i32", "i64"]), "i64");
+/// ```
+pub fn result_type(types: &[&str]) -> &'static str {
+    common_type(types)
+}
