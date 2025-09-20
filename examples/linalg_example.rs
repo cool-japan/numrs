@@ -103,7 +103,7 @@ fn main() -> Result<()> {
     );
     println!(
         "Is well-conditioned: {}",
-        well_conditioned.is_well_conditioned().unwrap_or(false)
+        well_conditioned.is_well_conditioned()
     );
 
     // SVD decomposition
@@ -186,7 +186,7 @@ fn main() -> Result<()> {
     println!("Condition number: {}", cond_hilbert);
     println!(
         "Is well-conditioned: {}",
-        hilbert.is_well_conditioned().unwrap_or(false)
+        hilbert.is_well_conditioned()
     );
 
     Ok(())
