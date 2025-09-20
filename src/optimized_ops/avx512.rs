@@ -27,9 +27,9 @@ impl Avx512Ops {
         mask: &ArrayView1<bool>,
     ) -> Result<Array1<f64>> {
         if a.len() != b.len() || a.len() != mask.len() {
-            return Err(crate::NumRs2Error::DimensionMismatch(format!(
-                "All arrays must have the same length"
-            )));
+            return Err(crate::NumRs2Error::DimensionMismatch(
+                "All arrays must have the same length".to_string(),
+            ));
         }
 
         if !Self::is_available() {
@@ -107,9 +107,11 @@ impl Avx512Ops {
         // Validate indices
         for &idx in indices {
             if idx >= data.len() {
-                return Err(crate::NumRs2Error::IndexOutOfBounds(
-                    format!("Index {} out of bounds for array of size {}", idx, data.len())
-                ));
+                return Err(crate::NumRs2Error::IndexOutOfBounds(format!(
+                    "Index {} out of bounds for array of size {}",
+                    idx,
+                    data.len()
+                )));
             }
         }
 
@@ -151,17 +153,18 @@ impl Avx512Ops {
         output_size: usize,
     ) -> Result<Array1<f64>> {
         if values.len() != indices.len() {
-            return Err(crate::NumRs2Error::DimensionMismatch(format!(
-                "Values and indices must have the same length"
-            )));
+            return Err(crate::NumRs2Error::DimensionMismatch(
+                "Values and indices must have the same length".to_string(),
+            ));
         }
 
         // Validate indices
         for &idx in indices {
             if idx >= output_size {
-                return Err(crate::NumRs2Error::IndexOutOfBounds(
-                    format!("Index {} out of bounds for output size {}", idx, output_size)
-                ));
+                return Err(crate::NumRs2Error::IndexOutOfBounds(format!(
+                    "Index {} out of bounds for output size {}",
+                    idx, output_size
+                )));
             }
         }
 
@@ -187,9 +190,9 @@ impl Avx512Ops {
     /// AVX-512 optimized reduction with mask
     pub fn masked_sum(data: &ArrayView1<f64>, mask: &ArrayView1<bool>) -> Result<f64> {
         if data.len() != mask.len() {
-            return Err(crate::NumRs2Error::DimensionMismatch(format!(
-                "Data and mask must have the same length"
-            )));
+            return Err(crate::NumRs2Error::DimensionMismatch(
+                "Data and mask must have the same length".to_string(),
+            ));
         }
 
         if !Self::is_available() {

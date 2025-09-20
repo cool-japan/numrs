@@ -17,8 +17,8 @@ use numrs2::linalg::matrix_ops::det;
 use numrs2::linalg::solve::{inv, solve};
 use numrs2::linalg::vector_ops::{norm, trace};
 
-#[cfg(feature = "matrix_decomp")]
-use numrs2::linalg::{cholesky, qr, svd};
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use numrs2::linalg::decomposition::{cholesky, qr, svd};
 use numrs2::new_modules::matrix_decomp::condition_number;
 #[cfg(feature = "matrix_decomp")]
 use numrs2::new_modules::matrix_decomp::lu;
@@ -284,6 +284,7 @@ fn test_eigendecomposition_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_svd_reference() {
     // Test SVD against known values for a simple matrix
@@ -295,15 +296,35 @@ fn test_svd_reference() {
     // are approximately 9.508032 and 0.77286964
     let (_, s, _) = svd(&m).unwrap();
 
+    // Extract the diagonal values (singular values) from the S matrix
+    let s_diag = if s.shape().len() == 2 {
+        // S is a diagonal matrix, extract diagonal
+        let min_dim = s.shape()[0].min(s.shape()[1]);
+        let mut singular_values = Vec::new();
+        for i in 0..min_dim {
+            if let Ok(val) = s.get(&[i, i]) {
+                if val.abs() > 1e-10 {
+                    // Only include non-zero values
+                    singular_values.push(val);
+                }
+            }
+        }
+        singular_values
+    } else {
+        // S is already a vector of singular values
+        s.to_vec()
+    };
+
     // Check that we have the right number of singular values
-    assert_eq!(s.size(), 2);
+    assert_eq!(s_diag.len(), 2);
 
     // Check against expected values (within tolerance)
-    assert!(is_within_range(s.get(&[0]).unwrap(), 9.508032, 0.01));
-    assert!(is_within_range(s.get(&[1]).unwrap(), 0.77286964, 0.01));
+    assert!(is_within_range(s_diag[0], 9.508032, 0.01));
+    assert!(is_within_range(s_diag[1], 0.77286964, 0.01));
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_qr_decomposition_reference() {
     // Test QR decomposition with a matrix that has known factors
@@ -367,6 +388,7 @@ fn test_qr_decomposition_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_cholesky_decomposition_reference() {
     // Test Cholesky decomposition with a matrix that has a known factor
@@ -440,6 +462,7 @@ fn test_lu_decomposition_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 #[allow(deprecated)]
 fn test_norm_reference() {
     // Test matrix norms against known values

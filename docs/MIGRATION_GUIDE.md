@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide helps developers migrate from the legacy NumRS2 systems to the new enhanced architecture introduced in version 0.1.0-beta.1. The migration maintains 100% backward compatibility while providing opt-in access to enhanced features.
+This guide helps developers migrate from the legacy NumRS2 systems to the new enhanced architecture introduced in version 0.1.0-beta.2. The migration maintains 100% backward compatibility while providing opt-in access to enhanced features.
 
 ## Error System Migration
 
@@ -358,7 +358,7 @@ mod tests {
 ## Migration Checklist
 
 ### Phase 1: Immediate (No Code Changes Required)
-- [ ] Update to NumRS2 0.1.0-beta.1
+- [ ] Update to NumRS2 0.1.0-beta.2
 - [ ] Run existing tests - all should pass
 - [ ] No breaking changes in public API
 

@@ -94,12 +94,12 @@ Before beginning a release, ensure you have:
 
 ## Current Release Status
 
-### Version 0.1.0-beta.1 (Released: September 15, 2025)
+### Version 0.1.0-beta.2 (Released: September 20, 2025)
 
 This is the **first beta release** of NumRS2, focusing on dependency modernization and stability improvements:
 
 **Key Updates:**
-- Updated scirs2-* dependencies from 0.1.0-alpha.5 to 0.1.0-beta.1
+- Updated scirs2-* dependencies from 0.1.0-beta.1 to 0.1.0-beta.2
 - Major dependency upgrades: nalgebra (0.32.3 → 0.34.0), criterion (0.5.1 → 0.7.0), zip (0.6.6 → 5.1.1)
 - Updated rand ecosystem: rand (0.9.0 → 0.9.2), rand_distr (0.5.0 → 0.5.1)
 - Updated 100+ transitive dependencies for improved security and performance
@@ -113,26 +113,10 @@ This is the **first beta release** of NumRS2, focusing on dependency modernizati
 - All 586 tests pass successfully (0 failed, 1 ignored)
 - Zero regressions detected from dependency updates
 - Maintained full API compatibility and feature set
-- Verified scirs2 integration compatibility with beta.1 versions
+- Verified scirs2 integration compatibility with beta.2 versions
 
 This beta release maintains 100% backward compatibility while providing updated dependencies and enhanced stability.
 
-### Version 0.1.0-alpha.4 (Released: June 15, 2025)
-
-This release focuses on comprehensive NumPy parity roadmap and enhanced documentation:
-
-**Key Features:**
-- Comprehensive NumPy parity roadmap in TODO.md
-- Detailed implementation plan for complete NumPy compatibility
-- Phase-based development strategy for systematic feature implementation
-- Enhanced documentation of current implementation status (80-85% NumPy parity)
-- Success metrics and quality standards for NumPy parity achievement
-
-**Architecture Improvements:**
-- Complete restructuring of TODO.md into comprehensive NumPy parity initiative
-- Improved development priorities with focus on missing 15-20% of NumPy functionality
-- Enhanced contribution guidelines for NumPy compatibility
-- Improved technical implementation documentation
 
 ## Release Cadence
 

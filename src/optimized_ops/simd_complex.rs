@@ -220,7 +220,7 @@ impl SimdFft {
         // Take conjugate again and scale
         let mut result = SimdComplexOps::complex_conjugate(&fft_result.view());
         let scale = 1.0 / n as f64;
-        result.map_inplace(|c| *c = *c * scale);
+        result.map_inplace(|c| *c *= scale);
 
         Ok(result)
     }

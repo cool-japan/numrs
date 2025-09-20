@@ -234,7 +234,7 @@ impl StrideCalculator {
         let innermost_size = shape[innermost_dim];
 
         // If the innermost dimension is not SIMD-aligned, adjust strides
-        if innermost_size % vector_width != 0 {
+        if !innermost_size.is_multiple_of(vector_width) {
             let padded_size = innermost_size.div_ceil(vector_width) * vector_width;
 
             // Recalculate strides with padding

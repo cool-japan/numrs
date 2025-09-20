@@ -111,7 +111,7 @@ pub fn hsplit<T: Clone>(
         SplitArg::Sections(sections) => {
             let axis_len = shape[axis];
 
-            if axis_len % sections != 0 {
+            if !axis_len.is_multiple_of(sections) {
                 return Err(NumRs2Error::InvalidOperation(format!(
                     "array of shape {:?} cannot be split into {} equal sections along axis {}",
                     shape, sections, axis
@@ -152,7 +152,7 @@ pub fn vsplit<T: Clone>(
         SplitArg::Sections(sections) => {
             let axis_len = shape[axis];
 
-            if axis_len % sections != 0 {
+            if !axis_len.is_multiple_of(sections) {
                 return Err(NumRs2Error::InvalidOperation(format!(
                     "array of shape {:?} cannot be split into {} equal sections along axis {}",
                     shape, sections, axis
@@ -193,7 +193,7 @@ pub fn dsplit<T: Clone>(
         SplitArg::Sections(sections) => {
             let axis_len = shape[axis];
 
-            if axis_len % sections != 0 {
+            if !axis_len.is_multiple_of(sections) {
                 return Err(NumRs2Error::InvalidOperation(format!(
                     "array of shape {:?} cannot be split into {} equal sections along axis {}",
                     shape, sections, axis

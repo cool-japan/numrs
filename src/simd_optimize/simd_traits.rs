@@ -197,7 +197,7 @@ impl SimdPerformanceHints {
             _ => 4,    // Conservative default
         };
 
-        size % vector_elements == 0 && size >= vector_elements * 2
+        size.is_multiple_of(vector_elements) && size >= vector_elements * 2
     }
 
     /// Get alignment requirement for optimal SIMD performance

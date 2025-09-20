@@ -3,7 +3,8 @@
 //! This example shows how to use SIMD, GPU, and parallel processing features
 //! from scirs2-core for high-performance numerical computing.
 
-// Use statements will be added as needed when features are implemented
+// use numrs2::prelude::*;
+// use std::time::Instant;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "scirs")]

@@ -2147,8 +2147,8 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
         T::Real: Clone + num_traits::Float,
     {
         let cond = crate::new_modules::matrix_decomp::condition_number(self)?;
-        let threshold: T::Real = num_traits::NumCast::from(1e12_f64)
-            .unwrap_or_else(|| num_traits::NumCast::from(1e6_f64).unwrap());
+        let threshold: T::Real = num_traits::NumCast::from(1e4_f64)
+            .unwrap_or_else(|| num_traits::NumCast::from(1e3_f64).unwrap());
         Ok(cond < threshold)
     }
 
@@ -2157,7 +2157,7 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     pub fn is_well_conditioned(&self) -> bool {
         match self.cond() {
             Some(cond_num) => {
-                let threshold = T::from(1e12).unwrap_or(T::from(1000000.0).unwrap());
+                let threshold = T::from(1e4).unwrap_or(T::from(1000.0).unwrap());
                 cond_num < threshold
             }
             None => false,

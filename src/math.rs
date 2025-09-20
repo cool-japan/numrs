@@ -4617,7 +4617,7 @@ where
             data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let n = data.len();
-            let median_val = if n % 2 == 0 {
+            let median_val = if n.is_multiple_of(2) {
                 // Even number of elements - average of two middle values
                 (data[n / 2 - 1] + data[n / 2]) / T::from(2.0).unwrap()
             } else {
@@ -4700,7 +4700,7 @@ where
 
                 // Sort and find median
                 values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                let median_val = if axis_size % 2 == 0 {
+                let median_val = if axis_size.is_multiple_of(2) {
                     (values[axis_size / 2 - 1] + values[axis_size / 2]) / T::from(2.0).unwrap()
                 } else {
                     values[axis_size / 2]

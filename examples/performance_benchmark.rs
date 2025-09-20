@@ -8,7 +8,7 @@ use ndarray::{Array1, Array2};
 #[cfg(feature = "scirs")]
 use numrs2::optimized_ops::{
     enhanced_exp, enhanced_math, get_optimization_info, process_large_array, simd_matmul,
-    simd_vector_ops, SimdMathOps,
+    SimdMathOps,
 };
 
 use std::time::Instant;

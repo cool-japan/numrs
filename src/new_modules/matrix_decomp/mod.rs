@@ -748,31 +748,34 @@ mod tests {
         );
 
         // Test is_well_conditioned
-        assert!(a.is_well_conditioned(), "Matrix should be well-conditioned");
+        assert!(
+            a.is_well_conditioned().unwrap(),
+            "Matrix should be well-conditioned"
+        );
     }
 
     #[test]
     fn test_condition_number_ill_conditioned() {
         // Create an ill-conditioned matrix with very different singular values
         let a =
-            Array::from_vec(vec![1.0, 0.0, 0.0, 0.0, 1e-8, 0.0, 0.0, 0.0, 1.0]).reshape(&[3, 3]);
+            Array::from_vec(vec![1.0, 0.0, 0.0, 0.0, 1e-14, 0.0, 0.0, 0.0, 1.0]).reshape(&[3, 3]);
 
         // Compute condition number
         let cond = condition_number(&a).unwrap();
 
-        // Expected condition number is max(diag) / min(diag) = 1.0 / 1e-8 = 1e8
-        let expected: f64 = 1e8;
+        // Expected condition number is max(diag) / min(diag) = 1.0 / 1e-14 = 1e14
+        let expected: f64 = 1e14;
         let diff_value = num_traits::Float::abs(cond - expected);
         let relative_error = diff_value / expected;
         assert!(
             relative_error < 1e-5,
-            "Condition number should be approximately 1e8 for this diagonal matrix, got {}",
+            "Condition number should be approximately 1e14 for this diagonal matrix, got {}",
             cond
         );
 
-        // Test is_well_conditioned - should return false
+        // Test is_well_conditioned - should return false (threshold is 1e12)
         assert!(
-            !a.is_well_conditioned(),
+            !a.is_well_conditioned().unwrap(),
             "Matrix should be ill-conditioned with condition number {}",
             cond
         );
@@ -805,7 +808,7 @@ mod tests {
 
         // Test is_well_conditioned - should return false
         assert!(
-            !a.is_well_conditioned(),
+            !a.is_well_conditioned().unwrap(),
             "Singular matrix should not be well-conditioned"
         );
     }

@@ -492,7 +492,7 @@ impl SignalProcessor {
         // - Set negative frequencies to zero
         // - Keep Nyquist component (if n is even) unchanged
 
-        if n % 2 == 0 {
+        if n.is_multiple_of(2) {
             // Even length: DC, positive frequencies, Nyquist, negative frequencies
             for i in 1..n / 2 {
                 fft_data[i] =

@@ -39,7 +39,7 @@ pub fn align_data<T: Copy>(data: &mut [T], strategy: AlignmentStrategy) {
 
     // Check if data is already properly aligned
     let data_ptr = data.as_ptr() as usize;
-    if data_ptr % alignment == 0 {
+    if data_ptr.is_multiple_of(alignment) {
         // Already aligned
         return;
     }
@@ -172,12 +172,12 @@ pub fn realign_vec<T: Copy>(mut vec: Vec<T>, new_alignment: usize) -> Vec<T> {
 
 /// Check if a pointer is aligned to a specific boundary
 pub fn is_aligned<T>(ptr: *const T, alignment: usize) -> bool {
-    (ptr as usize) % alignment == 0
+    (ptr as usize).is_multiple_of(alignment)
 }
 
 /// Calculate the padding needed to align a given offset
 pub fn alignment_padding(offset: usize, alignment: usize) -> usize {
-    if offset % alignment == 0 {
+    if offset.is_multiple_of(alignment) {
         0
     } else {
         alignment - (offset % alignment)
@@ -214,13 +214,13 @@ pub fn is_range_aligned<T>(slice: &[T], alignment: usize) -> bool {
     let size = std::mem::size_of_val(slice);
 
     // Check if start is aligned
-    if ptr % alignment != 0 {
+    if !ptr.is_multiple_of(alignment) {
         return false;
     }
 
     // Check if size is a multiple of alignment (for some use cases)
     // This is optional but can be useful for certain algorithms
-    size % alignment == 0
+    size.is_multiple_of(alignment)
 }
 
 /// Get alignment information for debugging
@@ -231,9 +231,9 @@ pub fn get_alignment_info<T>(data: &[T]) -> AlignmentInfo {
 
     AlignmentInfo {
         address: ptr,
-        cache_line_aligned: ptr % cache_line_size == 0,
-        simd_aligned: ptr % simd_alignment == 0,
-        natural_aligned: ptr % mem::align_of::<T>() == 0,
+        cache_line_aligned: ptr.is_multiple_of(cache_line_size),
+        simd_aligned: ptr.is_multiple_of(simd_alignment),
+        natural_aligned: ptr.is_multiple_of(mem::align_of::<T>()),
         cache_line_size,
         simd_alignment,
         type_alignment: mem::align_of::<T>(),

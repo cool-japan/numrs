@@ -24,7 +24,7 @@ use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 /// Get information about available optimizations
 #[cfg(feature = "scirs")]
 pub fn get_optimization_info() -> String {
-    let _caps = PlatformCapabilities::detect();
+    let caps = PlatformCapabilities::detect();
     format!(
         "NumRS2 Optimizations Available:\n\
          - SIMD: {}\n\
@@ -36,14 +36,14 @@ pub fn get_optimization_info() -> String {
          - AVX512: {}\n\
          - NEON: {}\n\
          - Parallel threads: {}",
-        _caps.simd_available,
-        _caps.gpu_available,
-        _caps.cuda_available,
-        _caps.opencl_available,
-        _caps.metal_available,
-        _caps.avx2_available,
-        _caps.avx512_available,
-        _caps.neon_available,
+        caps.simd_available,
+        caps.gpu_available,
+        caps.cuda_available,
+        caps.opencl_available,
+        caps.metal_available,
+        caps.avx2_available,
+        caps.avx512_available,
+        caps.neon_available,
         num_threads()
     )
 }
@@ -100,12 +100,26 @@ pub struct SimdOpsResult {
 /// Optimized vector operations using SIMD
 #[cfg(feature = "scirs")]
 pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
+    use crate::simd_optimize::simd_traits::SimdArrayOps;
+
+    // Convert ArrayView to Array
+    let array = crate::array::Array::from_vec(v.to_vec());
+    let sum = array.simd_sum();
+    let mean = sum / v.len() as f32;
+
+    // Calculate norm: sqrt(sum of squares)
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+    // Find min and max
+    let min = v.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+    let max = v.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+
     SimdVectorResult {
-        sum: f32::simd_sum(v),
-        mean: f32::simd_mean(v),
-        norm: f32::simd_norm(v),
-        min: f32::simd_min_element(v),
-        max: f32::simd_max_element(v),
+        sum,
+        mean,
+        norm,
+        min,
+        max,
     }
 }
 
@@ -142,7 +156,7 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
 #[cfg(feature = "scirs")]
 pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     let optimizer = AutoOptimizer::new();
-    let _caps = PlatformCapabilities::detect();
+    let caps = PlatformCapabilities::detect();
     let size = data.len();
 
     if optimizer.should_use_gpu(size) {
@@ -168,7 +182,9 @@ pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
 
 #[cfg(feature = "scirs")]
 fn adaptive_array_sum_simd(data: &ArrayView1<f64>) -> f64 {
-    f64::simd_sum(data)
+    // Convert ArrayView to Array for simd_sum
+    let array = crate::array::Array::from_vec(data.to_vec());
+    crate::simd::simd_sum(&array)
 }
 
 /// Parallel statistical computations

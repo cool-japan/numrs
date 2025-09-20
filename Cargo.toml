@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 edition = "2021"
 authors = ["cool-japan/NumRS2 (KitaSan) Team"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -49,9 +49,9 @@ num_cpus = "1.16.0"
 regex = "1.10.2"    # Regular expressions for string operations
 
 # Optional SciRS2 dependencies
-scirs2-stats = { version = "0.1.0-beta.1", optional = true }
-scirs2-core = { version = "0.1.0-beta.1", optional = true }
-scirs2-linalg = { version = "0.1.0-beta.1", optional = true }
+scirs2-stats = { version = "0.1.0-beta.2", optional = true }
+scirs2-core = { version = "0.1.0-beta.2", optional = true }
+scirs2-linalg = { version = "0.1.0-beta.2", optional = true }
 
 # Optional GPU acceleration dependencies
 wgpu = { version = "0.19.1", optional = true }

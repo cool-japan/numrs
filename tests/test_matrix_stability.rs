@@ -213,11 +213,18 @@ fn test_decomposition_stability_ill_conditioned() {
     // Test SVD first as it's the most stable
     let (u, s, vt) = linalg::svd(&a).unwrap();
 
-    // Create diagonal matrix from singular values
-    let mut s_diag = Array::zeros(&[n, n]);
-    for i in 0..s.size() {
-        s_diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
-    }
+    // S may be returned as either a diagonal matrix or a vector
+    let s_diag = if s.shape().len() == 2 {
+        // Already a diagonal matrix
+        s.clone()
+    } else {
+        // Create diagonal matrix from singular values vector
+        let mut diag = Array::zeros(&[n, n]);
+        for i in 0..s.size() {
+            diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
+        }
+        diag
+    };
 
     // Compute A ≈ U * S * V^T
     let us = u.matmul(&s_diag).unwrap();
@@ -410,10 +417,18 @@ fn test_decompositions_with_scaling() {
 
     // SVD should handle scaling
     let (u, s, vt) = linalg::svd(&large_matrix).unwrap();
-    let mut s_diag = Array::zeros(&[n, n]);
-    for i in 0..s.size() {
-        s_diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
-    }
+    // S may be returned as either a diagonal matrix or a vector
+    let s_diag = if s.shape().len() == 2 {
+        // Already a diagonal matrix
+        s.clone()
+    } else {
+        // Create diagonal matrix from singular values vector
+        let mut diag = Array::zeros(&[n, n]);
+        for i in 0..s.size() {
+            diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
+        }
+        diag
+    };
     let us = u.matmul(&s_diag).unwrap();
     let usv = us.matmul(&vt).unwrap();
 
@@ -465,10 +480,18 @@ fn test_relative_errors_between_decompositions() {
     let (l, u_lu, p) = lu(&a).unwrap();
 
     // Reconstruction for SVD
-    let mut s_diag = Array::zeros(&[n, n]);
-    for i in 0..s.size() {
-        s_diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
-    }
+    // S may be returned as either a diagonal matrix or a vector
+    let s_diag = if s.shape().len() == 2 {
+        // Already a diagonal matrix
+        s.clone()
+    } else {
+        // Create diagonal matrix from singular values vector
+        let mut diag = Array::zeros(&[n, n]);
+        for i in 0..s.size() {
+            diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
+        }
+        diag
+    };
     let us = u.matmul(&s_diag).unwrap();
     let svd_recon = us.matmul(&vt).unwrap();
 

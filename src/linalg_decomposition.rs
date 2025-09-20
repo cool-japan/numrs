@@ -124,7 +124,8 @@ where
 pub fn qr<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>)> {
-    a.qr()
+    // Use the proper implementation from new_modules
+    crate::new_modules::matrix_decomp::qr(a)
 }
 
 /// Compute the QR decomposition of a matrix
@@ -191,7 +192,8 @@ pub fn qr<
 pub fn cholesky<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
 ) -> Result<Array<T>> {
-    a.cholesky()
+    // Use the proper implementation from new_modules
+    crate::new_modules::matrix_decomp::cholesky(a)
 }
 
 /// Compute the Cholesky decomposition of a matrix
@@ -459,8 +461,27 @@ pub fn eig<
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn svd<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
-) -> Result<(Array<T>, Array<T>, Array<T>)> {
-    a.svd()
+) -> Result<(Array<T>, Array<T>, Array<T>)>
+where
+    <T as ndarray_linalg::Scalar>::Real: Float + Clone + Debug,
+{
+    // Use the proper implementation from new_modules
+    let (u, s_vec, vt) = crate::new_modules::matrix_decomp::svd(a)?;
+
+    // Convert singular values vector to diagonal matrix
+    let m = u.shape()[0];
+    let n = vt.shape()[0];
+    let k = s_vec.len();
+    let mut s = Array::zeros(&[m, n]);
+    for i in 0..k.min(m).min(n) {
+        let val = s_vec.get(&[i])?;
+        // Convert Real to T using NumCast which works for f32/f64
+        if let Some(t_val) = num_traits::NumCast::from(val) {
+            s.set(&[i, i], t_val)?;
+        }
+    }
+
+    Ok((u, s, vt))
 }
 
 /// Compute the singular value decomposition of a matrix
