@@ -8,9 +8,9 @@
 //! cargo run --example gpu_benchmark --features "gpu scirs"
 //! ```
 
-// ndarray will be used when features are implemented
 use numrs2::error::Result;
 use numrs2::prelude::*;
+use scirs2_core::ndarray::{Array1, Array2};
 use std::time::Instant;
 
 #[cfg(feature = "gpu")]
@@ -86,8 +86,8 @@ fn benchmark_element_wise_operations(size: usize) -> Result<()> {
         // Convert f32 to f64 for SIMD operations
         let a_f64 = a.map(|x| x as f64);
         let b_f64 = b.map(|x| x as f64);
-        let a_ndarray = ndarray::Array1::from_vec(a_f64.to_vec());
-        let b_ndarray = ndarray::Array1::from_vec(b_f64.to_vec());
+        let a_ndarray = Array1::from_vec(a_f64.to_vec());
+        let b_ndarray = Array1::from_vec(b_f64.to_vec());
         let start = Instant::now();
         let simd_result = simd_elementwise_ops(&a_ndarray.view(), &b_ndarray.view())?;
         let _ = simd_result.add;
@@ -127,8 +127,8 @@ fn benchmark_element_wise_operations(size: usize) -> Result<()> {
         // Convert f32 to f64 for SIMD operations
         let a_f64 = a.map(|x| x as f64);
         let b_f64 = b.map(|x| x as f64);
-        let a_ndarray = ndarray::Array1::from_vec(a_f64.to_vec());
-        let b_ndarray = ndarray::Array1::from_vec(b_f64.to_vec());
+        let a_ndarray = Array1::from_vec(a_f64.to_vec());
+        let b_ndarray = Array1::from_vec(b_f64.to_vec());
         let start = Instant::now();
         let simd_result = simd_elementwise_ops(&a_ndarray.view(), &b_ndarray.view())?;
         let _ = simd_result.mul;
@@ -180,7 +180,7 @@ fn benchmark_transcendental_functions(size: usize) -> Result<()> {
     #[cfg(feature = "scirs")]
     {
         let data_f64 = data.map(|x| x as f64);
-        let data_ndarray = ndarray::Array1::from_vec(data_f64.to_vec());
+        let data_ndarray = Array1::from_vec(data_f64.to_vec());
         let start = Instant::now();
         let _ = enhanced_exp::parallel_exp(&data_ndarray.view());
         result.simd_time = Some(start.elapsed().as_secs_f64());
@@ -216,7 +216,7 @@ fn benchmark_transcendental_functions(size: usize) -> Result<()> {
     #[cfg(feature = "scirs")]
     {
         let data_f64 = data.map(|x| x as f64);
-        let data_ndarray = ndarray::Array1::from_vec(data_f64.to_vec());
+        let data_ndarray = Array1::from_vec(data_f64.to_vec());
         let start = Instant::now();
         let _ = enhanced_math::parallel_sin(&data_ndarray.view());
         result.simd_time = Some(start.elapsed().as_secs_f64());
@@ -252,7 +252,7 @@ fn benchmark_transcendental_functions(size: usize) -> Result<()> {
     #[cfg(feature = "scirs")]
     {
         let data_f64 = data.map(|x| x as f64);
-        let data_ndarray = ndarray::Array1::from_vec(data_f64.to_vec());
+        let data_ndarray = Array1::from_vec(data_f64.to_vec());
         let start = Instant::now();
         let _ = enhanced_exp::simd_sqrt(&data_ndarray.view());
         result.simd_time = Some(start.elapsed().as_secs_f64());
@@ -309,8 +309,8 @@ fn benchmark_matrix_operations(size: usize) -> Result<()> {
     {
         let a_vec: Vec<f32> = a.to_vec();
         let b_vec: Vec<f32> = b.to_vec();
-        let a_ndarray = ndarray::Array2::from_shape_vec((size, size), a_vec).unwrap();
-        let b_ndarray = ndarray::Array2::from_shape_vec((size, size), b_vec).unwrap();
+        let a_ndarray = Array2::from_shape_vec((size, size), a_vec).unwrap();
+        let b_ndarray = Array2::from_shape_vec((size, size), b_vec).unwrap();
         let start = Instant::now();
         let _ = simd_matmul(&a_ndarray.view(), &b_ndarray.view())?;
         result.simd_time = Some(start.elapsed().as_secs_f64());
@@ -359,7 +359,7 @@ fn benchmark_matrix_operations(size: usize) -> Result<()> {
 }
 
 #[allow(dead_code)]
-fn benchmark_memory_transfer(_size: usize) -> Result<()> {
+fn benchmark_memory_transfer(size: usize) -> Result<()> {
     #[cfg(feature = "gpu")]
     {
         println!("\n=== Memory Transfer Overhead ===");

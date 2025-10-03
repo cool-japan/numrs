@@ -4,7 +4,7 @@
 //! partitioned across threads in parallel computations.
 
 use super::scheduling::SchedulingStrategy;
-use rayon::prelude::*;
+use scirs2_core::parallel_ops::*;
 use std::ops::Range;
 
 /// Partitioning strategies for parallel workloads
@@ -39,7 +39,7 @@ pub fn partition_workload(
     num_threads: usize,
 ) -> Vec<Range<usize>> {
     let n_threads = if num_threads == 0 {
-        rayon::current_num_threads()
+        scirs2_core::parallel_ops::num_threads()
     } else {
         num_threads
     };

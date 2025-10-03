@@ -989,129 +989,6 @@ pub fn logical_xor(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
     Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_allclose() {
-        let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-        let b = Array::from_vec(vec![1.0000001, 2.0000002, 3.0000003]);
-        let c = Array::from_vec(vec![1.001, 2.002, 3.003]);
-
-        // Default tolerances (rtol=1e-7, atol=0)
-        assert!(allclose(&a, &b));
-        assert!(!allclose(&a, &c));
-
-        // Custom tolerances
-        assert!(allclose_with_tol(&a, &c, 1e-2, 0.0));
-    }
-
-    #[test]
-    fn test_array_equal() {
-        let a = Array::from_vec(vec![1, 2, 3]);
-        let b = Array::from_vec(vec![1, 2, 3]);
-        let c = Array::from_vec(vec![1, 2, 4]);
-
-        assert!(array_equal(&a, &b, None));
-        assert!(!array_equal(&a, &c, None));
-
-        // Different shapes
-        let d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-        assert!(!array_equal(&a, &d, None));
-    }
-
-    #[test]
-    fn test_isclose() {
-        assert!(isclose(1.0, 1.0000001, 1e-7, 0.0));
-        assert!(!isclose(1.0, 1.001, 1e-7, 0.0));
-
-        // Test NaN handling
-        assert!(isclose(f64::NAN, f64::NAN, 1e-7, 0.0));
-
-        // Test infinity handling
-        assert!(isclose(f64::INFINITY, f64::INFINITY, 1e-7, 0.0));
-        assert!(!isclose(f64::INFINITY, 1.0, 1e-7, 0.0));
-    }
-
-    #[test]
-    fn test_all_any() {
-        let all_true = Array::from_vec(vec![true, true, true]);
-        let mixed = Array::from_vec(vec![true, false, true]);
-        let all_false = Array::from_vec(vec![false, false, false]);
-
-        assert!(all(&all_true));
-        assert!(!all(&mixed));
-        assert!(!all(&all_false));
-
-        assert!(any(&all_true));
-        assert!(any(&mixed));
-        assert!(!any(&all_false));
-    }
-
-    #[test]
-    fn test_comparison_ops() {
-        let a = Array::from_vec(vec![1, 2, 3]);
-        let b = Array::from_vec(vec![0, 2, 4]);
-
-        // Test greater
-        let result = greater(&a, &b).unwrap();
-        assert_eq!(result.to_vec(), vec![true, false, false]);
-
-        // Test greater_equal
-        let result = greater_equal(&a, &b).unwrap();
-        assert_eq!(result.to_vec(), vec![true, true, false]);
-
-        // Test less
-        let result = less(&a, &b).unwrap();
-        assert_eq!(result.to_vec(), vec![false, false, true]);
-
-        // Test less_equal
-        let result = less_equal(&a, &b).unwrap();
-        assert_eq!(result.to_vec(), vec![false, true, true]);
-
-        // Test equal
-        let result = equal(&a, &b).unwrap();
-        assert_eq!(result.to_vec(), vec![false, true, false]);
-
-        // Test not_equal
-        let result = not_equal(&a, &b).unwrap();
-        assert_eq!(result.to_vec(), vec![true, false, true]);
-    }
-
-    #[test]
-    fn test_broadcasting() {
-        let a = Array::from_vec(vec![1, 2, 3]);
-        let b = Array::from_vec(vec![1]).reshape(&[1]);
-
-        // Test broadcasting
-        let result = equal(&a, &b).unwrap();
-        assert_eq!(result.to_vec(), vec![true, false, false]);
-
-        // Test with 2D arrays
-        let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-        let d = Array::from_vec(vec![1, 2]).reshape(&[1, 2]);
-
-        let result = equal(&c, &d).unwrap();
-        assert_eq!(result.shape(), vec![2, 2]);
-        assert_eq!(result.to_vec(), vec![true, true, false, false]);
-    }
-
-    #[test]
-    fn test_isclose_array() {
-        let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-        let b = Array::from_vec(vec![1.0000001, 2.0000002, 3.0000003]);
-
-        // Default tolerances
-        let result = isclose_array(&a, &b, 1e-7, 0.0).unwrap();
-        assert_eq!(result.to_vec(), vec![true, true, true]);
-
-        // Stricter tolerances
-        let result = isclose_array(&a, &b, 1e-10, 0.0).unwrap();
-        assert_eq!(result.to_vec(), vec![false, false, false]);
-    }
-}
-
 /// Count the number of non-zero values in the array
 ///
 /// # Parameters
@@ -1233,4 +1110,127 @@ where
         .collect();
 
     Ok(Array::from_vec(indices))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_allclose() {
+        let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let b = Array::from_vec(vec![1.0000001, 2.0000002, 3.0000003]);
+        let c = Array::from_vec(vec![1.001, 2.002, 3.003]);
+
+        // Default tolerances (rtol=1e-7, atol=0)
+        assert!(allclose(&a, &b));
+        assert!(!allclose(&a, &c));
+
+        // Custom tolerances
+        assert!(allclose_with_tol(&a, &c, 1e-2, 0.0));
+    }
+
+    #[test]
+    fn test_array_equal() {
+        let a = Array::from_vec(vec![1, 2, 3]);
+        let b = Array::from_vec(vec![1, 2, 3]);
+        let c = Array::from_vec(vec![1, 2, 4]);
+
+        assert!(array_equal(&a, &b, None));
+        assert!(!array_equal(&a, &c, None));
+
+        // Different shapes
+        let d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+        assert!(!array_equal(&a, &d, None));
+    }
+
+    #[test]
+    fn test_isclose() {
+        assert!(isclose(1.0, 1.0000001, 1e-7, 0.0));
+        assert!(!isclose(1.0, 1.001, 1e-7, 0.0));
+
+        // Test NaN handling
+        assert!(isclose(f64::NAN, f64::NAN, 1e-7, 0.0));
+
+        // Test infinity handling
+        assert!(isclose(f64::INFINITY, f64::INFINITY, 1e-7, 0.0));
+        assert!(!isclose(f64::INFINITY, 1.0, 1e-7, 0.0));
+    }
+
+    #[test]
+    fn test_all_any() {
+        let all_true = Array::from_vec(vec![true, true, true]);
+        let mixed = Array::from_vec(vec![true, false, true]);
+        let all_false = Array::from_vec(vec![false, false, false]);
+
+        assert!(all(&all_true));
+        assert!(!all(&mixed));
+        assert!(!all(&all_false));
+
+        assert!(any(&all_true));
+        assert!(any(&mixed));
+        assert!(!any(&all_false));
+    }
+
+    #[test]
+    fn test_comparison_ops() {
+        let a = Array::from_vec(vec![1, 2, 3]);
+        let b = Array::from_vec(vec![0, 2, 4]);
+
+        // Test greater
+        let result = greater(&a, &b).unwrap();
+        assert_eq!(result.to_vec(), vec![true, false, false]);
+
+        // Test greater_equal
+        let result = greater_equal(&a, &b).unwrap();
+        assert_eq!(result.to_vec(), vec![true, true, false]);
+
+        // Test less
+        let result = less(&a, &b).unwrap();
+        assert_eq!(result.to_vec(), vec![false, false, true]);
+
+        // Test less_equal
+        let result = less_equal(&a, &b).unwrap();
+        assert_eq!(result.to_vec(), vec![false, true, true]);
+
+        // Test equal
+        let result = equal(&a, &b).unwrap();
+        assert_eq!(result.to_vec(), vec![false, true, false]);
+
+        // Test not_equal
+        let result = not_equal(&a, &b).unwrap();
+        assert_eq!(result.to_vec(), vec![true, false, true]);
+    }
+
+    #[test]
+    fn test_broadcasting() {
+        let a = Array::from_vec(vec![1, 2, 3]);
+        let b = Array::from_vec(vec![1]).reshape(&[1]);
+
+        // Test broadcasting
+        let result = equal(&a, &b).unwrap();
+        assert_eq!(result.to_vec(), vec![true, false, false]);
+
+        // Test with 2D arrays
+        let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+        let d = Array::from_vec(vec![1, 2]).reshape(&[1, 2]);
+
+        let result = equal(&c, &d).unwrap();
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![true, true, false, false]);
+    }
+
+    #[test]
+    fn test_isclose_array() {
+        let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let b = Array::from_vec(vec![1.0000001, 2.0000002, 3.0000003]);
+
+        // Default tolerances
+        let result = isclose_array(&a, &b, 1e-7, 0.0).unwrap();
+        assert_eq!(result.to_vec(), vec![true, true, true]);
+
+        // Stricter tolerances
+        let result = isclose_array(&a, &b, 1e-10, 0.0).unwrap();
+        assert_eq!(result.to_vec(), vec![false, false, false]);
+    }
 }

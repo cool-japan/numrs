@@ -6,8 +6,8 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::fft::FFT;
-use num_complex::Complex;
 use num_traits::{Float, NumCast, Zero};
+use scirs2_core::Complex;
 use std::f64::consts::PI;
 use std::fmt::Debug;
 
@@ -729,7 +729,7 @@ mod tests {
         let result_data = result.to_vec();
 
         // Expected convolution result
-        let expected = vec![0.5, 2.0, 4.0, 4.0, 1.5];
+        let expected = [0.5, 2.0, 4.0, 4.0, 1.5];
         assert_eq!(result_data.len(), expected.len());
 
         for (i, &val) in result_data.iter().enumerate() {
@@ -864,7 +864,7 @@ mod tests {
         // Check that we get real output with reasonable range
         for &mag in &magnitudes {
             assert!(
-                mag >= 0.0 && mag <= 2.0,
+                (0.0..=2.0).contains(&mag),
                 "Magnitude {} is out of reasonable range",
                 mag
             );

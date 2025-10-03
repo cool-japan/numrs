@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::Order;
 use num_traits::Zero;
+use scirs2_core::ndarray::Order;
 
 /// Roll array elements along a specified axis
 ///

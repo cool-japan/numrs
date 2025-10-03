@@ -3,11 +3,11 @@
 //! This module provides comprehensive performance benchmarks for NumRS2,
 //! focusing on newly integrated features and optimizations.
 
-use num_complex::Complex;
 use numrs2::array_ops::advanced_indexing;
 use numrs2::bitwise_ops;
 use numrs2::complex_ops;
 use numrs2::prelude::*;
+use scirs2_core::Complex;
 use std::time::Instant;
 
 /// Benchmark result structure

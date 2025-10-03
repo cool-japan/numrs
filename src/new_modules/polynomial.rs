@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_complex::Complex;
 use num_traits::{Float, One, Zero};
+use scirs2_core::Complex;
 use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
 

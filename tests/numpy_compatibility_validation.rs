@@ -3,11 +3,11 @@
 //! This module provides comprehensive tests to validate that NumRS2 functions
 //! behave identically to their NumPy equivalents.
 
-use num_complex::Complex;
 use numrs2::array_ops::advanced_indexing;
 use numrs2::bitwise_ops;
 use numrs2::complex_ops;
 use numrs2::prelude::*;
+use scirs2_core::Complex;
 
 /// Test numerical equivalence with tolerance
 fn assert_arrays_close_f64(a: &Array<f64>, b: &[f64], tolerance: f64) {
@@ -94,18 +94,18 @@ fn test_complex_operations_numpy_equivalence() {
     // >>> import numpy as np
     // >>> a = np.array([3+4j, 1+0j, 0+1j, -1-1j, 5+0j])
     // >>> np.abs(a)
-    let expected_abs = vec![5.0, 1.0, 1.0, 1.4142135623730951, 5.0];
+    let expected_abs = vec![5.0, 1.0, 1.0, std::f64::consts::SQRT_2, 5.0];
     let result_abs = complex_ops::absolute(&complex_data);
     assert_arrays_close_f64(&result_abs, &expected_abs, 1e-10);
 
     // Test angle calculation (phase)
     // >>> np.angle(a)
     let expected_angle = vec![
-        0.9272952180016122, // arctan(4/3)
-        0.0,                // angle of 1+0j
-        1.5707963267948966, // π/2 for 0+1j
-        -2.356194490192345, // -3π/4 for -1-1j
-        0.0,                // angle of 5+0j
+        0.9272952180016122,          // arctan(4/3)
+        0.0,                         // angle of 1+0j
+        std::f64::consts::FRAC_PI_2, // π/2 for 0+1j
+        -2.356194490192345,          // -3π/4 for -1-1j
+        0.0,                         // angle of 5+0j
     ];
     let result_angle = complex_ops::angle(&complex_data, false);
     assert_arrays_close_f64(&result_angle, &expected_angle, 1e-10);
@@ -151,7 +151,7 @@ fn test_mathematical_functions_numpy_equivalence() {
     let expected_exp = vec![
         1.0,
         1.6487212707001282,
-        2.718281828459045,
+        std::f64::consts::E,
         4.4816890703380645,
         7.38905609893065,
     ];
@@ -192,7 +192,7 @@ fn test_mathematical_functions_numpy_equivalence() {
     // Test natural logarithm
     let log_data = Array::from_vec(vec![1.0, 2.0, std::f64::consts::E, 10.0]);
     // >>> np.log([1.0, 2.0, np.e, 10.0])
-    let expected_log = vec![0.0, 0.6931471805599453, 1.0, 2.302585092994046];
+    let expected_log = vec![0.0, std::f64::consts::LN_2, 1.0, std::f64::consts::LN_10];
     let result_log = log_data.log();
     assert_arrays_close_f64(&result_log, &expected_log, 1e-10);
 }

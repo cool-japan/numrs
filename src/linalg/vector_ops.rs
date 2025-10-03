@@ -7,9 +7,9 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 #[cfg(target_arch = "x86_64")]
 use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-use num_complex::Complex;
 use num_traits::Float;
-use rand::Rng;
+use scirs2_core::random::prelude::*;
+use scirs2_core::Complex;
 use std::fmt::Debug;
 
 /// Threshold for using SIMD optimizations (minimum vector size)
@@ -181,7 +181,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             let mut x_data = vec![T::zero(); vec_size];
 
             // Use the preferred non-deprecated functions
-            let mut rng = rand::rng();
+            let mut rng = thread_rng();
             for item in &mut x_data {
                 *item = T::from(rng.random_range(0.0..1.0)).unwrap();
             }

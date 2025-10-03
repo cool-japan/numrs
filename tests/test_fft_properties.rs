@@ -1,12 +1,12 @@
 #![allow(deprecated)] // Allow deprecated warnings during API transition
 
 use approx::assert_abs_diff_eq;
-use num_complex::Complex64;
 /// Property-based tests for Fast Fourier Transform (FFT) operations
 ///
 /// This file tests the mathematical properties and relationships
 /// that should be satisfied by FFT operations in NumRS2.
 use numrs2::prelude::*;
+use scirs2_core::Complex64;
 use std::f64::consts::PI;
 
 // Constants for testing

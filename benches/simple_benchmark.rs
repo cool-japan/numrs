@@ -1,8 +1,9 @@
 //! Simple benchmark for NumRS2 core operations
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::array::Array;
 use numrs2::stats::Statistics;
+use std::hint::black_box;
 
 /// Benchmark basic array operations
 fn bench_array_basics(c: &mut Criterion) {

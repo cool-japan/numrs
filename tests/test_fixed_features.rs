@@ -44,8 +44,8 @@ fn test_boolean_indexing() {
     a_2d.set(&[2, 2], 9.0).unwrap();
 
     // Create masks for slicing
-    let _row_indices = vec![0]; // First row
-    let _col_indices = vec![0]; // First column
+    let _row_indices = [0]; // First row
+    let _col_indices = [0]; // First column
 
     // Select using standard indexing instead (until boolean indexing is fixed)
     let row_result = a_2d.index(&[IndexSpec::Index(0), IndexSpec::All]).unwrap();

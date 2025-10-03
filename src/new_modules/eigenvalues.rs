@@ -1,13 +1,13 @@
 use crate::array::Array;
 #[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
-#[allow(unused_imports)] // Used conditionally based on features
-use ndarray::ArrayView2;
 #[cfg(feature = "lapack")]
 use ndarray_linalg::{Eig, EigVals, Eigh, Scalar};
-use num_complex::Complex;
 #[cfg(feature = "lapack")]
 use num_traits::{Float, NumCast, Zero};
+#[allow(unused_imports)] // Used conditionally based on features
+use scirs2_core::ndarray::ArrayView2;
+use scirs2_core::Complex;
 #[cfg(feature = "lapack")]
 use std::fmt::Debug;
 

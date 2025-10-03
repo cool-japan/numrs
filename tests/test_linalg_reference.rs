@@ -67,18 +67,24 @@ fn schur(a: &Array<f64>) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
 // Provide fallback implementations for missing functions
 #[cfg(not(feature = "scirs"))]
 fn matrix_power(_a: &Array<f64>, _n: i32) -> numrs2::error::Result<Array<f64>> {
-    Err(numrs2::error::NumRs2Error::FeatureNotEnabled {
-        feature: "scirs".to_string(),
-        operation: "matrix_power".to_string(),
-    })
+    Err(numrs2::error::NumRs2Error::FeatureNotEnabled(
+        "scirs feature required for matrix_power".to_string(),
+    ))
 }
 
 #[cfg(not(feature = "scirs"))]
-fn schur(_a: &Array<f64>) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
-    Err(numrs2::error::NumRs2Error::FeatureNotEnabled {
-        feature: "scirs".to_string(),
-        operation: "schur".to_string(),
-    })
+fn schur(a: &Array<f64>) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
+    // Use NumRS2's own schur implementation
+    #[cfg(feature = "matrix_decomp")]
+    {
+        numrs2::new_modules::matrix_decomp::schur(a)
+    }
+    #[cfg(not(feature = "matrix_decomp"))]
+    {
+        Err(numrs2::error::NumRs2Error::FeatureNotEnabled(
+            "matrix_decomp feature required for schur".to_string(),
+        ))
+    }
 }
 
 // Unified eigh function that works with different feature configurations
@@ -101,10 +107,9 @@ fn eigh(a: &Array<f64>, _uplo: &str) -> numrs2::error::Result<(Array<f64>, Array
 
 #[cfg(not(feature = "scirs"))]
 fn eigh(_a: &Array<f64>, _uplo: &str) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
-    Err(numrs2::error::NumRs2Error::FeatureNotEnabled {
-        feature: "scirs or matrix_decomp".to_string(),
-        operation: "eigh".to_string(),
-    })
+    Err(numrs2::error::NumRs2Error::FeatureNotEnabled(
+        "scirs or matrix_decomp feature required for eigh".to_string(),
+    ))
 }
 
 // Tolerance for floating point comparisons
@@ -768,10 +773,10 @@ fn test_inner_outer_product_reference() {
 
 #[test]
 fn test_vdot_reference() {
-    use num_complex::Complex;
     use numrs2::linalg::vector_ops::{
         complex_vdot, vdot, ComplexVectorDotProduct, RealVectorDotProduct,
     };
+    use scirs2_core::Complex;
 
     // Test real vdot (function-based)
     let a_real = Array::from_vec(vec![1.0, 2.0, 3.0]);

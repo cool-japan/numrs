@@ -3,11 +3,11 @@
 //! This module analyzes memory usage patterns in NumRS2 operations
 //! to identify potential optimizations and ensure efficient memory management.
 
-use num_complex::Complex;
 use numrs2::array_ops::advanced_indexing;
 use numrs2::bitwise_ops;
 use numrs2::complex_ops;
 use numrs2::prelude::*;
+use scirs2_core::Complex;
 use std::time::Instant;
 
 /// Simple memory usage tracker

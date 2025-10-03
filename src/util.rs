@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
-use rayon::prelude::*;
+use scirs2_core::parallel_ops::*;
 
 /// Utilities for parallel computation
 pub fn parallel_map<T, U, F>(array: &Array<T>, f: F) -> Array<U>

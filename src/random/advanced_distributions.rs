@@ -33,8 +33,9 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast};
-use rand::prelude::*;
-use rand_distr::{ChiSquared, Distribution, Normal};
+use scirs2_core::random::prelude::*;
+use scirs2_core::{ChiSquared, Distribution as CoreDistribution};
+use scirs2_stats::{distributions::Normal, Distribution};
 use std::fmt::{Debug, Display};
 
 /// Non-central chi-squared distribution
@@ -69,18 +70,19 @@ impl NonCentralChiSquared {
     }
 
     /// Sample from the distribution
-    pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+    pub fn sample(&self) -> f64 {
         // Implementation based on the algorithm described in:
         // "Methods for generating random numbers from normal and non-central chi-squared distributions"
         // by B. E. Cooper (1968)
 
         // 1. Generate a normal random variable with mean sqrt(nonc) and variance 1
         let normal = Normal::new(self.nonc.sqrt(), 1.0).unwrap();
-        let z = normal.sample(rng);
+        let z = normal.rvs(1).expect("normal sampling failed")[0];
 
         // 2. Generate a chi-squared random variable with df-1 degrees of freedom
         let chi_squared = if self.df > 1.0 {
-            ChiSquared::new(self.df - 1.0).unwrap().sample(rng)
+            let mut rng = thread_rng();
+            ChiSquared::new(self.df - 1.0).unwrap().sample(&mut rng)
         } else {
             0.0
         };
@@ -130,7 +132,7 @@ impl NonCentralF {
     }
 
     /// Sample from the distribution
-    pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+    pub fn sample(&self) -> f64 {
         // Implementation based on the algorithm:
         // 1. Generate a non-central chi-squared random variable X with df1 degrees of freedom
         //    and non-centrality parameter nonc
@@ -138,10 +140,11 @@ impl NonCentralF {
         // 3. Return (X/df1)/(Y/df2)
 
         let nc_chi2 = NonCentralChiSquared::new(self.df1, self.nonc).unwrap();
-        let x = nc_chi2.sample(rng);
+        let x = nc_chi2.sample();
 
+        let mut rng = thread_rng();
         let chi2 = ChiSquared::new(self.df2).unwrap();
-        let y = chi2.sample(rng);
+        let y = chi2.sample(&mut rng);
 
         (x / self.df1) / (y / self.df2)
     }
@@ -173,12 +176,13 @@ impl VonMises {
     }
 
     /// Sample from the distribution using a simplified approach
-    pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+    pub fn sample(&self) -> f64 {
         use std::f64::consts::PI;
 
         // Special case for kappa = 0 (uniform distribution)
         if self.kappa < 1e-10 {
-            let u = rng.random::<f64>();
+            let mut rng = thread_rng();
+            let u = rng.gen::<f64>();
             return self.mu + 2.0 * PI * (u - 0.5);
         }
 
@@ -191,7 +195,7 @@ impl VonMises {
             1.0
         };
         let normal = Normal::new(self.mu, variance_scaling).unwrap();
-        let sample = normal.sample(rng);
+        let sample = normal.rvs(1).expect("normal sampling failed")[0];
 
         // Wrap to [-π, π] range
         let mut result = sample;
@@ -231,16 +235,17 @@ impl Maxwell {
     }
 
     /// Sample from the distribution
-    pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+    pub fn sample(&self) -> f64 {
         // Implementation based on the relationship with the chi distribution:
         // If X, Y, Z are independent normal random variables with mean 0 and variance σ^2,
         // then sqrt(X^2 + Y^2 + Z^2) follows a Maxwell-Boltzmann distribution with scale σ.
 
         let normal = Normal::new(0.0, self.scale).unwrap();
+        let samples = normal.rvs(3).expect("normal sampling failed");
 
-        let x = normal.sample(rng);
-        let y = normal.sample(rng);
-        let z = normal.sample(rng);
+        let x = samples[0];
+        let y = samples[1];
+        let z = samples[2];
 
         (x * x + y * y + z * z).sqrt()
     }
@@ -278,13 +283,13 @@ impl Wald {
     }
 
     /// Sample from the distribution
-    pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+    pub fn sample(&self) -> f64 {
         // Implementation based on the algorithm described in:
         // "Random variate generation for exponentially and normally distributed random variables"
         // by J. R. Michael, W. R. Schucany, and R. W. Haas (1976)
 
         let normal = Normal::new(0.0, 1.0).unwrap();
-        let y = normal.sample(rng);
+        let y = normal.rvs(1).expect("normal sampling failed")[0];
         let y_squared = y * y;
 
         let mu = self.mean;
@@ -295,7 +300,8 @@ impl Wald {
                 * (mu * y_squared * 4.0 * lambda / mu + mu * mu * y_squared * y_squared).sqrt();
 
         // Generate a uniform random variable for acceptance/rejection
-        let u = rng.random::<f64>();
+        let mut rng = thread_rng();
+        let u = rng.gen::<f64>();
 
         if u <= mu / (mu + x1) {
             x1
@@ -322,7 +328,7 @@ pub fn noncentral_chisquare<T: Float + NumCast + Clone + Debug + Display>(
     shape: &[usize],
 ) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
-    let mut rng_lock = rng.get_rng()?;
+    let rng_lock = rng.get_rng()?;
 
     let df_f64 = df
         .to_f64()
@@ -344,7 +350,7 @@ pub fn noncentral_chisquare<T: Float + NumCast + Clone + Debug + Display>(
     let mut vec = Vec::with_capacity(size);
 
     for _ in 0..size {
-        let val_f64 = dist.sample(&mut *rng_lock);
+        let val_f64 = dist.sample();
         let val = T::from(val_f64).ok_or_else(|| {
             NumRs2Error::InvalidOperation("Failed to convert sample to target type".to_string())
         })?;
@@ -373,7 +379,7 @@ pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(
     shape: &[usize],
 ) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
-    let mut rng_lock = rng.get_rng()?;
+    let rng_lock = rng.get_rng()?;
 
     let dfnum_f64 = dfnum.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert dfnum to f64".to_string())
@@ -398,7 +404,7 @@ pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(
     let mut vec = Vec::with_capacity(size);
 
     for _ in 0..size {
-        let val_f64 = dist.sample(&mut *rng_lock);
+        let val_f64 = dist.sample();
         let val = T::from(val_f64).ok_or_else(|| {
             NumRs2Error::InvalidOperation("Failed to convert sample to target type".to_string())
         })?;
@@ -425,7 +431,7 @@ pub fn vonmises<T: Float + NumCast + Clone + Debug + Display>(
     shape: &[usize],
 ) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
-    let mut rng_lock = rng.get_rng()?;
+    let rng_lock = rng.get_rng()?;
 
     let mu_f64 = mu
         .to_f64()
@@ -442,7 +448,7 @@ pub fn vonmises<T: Float + NumCast + Clone + Debug + Display>(
     let mut vec = Vec::with_capacity(size);
 
     for _ in 0..size {
-        let val_f64 = dist.sample(&mut *rng_lock);
+        let val_f64 = dist.sample();
         let val = T::from(val_f64).ok_or_else(|| {
             NumRs2Error::InvalidOperation("Failed to convert sample to target type".to_string())
         })?;
@@ -467,7 +473,7 @@ pub fn maxwell<T: Float + NumCast + Clone + Debug + Display>(
     shape: &[usize],
 ) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
-    let mut rng_lock = rng.get_rng()?;
+    let rng_lock = rng.get_rng()?;
 
     let scale_f64 = scale.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
@@ -481,7 +487,7 @@ pub fn maxwell<T: Float + NumCast + Clone + Debug + Display>(
     let mut vec = Vec::with_capacity(size);
 
     for _ in 0..size {
-        let val_f64 = dist.sample(&mut *rng_lock);
+        let val_f64 = dist.sample();
         let val = T::from(val_f64).ok_or_else(|| {
             NumRs2Error::InvalidOperation("Failed to convert sample to target type".to_string())
         })?;
@@ -508,7 +514,7 @@ pub fn wald<T: Float + NumCast + Clone + Debug + Display>(
     shape: &[usize],
 ) -> Result<Array<T>> {
     let rng = crate::random::distributions::get_global_random_state()?;
-    let mut rng_lock = rng.get_rng()?;
+    let rng_lock = rng.get_rng()?;
 
     let mean_f64 = mean.to_f64().ok_or_else(|| {
         NumRs2Error::InvalidOperation("Failed to convert mean to f64".to_string())
@@ -525,7 +531,7 @@ pub fn wald<T: Float + NumCast + Clone + Debug + Display>(
     let mut vec = Vec::with_capacity(size);
 
     for _ in 0..size {
-        let val_f64 = dist.sample(&mut *rng_lock);
+        let val_f64 = dist.sample();
         let val = T::from(val_f64).ok_or_else(|| {
             NumRs2Error::InvalidOperation("Failed to convert sample to target type".to_string())
         })?;
@@ -542,11 +548,9 @@ mod tests {
     #[test]
     fn test_vonmises_basic() {
         let dist = VonMises::new(0.0, 1.0).unwrap();
-        let mut rng = rand::rng();
-
         // Generate a few samples to check they're in range
         for _ in 0..10 {
-            let sample = dist.sample(&mut rng);
+            let sample = dist.sample();
             assert!(
                 (-std::f64::consts::PI..=std::f64::consts::PI).contains(&sample),
                 "Sample {} out of range",

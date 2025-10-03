@@ -147,9 +147,12 @@ impl BroadcastEngine {
         T: NumericElement + Copy + Send + Sync,
         F: Fn(T, T) -> T + Send + Sync,
     {
-        use rayon::prelude::*;
+        use scirs2_core::parallel_ops::*;
 
-        let chunk_size = cmp::max(1, broadcast_shape.size() / rayon::current_num_threads());
+        let chunk_size = cmp::max(
+            1,
+            broadcast_shape.size() / scirs2_core::parallel_ops::num_threads(),
+        );
 
         result
             .par_chunks_mut(chunk_size)

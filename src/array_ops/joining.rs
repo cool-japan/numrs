@@ -1,6 +1,6 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::Axis;
+use scirs2_core::ndarray::Axis;
 
 /// Enum to handle both single axis and multiple axes for concatenation
 pub enum AxisArg {
@@ -83,7 +83,7 @@ fn concatenate_single_axis<T: Clone>(arrays: &[&Array<T>], axis: usize) -> Resul
     let views = views?;
 
     // Use ndarray's concatenate function
-    let result = ndarray::concatenate(Axis(axis), &views).map_err(|e| {
+    let result = scirs2_core::ndarray::concatenate(Axis(axis), &views).map_err(|e| {
         NumRs2Error::InvalidOperation(format!("Failed to concatenate arrays: {}", e))
     })?;
 

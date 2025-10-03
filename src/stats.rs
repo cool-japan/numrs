@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast, Zero};
-use rayon::prelude::*;
+use scirs2_core::parallel_ops::*;
 
 /// Threshold for using parallel processing (minimum array size)
 const PARALLEL_THRESHOLD: usize = 10000;

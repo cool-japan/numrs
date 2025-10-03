@@ -4,10 +4,11 @@
 //! essential for production use, including memory efficiency, SIMD optimization,
 //! parallel processing, and numerical stability.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::parallel::parallel_algorithms::ParallelArrayOps;
 use numrs2::prelude::*;
 use numrs2::stats::Statistics;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Production readiness benchmarks
@@ -24,8 +25,8 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("standard_matmul", size),
                 size,
                 |bench, &size| {
-                    let a = Array::ones(&[size, size]);
-                    let b = Array::ones(&[size, size]);
+                    let a: Array<f64> = Array::ones(&[size, size]);
+                    let b: Array<f64> = Array::ones(&[size, size]);
                     bench.iter(|| black_box(a.matmul(&b).unwrap()));
                 },
             );
@@ -43,9 +44,9 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("add_operation", size),
                 size,
                 |bench, &size| {
-                    let a = Array::ones(&[*size]);
-                    let b = Array::ones(&[*size]);
-                    bench.iter(|| black_box(&a + &b));
+                    let a: Array<f32> = Array::ones(&[size]);
+                    let b: Array<f32> = Array::ones(&[size]);
+                    bench.iter(|| black_box(a.add(&b)));
                 },
             );
 
@@ -53,9 +54,9 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("multiply_operation", size),
                 size,
                 |bench, &size| {
-                    let a = Array::ones(&[*size]);
-                    let b = Array::ones(&[*size]);
-                    bench.iter(|| black_box(&a * &b));
+                    let a: Array<f32> = Array::ones(&[size]);
+                    let b: Array<f32> = Array::ones(&[size]);
+                    bench.iter(|| black_box(a.multiply(&b)));
                 },
             );
 
@@ -63,8 +64,8 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("dot_product", size),
                 size,
                 |bench, &size| {
-                    let a = Array::ones(&[*size]);
-                    let b = Array::ones(&[*size]);
+                    let a: Array<f32> = Array::ones(&[size]);
+                    let b: Array<f32> = Array::ones(&[size]);
                     bench.iter(|| black_box(a.dot(&b).unwrap()));
                 },
             );
@@ -82,7 +83,7 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("sequential_sum", size),
                 size,
                 |bench, &size| {
-                    let data = Array::ones(&[*size]);
+                    let data: Array<f32> = Array::ones(&[size]);
                     bench.iter(|| black_box(data.sum()));
                 },
             );
@@ -91,12 +92,12 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("parallel_sum", size),
                 size,
                 |bench, &size| {
-                    let data = Array::ones(&[*size]);
-                    let parallel_ops = ParallelArrayOps::new();
+                    let data: Array<f32> = Array::ones(&[size]);
+                    let parallel_ops = ParallelArrayOps::new(Default::default()).unwrap();
                     bench.iter(|| {
                         black_box(
                             parallel_ops
-                                .parallel_reduce(&data, 0.0f32, |a, b| a + b)
+                                .parallel_reduce(&data.to_vec(), 0.0f32, |a, b| a + b)
                                 .unwrap(),
                         )
                     });
@@ -116,7 +117,7 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("zeros_creation", size),
                 size,
                 |bench, &size| {
-                    bench.iter(|| black_box(Array::zeros(&[*size])));
+                    bench.iter(|| black_box(Array::<f32>::zeros(&[size])));
                 },
             );
 
@@ -124,12 +125,12 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("ones_creation", size),
                 size,
                 |bench, &size| {
-                    bench.iter(|| black_box(Array::ones(&[*size])));
+                    bench.iter(|| black_box(Array::<f32>::ones(&[size])));
                 },
             );
 
             group.bench_with_input(BenchmarkId::new("from_vec", size), size, |bench, &size| {
-                let data = vec![1.0f32; *size];
+                let data = vec![1.0f32; size];
                 bench.iter(|| black_box(Array::from_vec(data.clone())));
             });
         }
@@ -179,7 +180,7 @@ impl ProductionBenchmarks {
                         }
                     }
                     let a = Array::from_vec(a_data).reshape(&[size, size]);
-                    let b = Array::ones(&[size]);
+                    let b: Array<f64> = Array::ones(&[size]);
 
                     // bench.iter(|| black_box(numrs2::linalg::solve(&a, &b).unwrap())); // solve requires lapack feature
                 },
@@ -199,11 +200,11 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("row_major_access", size),
                 size,
                 |bench, &size| {
-                    let matrix = Array::ones(&[*size, *size]);
+                    let matrix: Array<f32> = Array::ones(&[size, size]);
                     bench.iter(|| {
                         let mut sum = 0.0f32;
-                        for i in 0..*size {
-                            for j in 0..*size {
+                        for i in 0..size {
+                            for j in 0..size {
                                 sum += matrix.get(&[i, j]).unwrap();
                             }
                         }
@@ -217,11 +218,11 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("column_major_access", size),
                 size,
                 |bench, &size| {
-                    let matrix = Array::ones(&[*size, *size]);
+                    let matrix: Array<f32> = Array::ones(&[size, size]);
                     bench.iter(|| {
                         let mut sum = 0.0f32;
-                        for j in 0..*size {
-                            for i in 0..*size {
+                        for j in 0..size {
+                            for i in 0..size {
                                 sum += matrix.get(&[i, j]).unwrap();
                             }
                         }
@@ -243,7 +244,7 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("mean_calculation", size),
                 size,
                 |bench, &size| {
-                    let data = Array::ones(&[*size]);
+                    let data: Array<f32> = Array::ones(&[size]);
                     bench.iter(|| black_box(data.mean()));
                 },
             );
@@ -252,7 +253,7 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("variance_calculation", size),
                 size,
                 |bench, &size| {
-                    let data = Array::ones(&[*size]);
+                    let data: Array<f32> = Array::ones(&[size]);
                     bench.iter(|| black_box(data.var()));
                 },
             );
@@ -261,7 +262,7 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("sum_calculation", size),
                 size,
                 |bench, &size| {
-                    let data = Array::ones(&[*size]);
+                    let data: Array<f32> = Array::ones(&[size]);
                     bench.iter(|| black_box(data.sum()));
                 },
             );
@@ -275,25 +276,26 @@ impl ProductionBenchmarks {
         group.measurement_time(Duration::from_secs(3));
 
         for size in [100, 500, 1000].iter() {
-            group.bench_with_input(
-                BenchmarkId::new("matrix_scalar_add", size),
-                size,
-                |bench, &size| {
-                    let matrix = Array::ones(&[*size, *size]);
-                    let scalar = 2.0f32;
-                    bench.iter(|| black_box(&matrix + scalar));
-                },
-            );
+            // Broadcasting operations commented out - not yet implemented
+            // group.bench_with_input(
+            //     BenchmarkId::new("matrix_scalar_add", size),
+            //     size,
+            //     |bench, &size| {
+            //         let matrix: Array<f32> = Array::ones(&[size, size]);
+            //         let scalar = 2.0f32;
+            //         bench.iter(|| black_box(&matrix + scalar));
+            //     },
+            // );
 
-            group.bench_with_input(
-                BenchmarkId::new("matrix_vector_add", size),
-                size,
-                |bench, &size| {
-                    let matrix = Array::ones(&[*size, *size]);
-                    let vector = Array::ones(&[*size]);
-                    bench.iter(|| black_box(&matrix + &vector));
-                },
-            );
+            // group.bench_with_input(
+            //     BenchmarkId::new("matrix_vector_add", size),
+            //     size,
+            //     |bench, &size| {
+            //         let matrix: Array<f32> = Array::ones(&[size, size]);
+            //         let vector: Array<f32> = Array::ones(&[size]);
+            //         bench.iter(|| black_box(&matrix + &vector));
+            //     },
+            // );
         }
         group.finish();
     }
@@ -308,8 +310,8 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("reshape_operation", size),
                 size,
                 |bench, &size| {
-                    let data = Array::ones(&[*size]);
-                    let new_shape = if *size == 1000 {
+                    let data: Array<f32> = Array::ones(&[size]);
+                    let new_shape = if size == 1000 {
                         vec![20, 50]
                     } else {
                         vec![100, 100]
@@ -322,9 +324,9 @@ impl ProductionBenchmarks {
                 BenchmarkId::new("transpose_operation", size),
                 size,
                 |bench, &size| {
-                    let sqrt_size = (*size as f64).sqrt() as usize;
-                    let matrix = Array::ones(&[sqrt_size, sqrt_size]);
-                    bench.iter(|| black_box(matrix.t()));
+                    let sqrt_size = (size as f64).sqrt() as usize;
+                    let matrix: Array<f32> = Array::ones(&[sqrt_size, sqrt_size]);
+                    bench.iter(|| black_box(matrix.transpose()));
                 },
             );
         }

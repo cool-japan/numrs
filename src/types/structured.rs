@@ -5,7 +5,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_complex::Complex;
+use scirs2_core::Complex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;

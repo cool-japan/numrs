@@ -3,8 +3,8 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::matrix_decomp::qr::{identity_matrix, qr};
-use ndarray::ArrayView2;
 use num_traits::Float;
+use scirs2_core::ndarray::ArrayView2;
 use std::fmt::Debug;
 
 /// Compute the Schur decomposition of a matrix

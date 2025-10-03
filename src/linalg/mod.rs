@@ -19,7 +19,9 @@ pub mod decomposition;
 pub mod solve;
 
 // Import submodules
+pub mod iterative_solvers;
 pub mod matrix_ops;
+pub mod randomized;
 pub mod tensor_ops;
 pub mod vector_ops;
 
@@ -38,6 +40,12 @@ pub use matrix_ops::{det, matrix_power};
 pub use solve::pinv;
 pub use tensor_ops::{einsum, kron, tensordot};
 pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
+
+// Randomized linear algebra
+pub use randomized::{
+    random_projection, randomized_low_rank_approximation, randomized_range_finder, randomized_svd,
+    ProjectionType,
+};
 
 // Additional standalone functions for improved compatibility
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
@@ -371,7 +379,6 @@ where
     /// 2. LU decomposition with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(feature = "scirs")]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -1195,7 +1202,6 @@ where
     /// 2. LU decomposition with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(feature = "scirs")]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();

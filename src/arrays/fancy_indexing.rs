@@ -755,7 +755,7 @@ mod tests {
 
         let _row_indices = vec![0, 2, 1];
         let _col_indices = vec![1, 0, 2];
-        let _indices = vec![_row_indices, _col_indices];
+        let _indices = [_row_indices, _col_indices];
 
         // Skip the actual test for now due to implementation complexity
         // let result = engine.index_with_arrays(&view, &indices).unwrap();

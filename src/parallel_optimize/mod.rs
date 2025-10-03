@@ -39,7 +39,7 @@ pub fn optimize_parallel_computation(
     }
 
     // Otherwise, determine the optimal number of threads
-    let num_threads = rayon::current_num_threads();
+    let num_threads = scirs2_core::parallel_ops::num_threads();
     optimize_scheduling(array_size, element_cost, scheduling, num_threads)
 }
 
@@ -131,7 +131,7 @@ impl ParallelConfig {
             return 1;
         }
 
-        let available_threads = rayon::current_num_threads();
+        let available_threads = scirs2_core::parallel_ops::num_threads();
         let mut optimal = optimize_scheduling(
             array_size,
             element_cost,

@@ -29,7 +29,7 @@ use std::fmt::Debug;
 /// # Errors
 ///
 /// Returns an error if the matrix is singular or if the dimensions do not match.
-#[cfg(all(feature = "scirs", feature = "lapack"))]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     a: &Array<T>,
     b: &Array<T>,
@@ -38,16 +38,7 @@ pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
 }
 
 /// Solve a linear system Ax = b
-#[cfg(all(feature = "matrix_decomp", feature = "lapack", not(feature = "scirs")))]
-pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
-    a: &Array<T>,
-    b: &Array<T>,
-) -> Result<Array<T>> {
-    a.solve(b)
-}
-
-/// Solve a linear system Ax = b
-#[cfg(not(any(feature = "matrix_decomp", feature = "scirs")))]
+#[cfg(not(feature = "matrix_decomp"))]
 pub fn solve<
     T: Float
         + Clone

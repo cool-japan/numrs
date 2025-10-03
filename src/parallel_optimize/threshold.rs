@@ -3,7 +3,7 @@
 //! This module provides functionality for determining optimal
 //! thresholds for when to use parallel computation.
 
-use rayon::prelude::*;
+use scirs2_core::parallel_ops::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 

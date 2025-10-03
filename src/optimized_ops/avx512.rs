@@ -4,15 +4,15 @@
 //! instruction set features when available.
 
 use crate::Result;
-use ndarray::{Array1, ArrayView1, Zip};
-#[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+use scirs2_core::ndarray::{Array1, ArrayView1, Zip};
+#[cfg(target_arch = "x86_64")]
 use scirs2_core::simd_ops::{PlatformCapabilities, SimdUnifiedOps};
 
 /// AVX-512 specific operations
-#[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 pub struct Avx512Ops;
 
-#[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 impl Avx512Ops {
     /// Check if AVX-512 is available
     pub fn is_available() -> bool {
@@ -58,8 +58,8 @@ impl Avx512Ops {
             }
 
             if mask_bits != 0 {
-                let chunk_a = a.slice(ndarray::s![start..end]);
-                let chunk_b = b.slice(ndarray::s![start..end]);
+                let chunk_a = a.slice(scirs2_core::ndarray::s![start..end]);
+                let chunk_b = b.slice(scirs2_core::ndarray::s![start..end]);
                 let chunk_result = f64::simd_add(&chunk_a, &chunk_b);
 
                 // Apply mask
@@ -73,8 +73,8 @@ impl Avx512Ops {
             } else {
                 // No mask bits set, just copy from a
                 result
-                    .slice_mut(ndarray::s![start..end])
-                    .assign(&a.slice(ndarray::s![start..end]));
+                    .slice_mut(scirs2_core::ndarray::s![start..end])
+                    .assign(&a.slice(scirs2_core::ndarray::s![start..end]));
             }
         }
 
@@ -223,7 +223,7 @@ impl Avx512Ops {
             }
 
             if mask_bits != 0 {
-                let chunk = data.slice(ndarray::s![start..end]);
+                let chunk = data.slice(scirs2_core::ndarray::s![start..end]);
                 // In real AVX-512, this would use masked operations
                 for j in 0..chunk_size {
                     if (mask_bits & (1 << j)) != 0 {
@@ -313,10 +313,10 @@ impl Avx512Ops {
 }
 
 /// AVX-512 specific matrix operations
-#[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 pub struct Avx512MatrixOps;
 
-#[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 impl Avx512MatrixOps {
     /// AVX-512 optimized matrix transpose for 8x8 blocks
     pub fn transpose_8x8_block(input: &[f64; 64], output: &mut [f64; 64]) {
@@ -346,7 +346,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     fn test_masked_add() {
         let a = Array1::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let b = Array1::from_vec(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     fn test_gather() {
         let data = Array1::from_vec(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
         let indices = Array1::from_vec(vec![4, 2, 0, 3, 1]);
@@ -377,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     fn test_scatter() {
         let values = Array1::from_vec(vec![100.0, 200.0, 300.0]);
         let indices = Array1::from_vec(vec![2, 0, 4]);
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     fn test_histogram() {
         let data = Array1::from_vec(vec![0.5, 1.5, 2.5, 3.5, 4.5, 0.2, 1.8, 2.2, 3.8, 4.2]);
 

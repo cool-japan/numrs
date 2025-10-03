@@ -5,11 +5,12 @@
 
 #[macro_use]
 extern crate criterion;
-use criterion::{black_box, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion};
 
-use num_complex::Complex64;
 use numrs2::prelude::*;
+use scirs2_core::Complex64;
 use std::f64::consts::PI;
+use std::hint::black_box;
 
 /// Benchmark 1D FFT for different sizes
 fn bench_fft_1d(c: &mut Criterion) {

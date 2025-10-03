@@ -7,8 +7,8 @@
 // and efficiently. It shows various conversion methods, type promotions,
 // and mixed-type operations.
 
-use num_complex::Complex;
 use numrs2::prelude::*;
+use scirs2_core::Complex;
 
 fn main() -> Result<()> {
     println!("NumRS2 Type Conversion Example");

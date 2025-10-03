@@ -196,7 +196,7 @@ pub fn calculate_chunk_size(array_size: usize, strategy: SchedulingStrategy) -> 
     match strategy {
         SchedulingStrategy::Static => {
             // For static scheduling, larger chunks reduce overhead
-            let num_threads = rayon::current_num_threads();
+            let num_threads = scirs2_core::parallel_ops::num_threads();
             (array_size / num_threads).max(1)
         }
         SchedulingStrategy::Dynamic => {

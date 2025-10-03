@@ -23,8 +23,8 @@
 
 use crate::error::Result;
 use crate::indexing::IndexSpec;
-use num_complex::Complex;
 use num_traits::Float;
+use scirs2_core::Complex;
 use std::collections::HashMap;
 use std::fmt::Debug;
 

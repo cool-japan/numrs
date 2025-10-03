@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::Zero;
-use rayon::prelude::*;
+use scirs2_core::parallel_ops::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -315,7 +315,7 @@ where
     };
 
     // Using batched processing for better performance
-    let batch_size = std::cmp::max(1, array_size / rayon::current_num_threads());
+    let batch_size = std::cmp::max(1, array_size / scirs2_core::parallel_ops::num_threads());
     let batches = flat_data.chunks(batch_size);
 
     // Process each batch for unique values

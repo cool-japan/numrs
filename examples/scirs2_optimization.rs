@@ -3,8 +3,10 @@
 //! This example shows how to use SIMD, GPU, and parallel processing features
 //! from scirs2-core for high-performance numerical computing.
 
-// use numrs2::prelude::*;
-// use std::time::Instant;
+use numrs2::array::Array;
+use numrs2::interop::ndarray_compat::to_ndarray;
+use numrs2::optimized_ops::*;
+use std::time::Instant;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "scirs")]

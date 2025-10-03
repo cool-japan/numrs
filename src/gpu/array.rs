@@ -145,7 +145,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
                 tx.send(result).unwrap();
             });
 
-            self.context.device().poll(wgpu::Maintain::Wait);
+            self.context.device().poll(wgpu::PollType::Wait).unwrap();
 
             rx.receive().await.unwrap().unwrap();
 

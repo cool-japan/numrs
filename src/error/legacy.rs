@@ -91,12 +91,8 @@ impl From<io::Error> for NumRs2Error {
     }
 }
 
-/// Implement From<Box<bincode::ErrorKind>> for NumRs2Error
-impl From<Box<bincode::ErrorKind>> for NumRs2Error {
-    fn from(err: Box<bincode::ErrorKind>) -> Self {
-        NumRs2Error::DeserializationError(err.to_string())
-    }
-}
+// Note: bincode v2 changed its error types; we map them explicitly at call sites
+// using map_err instead of a blanket From implementation.
 
 impl NumRs2Error {
     /// Get the error category for this error

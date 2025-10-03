@@ -3,26 +3,23 @@
 //! This module demonstrates the integration of SIMD, GPU, and parallel
 //! processing capabilities from scirs2-core into NumRS2.
 
-#[cfg(feature = "scirs")]
 use scirs2_core::parallel_ops::*;
-#[cfg(feature = "scirs")]
 use scirs2_core::simd_ops::{AutoOptimizer, PlatformCapabilities, SimdUnifiedOps};
 
 // Submodules for specialized optimizations
-#[cfg(all(feature = "scirs", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 pub mod avx512;
-#[cfg(all(feature = "scirs", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 pub mod neon;
-#[cfg(feature = "scirs")]
 pub mod simd_complex;
 
 #[cfg(feature = "lapack")]
 use crate::linalg::det;
 use crate::{prelude::Array, Result};
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
+// SCIRS2 POLICY COMPLIANT imports - always use SciRS2
+use scirs2_core::ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 
 /// Get information about available optimizations
-#[cfg(feature = "scirs")]
 pub fn get_optimization_info() -> String {
     let caps = PlatformCapabilities::detect();
     format!(
@@ -49,7 +46,6 @@ pub fn get_optimization_info() -> String {
 }
 
 /// Optimized matrix multiplication using SIMD
-#[cfg(feature = "scirs")]
 pub fn simd_matmul(a: &ArrayView2<f32>, b: &ArrayView2<f32>) -> Result<Array<f32>> {
     if a.ncols() != b.nrows() {
         return Err(crate::NumRs2Error::DimensionMismatch(format!(
@@ -70,7 +66,6 @@ pub fn simd_matmul(a: &ArrayView2<f32>, b: &ArrayView2<f32>) -> Result<Array<f32
 }
 
 /// Optimized element-wise operations using SIMD
-#[cfg(feature = "scirs")]
 pub fn simd_elementwise_ops(a: &ArrayView1<f64>, b: &ArrayView1<f64>) -> Result<SimdOpsResult> {
     if a.len() != b.len() {
         return Err(crate::NumRs2Error::DimensionMismatch(format!(
@@ -89,7 +84,6 @@ pub fn simd_elementwise_ops(a: &ArrayView1<f64>, b: &ArrayView1<f64>) -> Result<
 }
 
 /// Result structure for SIMD element-wise operations
-#[cfg(feature = "scirs")]
 pub struct SimdOpsResult {
     pub add: Array<f64>,
     pub sub: Array<f64>,
@@ -98,7 +92,6 @@ pub struct SimdOpsResult {
 }
 
 /// Optimized vector operations using SIMD
-#[cfg(feature = "scirs")]
 pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
     use crate::simd_optimize::simd_traits::SimdArrayOps;
 
@@ -124,7 +117,6 @@ pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
 }
 
 /// Result structure for SIMD vector operations
-#[cfg(feature = "scirs")]
 pub struct SimdVectorResult {
     pub sum: f32,
     pub mean: f32,
@@ -134,7 +126,7 @@ pub struct SimdVectorResult {
 }
 
 /// Parallel matrix operations
-#[cfg(all(feature = "scirs", feature = "lapack"))]
+#[cfg(feature = "lapack")]
 pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
     if matrices.is_empty() {
         return Ok(Vec::new());
@@ -153,7 +145,6 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
 }
 
 /// Adaptive processing that automatically chooses between scalar, SIMD, or GPU
-#[cfg(feature = "scirs")]
 pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     let optimizer = AutoOptimizer::new();
     let caps = PlatformCapabilities::detect();
@@ -165,7 +156,7 @@ pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
         adaptive_array_sum_simd(data)
     } else if optimizer.should_use_simd(size) {
         // On ARM64, prefer NEON if available
-        #[cfg(all(target_arch = "aarch64", feature = "scirs"))]
+        #[cfg(target_arch = "aarch64")]
         {
             if caps.neon_available && data.len() >= 4 {
                 // Convert f64 to f32 for NEON processing if beneficial
@@ -180,7 +171,6 @@ pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     }
 }
 
-#[cfg(feature = "scirs")]
 fn adaptive_array_sum_simd(data: &ArrayView1<f64>) -> f64 {
     // Convert ArrayView to Array for simd_sum
     let array = crate::array::Array::from_vec(data.to_vec());
@@ -188,7 +178,6 @@ fn adaptive_array_sum_simd(data: &ArrayView1<f64>) -> f64 {
 }
 
 /// Parallel statistical computations
-#[cfg(feature = "scirs")]
 pub fn parallel_column_statistics(data: &ArrayView2<f64>) -> Vec<ColumnStats> {
     // Process each column in parallel
     let stats: Vec<ColumnStats> = data
@@ -213,7 +202,6 @@ pub fn parallel_column_statistics(data: &ArrayView2<f64>) -> Vec<ColumnStats> {
 }
 
 /// Statistics for a column
-#[cfg(feature = "scirs")]
 #[derive(Debug, Clone)]
 pub struct ColumnStats {
     pub mean: f64,
@@ -223,7 +211,6 @@ pub struct ColumnStats {
 }
 
 /// Chunked processing for memory efficiency
-#[cfg(feature = "scirs")]
 pub fn chunked_array_processing<F, R>(
     data: &ArrayView1<f64>,
     chunk_size: usize,
@@ -242,16 +229,14 @@ where
 }
 
 /// Determine if parallel processing should be used based on data size
-#[cfg(feature = "scirs")]
 pub fn should_use_parallel(data_size: usize) -> bool {
     is_parallel_enabled() && data_size > 1000
 }
 
 /// Enhanced mathematical operations with chunked processing and parallelization
-#[cfg(feature = "scirs")]
 pub mod enhanced_math {
     use super::*;
-    use ndarray::{Array1, ArrayView1, Zip};
+    use scirs2_core::ndarray::{Array1, ArrayView1, Zip};
 
     /// Parallel trigonometric sine function
     pub fn parallel_sin(data: &ArrayView1<f64>) -> Array1<f64> {
@@ -417,10 +402,9 @@ pub mod enhanced_math {
 }
 
 /// Enhanced exponential and logarithmic functions with SIMD sqrt and parallel processing
-#[cfg(feature = "scirs")]
 pub mod enhanced_exp {
     use super::*;
-    use ndarray::{Array1, ArrayView1, Zip};
+    use scirs2_core::ndarray::{Array1, ArrayView1, Zip};
 
     /// Parallel exponential function (e^x)
     pub fn parallel_exp(data: &ArrayView1<f64>) -> Array1<f64> {
@@ -555,10 +539,8 @@ pub mod enhanced_exp {
 }
 
 /// Combined trigonometric and exponential optimization suite
-#[cfg(feature = "scirs")]
 pub struct SimdMathOps;
 
-#[cfg(feature = "scirs")]
 impl SimdMathOps {
     /// Apply a SIMD-optimized math function with automatic chunking for large arrays
     pub fn apply_chunked<F>(data: &ArrayView1<f64>, chunk_size: usize, simd_fn: F) -> Array1<f64>
@@ -614,7 +596,6 @@ impl SimdMathOps {
 }
 
 /// Chunked processing for very large arrays to avoid memory pressure
-#[cfg(feature = "scirs")]
 pub fn process_large_array<F, T>(
     data: &ArrayView1<f64>,
     chunk_size: usize,
@@ -622,7 +603,7 @@ pub fn process_large_array<F, T>(
 ) -> Result<Array1<T>>
 where
     F: Fn(&ArrayView1<f64>) -> Array1<T> + Send + Sync,
-    T: Clone + Send + Default + ndarray::LinalgScalar,
+    T: Clone + Send + Default + scirs2_core::ndarray::LinalgScalar,
 {
     if data.is_empty() {
         return Ok(Array1::from_vec(vec![]));
@@ -654,10 +635,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::array;
+    use scirs2_core::ndarray::array;
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_optimization_info() {
         let info = get_optimization_info();
         assert!(info.contains("NumRS2 Optimizations Available"));
@@ -666,7 +646,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_simd_matmul() {
         let a = array![[1.0f32, 2.0], [3.0, 4.0]];
         let b = array![[5.0f32, 6.0], [7.0, 8.0]];
@@ -684,7 +663,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_simd_elementwise_ops() {
         let a = array![1.0, 2.0, 3.0, 4.0];
         let b = array![5.0, 6.0, 7.0, 8.0];
@@ -703,7 +681,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_simd_vector_ops() {
         let v = array![1.0f32, 2.0, 3.0, 4.0];
 
@@ -718,7 +695,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_adaptive_array_sum() {
         let data = Array1::from_vec(vec![1.0; 10000]);
         let sum = adaptive_array_sum(&data.view());
@@ -726,7 +702,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_parallel_column_statistics() {
         let data = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
         let stats = parallel_column_statistics(&data.view());
@@ -739,7 +714,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_chunked_processing() {
         let data = Array1::from_vec((0..100).map(|x| x as f64).collect());
 
@@ -750,15 +724,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_adaptive_math_function() {
         // Small array - should use scalar
         let small_data = array![1.0, 4.0, 9.0];
-        let small_result = SimdMathOps::adaptive_math_function(
-            &small_data.view(),
-            |data| enhanced_exp::simd_sqrt(data),
-            |x| x.sqrt(),
-        );
+        let small_result =
+            SimdMathOps::adaptive_math_function(&small_data.view(), enhanced_exp::simd_sqrt, |x| {
+                x.sqrt()
+            });
         assert_eq!(small_result.len(), 3);
         assert!((small_result[0] - 1.0).abs() < 1e-10);
         assert!((small_result[1] - 2.0).abs() < 1e-10);
@@ -766,16 +738,14 @@ mod tests {
 
         // Large array - should use SIMD
         let large_data = Array1::from_vec((0..10000).map(|x| (x + 1) as f64).collect());
-        let large_result = SimdMathOps::adaptive_math_function(
-            &large_data.view(),
-            |data| enhanced_exp::simd_sqrt(data),
-            |x| x.sqrt(),
-        );
+        let large_result =
+            SimdMathOps::adaptive_math_function(&large_data.view(), enhanced_exp::simd_sqrt, |x| {
+                x.sqrt()
+            });
         assert_eq!(large_result.len(), 10000);
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_enhanced_trig_functions() {
         use std::f64::consts::PI;
 
@@ -813,7 +783,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_enhanced_exp_functions() {
         let x = array![0.0, 1.0, 2.0, -1.0, 0.5];
 
@@ -841,7 +810,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_process_large_array() {
         let large_data = Array1::from_vec((0..1000).map(|x| x as f64).collect());
 

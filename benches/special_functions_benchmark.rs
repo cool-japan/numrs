@@ -5,9 +5,10 @@
 
 #[macro_use]
 extern crate criterion;
-use criterion::{black_box, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion};
 
 use numrs2::prelude::*;
+use std::hint::black_box;
 
 /// Benchmark error functions
 fn bench_error_functions(c: &mut Criterion) {

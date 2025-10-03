@@ -1,6 +1,6 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::Axis;
+use scirs2_core::ndarray::Axis;
 
 /// Enumeration to handle either sections or indices for split functions
 pub enum SplitArg {
@@ -68,9 +68,10 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
         let mut indices = vec![0; shape.len()];
         indices[axis] = start_idx;
 
-        let view = array
-            .array()
-            .slice_axis(Axis(axis), ndarray::Slice::from(start_idx..end_idx));
+        let view = array.array().slice_axis(
+            Axis(axis),
+            scirs2_core::ndarray::Slice::from(start_idx..end_idx),
+        );
         result.push(Array::from_ndarray(view.into_owned().into_dyn()));
 
         start_idx = end_idx;
@@ -81,9 +82,10 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
         let mut sub_shape = shape.clone();
         sub_shape[axis] = axis_len - start_idx;
 
-        let view = array
-            .array()
-            .slice_axis(Axis(axis), ndarray::Slice::from(start_idx..axis_len));
+        let view = array.array().slice_axis(
+            Axis(axis),
+            scirs2_core::ndarray::Slice::from(start_idx..axis_len),
+        );
         result.push(Array::from_ndarray(view.into_owned().into_dyn()));
     }
 

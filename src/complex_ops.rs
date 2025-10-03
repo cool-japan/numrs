@@ -5,8 +5,8 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_complex::Complex;
 use num_traits::Float;
+use scirs2_core::Complex;
 
 /// Extract the real part of complex numbers
 ///
@@ -20,7 +20,7 @@ use num_traits::Float;
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::real;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(1.0, 2.0),
@@ -46,7 +46,7 @@ pub fn real<T: Float>(array: &Array<Complex<T>>) -> Array<T> {
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::imag;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(1.0, 2.0),
@@ -73,7 +73,7 @@ pub fn imag<T: Float>(array: &Array<Complex<T>>) -> Array<T> {
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::angle;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(1.0, 1.0),   // 45 degrees
@@ -110,7 +110,7 @@ pub fn angle<T: Float>(array: &Array<Complex<T>>, deg: bool) -> Array<T> {
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::conj;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(1.0, 2.0),
@@ -159,7 +159,7 @@ pub fn to_complex<T: Float>(array: &Array<T>) -> Array<Complex<T>> {
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::absolute;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(3.0, 4.0),   // magnitude = 5.0
@@ -234,7 +234,7 @@ pub fn from_polar<T: Float>(
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::iscomplex;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(1.0, 0.0),    // false (real)
@@ -260,7 +260,7 @@ pub fn iscomplex<T: Float>(array: &Array<Complex<T>>) -> Array<bool> {
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::isreal;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(1.0, 0.0),    // true (real)
@@ -290,7 +290,7 @@ pub fn isreal<T: Float>(array: &Array<Complex<T>>) -> Array<bool> {
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::complex_ops::iscomplexobj;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let complex_array = Array::from_vec(vec![
 ///     Complex::new(1.0, 0.0),    // Even though imaginary part is zero

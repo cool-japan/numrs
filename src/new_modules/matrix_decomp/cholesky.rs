@@ -3,9 +3,9 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::ArrayView2;
 use ndarray_linalg::{Cholesky, UPLO};
 use num_traits::Float;
+use scirs2_core::ndarray::ArrayView2;
 use std::fmt::Debug;
 
 /// Compute the Cholesky decomposition of a matrix

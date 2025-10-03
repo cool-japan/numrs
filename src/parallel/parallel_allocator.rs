@@ -598,8 +598,10 @@ mod tests {
     #[test]
     fn test_thread_local_caching() {
         let base = NumericalArrayAllocator::new();
-        let mut config = ParallelAllocatorConfig::default();
-        config.max_cached_blocks_per_thread = 5;
+        let config = ParallelAllocatorConfig {
+            max_cached_blocks_per_thread: 5,
+            ..Default::default()
+        };
         let allocator = ParallelAllocator::new(base, config);
 
         let layout = Layout::from_size_align(64, 8).unwrap();
@@ -645,8 +647,10 @@ mod tests {
     #[test]
     fn test_garbage_collection() {
         let base = NumericalArrayAllocator::new();
-        let mut config = ParallelAllocatorConfig::default();
-        config.max_block_age = Duration::from_millis(1); // Very short for testing
+        let config = ParallelAllocatorConfig {
+            max_block_age: Duration::from_millis(1), // Very short for testing
+            ..Default::default()
+        };
         let allocator = ParallelAllocator::new(base, config);
 
         let layout = Layout::from_size_align(64, 8).unwrap();

@@ -4,17 +4,14 @@
 //! operations including arithmetic, transcendental functions, and FFT.
 
 use crate::Result;
-use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
-use num_complex::Complex;
-#[cfg(feature = "scirs")]
+use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
 use scirs2_core::simd_ops::SimdUnifiedOps;
+use scirs2_core::Complex;
 use std::f64::consts::PI;
 
 /// SIMD-optimized complex number operations
-#[cfg(feature = "scirs")]
 pub struct SimdComplexOps;
 
-#[cfg(feature = "scirs")]
 impl SimdComplexOps {
     /// SIMD-optimized complex multiplication
     pub fn complex_multiply(
@@ -137,10 +134,8 @@ impl SimdComplexOps {
 }
 
 /// SIMD-optimized Fast Fourier Transform (FFT)
-#[cfg(feature = "scirs")]
 pub struct SimdFft;
 
-#[cfg(feature = "scirs")]
 impl SimdFft {
     /// Cooley-Tukey radix-2 FFT with SIMD optimization
     pub fn fft(input: &ArrayView1<Complex<f64>>) -> Result<Array1<Complex<f64>>> {
@@ -159,7 +154,7 @@ impl SimdFft {
     }
 
     /// Recursive FFT implementation
-    fn fft_recursive(data: &mut ndarray::ArrayViewMut1<Complex<f64>>) {
+    fn fft_recursive(data: &mut scirs2_core::ndarray::ArrayViewMut1<Complex<f64>>) {
         let n = data.len();
         if n <= 1 {
             return;
@@ -255,10 +250,8 @@ impl SimdFft {
 }
 
 /// SIMD-optimized convolution operations
-#[cfg(feature = "scirs")]
 pub struct SimdConvolution;
 
-#[cfg(feature = "scirs")]
 impl SimdConvolution {
     /// Fast convolution using FFT with SIMD
     pub fn convolve(signal: &ArrayView1<f64>, kernel: &ArrayView1<f64>) -> Result<Array1<f64>> {
@@ -273,8 +266,12 @@ impl SimdConvolution {
         let mut padded_signal = Array1::zeros(fft_len);
         let mut padded_kernel = Array1::zeros(fft_len);
 
-        padded_signal.slice_mut(ndarray::s![..n]).assign(signal);
-        padded_kernel.slice_mut(ndarray::s![..m]).assign(kernel);
+        padded_signal
+            .slice_mut(scirs2_core::ndarray::s![..n])
+            .assign(signal);
+        padded_kernel
+            .slice_mut(scirs2_core::ndarray::s![..m])
+            .assign(kernel);
 
         // Convert to complex
         let complex_signal: Array1<Complex<f64>> = padded_signal.map(|&x| Complex::new(x, 0.0));
@@ -292,7 +289,9 @@ impl SimdConvolution {
 
         // Extract real part and trim to output length
         let result_real: Array1<f64> = result_complex.map(|c| c.re);
-        Ok(result_real.slice(ndarray::s![..output_len]).to_owned())
+        Ok(result_real
+            .slice(scirs2_core::ndarray::s![..output_len])
+            .to_owned())
     }
 }
 
@@ -302,7 +301,6 @@ mod tests {
     use approx::assert_relative_eq;
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_complex_multiply() {
         let a = Array1::from_vec(vec![Complex::new(1.0, 2.0), Complex::new(3.0, 4.0)]);
         let b = Array1::from_vec(vec![Complex::new(5.0, 6.0), Complex::new(7.0, 8.0)]);
@@ -319,7 +317,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_complex_magnitude() {
         let a = Array1::from_vec(vec![Complex::new(3.0, 4.0), Complex::new(5.0, 12.0)]);
 
@@ -330,7 +327,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_fft_simple() {
         let input = Array1::from_vec(vec![
             Complex::new(1.0, 0.0),
@@ -352,7 +348,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "scirs")]
     fn test_fft_inverse() {
         let input = Array1::from_vec(vec![
             Complex::new(1.0, 2.0),

@@ -318,7 +318,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
     }
 
     /// Cache-oblivious FFT implementation
-    pub fn fft_cache_oblivious(&self, data: &mut [num_complex::Complex<T>]) -> Result<()> {
+    pub fn fft_cache_oblivious(&self, data: &mut [scirs2_core::Complex<T>]) -> Result<()> {
         let n = data.len();
         if n <= 1 {
             return Ok(());
@@ -338,7 +338,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
     }
 
     /// Cache-oblivious inverse FFT
-    pub fn ifft_cache_oblivious(&self, data: &mut [num_complex::Complex<T>]) -> Result<()> {
+    pub fn ifft_cache_oblivious(&self, data: &mut [scirs2_core::Complex<T>]) -> Result<()> {
         let n = data.len();
         if n <= 1 {
             return Ok(());
@@ -356,7 +356,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
         self.fft_recursive(data, true)?;
 
         // Scale by 1/n for inverse transform
-        let scale = num_complex::Complex::new(
+        let scale = scirs2_core::Complex::new(
             <T as NumericElement>::one() / T::from_f64(n as f64).unwrap(),
             <T as NumericElement>::zero(),
         );
@@ -368,7 +368,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
     }
 
     /// Recursive cache-oblivious FFT implementation
-    fn fft_recursive(&self, data: &mut [num_complex::Complex<T>], inverse: bool) -> Result<()> {
+    fn fft_recursive(&self, data: &mut [scirs2_core::Complex<T>], inverse: bool) -> Result<()> {
         let n = data.len();
         if n <= 1 {
             return Ok(());
@@ -403,7 +403,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
 
             let cos_angle = angle.cos();
             let sin_angle = angle.sin();
-            let twiddle = num_complex::Complex::new(cos_angle, sin_angle);
+            let twiddle = scirs2_core::Complex::new(cos_angle, sin_angle);
 
             let t = twiddle * odd[i];
             data[i] = even[i] + t;
@@ -414,7 +414,7 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
     }
 
     /// Iterative FFT for small arrays (better cache locality)
-    fn fft_iterative(&self, data: &mut [num_complex::Complex<T>], inverse: bool) -> Result<()> {
+    fn fft_iterative(&self, data: &mut [scirs2_core::Complex<T>], inverse: bool) -> Result<()> {
         let n = data.len();
 
         // Bit-reverse the input
@@ -444,10 +444,10 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
 
             let cos_angle = angle.cos();
             let sin_angle = angle.sin();
-            let w_len = num_complex::Complex::new(cos_angle, sin_angle);
+            let w_len = scirs2_core::Complex::new(cos_angle, sin_angle);
 
             for i in (0..n).step_by(length) {
-                let mut w = num_complex::Complex::new(
+                let mut w = scirs2_core::Complex::new(
                     <T as NumericElement>::one(),
                     <T as NumericElement>::zero(),
                 );
@@ -748,7 +748,7 @@ pub struct BandwidthEstimate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num_complex::Complex;
+    use scirs2_core::Complex;
 
     #[test]
     fn test_cache_aware_transpose() {

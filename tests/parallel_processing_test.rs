@@ -3,11 +3,11 @@
 //! This module verifies that parallel processing optimizations are effective
 //! for large arrays and provides performance comparisons.
 
-use num_complex::Complex;
 use numrs2::array_ops::advanced_indexing;
 use numrs2::bitwise_ops;
 use numrs2::complex_ops;
 use numrs2::prelude::*;
+use scirs2_core::Complex;
 use std::time::Instant;
 
 /// Test parallel processing effectiveness for mathematical operations
@@ -299,7 +299,7 @@ fn test_parallel_processing_scaling() {
 
     // Test scaling from small to large arrays to identify parallel processing benefits
     let base_size = 10000;
-    let multipliers = vec![1, 2, 5, 10, 20, 50];
+    let multipliers = [1, 2, 5, 10, 20, 50];
 
     println!("Array Size\tExp Time (ms)\tThroughput (MOps/s)\tScaling Factor");
     println!("----------\t-------------\t-------------------\t--------------");

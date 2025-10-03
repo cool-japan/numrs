@@ -12,6 +12,11 @@ cargo run --example linalg_example
 cargo run --example simd_example
 cargo run --example memory_optimize_example
 cargo run --example parallel_optimize_example
+cargo run --example autodiff_example
+cargo run --example randomized_linalg_example
+
+# For Arrow example, enable the arrow feature:
+cargo run --example arrow_example --features arrow
 ```
 
 ## Example Descriptions
@@ -167,6 +172,39 @@ Shows sparse array functionality:
 - Sparse array operations
 - Conversion between dense and sparse formats
 - Sparse matrix multiplication
+
+### Automatic Differentiation (`autodiff_example.rs`)
+
+Demonstrates automatic differentiation capabilities:
+- Forward mode AD with dual numbers
+- Reverse mode AD with tape-based backpropagation
+- Higher-order derivatives (Hessian, Taylor series)
+- Gradient descent optimization
+- Jacobian matrix computation
+- Neural network activation functions (sigmoid, ReLU)
+- Directional derivatives
+- Application to numerical optimization
+
+### Apache Arrow Integration (`arrow_example.rs`)
+
+Shows Apache Arrow interoperability (requires `--features arrow`):
+- Zero-copy conversions between NumRS and Arrow arrays
+- IPC streaming for inter-process communication
+- Feather format for fast columnar storage
+- Reading and writing Arrow data files
+- Support for multiple data types (f32, f64, i8-i64, u8-u64, bool)
+- Large array performance benchmarking
+- Integration with Python ecosystem (PyArrow, Pandas, Polars)
+
+### Randomized Linear Algebra (`randomized_linalg_example.rs`)
+
+Illustrates randomized linear algebra algorithms:
+- Random projections for dimensionality reduction (Gaussian, Sparse, Rademacher)
+- Randomized range finder for column space approximation
+- Low-rank approximation algorithms
+- Johnson-Lindenstrauss lemma application
+- Performance comparisons with full algorithms
+- Memory-efficient processing of large matrices
 
 ## Contributing Examples
 

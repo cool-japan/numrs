@@ -2,6 +2,11 @@
 //!
 //! This module provides conversions between NumRS Array and nalgebra matrix
 //! structures, allowing for interoperability between the two libraries.
+//!
+//! NOTE: This module is disabled per SCIRS2 POLICY which forbids direct nalgebra usage.
+//! BLAS/LAPACK operations must go through scirs2-core abstractions.
+
+#![cfg(feature = "nalgebra")] // Feature gate - nalgebra is not part of SCIRS2 POLICY
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};

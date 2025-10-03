@@ -974,7 +974,7 @@ mod tests {
 
     #[test]
     fn test_fancy_indexing() {
-        let _data = vec![10, 20, 30, 40, 50];
+        let _data = [10, 20, 30, 40, 50];
         let indices = vec![0, 2, 4];
         let spec = IndexSpec::Array(indices);
 

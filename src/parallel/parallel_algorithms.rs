@@ -6,7 +6,7 @@
 use super::WorkStealingPool;
 use crate::error::{NumRs2Error, Result};
 use crate::traits::{FloatingPoint, NumericElement};
-use rayon::prelude::*;
+use scirs2_core::parallel_ops::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::thread;
@@ -317,7 +317,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
     }
 
     /// Parallel FFT computation
-    pub fn parallel_fft(&self, data: &mut [num_complex::Complex<T>]) -> Result<()> {
+    pub fn parallel_fft(&self, data: &mut [scirs2_core::Complex<T>]) -> Result<()> {
         let n = data.len();
         if !n.is_power_of_two() {
             return Err(NumRs2Error::InvalidOperation(
@@ -333,7 +333,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
     }
 
     /// Parallel inverse FFT
-    pub fn parallel_ifft(&self, data: &mut [num_complex::Complex<T>]) -> Result<()> {
+    pub fn parallel_ifft(&self, data: &mut [scirs2_core::Complex<T>]) -> Result<()> {
         let n = data.len();
         if !n.is_power_of_two() {
             return Err(NumRs2Error::InvalidOperation(
@@ -348,7 +348,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
         self.parallel_fft_recursive(data, true)?;
 
         // Scale by 1/n for inverse transform
-        let scale = num_complex::Complex::new(
+        let scale = scirs2_core::Complex::new(
             <T as NumericElement>::one() / T::from_f64(n as f64).unwrap(),
             <T as NumericElement>::zero(),
         );
@@ -361,7 +361,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
 
     fn parallel_fft_recursive(
         &self,
-        data: &mut [num_complex::Complex<T>],
+        data: &mut [scirs2_core::Complex<T>],
         inverse: bool,
     ) -> Result<()> {
         let n = data.len();
@@ -389,8 +389,8 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
 
         // Recursive FFT on even and odd parts (in parallel for large sizes)
         if n >= self.config.parallel_threshold * 4 {
-            // True parallel recursion using rayon::join
-            let (even_result, odd_result) = rayon::join(
+            // True parallel recursion using scirs2_core::parallel_ops::par_join
+            let (even_result, odd_result) = scirs2_core::parallel_ops::par_join(
                 || self.parallel_fft_recursive(&mut even, inverse),
                 || self.parallel_fft_recursive(&mut odd, inverse),
             );
@@ -415,7 +415,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
 
             let cos_angle = angle.cos();
             let sin_angle = angle.sin();
-            let twiddle = num_complex::Complex::new(cos_angle, sin_angle);
+            let twiddle = scirs2_core::Complex::new(cos_angle, sin_angle);
 
             let t = twiddle * odd[i];
             data[i] = even[i] + t;
@@ -425,7 +425,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
         Ok(())
     }
 
-    fn sequential_fft(&self, data: &mut [num_complex::Complex<T>]) -> Result<()> {
+    fn sequential_fft(&self, data: &mut [scirs2_core::Complex<T>]) -> Result<()> {
         // Bit-reverse the input
         let n = data.len();
         let mut j = 0;
@@ -450,10 +450,10 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
 
             let cos_angle = angle.cos();
             let sin_angle = angle.sin();
-            let w_len = num_complex::Complex::new(cos_angle, sin_angle);
+            let w_len = scirs2_core::Complex::new(cos_angle, sin_angle);
 
             for i in (0..n).step_by(length) {
-                let mut w = num_complex::Complex::new(
+                let mut w = scirs2_core::Complex::new(
                     <T as NumericElement>::one(),
                     <T as NumericElement>::zero(),
                 );
@@ -472,7 +472,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
         Ok(())
     }
 
-    fn sequential_ifft(&self, data: &mut [num_complex::Complex<T>]) -> Result<()> {
+    fn sequential_ifft(&self, data: &mut [scirs2_core::Complex<T>]) -> Result<()> {
         // Conjugate the complex numbers
         for sample in data.iter_mut() {
             *sample = sample.conj();
@@ -495,7 +495,7 @@ impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num_complex::Complex;
+    use scirs2_core::Complex;
 
     #[test]
     fn test_parallel_array_ops_creation() {

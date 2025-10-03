@@ -5,11 +5,11 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::{Array as NdArray, ArrayD, Dimension, IxDyn};
 use num_traits::NumCast;
+use scirs2_core::ndarray::{Array as NdArray, ArrayD, Dimension, IxDyn};
 use std::fmt::Debug;
 
-/// Convert from ndarray::Array to NumRS Array
+/// Convert from scirs2_core::ndarray::Array to NumRS Array
 ///
 /// # Arguments
 ///
@@ -23,7 +23,7 @@ use std::fmt::Debug;
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use ndarray::{Array as NdArray, IxDyn};
+/// use scirs2_core::ndarray::{Array as NdArray, IxDyn};
 /// use numrs2::interop::ndarray_compat::from_ndarray;
 ///
 /// // Create a 2D ndarray
@@ -51,7 +51,7 @@ where
     Ok(arr.reshape(&shape))
 }
 
-/// Convert from NumRS Array to ndarray::Array
+/// Convert from NumRS Array to scirs2_core::ndarray::Array
 ///
 /// # Arguments
 ///
@@ -65,7 +65,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use ndarray::{Array as NdArray, IxDyn};
+/// use scirs2_core::ndarray::{Array as NdArray, IxDyn};
 /// use numrs2::interop::ndarray_compat::to_ndarray;
 ///
 /// // Create a 2D NumRS Array
@@ -95,7 +95,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::Array2;
+    use scirs2_core::ndarray::Array2;
 
     #[test]
     fn test_from_ndarray_2d() {

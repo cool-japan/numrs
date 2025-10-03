@@ -9,9 +9,10 @@
 
 #[macro_use]
 extern crate criterion;
-use criterion::{black_box, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion};
 use numrs2::array::Array;
 use numrs2::random::distributions::*;
+use std::hint::black_box;
 
 // Import the SciRS2 integration when available
 #[cfg(feature = "scirs")]

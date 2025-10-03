@@ -684,7 +684,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(200));
 
         let order = execution_order.lock().unwrap();
-        assert!(order.len() >= 1);
+        assert!(!order.is_empty());
         // Note: In this simple test, the exact order depends on timing
     }
 
@@ -721,7 +721,7 @@ mod tests {
         }
 
         let imbalance = pool.calculate_queue_imbalance();
-        assert!(imbalance >= 0.0 && imbalance <= 1.0);
+        assert!((0.0..=1.0).contains(&imbalance));
     }
 
     #[test]

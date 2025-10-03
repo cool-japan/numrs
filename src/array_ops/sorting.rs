@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_complex::Complex;
 use num_traits::{NumCast, ToPrimitive, Zero};
+use scirs2_core::Complex;
 
 /// Return a partitioned copy of an array
 ///
@@ -378,230 +378,163 @@ fn binary_search_right<T: PartialOrd>(arr: &[T], value: &T) -> usize {
     left
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::array::Array;
+/// Generic sorting function that can handle both real and complex numbers
+///
+/// This is a convenience function that automatically chooses the appropriate
+/// sorting algorithm based on the data type.
+///
+/// # Parameters
+///
+/// * `array` - Input array to sort
+/// * `kind` - Sort algorithm: "quicksort", "mergesort", or "heapsort"
+///   If None, uses "quicksort" as default
+///
+/// # Returns
+///
+/// * Sorted copy of the array
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::array_ops::sorting::sort;
+///
+/// let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
+/// let sorted = sort(&a, Some("mergesort")).unwrap();
+/// assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
+/// ```
+pub fn sort<T: Clone + PartialOrd>(array: &Array<T>, kind: Option<&str>) -> Result<Array<T>> {
+    let sort_kind = kind.unwrap_or("quicksort");
 
-    #[test]
-    fn test_partition_1d() {
-        let a = Array::from_vec(vec![9, 4, 1, 7, 5, 3, 8, 2, 6]);
-        let partitioned = partition(&a, 3, None).unwrap();
-
-        // The 4th element (index 3) should be in its sorted position
-        let kth_element = partitioned.get(&[3]).unwrap();
-
-        // Check that all elements before index 3 are <= kth_element
-        for i in 0..3 {
-            assert!(partitioned.get(&[i]).unwrap() <= kth_element);
+    match sort_kind {
+        "mergesort" => msort(array),
+        "quicksort" => {
+            // Use standard library sort (which is typically introsort)
+            let mut data = array.to_vec();
+            data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            Ok(Array::from_vec(data).reshape(&array.shape()))
         }
-
-        // Check that all elements after index 3 are >= kth_element
-        for i in 4..9 {
-            assert!(partitioned.get(&[i]).unwrap() >= kth_element);
+        "heapsort" => {
+            // Implement heap sort
+            let mut data = array.to_vec();
+            heap_sort(&mut data);
+            Ok(Array::from_vec(data).reshape(&array.shape()))
         }
+        _ => Err(NumRs2Error::InvalidOperation(format!(
+            "Unknown sort kind: {}. Must be 'quicksort', 'mergesort', or 'heapsort'",
+            sort_kind
+        ))),
+    }
+}
+
+/// Heap sort implementation for in-place sorting
+fn heap_sort<T: Clone + PartialOrd>(arr: &mut [T]) {
+    let len = arr.len();
+    if len <= 1 {
+        return;
     }
 
-    #[test]
-    fn test_searchsorted_left() {
-        let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
-        let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
-        let indices = searchsorted(&a, &v, Some("left"), None).unwrap();
-        assert_eq!(indices.to_vec(), vec![0, 0, 1, 2, 4, 5]);
+    // Build max heap
+    for i in (0..len / 2).rev() {
+        heapify(arr, len, i);
     }
 
-    #[test]
-    fn test_searchsorted_right() {
-        let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
-        let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
-        let indices = searchsorted(&a, &v, Some("right"), None).unwrap();
-        assert_eq!(indices.to_vec(), vec![0, 1, 1, 2, 4, 5]);
+    // Extract elements from heap one by one
+    for i in (1..len).rev() {
+        arr.swap(0, i);
+        heapify(arr, i, 0);
+    }
+}
+
+/// Heapify a subtree rooted at index i
+fn heapify<T: Clone + PartialOrd>(arr: &mut [T], n: usize, i: usize) {
+    let mut largest = i;
+    let left = 2 * i + 1;
+    let right = 2 * i + 2;
+
+    // If left child is larger than root
+    if left < n && arr[left] > arr[largest] {
+        largest = left;
     }
 
-    #[test]
-    fn test_searchsorted_duplicates() {
-        let a = Array::from_vec(vec![1, 1, 1, 3, 3, 5]);
-        let v = Array::from_vec(vec![1, 3]);
-
-        let indices_left = searchsorted(&a, &v, Some("left"), None).unwrap();
-        assert_eq!(indices_left.to_vec(), vec![0, 3]); // First occurrence
-
-        let indices_right = searchsorted(&a, &v, Some("right"), None).unwrap();
-        assert_eq!(indices_right.to_vec(), vec![3, 5]); // After last occurrence
+    // If right child is larger than largest so far
+    if right < n && arr[right] > arr[largest] {
+        largest = right;
     }
 
-    #[test]
-    fn test_binary_search_functions() {
-        let arr = vec![1, 3, 5, 7, 9];
-
-        assert_eq!(binary_search_left(&arr, &0), 0);
-        assert_eq!(binary_search_left(&arr, &1), 0);
-        assert_eq!(binary_search_left(&arr, &2), 1);
-        assert_eq!(binary_search_left(&arr, &10), 5);
-
-        assert_eq!(binary_search_right(&arr, &0), 0);
-        assert_eq!(binary_search_right(&arr, &1), 1);
-        assert_eq!(binary_search_right(&arr, &2), 1);
-        assert_eq!(binary_search_right(&arr, &10), 5);
+    // If largest is not root
+    if largest != i {
+        arr.swap(i, largest);
+        heapify(arr, n, largest);
     }
+}
 
-    #[test]
-    fn test_bincount() {
-        // Basic bincount
-        let x = Array::from_vec(vec![0, 1, 1, 3, 2, 1, 7]);
-        let counts: Array<i32> = bincount(&x, None, None).unwrap();
-        assert_eq!(counts.shape(), vec![8]);
-        assert_eq!(counts.to_vec(), vec![1, 3, 1, 1, 0, 0, 0, 1]);
+/// Sort a complex array using the absolute value as the key
+///
+/// Complex numbers are sorted first by their absolute value (magnitude),
+/// and then by their argument (angle) for numbers with the same magnitude.
+/// This provides a consistent ordering for complex numbers.
+///
+/// # Parameters
+///
+/// * `array` - Input array of complex numbers to sort
+///
+/// # Returns
+///
+/// * Sorted copy of the array
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::array_ops::sorting::sort_complex;
+/// use scirs2_core::Complex;
+///
+/// let a = Array::from_vec(vec![
+///     Complex::new(3.0, 4.0),  // magnitude 5.0
+///     Complex::new(1.0, 0.0),  // magnitude 1.0
+///     Complex::new(0.0, 1.0),  // magnitude 1.0
+///     Complex::new(2.0, 0.0),  // magnitude 2.0
+/// ]);
+/// let sorted = sort_complex(&a).unwrap();
+/// // Should be sorted by magnitude: [1+0i, 0+1i, 2+0i, 3+4i]
+/// ```
+pub fn sort_complex<T>(array: &Array<Complex<T>>) -> Result<Array<Complex<T>>>
+where
+    T: Clone + PartialOrd + num_traits::Float,
+{
+    // For now, implement for 1D arrays and flatten multi-dimensional arrays
+    let flattened = if array.ndim() == 1 {
+        array.clone()
+    } else {
+        array.flatten(None)
+    };
 
-        // With minlength
-        let counts: Array<i32> = bincount(&x, None, Some(10)).unwrap();
-        assert_eq!(counts.shape(), vec![10]);
-        assert_eq!(counts.to_vec(), vec![1, 3, 1, 1, 0, 0, 0, 1, 0, 0]);
+    let mut data = flattened.to_vec();
 
-        // With weights
-        let weights = Array::from_vec(vec![0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 2.0]);
-        let weighted_counts: Array<f64> = bincount(&x, Some(&weights), None).unwrap();
-        assert_eq!(weighted_counts.shape(), vec![8]);
-        assert_eq!(
-            weighted_counts.to_vec(),
-            vec![0.5, 1.5, 1.0, 1.0, 0.0, 0.0, 0.0, 2.0]
-        );
+    // Sort by magnitude first, then by argument for equal magnitudes
+    data.sort_by(|a, b| {
+        let mag_a = a.norm();
+        let mag_b = b.norm();
 
-        // Empty array
-        let empty: Array<i32> = Array::from_vec(vec![]);
-        let counts: Array<i32> = bincount(&empty, None::<&Array<i32>>, Some(5)).unwrap();
-        assert_eq!(counts.to_vec(), vec![0, 0, 0, 0, 0]);
-    }
-
-    #[test]
-    fn test_digitize() {
-        // Basic digitize with increasing bins
-        let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]);
-        let bins = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
-        assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
-
-        // Test boundary values
-        let x = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
-        assert_eq!(indices.to_vec(), vec![0, 1, 2, 3, 4]);
-
-        // Test with right=true
-        let indices = digitize(&x, &bins, true).unwrap();
-        assert_eq!(indices.to_vec(), vec![1, 2, 3, 4, 5]);
-
-        // Test values outside bounds
-        let x = Array::from_vec(vec![-1.0, 15.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
-        assert_eq!(indices.to_vec(), vec![0, 5]);
-
-        // Test decreasing bins
-        let bins_dec = Array::from_vec(vec![10.0, 4.0, 2.5, 1.0, 0.0]);
-        let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]);
-        let indices = digitize(&x, &bins_dec, false).unwrap();
-        assert_eq!(indices.to_vec(), vec![4, 1, 2, 3]);
-
-        // Test 2D array
-        let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]).reshape(&[2, 2]);
-        let bins = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
-        assert_eq!(indices.shape(), vec![2, 2]);
-        assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
-    }
-
-    #[test]
-    fn test_msort() {
-        // Test basic merge sort
-        let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
-        let sorted = msort(&a).unwrap();
-        assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
-
-        // Test empty array
-        let empty: Array<i32> = Array::from_vec(vec![]);
-        let sorted_empty = msort(&empty).unwrap();
-        assert_eq!(sorted_empty.to_vec(), Vec::<i32>::new());
-
-        // Test single element
-        let single = Array::from_vec(vec![42]);
-        let sorted_single = msort(&single).unwrap();
-        assert_eq!(sorted_single.to_vec(), vec![42]);
-
-        // Test with floating point numbers
-        let float_arr = Array::from_vec(vec![3.14, 2.71, 1.41, 1.73]);
-        let sorted_float = msort(&float_arr).unwrap();
-        assert_eq!(sorted_float.to_vec(), vec![1.41, 1.73, 2.71, 3.14]);
-    }
-
-    #[test]
-    fn test_sort_complex() {
-        // Test complex number sorting
-        let a = Array::from_vec(vec![
-            Complex::new(3.0, 4.0), // magnitude 5.0
-            Complex::new(1.0, 0.0), // magnitude 1.0
-            Complex::new(0.0, 1.0), // magnitude 1.0
-            Complex::new(2.0, 0.0), // magnitude 2.0
-        ]);
-        let sorted = sort_complex(&a).unwrap();
-
-        // Check that magnitudes are in ascending order
-        let magnitudes: Vec<f64> = sorted.to_vec().iter().map(|c| c.norm()).collect();
-        for i in 1..magnitudes.len() {
-            assert!(magnitudes[i] >= magnitudes[i - 1]);
+        match mag_a
+            .partial_cmp(&mag_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
+        {
+            std::cmp::Ordering::Equal => {
+                // Same magnitude, sort by argument (angle)
+                let arg_a = a.arg();
+                let arg_b = b.arg();
+                arg_a
+                    .partial_cmp(&arg_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            }
+            other => other,
         }
+    });
 
-        // Test with equal magnitudes sorted by argument
-        let b = Array::from_vec(vec![
-            Complex::new(1.0, 0.0),  // arg = 0
-            Complex::new(0.0, 1.0),  // arg = π/2
-            Complex::new(-1.0, 0.0), // arg = π
-            Complex::new(0.0, -1.0), // arg = -π/2 or 3π/2
-        ]);
-        let sorted_b = sort_complex(&b).unwrap();
-
-        // All should have magnitude 1, sorted by argument
-        for val in sorted_b.to_vec() {
-            assert!((val.norm() - 1.0_f64).abs() < 1e-10);
-        }
-    }
-
-    #[test]
-    fn test_generic_sort() {
-        // Test quicksort
-        let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
-        let sorted = sort(&a, Some("quicksort")).unwrap();
-        assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
-
-        // Test mergesort
-        let sorted_merge = sort(&a, Some("mergesort")).unwrap();
-        assert_eq!(sorted_merge.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
-
-        // Test heapsort
-        let sorted_heap = sort(&a, Some("heapsort")).unwrap();
-        assert_eq!(sorted_heap.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
-
-        // Test default (quicksort)
-        let sorted_default = sort(&a, None).unwrap();
-        assert_eq!(sorted_default.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
-
-        // Test invalid sort kind
-        let result = sort(&a, Some("invalid"));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_lexsort_basic() {
-        // Test lexicographic sorting
-        let keys = Array::from_vec(vec![
-            1, 0, 1, 0, 1, // Secondary sort key
-            2, 2, 1, 1, 3, // Primary sort key
-        ])
-        .reshape(&[2, 5]);
-
-        let indices = lexsort(&keys).unwrap();
-        // Should sort by primary key (row 1) first: [1,1,2,2,3]
-        // Then by secondary key (row 0) within ties
-        assert_eq!(indices.to_vec(), vec![3, 2, 1, 0, 4]);
-    }
+    // Reshape back to original shape
+    Ok(Array::from_vec(data).reshape(&array.shape()))
 }
 
 /// Count number of occurrences of each value in array of non-negative integers
@@ -956,161 +889,228 @@ fn merge_sort<T: Clone + PartialOrd>(arr: &mut [T]) {
     }
 }
 
-/// Sort a complex array using the absolute value as the key
-///
-/// Complex numbers are sorted first by their absolute value (magnitude),
-/// and then by their argument (angle) for numbers with the same magnitude.
-/// This provides a consistent ordering for complex numbers.
-///
-/// # Parameters
-///
-/// * `array` - Input array of complex numbers to sort
-///
-/// # Returns
-///
-/// * Sorted copy of the array
-///
-/// # Examples
-///
-/// ```
-/// use numrs2::prelude::*;
-/// use numrs2::array_ops::sorting::sort_complex;
-/// use num_complex::Complex;
-///
-/// let a = Array::from_vec(vec![
-///     Complex::new(3.0, 4.0),  // magnitude 5.0
-///     Complex::new(1.0, 0.0),  // magnitude 1.0
-///     Complex::new(0.0, 1.0),  // magnitude 1.0
-///     Complex::new(2.0, 0.0),  // magnitude 2.0
-/// ]);
-/// let sorted = sort_complex(&a).unwrap();
-/// // Should be sorted by magnitude: [1+0i, 0+1i, 2+0i, 3+4i]
-/// ```
-pub fn sort_complex<T>(array: &Array<Complex<T>>) -> Result<Array<Complex<T>>>
-where
-    T: Clone + PartialOrd + num_traits::Float,
-{
-    // For now, implement for 1D arrays and flatten multi-dimensional arrays
-    let flattened = if array.ndim() == 1 {
-        array.clone()
-    } else {
-        array.flatten(None)
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::array::Array;
 
-    let mut data = flattened.to_vec();
+    #[test]
+    fn test_partition_1d() {
+        let a = Array::from_vec(vec![9, 4, 1, 7, 5, 3, 8, 2, 6]);
+        let partitioned = partition(&a, 3, None).unwrap();
 
-    // Sort by magnitude first, then by argument for equal magnitudes
-    data.sort_by(|a, b| {
-        let mag_a = a.norm();
-        let mag_b = b.norm();
+        // The 4th element (index 3) should be in its sorted position
+        let kth_element = partitioned.get(&[3]).unwrap();
 
-        match mag_a
-            .partial_cmp(&mag_b)
-            .unwrap_or(std::cmp::Ordering::Equal)
-        {
-            std::cmp::Ordering::Equal => {
-                // Same magnitude, sort by argument (angle)
-                let arg_a = a.arg();
-                let arg_b = b.arg();
-                arg_a
-                    .partial_cmp(&arg_b)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }
-            other => other,
+        // Check that all elements before index 3 are <= kth_element
+        for i in 0..3 {
+            assert!(partitioned.get(&[i]).unwrap() <= kth_element);
         }
-    });
 
-    // Reshape back to original shape
-    Ok(Array::from_vec(data).reshape(&array.shape()))
-}
-
-/// Generic sorting function that can handle both real and complex numbers
-///
-/// This is a convenience function that automatically chooses the appropriate
-/// sorting algorithm based on the data type.
-///
-/// # Parameters
-///
-/// * `array` - Input array to sort
-/// * `kind` - Sort algorithm: "quicksort", "mergesort", or "heapsort"
-///   If None, uses "quicksort" as default
-///
-/// # Returns
-///
-/// * Sorted copy of the array
-///
-/// # Examples
-///
-/// ```
-/// use numrs2::prelude::*;
-/// use numrs2::array_ops::sorting::sort;
-///
-/// let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
-/// let sorted = sort(&a, Some("mergesort")).unwrap();
-/// assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
-/// ```
-pub fn sort<T: Clone + PartialOrd>(array: &Array<T>, kind: Option<&str>) -> Result<Array<T>> {
-    let sort_kind = kind.unwrap_or("quicksort");
-
-    match sort_kind {
-        "mergesort" => msort(array),
-        "quicksort" => {
-            // Use standard library sort (which is typically introsort)
-            let mut data = array.to_vec();
-            data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            Ok(Array::from_vec(data).reshape(&array.shape()))
+        // Check that all elements after index 3 are >= kth_element
+        for i in 4..9 {
+            assert!(partitioned.get(&[i]).unwrap() >= kth_element);
         }
-        "heapsort" => {
-            // Implement heap sort
-            let mut data = array.to_vec();
-            heap_sort(&mut data);
-            Ok(Array::from_vec(data).reshape(&array.shape()))
+    }
+
+    #[test]
+    fn test_searchsorted_left() {
+        let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
+        let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
+        let indices = searchsorted(&a, &v, Some("left"), None).unwrap();
+        assert_eq!(indices.to_vec(), vec![0, 0, 1, 2, 4, 5]);
+    }
+
+    #[test]
+    fn test_searchsorted_right() {
+        let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
+        let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
+        let indices = searchsorted(&a, &v, Some("right"), None).unwrap();
+        assert_eq!(indices.to_vec(), vec![0, 1, 1, 2, 4, 5]);
+    }
+
+    #[test]
+    fn test_searchsorted_duplicates() {
+        let a = Array::from_vec(vec![1, 1, 1, 3, 3, 5]);
+        let v = Array::from_vec(vec![1, 3]);
+
+        let indices_left = searchsorted(&a, &v, Some("left"), None).unwrap();
+        assert_eq!(indices_left.to_vec(), vec![0, 3]); // First occurrence
+
+        let indices_right = searchsorted(&a, &v, Some("right"), None).unwrap();
+        assert_eq!(indices_right.to_vec(), vec![3, 5]); // After last occurrence
+    }
+
+    #[test]
+    fn test_binary_search_functions() {
+        let arr = vec![1, 3, 5, 7, 9];
+
+        assert_eq!(binary_search_left(&arr, &0), 0);
+        assert_eq!(binary_search_left(&arr, &1), 0);
+        assert_eq!(binary_search_left(&arr, &2), 1);
+        assert_eq!(binary_search_left(&arr, &10), 5);
+
+        assert_eq!(binary_search_right(&arr, &0), 0);
+        assert_eq!(binary_search_right(&arr, &1), 1);
+        assert_eq!(binary_search_right(&arr, &2), 1);
+        assert_eq!(binary_search_right(&arr, &10), 5);
+    }
+
+    #[test]
+    fn test_bincount() {
+        // Basic bincount
+        let x = Array::from_vec(vec![0, 1, 1, 3, 2, 1, 7]);
+        let counts: Array<i32> = bincount(&x, None, None).unwrap();
+        assert_eq!(counts.shape(), vec![8]);
+        assert_eq!(counts.to_vec(), vec![1, 3, 1, 1, 0, 0, 0, 1]);
+
+        // With minlength
+        let counts: Array<i32> = bincount(&x, None, Some(10)).unwrap();
+        assert_eq!(counts.shape(), vec![10]);
+        assert_eq!(counts.to_vec(), vec![1, 3, 1, 1, 0, 0, 0, 1, 0, 0]);
+
+        // With weights
+        let weights = Array::from_vec(vec![0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 2.0]);
+        let weighted_counts: Array<f64> = bincount(&x, Some(&weights), None).unwrap();
+        assert_eq!(weighted_counts.shape(), vec![8]);
+        assert_eq!(
+            weighted_counts.to_vec(),
+            vec![0.5, 1.5, 1.0, 1.0, 0.0, 0.0, 0.0, 2.0]
+        );
+
+        // Empty array
+        let empty: Array<i32> = Array::from_vec(vec![]);
+        let counts: Array<i32> = bincount(&empty, None::<&Array<i32>>, Some(5)).unwrap();
+        assert_eq!(counts.to_vec(), vec![0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_digitize() {
+        // Basic digitize with increasing bins
+        let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]);
+        let bins = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
+        let indices = digitize(&x, &bins, false).unwrap();
+        assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
+
+        // Test boundary values
+        let x = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
+        let indices = digitize(&x, &bins, false).unwrap();
+        assert_eq!(indices.to_vec(), vec![0, 1, 2, 3, 4]);
+
+        // Test with right=true
+        let indices = digitize(&x, &bins, true).unwrap();
+        assert_eq!(indices.to_vec(), vec![1, 2, 3, 4, 5]);
+
+        // Test values outside bounds
+        let x = Array::from_vec(vec![-1.0, 15.0]);
+        let indices = digitize(&x, &bins, false).unwrap();
+        assert_eq!(indices.to_vec(), vec![0, 5]);
+
+        // Test decreasing bins
+        let bins_dec = Array::from_vec(vec![10.0, 4.0, 2.5, 1.0, 0.0]);
+        let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]);
+        let indices = digitize(&x, &bins_dec, false).unwrap();
+        assert_eq!(indices.to_vec(), vec![4, 1, 2, 3]);
+
+        // Test 2D array
+        let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]).reshape(&[2, 2]);
+        let bins = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
+        let indices = digitize(&x, &bins, false).unwrap();
+        assert_eq!(indices.shape(), vec![2, 2]);
+        assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
+    }
+
+    #[test]
+    fn test_msort() {
+        // Test basic merge sort
+        let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
+        let sorted = msort(&a).unwrap();
+        assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
+
+        // Test empty array
+        let empty: Array<i32> = Array::from_vec(vec![]);
+        let sorted_empty = msort(&empty).unwrap();
+        assert_eq!(sorted_empty.to_vec(), Vec::<i32>::new());
+
+        // Test single element
+        let single = Array::from_vec(vec![42]);
+        let sorted_single = msort(&single).unwrap();
+        assert_eq!(sorted_single.to_vec(), vec![42]);
+
+        // Test with floating point numbers
+        let float_arr = Array::from_vec(vec![3.14, 2.71, 1.41, 1.73]);
+        let sorted_float = msort(&float_arr).unwrap();
+        assert_eq!(sorted_float.to_vec(), vec![1.41, 1.73, 2.71, 3.14]);
+    }
+
+    #[test]
+    fn test_sort_complex() {
+        // Test complex number sorting
+        let a = Array::from_vec(vec![
+            Complex::new(3.0, 4.0), // magnitude 5.0
+            Complex::new(1.0, 0.0), // magnitude 1.0
+            Complex::new(0.0, 1.0), // magnitude 1.0
+            Complex::new(2.0, 0.0), // magnitude 2.0
+        ]);
+        let sorted = sort_complex(&a).unwrap();
+
+        // Check that magnitudes are in ascending order
+        let magnitudes: Vec<f64> = sorted.to_vec().iter().map(|c| c.norm()).collect();
+        for i in 1..magnitudes.len() {
+            assert!(magnitudes[i] >= magnitudes[i - 1]);
         }
-        _ => Err(NumRs2Error::InvalidOperation(format!(
-            "Unknown sort kind: {}. Must be 'quicksort', 'mergesort', or 'heapsort'",
-            sort_kind
-        ))),
-    }
-}
 
-/// Heap sort implementation for in-place sorting
-fn heap_sort<T: Clone + PartialOrd>(arr: &mut [T]) {
-    let len = arr.len();
-    if len <= 1 {
-        return;
-    }
+        // Test with equal magnitudes sorted by argument
+        let b = Array::from_vec(vec![
+            Complex::new(1.0, 0.0),  // arg = 0
+            Complex::new(0.0, 1.0),  // arg = π/2
+            Complex::new(-1.0, 0.0), // arg = π
+            Complex::new(0.0, -1.0), // arg = -π/2 or 3π/2
+        ]);
+        let sorted_b = sort_complex(&b).unwrap();
 
-    // Build max heap
-    for i in (0..len / 2).rev() {
-        heapify(arr, len, i);
+        // All should have magnitude 1, sorted by argument
+        for val in sorted_b.to_vec() {
+            assert!((val.norm() - 1.0_f64).abs() < 1e-10);
+        }
     }
 
-    // Extract elements from heap one by one
-    for i in (1..len).rev() {
-        arr.swap(0, i);
-        heapify(arr, i, 0);
+    #[test]
+    fn test_generic_sort() {
+        // Test quicksort
+        let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
+        let sorted = sort(&a, Some("quicksort")).unwrap();
+        assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
+
+        // Test mergesort
+        let sorted_merge = sort(&a, Some("mergesort")).unwrap();
+        assert_eq!(sorted_merge.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
+
+        // Test heapsort
+        let sorted_heap = sort(&a, Some("heapsort")).unwrap();
+        assert_eq!(sorted_heap.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
+
+        // Test default (quicksort)
+        let sorted_default = sort(&a, None).unwrap();
+        assert_eq!(sorted_default.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
+
+        // Test invalid sort kind
+        let result = sort(&a, Some("invalid"));
+        assert!(result.is_err());
     }
-}
 
-/// Heapify a subtree rooted at index i
-fn heapify<T: Clone + PartialOrd>(arr: &mut [T], n: usize, i: usize) {
-    let mut largest = i;
-    let left = 2 * i + 1;
-    let right = 2 * i + 2;
+    #[test]
+    fn test_lexsort_basic() {
+        // Test lexicographic sorting
+        let keys = Array::from_vec(vec![
+            1, 0, 1, 0, 1, // Secondary sort key
+            2, 2, 1, 1, 3, // Primary sort key
+        ])
+        .reshape(&[2, 5]);
 
-    // If left child is larger than root
-    if left < n && arr[left] > arr[largest] {
-        largest = left;
-    }
-
-    // If right child is larger than largest so far
-    if right < n && arr[right] > arr[largest] {
-        largest = right;
-    }
-
-    // If largest is not root
-    if largest != i {
-        arr.swap(i, largest);
-        heapify(arr, n, largest);
+        let indices = lexsort(&keys).unwrap();
+        // Should sort by primary key (row 1) first: [1,1,2,2,3]
+        // Then by secondary key (row 0) within ties
+        assert_eq!(indices.to_vec(), vec![3, 2, 1, 0, 4]);
     }
 }

@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **🚀 Version 0.1.0-beta.2** - This beta release includes significant performance optimizations through SciRS2-Core integration, providing SIMD acceleration, parallel processing, and adaptive algorithm selection. The API is stabilizing as we approach the 1.0 release.
+> **🚀 Version 0.1.0-beta.3** - This beta release completes Phase 4 with advanced features including Apache Arrow integration, randomized linear algebra algorithms, comprehensive sparse matrix support, and automatic differentiation. Production-ready with 659 tests passing and zero warnings.
 
 ## ✨ Architecture Highlights
 
@@ -26,18 +26,29 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
 
 ## Main Features
 
-- **N-dimensional Array**: Core `Array` type with efficient memory layout and broadcasting
-- **Linear Algebra**: Matrix operations, decompositions, solvers through BLAS/LAPACK integration
+- **N-dimensional Array**: Core `Array` type with efficient memory layout and NumPy-compatible broadcasting
+- **Advanced Linear Algebra**:
+  - Matrix operations, decompositions, solvers through BLAS/LAPACK integration
+  - Sparse matrices (COO, CSR, CSC, DIA formats) with format conversions
+  - Iterative solvers (CG, GMRES, BiCGSTAB) for large systems
+  - Randomized algorithms (randomized SVD, random projections, range finders)
+- **Automatic Differentiation**: Forward and reverse mode AD with higher-order derivatives
+- **Data Interoperability**:
+  - Apache Arrow integration for zero-copy data exchange
+  - Feather format support for fast columnar storage
+  - IPC streaming for inter-process communication
+  - Python bindings via PyO3 for NumPy compatibility
+- **Expression Templates**: Lazy evaluation and operation fusion for performance
+- **Advanced Indexing**: Fancy indexing, boolean masking, and conditional selection
 - **Polynomial Functions**: Interpolation, evaluation, and arithmetic operations
 - **Fast Fourier Transform**: Optimized FFT implementation with 1D/2D transforms, real FFT specialization, frequency shifting, and various windowing functions
-- **Sparse Arrays**: Memory-efficient representation for sparse data
 - **SIMD Acceleration**: Enhanced vectorized operations via SciRS2-Core with AVX2/AVX512/NEON support
 - **Parallel Computing**: Advanced multi-threaded execution with adaptive chunking and work-stealing
 - **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
 - **Mathematical Functions**: Comprehensive set of element-wise mathematical operations
 - **Statistical Analysis**: Descriptive statistics, probability distributions, and more
 - **Random Number Generation**: Modern interface for various distributions with fast generation and NumPy-compatible API
-- **SciRS2 Integration**: Optional integration with SciRS2 for advanced statistical distributions and scientific computing functionality
+- **SciRS2 Integration**: Integration with SciRS2 for advanced statistical distributions and scientific computing functionality
 - **Fully Type-Safe**: Leverage Rust's type system for compile-time guarantees
 
 ## Optional Features
@@ -47,14 +58,15 @@ NumRS2 includes several optional features that can be enabled in your `Cargo.tom
 - **matrix_decomp** (enabled by default): Matrix decomposition functions (SVD, QR, LU, etc.)
 - **lapack**: Enable LAPACK-dependent linear algebra operations (eigenvalues, matrix decompositions)
 - **validation**: Additional runtime validation checks for array operations
-- **scirs**: Integration with SciRS2 for advanced statistical distributions and scientific computing
+- **arrow**: Apache Arrow integration for zero-copy data exchange with Python/Polars/DataFusion
+- **python**: Python bindings via PyO3 for NumPy interoperability
 - **gpu**: GPU acceleration for array operations using WGPU
 
 To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-beta.2", features = ["scirs"] }
+numrs2 = { version = "0.1.0-beta.3", features = ["arrow"] }
 ```
 
 Or, when building:
@@ -188,7 +200,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-beta.2"
+numrs2 = "0.1.0-beta.3"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:

@@ -6,12 +6,16 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast};
-use rand::prelude::*;
-use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
-use rand::SeedableRng;
-use rand_distr::uniform::SampleUniform;
-use rand_distr::{Bernoulli, Distribution, Exp as Exponential, Gamma, LogNormal, Normal, Uniform};
+// Note: Legacy module - may need fallback to rand for compatibility
+use scirs2_core::ndarray::distributions::uniform::SampleUniform;
+use scirs2_core::random::prelude::*;
+use scirs2_core::SliceRandomExt;
+use scirs2_stats::{
+    distributions::{
+        lognormal::Lognormal as LogNormal, Bernoulli, Exponential, Gamma, Normal, Uniform,
+    },
+    Distribution,
+};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -49,18 +53,25 @@ impl Generator {
     /// Generate uniform random values in [0, 1)
     pub fn random<T>(&self, shape: &[usize]) -> Result<Array<T>>
     where
-        T: Clone,
-        rand_distr::StandardUniform: rand_distr::Distribution<T>,
+        T: Clone + SampleUniform + NumCast,
     {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         for _ in 0..size {
-            vec.push(rng.random::<T>());
+            // Use SciRS2 uniform distribution for [0, 1) and convert to T
+            let uniform_dist = scirs2_stats::distributions::Uniform::new(0.0f64, 1.0f64).unwrap();
+            let val_f64 = uniform_dist.rvs(1).expect("uniform sampling failed")[0];
+            let val = NumCast::from(val_f64).ok_or_else(|| {
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert uniform sample to target type".to_string(),
+                )
+            })?;
+            vec.push(val);
         }
 
         Ok(Array::from_vec(vec).reshape(shape))
@@ -93,13 +104,13 @@ impl Generator {
             NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
         })?;
 
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         for _ in 0..size {
-            let val_f64 = dist.sample(&mut *rng);
+            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert normal sample to target type".to_string(),
@@ -134,20 +145,20 @@ impl Generator {
             NumRs2Error::InvalidOperation("Failed to convert sigma to f64".to_string())
         })?;
 
-        let dist = LogNormal::new(mean_f64, sigma_f64).map_err(|e| {
+        let dist = LogNormal::new(mean_f64, sigma_f64, 0.0).map_err(|e| {
             NumRs2Error::InvalidOperation(format!(
                 "Failed to create log-normal distribution: {}",
                 e
             ))
         })?;
 
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         for _ in 0..size {
-            let val_f64 = dist.sample(&mut *rng);
+            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert lognormal sample to target type".to_string(),
@@ -160,7 +171,7 @@ impl Generator {
     }
 
     /// Generate random values from a uniform distribution
-    pub fn uniform<T: Clone + PartialOrd + SampleUniform>(
+    pub fn uniform<T: Clone + PartialOrd + SampleUniform + Float + NumCast + std::fmt::Display>(
         &self,
         low: T,
         high: T,
@@ -169,17 +180,17 @@ impl Generator {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 
-        let dist = Uniform::new_inclusive(low, high).map_err(|e| {
+        let dist = Uniform::new(low, high).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create uniform distribution: {}", e))
         })?;
 
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         for _ in 0..size {
-            vec.push(dist.sample(&mut *rng));
+            vec.push(dist.rvs(1).expect("distribution sampling failed")[0]);
         }
 
         Ok(Array::from_vec(vec).reshape(shape))
@@ -208,14 +219,14 @@ impl Generator {
             NumRs2Error::InvalidOperation(format!("Failed to create Bernoulli distribution: {}", e))
         })?;
 
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         for _ in 0..size {
-            let val_bool = dist.sample(&mut *rng);
-            let val = if val_bool { T::one() } else { T::zero() };
+            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val = if val_f64 > 0.5 { T::one() } else { T::zero() };
             vec.push(val);
         }
 
@@ -245,17 +256,21 @@ impl Generator {
             NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
         })?;
 
-        let dist = Gamma::new(shape_f64, scale_f64).map_err(|e| {
+        // WORKAROUND: SciRS2 Gamma has a bug where it passes 1/scale to rand_distr::Gamma
+        // rand_distr::Gamma expects (shape, scale) but SciRS2 passes (shape, 1/scale)
+        // To get the correct scale, we need to pass 1/scale to SciRS2 so it becomes 1/(1/scale) = scale
+        let corrected_scale = 1.0 / scale_f64;
+        let dist = Gamma::new(shape_f64, corrected_scale, 0.0).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create gamma distribution: {}", e))
         })?;
 
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         for _ in 0..arr_size {
-            let val_f64 = dist.sample(&mut *rng);
+            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert gamma sample to target type".to_string(),
@@ -286,20 +301,23 @@ impl Generator {
             NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
         })?;
 
-        let dist = Exponential::new(1.0 / scale_f64).map_err(|e| {
+        // CORRECTED: SciRS2 Exponential::new(rate, location) expects rate = 1/scale
+        // For exponential distribution with scale s: rate = 1/s, mean = s, variance = s²
+        let rate = 1.0 / scale_f64;
+        let dist = Exponential::new(rate, 0.0).map_err(|e| {
             NumRs2Error::InvalidOperation(format!(
                 "Failed to create exponential distribution: {}",
                 e
             ))
         })?;
 
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         for _ in 0..size {
-            let val_f64 = dist.sample(&mut *rng);
+            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert exponential sample to target type".to_string(),
@@ -313,13 +331,13 @@ impl Generator {
 
     /// Shuffle an array in-place
     pub fn shuffle<T: Clone>(&self, array: &mut Array<T>) -> Result<()> {
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         let mut data = array.to_vec();
-        data.shuffle(&mut *rng);
+        data.shuffle(&mut thread_rng());
 
         // Update the array with shuffled data
         let shape = array.shape();
@@ -369,7 +387,7 @@ impl Generator {
         } else {
             // Sample without replacement
             let mut indices: Vec<usize> = (0..data.len()).collect();
-            indices.shuffle(&mut *rng);
+            indices.shuffle(&mut thread_rng());
 
             for i in 0..choose_size {
                 result.push(data[indices[i]].clone());
@@ -387,13 +405,13 @@ impl Generator {
 
     /// Generate a permutation of integers from 0 to n-1
     pub fn permutation<T: NumCast + Clone>(&self, n: usize) -> Result<Array<T>> {
-        let mut rng = self
+        let rng = self
             .rng
             .lock()
             .map_err(|_| NumRs2Error::InvalidOperation("Failed to acquire RNG lock".to_string()))?;
 
         let mut indices: Vec<usize> = (0..n).collect();
-        indices.shuffle(&mut *rng);
+        indices.shuffle(&mut thread_rng());
 
         let mut result = Vec::with_capacity(n);
         for idx in indices {
@@ -422,8 +440,7 @@ pub fn seed(seed: u64) {
 /// Generate uniform random values in [0, 1) using the global generator
 pub fn rand<T>(shape: &[usize]) -> Result<Array<T>>
 where
-    T: Clone,
-    rand_distr::StandardUniform: rand_distr::Distribution<T>,
+    T: Clone + SampleUniform + NumCast,
 {
     let generator = GLOBAL_GENERATOR.lock().map_err(|_| {
         NumRs2Error::InvalidOperation("Failed to acquire global generator lock".to_string())
@@ -442,7 +459,7 @@ pub fn randn<T: Float + NumCast + Clone + std::fmt::Debug + std::fmt::Display>(
 }
 
 /// Generate uniform random values using the global generator
-pub fn uniform<T: Clone + PartialOrd + SampleUniform>(
+pub fn uniform<T: Clone + PartialOrd + SampleUniform + Float + NumCast + std::fmt::Display>(
     low: T,
     high: T,
     shape: &[usize],

@@ -2,7 +2,7 @@ use numrs2::parallel_optimize::{
     adaptive_threshold, optimize_parallel_computation, optimize_scheduling, partition_workload,
     ParallelConfig, ParallelizationThreshold, SchedulingStrategy, WorkloadPartitioning,
 };
-use rayon::prelude::*;
+use scirs2_core::parallel_ops::*;
 use std::time::Instant;
 
 fn main() {
@@ -56,7 +56,7 @@ fn main() {
     println!("Testing different scheduling strategies:");
 
     let element_cost = 1.0;
-    let num_threads = rayon::current_num_threads();
+    let num_threads = scirs2_core::parallel_ops::num_threads();
 
     // Static scheduling
     let static_threads =
@@ -320,11 +320,11 @@ fn benchmark_scheduling(data: &[f64], strategy: SchedulingStrategy) -> std::time
 
     let size = data.len();
     let element_cost = 1.0;
-    let num_threads = rayon::current_num_threads();
+    let num_threads = scirs2_core::parallel_ops::num_threads();
     let optimal_threads = optimize_scheduling(size, element_cost, strategy, num_threads);
 
     // Create a custom thread pool with the optimal number of threads
-    let pool = rayon::ThreadPoolBuilder::new()
+    let pool = scirs2_core::parallel_ops::ThreadPoolBuilder::new()
         .num_threads(optimal_threads)
         .build()
         .unwrap();
@@ -457,7 +457,7 @@ fn benchmark_with_config(data: &[f64], config: ParallelConfig) -> std::time::Dur
         let optimal_threads = config.optimal_threads(size, element_cost);
 
         // Create a custom thread pool with the optimal number of threads
-        let pool = rayon::ThreadPoolBuilder::new()
+        let pool = scirs2_core::parallel_ops::ThreadPoolBuilder::new()
             .num_threads(optimal_threads)
             .build()
             .unwrap();

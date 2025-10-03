@@ -7,9 +7,9 @@
 // references to array data that avoid unnecessary copying, making operations
 // more memory-efficient.
 
-use ndarray::{Axis, Slice};
-use num_complex::Complex64;
 use numrs2::prelude::*;
+use scirs2_core::ndarray::{Axis, Slice};
+use scirs2_core::Complex64;
 
 fn main() -> Result<()> {
     println!("NumRS2 Array Views Example");

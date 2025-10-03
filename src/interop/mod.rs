@@ -1,9 +1,9 @@
 //! Interoperability with other Rust numerical libraries
 //!
 //! This module provides conversion functions to and from other popular Rust
-//! numerical libraries like ndarray, nalgebra, and SciRS2.
+//! numerical libraries like ndarray and SciRS2.
 
-pub mod nalgebra_compat;
+// nalgebra_compat removed - nalgebra is forbidden per SCIRS2 POLICY
 pub mod ndarray_compat;
 pub mod scirs_compat;
 

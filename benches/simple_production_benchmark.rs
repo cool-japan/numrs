@@ -1,7 +1,8 @@
 //! Simple production readiness benchmarks for NumRS2
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::prelude::*;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Test basic array operations performance

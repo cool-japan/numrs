@@ -5,22 +5,23 @@
 
 #[macro_use]
 extern crate criterion;
-use criterion::{black_box, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion};
 
 use numrs2::prelude::*;
+use std::hint::black_box;
 
 /// Benchmark matrix multiplication for different sizes
 fn bench_matmul(c: &mut Criterion) {
     let mut group = c.benchmark_group("matrix_multiplication");
 
     for size in [10, 50, 100, 200].iter() {
-        group.bench_with_input(BenchmarkId::new("matmul", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("matmul", size), size, |bench, &size| {
             // Create random matrices of the specified size
             let rng = random::default_rng();
             let a = rng.random::<f64>(&[size, size]).unwrap();
             let b = rng.random::<f64>(&[size, size]).unwrap();
 
-            b.iter(|| black_box(a.matmul(&b).unwrap()));
+            bench.iter(|| black_box(a.matmul(&b).unwrap()));
         });
 
         // Also benchmark SIMD matrix multiplication if available
@@ -105,7 +106,7 @@ fn bench_eigendecomposition(c: &mut Criterion) {
             let rng = random::default_rng();
             let tmp = rng.random::<f64>(&[size, size]).unwrap();
             let tmp_t = tmp.transpose();
-            let a = tmp.add(&tmp_t).unwrap().multiply_scalar(0.5);
+            let a = tmp.add(&tmp_t).multiply_scalar(0.5);
 
             b.iter(|| black_box(eigh(&a, "lower").unwrap()));
         });
@@ -223,7 +224,7 @@ fn bench_rank(c: &mut Criterion) {
             let rng = random::default_rng();
             let a = rng.random::<f64>(&[size, size]).unwrap();
 
-            b.iter(|| black_box(matrix_rank(&a).unwrap()));
+            b.iter(|| black_box(matrix_rank(&a, None).unwrap()));
         });
     }
 

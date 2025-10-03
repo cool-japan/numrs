@@ -649,23 +649,29 @@ mod tests {
 
     #[test]
     fn test_load_distribution_cv() {
-        let mut metrics = WorkloadMetrics::default();
-
         // Perfectly balanced
-        metrics.queue_lengths = vec![5, 5, 5];
+        let metrics = WorkloadMetrics {
+            queue_lengths: vec![5, 5, 5],
+            ..Default::default()
+        };
         assert_eq!(metrics.load_distribution_cv(), 0.0);
 
         // Imbalanced
-        metrics.queue_lengths = vec![1, 5, 9];
-        assert!(metrics.load_distribution_cv() > 0.5);
+        let metrics2 = WorkloadMetrics {
+            queue_lengths: vec![1, 5, 9],
+            ..Default::default()
+        };
+        assert!(metrics2.load_distribution_cv() > 0.5);
     }
 
     #[test]
     fn test_load_balancing_advisor() {
         let mut advisor = LoadBalancingAdvisor::new();
 
-        let mut metrics = WorkloadMetrics::default();
-        metrics.load_imbalance = 0.5; // High imbalance
+        let metrics = WorkloadMetrics {
+            load_imbalance: 0.5, // High imbalance
+            ..Default::default()
+        };
 
         advisor.record_metrics(metrics);
         let recommendation = advisor.recommend_strategy();
@@ -674,8 +680,10 @@ mod tests {
 
     #[test]
     fn test_workload_metrics_helpers() {
-        let mut metrics = WorkloadMetrics::default();
-        metrics.queue_lengths = vec![1, 5, 3, 7, 2];
+        let mut metrics = WorkloadMetrics {
+            queue_lengths: vec![1, 5, 3, 7, 2],
+            ..Default::default()
+        };
 
         // Calculate load imbalance based on the queue lengths
         let max_load = 7.0; // Worker 3 has queue length 7

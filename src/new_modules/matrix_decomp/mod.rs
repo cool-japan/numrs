@@ -5,11 +5,11 @@ use crate::array::Array;
 #[cfg(feature = "lapack")]
 use crate::error::{NumRs2Error, Result};
 #[cfg(feature = "lapack")]
-use ndarray::ArrayView2;
-#[cfg(feature = "lapack")]
 use ndarray_linalg::{Scalar, SVD};
 #[cfg(feature = "lapack")]
 use num_traits::{Float, NumCast, Zero};
+#[cfg(feature = "lapack")]
+use scirs2_core::ndarray::ArrayView2;
 #[cfg(feature = "lapack")]
 use std::fmt::Debug;
 

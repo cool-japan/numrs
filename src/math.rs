@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_complex::Complex;
 use num_traits::{Float, NumCast, One, Zero};
+use scirs2_core::Complex;
 use std::ops::{Add, Div, Mul, Sub};
 
 // Import SIMD optimizations when available
@@ -5524,7 +5524,7 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
-/// use num_complex::Complex;
+/// use scirs2_core::Complex;
 ///
 /// let a = Array::from_vec(vec![
 ///     Complex::new(1.0, 1e-15),

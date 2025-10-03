@@ -1,6 +1,6 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::{
+use scirs2_core::ndarray::{
     ArrayView as NdArrayView, ArrayViewMut as NdArrayViewMut, Axis, IxDyn, Slice, SliceInfo,
     SliceInfoElem,
 };
@@ -271,7 +271,7 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     ///
     /// ```
     /// use numrs2::prelude::*;
-    /// use ndarray::{Axis, Slice};
+    /// use scirs2_core::ndarray::{Axis, Slice};
     ///
     /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
     /// let view = array.view();
@@ -820,7 +820,7 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     ///
     /// ```
     /// use numrs2::prelude::*;
-    /// use ndarray::{Axis, Slice};
+    /// use scirs2_core::ndarray::{Axis, Slice};
     ///
     /// let mut array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
     /// let mut view_mut = array.view_mut();

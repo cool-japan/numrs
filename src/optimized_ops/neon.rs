@@ -4,6 +4,7 @@
 //! using ARM NEON SIMD instructions when available.
 
 use crate::error::Result;
+use scirs2_core::parallel_ops::*;
 use scirs2_core::simd_ops::PlatformCapabilities;
 
 /// ARM NEON optimized element-wise addition for f32
@@ -15,9 +16,6 @@ pub fn neon_add_f32(a: &[f32], b: &[f32], result: &mut [f32]) -> Result<()> {
             actual: vec![b.len()],
         });
     }
-
-    // Use rayon's parallel chunks for NEON processing
-    use rayon::prelude::*;
 
     result
         .par_chunks_mut(4)
@@ -42,8 +40,6 @@ pub fn neon_mul_f32(a: &[f32], b: &[f32], result: &mut [f32]) -> Result<()> {
         });
     }
 
-    use rayon::prelude::*;
-
     result
         .par_chunks_mut(4)
         .zip(a.par_chunks(4))
@@ -67,8 +63,6 @@ pub fn neon_dot_f32(a: &[f32], b: &[f32]) -> Result<f32> {
         });
     }
 
-    use rayon::prelude::*;
-
     let sum: f32 = a
         .par_chunks(4)
         .zip(b.par_chunks(4))
@@ -87,8 +81,6 @@ pub fn neon_dot_f32(a: &[f32], b: &[f32]) -> Result<f32> {
 /// ARM NEON optimized sum reduction for f32
 #[cfg(target_arch = "aarch64")]
 pub fn neon_sum_f32(data: &[f32]) -> f32 {
-    use rayon::prelude::*;
-
     data.par_chunks(4)
         .map(|chunk| chunk.iter().sum::<f32>())
         .sum()
@@ -97,8 +89,6 @@ pub fn neon_sum_f32(data: &[f32]) -> f32 {
 /// ARM NEON optimized max reduction for f32
 #[cfg(target_arch = "aarch64")]
 pub fn neon_max_f32(data: &[f32]) -> Option<f32> {
-    use rayon::prelude::*;
-
     data.par_chunks(4)
         .map(|chunk| chunk.iter().cloned().fold(f32::NEG_INFINITY, f32::max))
         .reduce(|| f32::NEG_INFINITY, f32::max)
@@ -108,8 +98,6 @@ pub fn neon_max_f32(data: &[f32]) -> Option<f32> {
 /// ARM NEON optimized min reduction for f32
 #[cfg(target_arch = "aarch64")]
 pub fn neon_min_f32(data: &[f32]) -> Option<f32> {
-    use rayon::prelude::*;
-
     data.par_chunks(4)
         .map(|chunk| chunk.iter().cloned().fold(f32::INFINITY, f32::min))
         .reduce(|| f32::INFINITY, f32::min)
@@ -125,8 +113,6 @@ pub fn neon_exp_f32(data: &[f32], result: &mut [f32]) -> Result<()> {
             actual: vec![result.len()],
         });
     }
-
-    use rayon::prelude::*;
 
     result
         .par_chunks_mut(4)
@@ -149,8 +135,6 @@ pub fn neon_sqrt_f32(data: &[f32], result: &mut [f32]) -> Result<()> {
             actual: vec![result.len()],
         });
     }
-
-    use rayon::prelude::*;
 
     result
         .par_chunks_mut(4)

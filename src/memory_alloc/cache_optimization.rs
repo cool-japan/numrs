@@ -725,11 +725,13 @@ mod tests {
 
     #[test]
     fn test_cache_metrics() {
-        let mut metrics = CacheMetrics::default();
-        metrics.l1_hits = 900;
-        metrics.l1_misses = 100;
-        metrics.l2_hits = 80;
-        metrics.l2_misses = 20;
+        let metrics = CacheMetrics {
+            l1_hits: 900,
+            l1_misses: 100,
+            l2_hits: 80,
+            l2_misses: 20,
+            ..Default::default()
+        };
 
         assert_eq!(metrics.l1_hit_ratio(), 0.9);
         assert_eq!(metrics.l2_hit_ratio(), 0.8);

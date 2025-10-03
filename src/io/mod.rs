@@ -159,9 +159,16 @@ impl<T: Clone + Serialize> Array<T> {
                 })?;
             }
             SerializeFormat::Binary => {
-                bincode::serialize_into(&mut writer, &serialized).map_err(|e| {
-                    NumRs2Error::SerializationError(format!("Binary serialization error: {}", e))
-                })?;
+                // bincode v2 API uses encode_to_std_write with a configuration.
+                let config = bincode::config::standard();
+                bincode::serde::encode_into_std_write(&serialized, &mut writer, config).map_err(
+                    |e| {
+                        NumRs2Error::SerializationError(format!(
+                            "Binary serialization error: {}",
+                            e
+                        ))
+                    },
+                )?;
             }
             SerializeFormat::Npy | SerializeFormat::Npz => {
                 // Delegate to the NPY/NPZ module
@@ -395,8 +402,10 @@ where
                 Ok(Array::from_vec(data).reshape(&[rows_count, row_length]))
             }
             SerializeFormat::Binary => {
-                let serialized: SerializedArray<T> =
-                    bincode::deserialize_from(reader).map_err(|e| {
+                let config = bincode::config::standard();
+                let mut reader = reader; // make mutable for API
+                let (serialized, _len): (SerializedArray<T>, usize) =
+                    bincode::serde::decode_from_std_read(&mut reader, config).map_err(|e| {
                         NumRs2Error::DeserializationError(format!(
                             "Binary deserialization error: {}",
                             e

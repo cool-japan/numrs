@@ -4,7 +4,7 @@
 //! for core array operations, demonstrating the performance characteristics of the Rust
 //! implementation.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::array::Array;
 use numrs2::array_ops;
 use numrs2::blas;
@@ -15,6 +15,7 @@ use numrs2::random::distributions::*;
 use numrs2::random::state::RandomState;
 use numrs2::stats::Statistics;
 use numrs2::unique::unique;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark configuration for array operations
@@ -37,13 +38,15 @@ impl Default for BenchmarkConfig {
 /// Generate test data for benchmarks
 fn generate_test_data_f64(size: usize) -> Vec<f64> {
     let mut rng = RandomState::new();
-    (0..size).map(|_| rng.uniform(0.0, 1.0)).collect()
+    (0..size)
+        .map(|_| rng.uniform(0.0, 1.0, &[1]).unwrap().get(&[0]).unwrap())
+        .collect()
 }
 
 fn generate_test_data_i32(size: usize) -> Vec<i32> {
     let mut rng = RandomState::new();
     (0..size)
-        .map(|_| (rng.uniform(0.0, 1000.0, &[1]).unwrap().to_vec()[0] as i32))
+        .map(|_| (rng.uniform(0.0, 1000.0, &[1]).unwrap().get(&[0]).unwrap() as i32))
         .collect()
 }
 
@@ -82,7 +85,7 @@ fn bench_array_creation(c: &mut Criterion) {
         // Benchmark arange creation
         group.bench_with_input(BenchmarkId::new("arange", size), &size, |b, &size| {
             b.iter(|| {
-                let arr = numrs2::math::arange(0.0, size as f64, 1.0).unwrap();
+                let arr = numrs2::math::arange(0.0, size as f64, 1.0);
                 black_box(arr)
             })
         });
@@ -387,7 +390,7 @@ fn bench_sorting_searching(c: &mut Criterion) {
         // Benchmark unique
         group.bench_with_input(BenchmarkId::new("unique", size), &size, |b, _| {
             b.iter(|| {
-                let result = unique(&arr, None).unwrap();
+                let result = unique(&arr, None, None, None, None).unwrap();
                 black_box(result)
             })
         });

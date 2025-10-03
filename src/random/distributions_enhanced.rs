@@ -7,7 +7,7 @@ use crate::array::Array;
 use crate::error::Result;
 use crate::random::state::RandomState;
 use num_traits::{Float, NumCast};
-use rand::Rng;
+use scirs2_core::random::prelude::Rng;
 use std::fmt::{Debug, Display};
 
 /// Get a reference to the global random state
@@ -30,7 +30,12 @@ fn get_global_random_state() -> Result<std::sync::MutexGuard<'static, RandomStat
 /// An array of random values from the truncated normal distribution
 pub fn truncated_normal<T>(mean: T, std: T, low: T, high: T, shape: &[usize]) -> Result<Array<T>>
 where
-    T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform,
+    T: Float
+        + NumCast
+        + Clone
+        + Debug
+        + Display
+        + scirs2_core::ndarray::distributions::uniform::SampleUniform,
 {
     let rng = get_global_random_state()?;
     rng.truncated_normal(mean, std, low, high, shape)
@@ -160,7 +165,12 @@ where
 /// A random correlation matrix of shape [n, n]
 pub fn random_correlation_matrix<T>(n: usize) -> Result<Array<T>>
 where
-    T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform,
+    T: Float
+        + NumCast
+        + Clone
+        + Debug
+        + Display
+        + scirs2_core::ndarray::distributions::uniform::SampleUniform,
 {
     let rng = get_global_random_state()?;
     rng.random_correlation_matrix(n)
@@ -614,7 +624,12 @@ impl RandomState {
     /// Generate a random correlation matrix
     pub fn random_correlation_matrix<T>(&self, n: usize) -> Result<Array<T>>
     where
-        T: Float + NumCast + Clone + Debug + Display + rand_distr::uniform::SampleUniform,
+        T: Float
+            + NumCast
+            + Clone
+            + Debug
+            + Display
+            + scirs2_core::ndarray::distributions::uniform::SampleUniform,
     {
         if n < 2 {
             return Err(crate::error::NumRs2Error::InvalidOperation(

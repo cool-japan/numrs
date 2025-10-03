@@ -932,8 +932,10 @@ mod tests {
         writeln!(temp_file, "1.0,2.0,3.0").unwrap();
         writeln!(temp_file, "4.0,5.0,6.0").unwrap();
 
-        let mut options = LoadTxtOptions::default();
-        options.delimiter = Some(",".to_string());
+        let options = LoadTxtOptions {
+            delimiter: Some(",".to_string()),
+            ..Default::default()
+        };
 
         let array = loadtxt::<f64>(temp_file.path(), options).unwrap();
         assert_eq!(array.shape(), &[2, 3]);

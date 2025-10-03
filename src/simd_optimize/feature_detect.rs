@@ -104,18 +104,21 @@ fn detect_x86_features() -> CpuFeatures {
 /// Detect CPU features on aarch64 architecture
 #[cfg(target_arch = "aarch64")]
 fn detect_aarch64_features() -> CpuFeatures {
-    let mut features = CpuFeatures::default();
-
-    // NEON is available on all aarch64 CPUs
-    features.neon = true;
-
-    // Check for SVE
     #[cfg(target_feature = "sve")]
     {
-        features.sve = true;
+        CpuFeatures {
+            neon: true,
+            sve: true,
+            ..Default::default()
+        }
     }
-
-    features
+    #[cfg(not(target_feature = "sve"))]
+    {
+        CpuFeatures {
+            neon: true,
+            ..Default::default()
+        }
+    }
 }
 
 /// Detect CPU features on other architectures

@@ -38,8 +38,11 @@ impl GpuContext {
                 compatible_surface: None,
             })
             .await
-            .ok_or_else(|| {
-                NumRs2Error::RuntimeError("Failed to find an appropriate GPU adapter".to_string())
+            .map_err(|e| {
+                NumRs2Error::RuntimeError(format!(
+                    "Failed to find an appropriate GPU adapter: {}",
+                    e
+                ))
             })?;
 
         // Get information about the adapter
@@ -48,14 +51,13 @@ impl GpuContext {
 
         // Create the device and queue
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("NumRS2 GPU device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("NumRS2 GPU device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::Performance,
+                trace: wgpu::Trace::default(),
+            })
             .await
             .map_err(|e| {
                 NumRs2Error::RuntimeError(format!("Failed to create GPU device: {}", e))
@@ -203,7 +205,7 @@ impl GpuContext {
             compute_pass.set_pipeline(compute_pipeline);
 
             for (i, bind_group) in bind_groups.iter().enumerate() {
-                compute_pass.set_bind_group(i as u32, bind_group, &[]);
+                compute_pass.set_bind_group(i as u32, *bind_group, &[]);
             }
 
             compute_pass.dispatch_workgroups(

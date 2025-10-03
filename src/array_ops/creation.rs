@@ -853,12 +853,12 @@ mod tests {
         assert_eq!(result.to_vec(), vec![0.0, 1.0, 2.0, 3.0, 4.0]);
 
         // Test 2D array with specified shape
-        let result = fromiter((0..6).map(|x| x as i32), Some(&[2, 3])).unwrap();
+        let result = fromiter(0..6, Some(&[2, 3])).unwrap();
         assert_eq!(result.shape(), vec![2, 3]);
         assert_eq!(result.to_vec(), vec![0, 1, 2, 3, 4, 5]);
 
         // Test shape mismatch error
-        let result = fromiter((0..5).map(|x| x as i32), Some(&[2, 3]));
+        let result = fromiter(0..5, Some(&[2, 3]));
         assert!(result.is_err());
     }
 

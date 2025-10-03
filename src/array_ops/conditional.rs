@@ -324,12 +324,12 @@ pub fn select<T: Clone + num_traits::Zero>(
         {
             let cond_val = cond_broadcast
                 .array()
-                .get(ndarray::IxDyn(&indices))
+                .get(scirs2_core::ndarray::IxDyn(&indices))
                 .unwrap();
             if *cond_val {
                 let choice_val = choice_broadcast
                     .array()
-                    .get(ndarray::IxDyn(&indices))
+                    .get(scirs2_core::ndarray::IxDyn(&indices))
                     .unwrap();
                 result.set(&indices, choice_val.clone())?;
                 break; // Take the first matching condition

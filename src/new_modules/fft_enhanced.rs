@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_complex::Complex;
 use num_traits::{Float, NumCast};
+use scirs2_core::Complex;
 use std::f64::consts::PI;
 use std::fmt::Debug;
 
@@ -819,7 +819,7 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
     #[allow(unused_imports)]
-    use num_complex::Complex64;
+    use scirs2_core::Complex64;
 
     #[test]
     fn test_fft_any_size_power_of_two() {

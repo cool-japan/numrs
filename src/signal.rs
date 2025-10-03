@@ -853,7 +853,7 @@ mod window_tests {
 
         // All values should be positive and <= 1
         for &val in &data {
-            assert!(val >= 0.0 && val <= 1.0);
+            assert!((0.0..=1.0).contains(&val));
         }
     }
 
@@ -875,7 +875,7 @@ mod window_tests {
 
         // All values should be in [0, 1]
         for &val in &data {
-            assert!(val >= 0.0 && val <= 1.0);
+            assert!((0.0..=1.0).contains(&val));
         }
     }
 

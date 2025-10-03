@@ -1,7 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_complex::Complex;
 use num_traits::{Float, NumCast};
+use scirs2_core::Complex;
 use std::f64::consts::PI;
 use std::fmt::Debug;
 
@@ -347,7 +347,7 @@ impl FFT {
     ///
     /// ```
     /// use numrs2::prelude::*;
-    /// use num_complex::Complex64;
+    /// use scirs2_core::Complex64;
     ///
     /// // Create a 1D spectrum with DC at 0
     /// let mut spectrum = Vec::new();
@@ -434,7 +434,7 @@ impl FFT {
     ///
     /// ```
     /// use numrs2::prelude::*;
-    /// use num_complex::Complex64;
+    /// use scirs2_core::Complex64;
     ///
     /// // Create a 1D spectrum with DC in the middle
     /// let mut spectrum = Vec::new();
@@ -995,7 +995,7 @@ where
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    use num_complex::Complex64;
+    use scirs2_core::Complex64;
 
     // Helper to create Complex<f64> array
     #[allow(dead_code)]

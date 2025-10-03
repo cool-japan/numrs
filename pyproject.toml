@@ -1,0 +1,68 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "numrs2"
+version = "0.1.0-beta.2"
+description = "A Rust implementation inspired by NumPy for numerical computing"
+authors = [
+    {name = "cool-japan/NumRS2 (KitaSan) Team"}
+]
+license = {text = "MIT OR Apache-2.0"}
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries",
+]
+keywords = ["numpy", "numerical", "array", "linear-algebra", "mathematics", "rust"]
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-benchmark>=4.0",
+    "black>=23.0",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/cool-japan/numrs"
+Repository = "https://github.com/cool-japan/numrs"
+Documentation = "https://github.com/cool-japan/numrs/blob/master/README.md"
+"Bug Tracker" = "https://github.com/cool-japan/numrs/issues"
+
+[tool.maturin]
+features = ["python"]
+python-source = "python"
+module-name = "numrs2._numrs2"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

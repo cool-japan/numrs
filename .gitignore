@@ -21,9 +21,16 @@ Cargo.lock
 # Cargo config (local settings)
 .cargo/
 
+# Claude
+.claude/
+
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/*
+
 # Test Generated files
 output.*
 
 **/.claude/settings.local.json
 **/.ipynb_checkpoints/
 ./.ipynb_checkpoints/
+

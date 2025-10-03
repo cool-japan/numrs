@@ -1,6 +1,6 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray::{IxDyn, SliceInfo, SliceInfoElem};
+use scirs2_core::ndarray::{IxDyn, SliceInfo, SliceInfoElem};
 use std::fmt::Debug;
 
 /// Advanced stride manipulation utilities for NumRS2 arrays.

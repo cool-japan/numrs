@@ -1,8 +1,8 @@
 use crate::array::Array;
 use crate::array_ops::manipulation::ravel;
 use crate::error::{NumRs2Error, Result};
-use ndarray::{Axis, IxDyn};
 use num_traits::Zero;
+use scirs2_core::ndarray::{Axis, IxDyn};
 use std::cmp;
 use std::fmt::Display;
 
@@ -248,7 +248,7 @@ fn concatenate_single_axis<T: Clone>(arrays: &[&Array<T>], axis: usize) -> Resul
     let views = views?;
 
     // Use ndarray's concatenate function
-    let result = ndarray::concatenate(Axis(axis), &views).map_err(|e| {
+    let result = scirs2_core::ndarray::concatenate(Axis(axis), &views).map_err(|e| {
         NumRs2Error::InvalidOperation(format!("Failed to concatenate arrays: {}", e))
     })?;
 
@@ -1664,9 +1664,10 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
         let mut indices = vec![0; shape.len()];
         indices[axis] = start_idx;
 
-        let view = array
-            .array()
-            .slice_axis(Axis(axis), ndarray::Slice::from(start_idx..end_idx));
+        let view = array.array().slice_axis(
+            Axis(axis),
+            scirs2_core::ndarray::Slice::from(start_idx..end_idx),
+        );
         result.push(Array::from_ndarray(view.into_owned().into_dyn()));
 
         start_idx = end_idx;
@@ -1677,9 +1678,10 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
         let mut sub_shape = shape.clone();
         sub_shape[axis] = axis_len - start_idx;
 
-        let view = array
-            .array()
-            .slice_axis(Axis(axis), ndarray::Slice::from(start_idx..axis_len));
+        let view = array.array().slice_axis(
+            Axis(axis),
+            scirs2_core::ndarray::Slice::from(start_idx..axis_len),
+        );
         result.push(Array::from_ndarray(view.into_owned().into_dyn()));
     }
 
@@ -2848,12 +2850,12 @@ pub fn select<T: Clone + num_traits::Zero>(
         {
             let cond_val = cond_broadcast
                 .array()
-                .get(ndarray::IxDyn(&indices))
+                .get(scirs2_core::ndarray::IxDyn(&indices))
                 .unwrap();
             if *cond_val {
                 let choice_val = choice_broadcast
                     .array()
-                    .get(ndarray::IxDyn(&indices))
+                    .get(scirs2_core::ndarray::IxDyn(&indices))
                     .unwrap();
                 result.set(&indices, choice_val.clone())?;
                 break; // Take the first matching condition

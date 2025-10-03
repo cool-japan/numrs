@@ -214,7 +214,9 @@ pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(
             label: Some("NumRS2 MatMul Pipeline"),
             layout: Some(&pipeline_layout),
             module: shader,
-            entry_point: "main",
+            entry_point: Some("main"),
+            cache: None,
+            compilation_options: Default::default(),
         });
 
     // Create dimensions buffer
@@ -357,7 +359,9 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
                 label: Some("NumRS2 Transpose Pipeline"),
                 layout: Some(&pipeline_layout),
                 module: shader,
-                entry_point: "transpose",
+                entry_point: Some("transpose"),
+                cache: None,
+                compilation_options: Default::default(),
             });
 
         // Create dimensions buffer
@@ -510,7 +514,9 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
             label: Some("NumRS2 Element-wise Pipeline"),
             layout: Some(&pipeline_layout),
             module: shader,
-            entry_point: "binary_op",
+            entry_point: Some("binary_op"),
+            cache: None,
+            compilation_options: Default::default(),
         });
 
     // Create uniform buffer with operation type and size
@@ -687,7 +693,9 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
             label: Some("NumRS2 Reduction Pipeline"),
             layout: Some(&pipeline_layout),
             module: shader,
-            entry_point: "reduction",
+            entry_point: Some("reduction"),
+            cache: None,
+            compilation_options: Default::default(),
         });
 
     // Create uniform buffer with operation type and size
@@ -758,7 +766,7 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
         tx.send(result).unwrap();
     });
 
-    context.device().poll(wgpu::Maintain::Wait);
+    context.device().poll(wgpu::PollType::Wait).unwrap();
     rx.recv()
         .unwrap()
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
@@ -864,7 +872,9 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
             label: Some("NumRS2 Reduction Pipeline"),
             layout: Some(&pipeline_layout),
             module: shader,
-            entry_point: "reduction",
+            entry_point: Some("reduction"),
+            cache: None,
+            compilation_options: Default::default(),
         });
 
     // Create uniform buffer with operation type and size
@@ -935,7 +945,7 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
         tx.send(result).unwrap();
     });
 
-    context.device().poll(wgpu::Maintain::Wait);
+    context.device().poll(wgpu::PollType::Wait).unwrap();
     rx.recv()
         .unwrap()
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
@@ -1038,7 +1048,9 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
             label: Some("NumRS2 Unary Element-wise Pipeline"),
             layout: Some(&pipeline_layout),
             module: shader,
-            entry_point: "unary_op",
+            entry_point: Some("unary_op"),
+            cache: None,
+            compilation_options: Default::default(),
         });
 
     // Create uniform buffer with operation type and size

@@ -8,8 +8,8 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::fft::FFT;
 use crate::new_modules::signal_processing::SignalProcessor;
-use num_complex::Complex;
 use num_traits::{Float, NumCast, Zero};
+use scirs2_core::Complex;
 use std::f64::consts::PI;
 use std::fmt::Debug;
 
@@ -796,7 +796,7 @@ mod tests {
         // Coherence values should be between 0 and 1
         let coherence_data = result.coherence.to_vec();
         for &val in &coherence_data {
-            assert!(val >= 0.0 && val <= 1.0);
+            assert!((0.0..=1.0).contains(&val));
         }
     }
 

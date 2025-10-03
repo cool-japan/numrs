@@ -3,11 +3,11 @@
 //! This test file verifies that different modules work correctly together,
 //! particularly the newly integrated bitwise_ops, complex_ops, and advanced_indexing.
 
-use num_complex::Complex;
 use numrs2::array_ops::advanced_indexing;
 use numrs2::bitwise_ops;
 use numrs2::complex_ops;
 use numrs2::prelude::*;
+use scirs2_core::Complex;
 
 #[test]
 fn test_bitwise_and_advanced_indexing_integration() {

@@ -11,8 +11,8 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::fft::FFT;
 use crate::new_modules::frequency_analysis::FrequencyAnalyzer;
-use num_complex::Complex;
 use num_traits::{Float, NumCast};
+use scirs2_core::Complex;
 use std::f64::consts::PI;
 use std::fmt::Debug;
 

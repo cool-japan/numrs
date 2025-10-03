@@ -324,7 +324,7 @@ impl NeonEnhancedOps {
             vst1q_f32(temp_x.as_mut_ptr(), x);
 
             for j in 0..NEON_F32_LANES {
-                temp_x[j] = temp_x[j] % (2.0 * std::f32::consts::PI);
+                temp_x[j] %= 2.0 * std::f32::consts::PI;
                 if temp_x[j] > std::f32::consts::PI {
                     temp_x[j] -= 2.0 * std::f32::consts::PI;
                 }
@@ -494,9 +494,7 @@ impl NeonEnhancedOps {
         }
 
         // Handle remaining elements
-        for i in simd_len..len {
-            dst[i] = src[i];
-        }
+        dst[simd_len..len].copy_from_slice(&src[simd_len..len]);
     }
 }
 

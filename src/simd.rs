@@ -3,12 +3,11 @@ use crate::error::{NumRs2Error, Result};
 use crate::simd_optimize::{detect_cpu_features, select_simd_implementation, SimdImplementation};
 use num_traits::Float;
 #[allow(unused_imports)]
-use rayon::prelude::*;
-use simba::simd::*;
+use scirs2_core::parallel_ops::*;
+// SCIRS2 POLICY: Use scirs2_core::simd_ops instead of simba
 
-// Note: This module uses the simba crate for SIMD abstractions
-// For a real implementation, you might want to use the std::simd or packed_simd crates
-// or even implement platform-specific optimizations using intrinsics
+// Note: This module follows SCIRS2 POLICY - all SIMD operations go through scirs2_core::simd_ops
+// NO direct usage of simba, wide, or other SIMD libraries
 
 /// Trait for SIMD-accelerated operations
 pub trait SimdOps<T> {
@@ -53,11 +52,7 @@ pub trait SimdOps<T> {
         T: Float + Copy;
 }
 
-impl<T: Float + SimdValue + 'static> SimdOps<T> for Array<T>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+impl<T: Float + 'static> SimdOps<T> for Array<T> {
     fn simd_map<F>(&self, f: F) -> Array<T>
     where
         F: Fn(T) -> T,
@@ -384,11 +379,7 @@ where
 }
 
 // Implementation of specific SIMD operations for different architectures
-impl<T: Float + SimdValue + 'static> Array<T>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+impl<T: Float + 'static> Array<T> {
     // Scalar implementations (fallback)
     fn simd_map_scalar<F>(&self, f: &F) -> Array<T>
     where
@@ -807,77 +798,45 @@ where
     }
 }
 
-// Efficient SIMD implementations for common operations
+// Efficient SIMD implementations for common operations (SCIRS2 POLICY compliant)
 
 /// SIMD-accelerated element-wise addition with automatic CPU feature detection
-pub fn simd_add<T: Float + SimdValue + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_add<T: Float + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>> {
     a.simd_zip_with(b, |x, y| x + y)
 }
 
 /// SIMD-accelerated element-wise multiplication with automatic CPU feature detection
-pub fn simd_mul<T: Float + SimdValue + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_mul<T: Float + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>> {
     a.simd_zip_with(b, |x, y| x * y)
 }
 
 /// SIMD-accelerated element-wise division with automatic CPU feature detection
-pub fn simd_div<T: Float + SimdValue + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_div<T: Float + 'static>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>> {
     a.simd_zip_with(b, |x, y| x / y)
 }
 
 /// SIMD-accelerated element-wise exponentiation with automatic CPU feature detection
-pub fn simd_exp<T: Float + SimdValue + 'static>(a: &Array<T>) -> Array<T>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_exp<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     a.simd_map(|x| x.exp())
 }
 
 /// SIMD-accelerated element-wise logarithm with automatic CPU feature detection
-pub fn simd_log<T: Float + SimdValue + 'static>(a: &Array<T>) -> Array<T>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_log<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     a.simd_map(|x| x.ln())
 }
 
 /// SIMD-accelerated element-wise square root with automatic CPU feature detection
-pub fn simd_sqrt<T: Float + SimdValue + 'static>(a: &Array<T>) -> Array<T>
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_sqrt<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     a.simd_map(|x| x.sqrt())
 }
 
 /// SIMD-accelerated sum of all elements with automatic CPU feature detection
-pub fn simd_sum<T: Float + SimdValue + 'static>(a: &Array<T>) -> T
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_sum<T: Float + 'static>(a: &Array<T>) -> T {
     a.simd_reduce(T::zero(), |acc, x| acc + x)
 }
 
 /// SIMD-accelerated product of all elements with automatic CPU feature detection
-pub fn simd_prod<T: Float + SimdValue + 'static>(a: &Array<T>) -> T
-where
-    T::SimdBool: SimdBool,
-    <T as simba::simd::SimdValue>::Element: Float,
-{
+pub fn simd_prod<T: Float + 'static>(a: &Array<T>) -> T {
     a.simd_reduce(T::one(), |acc, x| acc * x)
 }
 

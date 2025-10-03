@@ -510,6 +510,141 @@ fn read_npz_generic<T: Clone, R: Read + Seek>(reader: R) -> Result<Array<T>> {
     read_npy_generic(npy_file)
 }
 
+/// List all array names in an NPZ archive
+///
+/// # Arguments
+/// * `reader` - A readable and seekable source (e.g., File)
+///
+/// # Returns
+/// A vector of array names (without .npy extension)
+///
+/// # Examples
+/// ```rust,no_run
+/// use numrs2::io::list_npz_arrays;
+/// use std::fs::File;
+///
+/// let file = File::open("arrays.npz").unwrap();
+/// let array_names = list_npz_arrays(file).unwrap();
+/// println!("Arrays in NPZ: {:?}", array_names);
+/// ```
+pub fn list_npz_arrays<R: Read + Seek>(reader: R) -> Result<Vec<String>> {
+    let mut archive = ZipArchive::new(reader).map_err(|e| {
+        NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
+    })?;
+
+    let mut array_names = Vec::new();
+    for i in 0..archive.len() {
+        let file = archive.by_index(i).map_err(|e| {
+            NumRs2Error::DeserializationError(format!(
+                "Failed to access file in NPZ archive: {}",
+                e
+            ))
+        })?;
+        let name = file.name().to_string();
+
+        if name.ends_with(".npy") {
+            // Remove the .npy extension
+            let array_name = name.trim_end_matches(".npy").to_string();
+            array_names.push(array_name);
+        }
+    }
+
+    Ok(array_names)
+}
+
+/// Load a specific named array from an NPZ archive
+///
+/// # Arguments
+/// * `reader` - A readable and seekable source (e.g., File)
+/// * `array_name` - Name of the array to load (without .npy extension)
+///
+/// # Returns
+/// The array with the specified name
+///
+/// # Examples
+/// ```rust,no_run
+/// use numrs2::io::load_npz_array;
+/// use std::fs::File;
+///
+/// let file = File::open("arrays.npz").unwrap();
+/// let array = load_npz_array::<f32, _>(file, "my_array").unwrap();
+/// ```
+pub fn load_npz_array<T: Clone, R: Read + Seek>(reader: R, array_name: &str) -> Result<Array<T>> {
+    let mut archive = ZipArchive::new(reader).map_err(|e| {
+        NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
+    })?;
+
+    // Look for the array with the specified name
+    let npy_filename = format!("{}.npy", array_name);
+    let npy_file = archive.by_name(&npy_filename).map_err(|e| {
+        NumRs2Error::DeserializationError(format!(
+            "Array '{}' not found in NPZ archive: {}",
+            array_name, e
+        ))
+    })?;
+
+    // Use the generic NPY reader
+    read_npy_generic(npy_file)
+}
+
+/// Load all arrays from an NPZ archive
+///
+/// # Arguments
+/// * `reader` - A readable and seekable source (e.g., File)
+///
+/// # Returns
+/// A HashMap mapping array names to their data
+///
+/// # Examples
+/// ```rust,no_run
+/// use numrs2::io::load_all_npz_arrays;
+/// use std::fs::File;
+///
+/// let file = File::open("arrays.npz").unwrap();
+/// let arrays = load_all_npz_arrays::<f32, _>(file).unwrap();
+/// for (name, array) in &arrays {
+///     println!("Array '{}' has shape {:?}", name, array.shape());
+/// }
+/// ```
+pub fn load_all_npz_arrays<T: Clone, R: Read + Seek>(
+    reader: R,
+) -> Result<std::collections::HashMap<String, Array<T>>> {
+    let mut archive = ZipArchive::new(reader).map_err(|e| {
+        NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
+    })?;
+
+    let mut arrays = std::collections::HashMap::new();
+
+    // Get all NPY file indices first
+    let mut npy_files = Vec::new();
+    for i in 0..archive.len() {
+        let file = archive.by_index(i).map_err(|e| {
+            NumRs2Error::DeserializationError(format!(
+                "Failed to access file in NPZ archive: {}",
+                e
+            ))
+        })?;
+        let name = file.name().to_string();
+
+        if name.ends_with(".npy") {
+            let array_name = name.trim_end_matches(".npy").to_string();
+            npy_files.push((i, array_name));
+        }
+    }
+
+    // Load each NPY file
+    for (index, array_name) in npy_files {
+        let npy_file = archive.by_index(index).map_err(|e| {
+            NumRs2Error::DeserializationError(format!("Failed to extract NPY file from NPZ: {}", e))
+        })?;
+
+        let array = read_npy_generic(npy_file)?;
+        arrays.insert(array_name, array);
+    }
+
+    Ok(arrays)
+}
+
 // Public function to deserialize an array from a file in NPY or NPZ format
 pub fn deserialize_from_file<T: Clone, R: Read + Seek>(
     reader: R,

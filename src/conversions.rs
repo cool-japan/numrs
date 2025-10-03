@@ -1,8 +1,8 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::views::ArrayView;
-use num_complex::Complex;
 use num_traits::{AsPrimitive, NumCast, Zero}; // One removed
+use scirs2_core::Complex;
 use std::ops::{Add, Div, Mul, Sub};
 
 /// Core trait for type conversions between numeric types.
@@ -244,7 +244,7 @@ impl<T> Array<T> {
     ///
     /// ```
     /// use numrs2::prelude::*;
-    /// use num_complex::Complex;
+    /// use scirs2_core::Complex;
     ///
     /// // Convert a real array to complex
     /// let array = Array::from_vec(vec![1.0, 2.0, 3.0]);
@@ -552,7 +552,7 @@ where
     ///
     /// ```
     /// use numrs2::prelude::*;
-    /// use num_complex::Complex;
+    /// use scirs2_core::Complex;
     ///
     /// let array = Array::from_vec(vec![1.0, 2.0, 3.0]);
     /// let view = array.view();

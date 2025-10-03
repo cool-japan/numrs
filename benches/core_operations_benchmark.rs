@@ -3,15 +3,16 @@
 //! This benchmark suite focuses on the fundamental array operations that form
 //! the backbone of numerical computing, with detailed performance profiling.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use numrs2::array::Array;
 use numrs2::array_ops;
 // use numrs2::linalg::LinAlg; // LinAlg trait doesn't exist
 use numrs2::memory_optimize::cache_layout::{
     calculate_optimal_block_size, optimize_layout, LayoutStrategy,
 };
-// use numrs2::simd::SimdOps;
-// use numrs2::stats::Statistics;
+use numrs2::simd;
+use numrs2::stats::Statistics;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark array indexing operations
@@ -324,7 +325,7 @@ fn bench_simd_performance(c: &mut Criterion) {
         // SIMD addition
         group.bench_with_input(BenchmarkId::new("simd_add_f64", size), &size, |b, _| {
             b.iter(|| {
-                let result = numrs2::simd_optimize::simd_add(&arr1, &arr2).unwrap();
+                let result = simd::simd_add(&arr1, &arr2).unwrap();
                 black_box(result)
             })
         });
@@ -335,27 +336,28 @@ fn bench_simd_performance(c: &mut Criterion) {
             &size,
             |b, _| {
                 b.iter(|| {
-                    let result = numrs2::simd_optimize::simd_mul(&arr1, &arr2).unwrap();
+                    let result = simd::simd_mul(&arr1, &arr2).unwrap();
                     black_box(result)
                 })
             },
         );
 
         // SIMD dot product
-        group.bench_with_input(BenchmarkId::new("simd_dot_f64", size), &size, |b, _| {
-            b.iter(|| {
-                // let result = arr1.simd_dot(&arr2).unwrap(); // simd_dot not available
-                black_box(result)
-            })
-        });
+        // Commented out - simd_dot not available
+        // group.bench_with_input(BenchmarkId::new("simd_dot_f64", size), &size, |b, _| {
+        //     b.iter(|| {
+        //         let result = arr1.simd_dot(&arr2).unwrap();
+        //         black_box(result)
+        //     })
+        // });
 
-        // FMA operations
-        group.bench_with_input(BenchmarkId::new("simd_fma_f64", size), &size, |b, _| {
-            b.iter(|| {
-                // let result = arr1.simd_fma(&arr2, &arr1).unwrap(); // simd_fma not available
-                black_box(result)
-            })
-        });
+        // Commented out - simd_fma not available
+        // group.bench_with_input(BenchmarkId::new("simd_fma_f64", size), &size, |b, _| {
+        //     b.iter(|| {
+        //         let result = arr1.simd_fma(&arr2, &arr1).unwrap();
+        //         black_box(result)
+        //     })
+        // });
     }
 
     group.finish();

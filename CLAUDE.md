@@ -27,3 +27,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Testing**: Write unit tests for all new functionality
 
 Always leverage existing abstractions: array operations, BLAS integration, and SIMD optimizations.
+
+## SCIRS2 Ecosystem Policy (MANDATORY)
+
+**NumRS2 is part of the SciRS2 ecosystem and MUST follow all SciRS2 ecosystem policies.**
+
+### Core Requirements
+
+1. **Mandatory SciRS2 Foundation**: NumRS2 builds upon SciRS2's scientific computing foundation
+2. **NO Direct External Dependencies**: NEVER use `rand`, `ndarray`, `rayon`, BLAS libraries directly
+3. **ALWAYS Use SciRS2-Core Abstractions**: All external functionality through `scirs2_core::*`
+4. **Version**: Currently using SciRS2 0.1.0-beta.3
+
+### Required Import Patterns
+
+```rust
+// ✅ REQUIRED - All NumRS2 code, tests, examples
+use scirs2_core::random::*;           // Complete rand + rand_distr functionality
+use scirs2_core::ndarray::*;          // Complete ndarray functionality + macros (array!, s!)
+use scirs2_core::simd_ops::*;         // SIMD operations
+use scirs2_core::parallel_ops::*;     // Parallel operations
+use scirs2_stats::*;                  // Statistical functions
+use scirs2_linalg::*;                 // Linear algebra
+
+// ❌ FORBIDDEN - Direct external dependencies
+// use rand::*;                       // FORBIDDEN
+// use ndarray::*;                    // FORBIDDEN
+// use rayon::prelude::*;             // FORBIDDEN
+```
+
+### Policy Documents
+
+- **NumRS2 Specific**: See `SCIRS2_INTEGRATION_POLICY.md` for NumRS2-specific integration patterns
+- **Main Ecosystem Policy**: See `~/work/scirs/SCIRS2_POLICY.md` for complete technical policies
+- **Mandatory Compliance**: All code must comply with SciRS2 ecosystem policies
+
+### Key Policies
+
+1. **SIMD Operations**: ALWAYS use `scirs2_core::simd_ops::SimdUnifiedOps` trait
+2. **Parallel Processing**: ALWAYS use `scirs2_core::parallel_ops` (NEVER direct rayon)
+3. **Random Numbers**: ALWAYS use `scirs2_core::random` (NEVER direct rand/rand_distr)
+4. **Array Operations**: ALWAYS use `scirs2_core::ndarray` (NEVER direct ndarray)
+5. **BLAS Operations**: ALL through scirs2-core (NEVER direct BLAS dependencies)
+6. **Error Handling**: Base on `scirs2_core::error::CoreError`
+
+When writing NumRS2 code, ALWAYS use SciRS2 abstractions - no exceptions for tests, examples, or benchmarks.

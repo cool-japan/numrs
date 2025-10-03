@@ -247,7 +247,7 @@ mod tests {
         assert_eq!(options.threshold, 100);
         assert_eq!(options.edgeitems, 2);
         assert_eq!(options.linewidth, 50);
-        assert_eq!(options.suppress, true);
+        assert!(options.suppress);
 
         // Restore original options
         let mut global_options = PRINT_OPTIONS.write().unwrap();
@@ -295,7 +295,7 @@ mod tests {
     fn test_array_str_function() {
         let arr = Array::from_vec(vec![1.0 / 3.0, 2.0 / 3.0, 1.0]);
         let formatted = array_str(&arr, Some(2), None, None);
-        assert!(formatted.len() > 0);
+        assert!(!formatted.is_empty());
     }
 
     #[test]

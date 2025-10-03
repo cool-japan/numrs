@@ -57,7 +57,7 @@ pub fn get_gpu_info() -> Option<String> {
         compatible_surface: None,
     });
 
-    let adapter = rt.block_on(adapter_future)?;
+    let adapter = rt.block_on(adapter_future).ok()?;
     let info = adapter.get_info();
 
     Some(format!("{} ({:?})", info.name, info.backend))
