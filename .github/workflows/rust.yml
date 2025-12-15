@@ -81,4 +81,4 @@ jobs:
         run: cargo run --example basic_usage
       
       - name: Run linalg example (with CI-safe features)
-        run: cargo run --example linalg_example --features="ci-safe"
+        run: cargo run --example matrix_decomp_example --features="ci-safe"
