@@ -8,6 +8,8 @@
 //! cargo run --example gpu_benchmark --features "gpu scirs"
 //! ```
 
+#![allow(clippy::result_large_err)]
+
 use numrs2::error::Result;
 use numrs2::prelude::*;
 use scirs2_core::ndarray::{Array1, Array2};

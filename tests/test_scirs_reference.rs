@@ -103,7 +103,7 @@ fn test_vonmises_concentration() {
         // Test 1: All samples should be in [-π, π]
         for &val in &data {
             assert!(
-                val >= -PI && val <= PI,
+                (-PI..=PI).contains(&val),
                 "Sample {} outside valid range [-π, π]",
                 val
             );

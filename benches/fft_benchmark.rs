@@ -3,6 +3,8 @@
 //! This file contains benchmarks for various FFT operations
 //! to track performance and identify bottlenecks.
 
+#![allow(deprecated)]
+
 #[macro_use]
 extern crate criterion;
 use criterion::{BenchmarkId, Criterion};

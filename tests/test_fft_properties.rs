@@ -1,4 +1,5 @@
 #![allow(deprecated)] // Allow deprecated warnings during API transition
+#![allow(clippy::needless_range_loop)]
 
 use approx::assert_abs_diff_eq;
 /// Property-based tests for Fast Fourier Transform (FFT) operations
@@ -416,7 +417,6 @@ fn test_fft_real_properties() {
     // Skipping test due to precision issues in FFT implementation
     // This test validates properties specific to RFFT (Real FFT)
     // TODO: Fix precision issues in the FFT implementation and re-enable this test
-    return;
 }
 
 #[test]
@@ -590,7 +590,6 @@ fn test_2d_real_fft_properties() {
     // Skipping test due to precision issues in FFT implementation
     // This test validates properties of 2D real FFT (RFFT2)
     // TODO: Fix precision issues in the FFT implementation and re-enable this test
-    return;
 }
 
 #[test]

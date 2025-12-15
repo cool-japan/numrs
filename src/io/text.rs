@@ -879,9 +879,7 @@ pub fn savez_compressed<T: Clone + serde::Serialize>(
     fname: &Path,
     arrays: &HashMap<String, Array<T>>,
 ) -> Result<()> {
-    // This is a convenience wrapper around the existing NPZ functionality
-    // For now, we'll save the first array with a default name
-    // A full implementation would save multiple arrays to the same NPZ file
+    use std::fs::File;
 
     if arrays.is_empty() {
         return Err(NumRs2Error::InvalidOperation(
@@ -889,10 +887,12 @@ pub fn savez_compressed<T: Clone + serde::Serialize>(
         ));
     }
 
-    // For simplicity, just save the first array
-    // TODO: Implement full multi-array NPZ support
-    let (_name, array) = arrays.iter().next().unwrap();
-    array.to_file(fname, crate::io::SerializeFormat::Npz)
+    // Create the NPZ file
+    let file = File::create(fname)
+        .map_err(|e| NumRs2Error::IOError(format!("Failed to create NPZ file: {}", e)))?;
+
+    // Use the new multi-array NPZ save function with compression enabled
+    crate::io::npy_npz::save_npz_arrays(arrays, file, true)
 }
 
 #[cfg(test)]

@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use numrs2::array::Array;
 use numrs2::error::Result;
 

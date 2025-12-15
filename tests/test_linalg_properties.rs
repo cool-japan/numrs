@@ -1,4 +1,5 @@
 #![cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#![allow(clippy::result_large_err)]
 
 use approx::assert_abs_diff_eq;
 /// Property-based tests for linear algebra operations
@@ -548,7 +549,7 @@ fn test_lu_decomposition_properties() {
             let mut pa = Array::zeros(&[size, size]);
             for i in 0..size {
                 for j in 0..size {
-                    let perm_idx = p.get(&[i]).unwrap() as usize;
+                    let perm_idx = p.get(&[i]).unwrap();
                     pa.set(&[i, j], a.get(&[perm_idx, j]).unwrap()).unwrap();
                 }
             }

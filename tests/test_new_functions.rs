@@ -763,14 +763,14 @@ mod test_frombuffer_fromiter {
 
     #[test]
     fn test_fromiter_2d() {
-        let result = fromiter((0..6).map(|x| x as i32), Some(&[2, 3])).unwrap();
+        let result = fromiter(0..6, Some(&[2, 3])).unwrap();
         assert_eq!(result.shape(), vec![2, 3]);
         assert_eq!(result.to_vec(), vec![0, 1, 2, 3, 4, 5]);
     }
 
     #[test]
     fn test_fromiter_shape_mismatch() {
-        let result = fromiter((0..5).map(|x| x as i32), Some(&[2, 3])); // 5 elements but 2x3=6 expected
+        let result = fromiter(0..5, Some(&[2, 3])); // 5 elements but 2x3=6 expected
         assert!(result.is_err());
     }
 
@@ -786,5 +786,472 @@ mod test_frombuffer_fromiter {
         let result = fromiter((0..4).map(|x| x * x), Some(&[2, 2])).unwrap();
         assert_eq!(result.shape(), vec![2, 2]);
         assert_eq!(result.to_vec(), vec![0, 1, 4, 9]);
+    }
+}
+
+#[cfg(test)]
+mod test_nan_arg_functions {
+    use super::*;
+    use numrs2::math::{nanargmax, nanargmin, nancumprod};
+
+    #[test]
+    fn test_nanargmax_1d_no_nan() {
+        let a = Array::from_vec(vec![1.0, 5.0, 3.0, 2.0]);
+        let result = nanargmax(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![1]); // index 1 has value 5.0
+    }
+
+    #[test]
+    fn test_nanargmax_1d_with_nan() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 2.0]);
+        let result = nanargmax(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![2]); // index 2 has value 3.0, ignoring NaN
+    }
+
+    #[test]
+    fn test_nanargmax_1d_nan_at_max() {
+        // NaN at what would be max position
+        let a = Array::from_vec(vec![1.0, 2.0, f64::NAN, 4.0]);
+        let result = nanargmax(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![3]); // index 3 has value 4.0
+    }
+
+    #[test]
+    fn test_nanargmax_2d_axis0() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0, 2.0, 1.0]).reshape(&[2, 3]);
+        let result = nanargmax(&a, Some(0), false).unwrap();
+        assert_eq!(result.shape(), vec![3]);
+        assert_eq!(result.to_vec(), vec![1, 1, 0]); // max indices along axis 0
+    }
+
+    #[test]
+    fn test_nanargmax_2d_axis1() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 2.0, 4.0, 1.0]).reshape(&[2, 3]);
+        let result = nanargmax(&a, Some(1), false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        assert_eq!(result.to_vec(), vec![2, 1]); // max indices in each row, ignoring NaN
+    }
+
+    #[test]
+    fn test_nanargmax_keepdims() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, 2.0]);
+        let result = nanargmax(&a, None, true).unwrap();
+        assert_eq!(result.shape(), vec![1]);
+        assert_eq!(result.to_vec(), vec![2]);
+    }
+
+    #[test]
+    fn test_nanargmin_1d_no_nan() {
+        let a = Array::from_vec(vec![5.0, 1.0, 3.0, 2.0]);
+        let result = nanargmin(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![1]); // index 1 has value 1.0
+    }
+
+    #[test]
+    fn test_nanargmin_1d_with_nan() {
+        let a = Array::from_vec(vec![3.0, f64::NAN, 1.0, 2.0]);
+        let result = nanargmin(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![2]); // index 2 has value 1.0, ignoring NaN
+    }
+
+    #[test]
+    fn test_nanargmin_1d_nan_at_min() {
+        // NaN at what would be min position
+        let a = Array::from_vec(vec![4.0, 2.0, f64::NAN, 1.0]);
+        let result = nanargmin(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![3]); // index 3 has value 1.0
+    }
+
+    #[test]
+    fn test_nanargmin_2d_axis0() {
+        let a = Array::from_vec(vec![4.0, f64::NAN, 1.0, 2.0, 5.0, 3.0]).reshape(&[2, 3]);
+        let result = nanargmin(&a, Some(0), false).unwrap();
+        assert_eq!(result.shape(), vec![3]);
+        assert_eq!(result.to_vec(), vec![1, 1, 0]); // min indices along axis 0
+    }
+
+    #[test]
+    fn test_nanargmin_2d_axis1() {
+        let a = Array::from_vec(vec![3.0, f64::NAN, 1.0, 2.0, 4.0, 0.5]).reshape(&[2, 3]);
+        let result = nanargmin(&a, Some(1), false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        assert_eq!(result.to_vec(), vec![2, 2]); // min indices in each row, ignoring NaN
+    }
+
+    #[test]
+    fn test_nanargmin_keepdims() {
+        let a = Array::from_vec(vec![3.0, f64::NAN, 1.0, 2.0]);
+        let result = nanargmin(&a, None, true).unwrap();
+        assert_eq!(result.shape(), vec![1]);
+        assert_eq!(result.to_vec(), vec![2]);
+    }
+
+    #[test]
+    fn test_nancumprod_1d_no_nan() {
+        let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+        let result = nancumprod(&a, None).unwrap();
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 6.0, 24.0]);
+    }
+
+    #[test]
+    fn test_nancumprod_1d_with_nan() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 2.0, 3.0]);
+        let result = nancumprod(&a, None).unwrap();
+        assert_eq!(result.to_vec(), vec![1.0, 1.0, 2.0, 6.0]); // NaN treated as 1
+    }
+
+    #[test]
+    fn test_nancumprod_1d_multiple_nan() {
+        let a = Array::from_vec(vec![2.0, f64::NAN, f64::NAN, 3.0]);
+        let result = nancumprod(&a, None).unwrap();
+        assert_eq!(result.to_vec(), vec![2.0, 2.0, 2.0, 6.0]); // Multiple NaNs treated as 1
+    }
+
+    #[test]
+    fn test_nancumprod_2d_axis0() {
+        let a = Array::from_vec(vec![1.0, 2.0, f64::NAN, 3.0, 4.0, 2.0]).reshape(&[2, 3]);
+        let result = nancumprod(&a, Some(0)).unwrap();
+        assert_eq!(result.shape(), vec![2, 3]);
+        // First row: [1.0, 2.0, NaN->1.0]
+        // Second row: cumulative product along axis 0
+        // [1.0, 2.0, 1.0] then [1*3, 2*4, 1*2] = [3.0, 8.0, 2.0]
+        let expected = vec![1.0, 2.0, 1.0, 3.0, 8.0, 2.0];
+        assert_eq!(result.to_vec(), expected);
+    }
+
+    #[test]
+    fn test_nancumprod_2d_axis1() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 2.0, 3.0, 2.0, 4.0]).reshape(&[2, 3]);
+        let result = nancumprod(&a, Some(1)).unwrap();
+        assert_eq!(result.shape(), vec![2, 3]);
+        // Row 0: [1.0, 1.0, 2.0] (NaN treated as 1)
+        // Row 1: [3.0, 6.0, 24.0]
+        let expected = vec![1.0, 1.0, 2.0, 3.0, 6.0, 24.0];
+        assert_eq!(result.to_vec(), expected);
+    }
+
+    #[test]
+    fn test_nancumprod_negative_axis() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 2.0, 3.0]).reshape(&[2, 2]);
+        let result = nancumprod(&a, Some(-1)).unwrap();
+        assert_eq!(result.shape(), vec![2, 2]);
+        // Row 0: [1.0, 1.0] (NaN treated as 1)
+        // Row 1: [2.0, 6.0]
+        let expected = vec![1.0, 1.0, 2.0, 6.0];
+        assert_eq!(result.to_vec(), expected);
+    }
+
+    #[test]
+    fn test_nanargmax_all_nan() {
+        // When all values are NaN, should return 0
+        let a = Array::from_vec(vec![f64::NAN, f64::NAN, f64::NAN]);
+        let result = nanargmax(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![0]); // Returns 0 when all are NaN
+    }
+
+    #[test]
+    fn test_nanargmin_all_nan() {
+        // When all values are NaN, should return 0
+        let a = Array::from_vec(vec![f64::NAN, f64::NAN, f64::NAN]);
+        let result = nanargmin(&a, None, false).unwrap();
+        assert_eq!(result.to_vec(), vec![0]); // Returns 0 when all are NaN
+    }
+
+    #[test]
+    fn test_nancumprod_all_nan() {
+        // When all values are NaN, result should be all ones
+        let a = Array::from_vec(vec![f64::NAN, f64::NAN, f64::NAN]);
+        let result = nancumprod(&a, None).unwrap();
+        assert_eq!(result.to_vec(), vec![1.0, 1.0, 1.0]);
+    }
+}
+
+#[cfg(test)]
+mod test_histogram_bin_edges {
+    use super::*;
+    use numrs2::stats::{histogram_bin_edges, BinSpec};
+
+    #[test]
+    fn test_histogram_bin_edges_fixed_bins() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Count(5), None).unwrap();
+        assert_eq!(edges.size(), 6); // 5 bins = 6 edges
+        assert_relative_eq!(edges.get(&[0]).unwrap(), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(edges.get(&[5]).unwrap(), 5.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_with_range() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Count(4), Some((0.0, 8.0))).unwrap();
+        assert_eq!(edges.size(), 5); // 4 bins = 5 edges
+        assert_relative_eq!(edges.get(&[0]).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(edges.get(&[4]).unwrap(), 8.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_sqrt() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Sqrt, None).unwrap();
+        // sqrt(9) = 3, so 3 bins, 4 edges
+        assert_eq!(edges.size(), 4);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_sturges() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Sturges, None).unwrap();
+        // Sturges: ceil(log2(8) + 1) = ceil(3 + 1) = 4 bins, 5 edges
+        assert_eq!(edges.size(), 5);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_rice() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Rice, None).unwrap();
+        // Rice: ceil(2 * 8^(1/3)) = ceil(2 * 2) = 4 bins, 5 edges
+        assert_eq!(edges.size(), 5);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_auto() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Auto, None).unwrap();
+        // Auto should produce a reasonable number of bins
+        assert!(edges.size() >= 2);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_usize_into() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        let edges = histogram_bin_edges(&data, 5usize, None).unwrap();
+        assert_eq!(edges.size(), 6);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_string_into() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let edges = histogram_bin_edges(&data, "sqrt", None).unwrap();
+        // sqrt(8) ≈ 2.83, ceil = 3 bins, 4 edges
+        assert_eq!(edges.size(), 4);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_empty_error() {
+        let data: Array<f64> = Array::from_vec(vec![]);
+        let result = histogram_bin_edges(&data, BinSpec::Count(5), None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_zero_bins_error() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let result = histogram_bin_edges(&data, BinSpec::Count(0), None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_invalid_range_error() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let result = histogram_bin_edges(&data, BinSpec::Count(5), Some((5.0, 1.0)));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_uniform_spacing() {
+        let data = Array::from_vec(vec![0.0, 10.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Count(10), None).unwrap();
+        assert_eq!(edges.size(), 11);
+
+        // Check uniform spacing
+        for i in 0..10 {
+            let edge_i = edges.get(&[i]).unwrap();
+            let edge_i_plus_1 = edges.get(&[i + 1]).unwrap();
+            assert_relative_eq!(edge_i_plus_1 - edge_i, 1.0, epsilon = 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_scott() {
+        let data = Array::from_vec(vec![1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Scott, None).unwrap();
+        // Scott should produce a reasonable number of bins
+        assert!(edges.size() >= 2);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_fd() {
+        let data = Array::from_vec(vec![1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Fd, None).unwrap();
+        // Freedman-Diaconis should produce a reasonable number of bins
+        assert!(edges.size() >= 2);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_doane() {
+        let data = Array::from_vec(vec![1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Doane, None).unwrap();
+        // Doane should produce a reasonable number of bins
+        assert!(edges.size() >= 2);
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_small_data() {
+        let data = Array::from_vec(vec![1.0, 2.0]);
+        let edges = histogram_bin_edges(&data, BinSpec::Auto, None).unwrap();
+        // Should handle small data gracefully
+        assert!(edges.size() >= 2);
+    }
+}
+
+#[cfg(test)]
+mod test_nan_axis_functions {
+    use super::*;
+    use numrs2::stats::{nanmax, nanmean, nanmin, nanprod, nanstd, nansum, nanvar};
+
+    #[test]
+    fn test_nanmean_2d_axis0() {
+        // [[1.0, NaN, 3.0],
+        //  [4.0, 5.0, 6.0]]
+        let data = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nanmean(&data, Some(0), false).unwrap();
+        assert_eq!(result.shape(), vec![3]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 2.5, epsilon = 1e-10); // (1+4)/2
+        assert_relative_eq!(values[1], 5.0, epsilon = 1e-10); // 5/1 (NaN ignored)
+        assert_relative_eq!(values[2], 4.5, epsilon = 1e-10); // (3+6)/2
+    }
+
+    #[test]
+    fn test_nanmean_2d_axis1() {
+        let data = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nanmean(&data, Some(1), false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 2.0, epsilon = 1e-10); // (1+3)/2
+        assert_relative_eq!(values[1], 5.0, epsilon = 1e-10); // (4+5+6)/3
+    }
+
+    #[test]
+    fn test_nanmean_2d_keepdims() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+        let result = nanmean(&data, Some(0), true).unwrap();
+        assert_eq!(result.shape(), vec![1, 2]);
+    }
+
+    #[test]
+    fn test_nansum_2d_axis0() {
+        let data = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nansum(&data, Some(0), false).unwrap();
+        assert_eq!(result.shape(), vec![3]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 5.0, epsilon = 1e-10); // 1+4
+        assert_relative_eq!(values[1], 5.0, epsilon = 1e-10); // 5 (NaN ignored)
+        assert_relative_eq!(values[2], 9.0, epsilon = 1e-10); // 3+6
+    }
+
+    #[test]
+    fn test_nansum_2d_axis1() {
+        let data = Array::from_vec(vec![1.0, f64::NAN, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nansum(&data, Some(1), false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 4.0, epsilon = 1e-10); // 1+3
+        assert_relative_eq!(values[1], 15.0, epsilon = 1e-10); // 4+5+6
+    }
+
+    #[test]
+    fn test_nanmin_2d_axis0() {
+        let data = Array::from_vec(vec![1.0, f64::NAN, 9.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nanmin(&data, Some(0), false).unwrap();
+        assert_eq!(result.shape(), vec![3]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 1.0, epsilon = 1e-10); // min(1,4)
+        assert_relative_eq!(values[1], 5.0, epsilon = 1e-10); // min(NaN,5) = 5
+        assert_relative_eq!(values[2], 6.0, epsilon = 1e-10); // min(9,6)
+    }
+
+    #[test]
+    fn test_nanmin_2d_axis1() {
+        let data = Array::from_vec(vec![3.0, f64::NAN, 1.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nanmin(&data, Some(1), false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 1.0, epsilon = 1e-10); // min(3,NaN,1)
+        assert_relative_eq!(values[1], 4.0, epsilon = 1e-10); // min(4,5,6)
+    }
+
+    #[test]
+    fn test_nanmax_2d_axis0() {
+        let data = Array::from_vec(vec![1.0, f64::NAN, 9.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nanmax(&data, Some(0), false).unwrap();
+        assert_eq!(result.shape(), vec![3]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 4.0, epsilon = 1e-10); // max(1,4)
+        assert_relative_eq!(values[1], 5.0, epsilon = 1e-10); // max(NaN,5) = 5
+        assert_relative_eq!(values[2], 9.0, epsilon = 1e-10); // max(9,6)
+    }
+
+    #[test]
+    fn test_nanmax_2d_axis1() {
+        let data = Array::from_vec(vec![3.0, f64::NAN, 1.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nanmax(&data, Some(1), false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 3.0, epsilon = 1e-10); // max(3,NaN,1)
+        assert_relative_eq!(values[1], 6.0, epsilon = 1e-10); // max(4,5,6)
+    }
+
+    #[test]
+    fn test_nanprod_2d_axis0() {
+        let data = Array::from_vec(vec![2.0, f64::NAN, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let result = nanprod(&data, Some(0), false).unwrap();
+        assert_eq!(result.shape(), vec![3]);
+        let values = result.to_vec();
+        assert_relative_eq!(values[0], 8.0, epsilon = 1e-10); // 2*4
+        assert_relative_eq!(values[1], 5.0, epsilon = 1e-10); // 5 (NaN ignored)
+        assert_relative_eq!(values[2], 18.0, epsilon = 1e-10); // 3*6
+    }
+
+    #[test]
+    fn test_nanvar_2d_axis0() {
+        // [[1.0, 2.0],
+        //  [3.0, 4.0]]
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+        let result = nanvar(&data, Some(0), None, false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        let values = result.to_vec();
+        // Variance of [1,3]: mean=2, var = ((1-2)^2 + (3-2)^2)/2 = 1
+        assert_relative_eq!(values[0], 1.0, epsilon = 1e-10);
+        // Variance of [2,4]: mean=3, var = ((2-3)^2 + (4-3)^2)/2 = 1
+        assert_relative_eq!(values[1], 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_nanstd_2d_axis0() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+        let result = nanstd(&data, Some(0), None, false).unwrap();
+        assert_eq!(result.shape(), vec![2]);
+        let values = result.to_vec();
+        // std = sqrt(var) = sqrt(1) = 1
+        assert_relative_eq!(values[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(values[1], 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_nan_axis_all_nan_column() {
+        // Test column with all NaN values
+        let data = Array::from_vec(vec![f64::NAN, 2.0, f64::NAN, 4.0]).reshape(&[2, 2]);
+        let result = nanmean(&data, Some(0), false).unwrap();
+        let values = result.to_vec();
+        assert!(values[0].is_nan()); // Column 0 is all NaN
+        assert_relative_eq!(values[1], 3.0, epsilon = 1e-10); // (2+4)/2
+    }
+
+    #[test]
+    fn test_nan_axis_out_of_bounds() {
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+        let result = nanmean(&data, Some(5), false);
+        assert!(result.is_err());
     }
 }

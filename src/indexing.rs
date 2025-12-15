@@ -18,6 +18,8 @@ pub enum IndexSpec {
     All,
     /// Ellipsis (...) - expands to the number of : needed for selection
     Ellipsis,
+    /// NewAxis (np.newaxis) - inserts a new axis of length 1
+    NewAxis,
 }
 
 impl IndexSpec {
@@ -44,6 +46,11 @@ impl IndexSpec {
     /// Create an ellipsis index specification
     pub fn ellipsis() -> Self {
         IndexSpec::Ellipsis
+    }
+
+    /// Create a new axis index specification (inserts dimension of size 1)
+    pub fn newaxis() -> Self {
+        IndexSpec::NewAxis
     }
 }
 
@@ -101,28 +108,97 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             return Ok(self.clone());
         }
 
-        if index_specs.len() > self.ndim() {
+        // Count NewAxis specs - they don't consume input dimensions
+        let newaxis_count = index_specs
+            .iter()
+            .filter(|spec| matches!(spec, IndexSpec::NewAxis))
+            .count();
+        let ellipsis_count = index_specs
+            .iter()
+            .filter(|spec| matches!(spec, IndexSpec::Ellipsis))
+            .count();
+
+        // Actual indices for dimensions (excluding NewAxis and Ellipsis)
+        let actual_index_count = index_specs.len() - newaxis_count - ellipsis_count;
+
+        if actual_index_count > self.ndim() {
             return Err(NumRs2Error::DimensionMismatch(format!(
                 "Too many indices: expected at most {}, got {}",
                 self.ndim(),
-                index_specs.len()
+                actual_index_count
             )));
         }
 
-        // Handle boolean indexing first
-        for (dim, spec) in index_specs.iter().enumerate() {
+        // Handle NewAxis separately - calculate output positions for new axes
+        let has_newaxis = newaxis_count > 0;
+        let newaxis_output_positions: Vec<usize> = if has_newaxis {
+            // Calculate the output position for each NewAxis based on how many
+            // output-producing specs come before it in the index spec list
+            let mut positions = Vec::new();
+            let mut output_dim = 0;
+
+            for spec in index_specs.iter() {
+                match spec {
+                    IndexSpec::NewAxis => {
+                        // NewAxis inserts at the current output dimension
+                        positions.push(output_dim);
+                        output_dim += 1;
+                    }
+                    IndexSpec::Index(_) => {
+                        // Index consumes an input dimension but produces no output dimension
+                    }
+                    IndexSpec::Slice(_, _, _) | IndexSpec::All => {
+                        // Slice/All consumes an input dimension and produces an output dimension
+                        output_dim += 1;
+                    }
+                    IndexSpec::Ellipsis => {
+                        // Ellipsis expands to fill remaining dimensions
+                        // Count how many dimensions it will expand to
+                        let remaining_input_dims = self.ndim() - actual_index_count;
+                        output_dim += remaining_input_dims;
+                    }
+                    IndexSpec::Indices(_) | IndexSpec::Mask(_) => {
+                        // Fancy indexing - for now treat as producing one output dimension
+                        output_dim += 1;
+                    }
+                }
+            }
+            positions
+        } else {
+            vec![]
+        };
+
+        // Filter out NewAxis specs for the main indexing operation
+        let filtered_specs: Vec<IndexSpec> = index_specs
+            .iter()
+            .filter(|spec| !matches!(spec, IndexSpec::NewAxis))
+            .cloned()
+            .collect();
+
+        // Handle boolean indexing first (only check filtered specs)
+        for (dim, spec) in filtered_specs.iter().enumerate() {
             if let IndexSpec::Mask(mask) = spec {
-                return self.bool_index(dim, mask);
+                let result = self.bool_index(dim, mask)?;
+                return if has_newaxis {
+                    insert_newaxis(&result, &newaxis_output_positions)
+                } else {
+                    Ok(result)
+                };
             }
         }
 
         // Handle fancy indexing (integer array indexing)
-        let has_fancy_indexing = index_specs
+        let has_fancy_indexing = filtered_specs
             .iter()
             .any(|spec| matches!(spec, IndexSpec::Indices(_)));
 
         if has_fancy_indexing {
-            return self.fancy_index(index_specs);
+            let result = self.fancy_index(&filtered_specs)?;
+            return if has_newaxis {
+                insert_newaxis(&result, &newaxis_output_positions)
+            } else {
+                Ok(result)
+            };
         }
 
         // Handle basic indexing (integer and slice indexing)
@@ -130,7 +206,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
         let mut ndarray_indices = Vec::with_capacity(self.ndim());
 
         // Process explicitly provided indices
-        for (dim, spec) in index_specs.iter().enumerate() {
+        for (dim, spec) in filtered_specs.iter().enumerate() {
             match spec {
                 IndexSpec::Index(idx) => {
                     if *idx >= self.shape()[dim] {
@@ -197,17 +273,21 @@ impl<T: Clone + num_traits::Zero> Array<T> {
                 IndexSpec::Ellipsis => {
                     // Ellipsis is handled separately below
                 }
+                IndexSpec::NewAxis => {
+                    // NewAxis is handled separately - already filtered out
+                    unreachable!();
+                }
             }
         }
 
         // Process ellipsis if present
-        let ellipsis_idx = index_specs
+        let ellipsis_idx = filtered_specs
             .iter()
             .position(|spec| matches!(spec, IndexSpec::Ellipsis));
 
         if let Some(idx) = ellipsis_idx {
             // Calculate how many dimensions need to be filled
-            let num_dims_provided = index_specs.len() - 1; // -1 for the ellipsis
+            let num_dims_provided = filtered_specs.len() - 1; // -1 for the ellipsis
             let num_dims_needed = self.ndim();
             let additional_dims = num_dims_needed.saturating_sub(num_dims_provided);
 
@@ -237,7 +317,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             ndarray_indices = expanded_indices;
         } else {
             // Fill in remaining dimensions with full slices
-            for dim in index_specs.len()..self.ndim() {
+            for dim in filtered_specs.len()..self.ndim() {
                 shape.push(self.shape()[dim]);
                 ndarray_indices.push(SliceInfoElem::Slice {
                     start: 0,
@@ -255,7 +335,14 @@ impl<T: Clone + num_traits::Zero> Array<T> {
         // Slice the array
         let result = self.array().slice(slice_info).into_owned().into_dyn();
 
-        Ok(Self::from_ndarray(result))
+        let result_array = Self::from_ndarray(result);
+
+        // Insert new axes if needed
+        if has_newaxis {
+            insert_newaxis(&result_array, &newaxis_output_positions)
+        } else {
+            Ok(result_array)
+        }
     }
 
     /// Index into the array using a boolean mask for a specific dimension
@@ -1053,6 +1140,56 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             }
         }
     }
+}
+
+/// Insert new axes at specified output positions in the array
+///
+/// This helper function is used by the indexing system to handle `IndexSpec::NewAxis`.
+/// It inserts axes of size 1 at the specified final output positions.
+///
+/// # Arguments
+/// * `arr` - The array to modify
+/// * `output_positions` - The final output positions for new axes (e.g., [0, 2] means
+///   dims 0 and 2 of the result will be size 1 newaxis)
+///
+/// # Returns
+/// A new array with additional axes of size 1 at the specified positions
+fn insert_newaxis<T: Clone + num_traits::Zero>(
+    arr: &Array<T>,
+    output_positions: &[usize],
+) -> Result<Array<T>> {
+    if output_positions.is_empty() {
+        return Ok(arr.clone());
+    }
+
+    // Convert output_positions to a set for fast lookup
+    let newaxis_set: std::collections::HashSet<usize> = output_positions.iter().copied().collect();
+
+    // Calculate the new total dimensions
+    let new_ndim = arr.ndim() + output_positions.len();
+
+    // Build the new shape by interleaving original dims and newaxis
+    let mut new_shape = Vec::with_capacity(new_ndim);
+    let mut orig_dim_idx = 0;
+
+    for out_dim in 0..new_ndim {
+        if newaxis_set.contains(&out_dim) {
+            // This position is a newaxis
+            new_shape.push(1);
+        } else {
+            // This position comes from the original array
+            if orig_dim_idx < arr.ndim() {
+                new_shape.push(arr.shape()[orig_dim_idx]);
+                orig_dim_idx += 1;
+            } else {
+                // Shouldn't happen if positions are correct
+                new_shape.push(1);
+            }
+        }
+    }
+
+    // Reshape the array to the new shape
+    Ok(arr.reshape(&new_shape))
 }
 
 /// Generate index arrays for fancy indexing
@@ -2422,4 +2559,227 @@ pub fn triu_indices_from<T: Clone>(
     let k = k.unwrap_or(0);
 
     triu_indices(n, k, Some(m))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== ELLIPSIS TESTS ====================
+
+    #[test]
+    fn test_ellipsis_2d_first_position() {
+        // For a 2D array (3x4), arr[..., 0] should get the first column
+        let arr = Array::from_vec(vec![
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+        ])
+        .reshape(&[3, 4]);
+
+        let result = arr
+            .index(&[IndexSpec::Ellipsis, IndexSpec::Index(0)])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[3]);
+        assert_eq!(result.to_vec(), vec![1.0, 5.0, 9.0]);
+    }
+
+    #[test]
+    fn test_ellipsis_2d_last_position() {
+        // For a 2D array (3x4), arr[0, ...] should get the first row
+        let arr = Array::from_vec(vec![
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+        ])
+        .reshape(&[3, 4]);
+
+        let result = arr
+            .index(&[IndexSpec::Index(0), IndexSpec::Ellipsis])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[4]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_ellipsis_3d_middle() {
+        // For a 3D array (2x3x4), arr[0, ..., 0] should get first and last dim slices
+        let arr: Array<f64> =
+            Array::from_vec((0..24).map(|x| x as f64).collect()).reshape(&[2, 3, 4]);
+
+        let result = arr
+            .index(&[
+                IndexSpec::Index(0),
+                IndexSpec::Ellipsis,
+                IndexSpec::Index(0),
+            ])
+            .unwrap();
+
+        // Should be arr[0, :, 0] = [0, 4, 8]
+        assert_eq!(result.shape(), &[3]);
+        assert_eq!(result.to_vec(), vec![0.0, 4.0, 8.0]);
+    }
+
+    #[test]
+    fn test_ellipsis_alone() {
+        // arr[...] should return a copy of the entire array
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+
+        let result = arr.index(&[IndexSpec::Ellipsis]).unwrap();
+
+        assert_eq!(result.shape(), &[2, 2]);
+        assert_eq!(result.to_vec(), arr.to_vec());
+    }
+
+    #[test]
+    fn test_ellipsis_with_slice() {
+        // For a 2D array, arr[..., 1:3] should slice the last dimension
+        let arr = Array::from_vec(vec![
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+        ])
+        .reshape(&[3, 4]);
+
+        let result = arr
+            .index(&[IndexSpec::Ellipsis, IndexSpec::Slice(1, Some(3), None)])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[3, 2]);
+        // First row [1,2,3,4] -> [2,3], Second row [5,6,7,8] -> [6,7], etc
+        assert_eq!(result.to_vec(), vec![2.0, 3.0, 6.0, 7.0, 10.0, 11.0]);
+    }
+
+    // ==================== NEWAXIS TESTS ====================
+
+    #[test]
+    fn test_newaxis_1d_to_2d_row() {
+        // arr[np.newaxis, :] on (3,) should give (1, 3)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0]);
+
+        let result = arr.index(&[IndexSpec::NewAxis, IndexSpec::All]).unwrap();
+
+        assert_eq!(result.shape(), &[1, 3]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_newaxis_1d_to_2d_column() {
+        // arr[:, np.newaxis] on (3,) should give (3, 1)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0]);
+
+        let result = arr.index(&[IndexSpec::All, IndexSpec::NewAxis]).unwrap();
+
+        assert_eq!(result.shape(), &[3, 1]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_newaxis_2d_add_front() {
+        // arr[np.newaxis, :, :] on (2, 3) should give (1, 2, 3)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+
+        let result = arr
+            .index(&[IndexSpec::NewAxis, IndexSpec::All, IndexSpec::All])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[1, 2, 3]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_newaxis_2d_add_middle() {
+        // arr[:, np.newaxis, :] on (2, 3) should give (2, 1, 3)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+
+        let result = arr
+            .index(&[IndexSpec::All, IndexSpec::NewAxis, IndexSpec::All])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[2, 1, 3]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_newaxis_2d_add_end() {
+        // arr[:, :, np.newaxis] on (2, 3) should give (2, 3, 1)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+
+        let result = arr
+            .index(&[IndexSpec::All, IndexSpec::All, IndexSpec::NewAxis])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[2, 3, 1]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_newaxis_multiple() {
+        // arr[np.newaxis, :, np.newaxis] on (3,) should give (1, 3, 1)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0]);
+
+        let result = arr
+            .index(&[IndexSpec::NewAxis, IndexSpec::All, IndexSpec::NewAxis])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[1, 3, 1]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_newaxis_with_ellipsis() {
+        // arr[np.newaxis, ...] on (2, 3) should give (1, 2, 3)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+
+        let result = arr
+            .index(&[IndexSpec::NewAxis, IndexSpec::Ellipsis])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[1, 2, 3]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_ellipsis_with_newaxis() {
+        // arr[..., np.newaxis] on (2, 3) should give (2, 3, 1)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+
+        let result = arr
+            .index(&[IndexSpec::Ellipsis, IndexSpec::NewAxis])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[2, 3, 1]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_newaxis_with_index() {
+        // arr[0, np.newaxis, :] on (2, 3) should select first row and add axis: (1, 3)
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+
+        let result = arr
+            .index(&[IndexSpec::Index(0), IndexSpec::NewAxis, IndexSpec::All])
+            .unwrap();
+
+        assert_eq!(result.shape(), &[1, 3]);
+        assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_helper_insert_newaxis() {
+        // Test the insert_newaxis helper directly
+        let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+
+        // Insert at position 0
+        let result = insert_newaxis(&arr, &[0]).unwrap();
+        assert_eq!(result.shape(), &[1, 2, 3]);
+
+        // Insert at position 1
+        let result = insert_newaxis(&arr, &[1]).unwrap();
+        assert_eq!(result.shape(), &[2, 1, 3]);
+
+        // Insert at position 2 (end)
+        let result = insert_newaxis(&arr, &[2]).unwrap();
+        assert_eq!(result.shape(), &[2, 3, 1]);
+
+        // Insert at multiple positions
+        let result = insert_newaxis(&arr, &[0, 2]).unwrap();
+        assert_eq!(result.shape(), &[1, 2, 1, 3]);
+    }
 }

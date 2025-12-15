@@ -116,7 +116,7 @@ fn main() {
     let point = Array::from_vec(vec![2.0, 3.0]);
     let f_hessian = |x: &[f64]| x[0] * x[0] + x[0] * x[1] + x[1] * x[1];
 
-    let hess = hessian(&f_hessian, &point).unwrap();
+    let hess = hessian(f_hessian, &point).unwrap();
     let hess_vec = hess.to_vec();
 
     println!("Hessian of f(x, y) = x² + xy + y² at (2, 3):");
@@ -133,7 +133,7 @@ fn main() {
     let x0 = 0.0;
     let order = 5;
 
-    let coeffs = taylor_series(&f_taylor, x0, order);
+    let coeffs = taylor_series(f_taylor, x0, order);
 
     println!("Taylor series of sin(x) around x₀ = 0:");
     print!("  sin(x) ≈ ");
@@ -211,7 +211,7 @@ fn main() {
     };
 
     let point = Array::from_vec(vec![2.0, 3.0]);
-    let jac = jacobian(&f_jacobian, &point).unwrap();
+    let jac = jacobian(f_jacobian, &point).unwrap();
     let jac_vec = jac.to_vec();
 
     println!("Jacobian of f: R² → R² at (2, 3):");

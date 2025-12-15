@@ -10,6 +10,7 @@ use numrs2::stats::{
     average, bincount, corrcoef, cov, digitize, histogram, histogram2d, percentile, ptp, quantile,
 };
 
+#[allow(clippy::result_large_err)]
 fn main() -> numrs2::error::Result<()> {
     println!("NumRS2 Statistical Functions Example");
     println!("====================================");

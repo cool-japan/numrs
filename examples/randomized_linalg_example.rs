@@ -9,6 +9,7 @@ use numrs2::linalg::randomized::*;
 use numrs2::math;
 use numrs2::prelude::*;
 
+#[allow(clippy::result_large_err)]
 fn main() -> Result<()> {
     println!("=== NumRS2 Randomized Linear Algebra Examples ===\n");
 

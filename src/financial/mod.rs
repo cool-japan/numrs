@@ -34,6 +34,7 @@ use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use std::fmt::Debug;
 
+mod advanced;
 mod bond_pricing;
 mod future_value;
 mod internal_rate;
@@ -44,6 +45,7 @@ mod periods;
 mod present_value;
 mod rate_calculation;
 
+pub use advanced::*;
 pub use bond_pricing::*;
 pub use future_value::*;
 pub use internal_rate::*;

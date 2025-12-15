@@ -597,7 +597,7 @@ where
 /// ```
 pub fn mgrid<T>(slices: &[(T, T, T)]) -> Result<Vec<Array<T>>>
 where
-    T: Float + Clone + PartialOrd + num_traits::FromPrimitive,
+    T: Float + Clone + PartialOrd + num_traits::FromPrimitive + 'static,
 {
     use crate::array::Array;
     use crate::math::linspace;
@@ -680,7 +680,7 @@ where
 /// ```
 pub fn ogrid<T>(slices: &[(T, T, T)]) -> Result<Vec<Array<T>>>
 where
-    T: Float + Clone + PartialOrd + num_traits::FromPrimitive,
+    T: Float + Clone + PartialOrd + num_traits::FromPrimitive + 'static,
 {
     use crate::array::Array;
     use crate::math::linspace;

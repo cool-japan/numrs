@@ -11,7 +11,6 @@ use numrs2::linalg;
 use numrs2::new_modules::matrix_decomp::{condition_number, lu, pivoted_cholesky};
 #[cfg(feature = "matrix_decomp")]
 // Use functions from the core module structure
-
 /// Generate a Hilbert matrix of size n x n
 /// Hilbert matrices are famously ill-conditioned and provide a good stress test
 /// for numerical algorithms.
@@ -54,9 +53,9 @@ fn near_singular_matrix<T: Float + From<f64>>(n: usize, condition: f64) -> Array
     for i in 0..n {
         for j in 0..n {
             let mut sum = T::zero();
-            for k in 0..n {
+            for (k, d_k) in d.iter().enumerate().take(n) {
                 // Q * D
-                let qd = q.get(&[i, k]).unwrap() * d[k];
+                let qd = q.get(&[i, k]).unwrap() * *d_k;
                 // (Q * D) * Q^T
                 for l in 0..n {
                     sum = sum + qd * q.get(&[j, l]).unwrap();
@@ -124,7 +123,7 @@ fn test_decomposition_stability_well_conditioned() {
     let mut pa = Array::zeros(&[n, n]);
     for i in 0..n {
         for j in 0..n {
-            pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap() as usize, j]).unwrap())
+            pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
                 .unwrap();
         }
     }
@@ -256,7 +255,7 @@ fn test_decomposition_stability_ill_conditioned() {
     let mut pa = Array::zeros(&[n, n]);
     for i in 0..n {
         for j in 0..n {
-            pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap() as usize, j]).unwrap())
+            pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
                 .unwrap();
         }
     }
@@ -502,7 +501,7 @@ fn test_relative_errors_between_decompositions() {
     let mut pa = Array::zeros(&[n, n]);
     for i in 0..n {
         for j in 0..n {
-            pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap() as usize, j]).unwrap())
+            pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
                 .unwrap();
         }
     }

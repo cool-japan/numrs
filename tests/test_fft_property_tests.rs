@@ -6,9 +6,8 @@ use numrs2::signal::FFT;
 use scirs2_core::Complex64;
 use std::f64::consts::PI;
 
-/// This file implements property-based testing for FFT operations in NumRS2.
-/// It focuses on verifying mathematical properties of the FFT rather than specific values.
-
+// This file implements property-based testing for FFT operations in NumRS2.
+// It focuses on verifying mathematical properties of the FFT rather than specific values.
 // Constants used in tests
 const TOLERANCE: f64 = 1e-10;
 
@@ -457,19 +456,19 @@ fn test_2d_fft() {
     let fft_values = fft_delta.to_vec();
 
     // For a delta function at (0,0), the 2D FFT should be constant
-    for i in 0..(n * n) {
+    for (i, fft_val) in fft_values.iter().enumerate().take(n * n) {
         assert!(
-            is_within_bounds(fft_values[i].re, 1.0, TOLERANCE),
+            is_within_bounds(fft_val.re, 1.0, TOLERANCE),
             "2D FFT of delta function should have constant real part: index={}, value={}",
             i,
-            fft_values[i].re
+            fft_val.re
         );
 
         assert!(
-            is_within_bounds(fft_values[i].im, 0.0, TOLERANCE),
+            is_within_bounds(fft_val.im, 0.0, TOLERANCE),
             "2D FFT of delta function should have zero imaginary part: index={}, value={}",
             i,
-            fft_values[i].im
+            fft_val.im
         );
     }
 }

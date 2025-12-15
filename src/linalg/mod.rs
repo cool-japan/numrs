@@ -22,6 +22,7 @@ pub mod solve;
 pub mod iterative_solvers;
 pub mod matrix_ops;
 pub mod randomized;
+pub mod tensor_decomp;
 pub mod tensor_ops;
 pub mod vector_ops;
 
@@ -45,6 +46,12 @@ pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
 pub use randomized::{
     random_projection, randomized_low_rank_approximation, randomized_range_finder, randomized_svd,
     ProjectionType,
+};
+
+// Tensor decompositions
+pub use tensor_decomp::{
+    cp_als, cp_als_with_config, cp_reconstruct, nonnegative_cp_als, tucker_decomposition,
+    tucker_reconstruct, CpResult, DecompConfig, TuckerResult,
 };
 
 // Additional standalone functions for improved compatibility

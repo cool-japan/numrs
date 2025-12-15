@@ -22,6 +22,7 @@ pub mod enhanced {
 use crate::array::Array;
 use crate::error::Result;
 use num_traits::{Float, Zero};
+use scirs2_core::parallel_ops::*;
 use std::ops::{Add, Mul};
 
 /// Compute the 1D convolution of two arrays
@@ -58,7 +59,7 @@ use std::ops::{Add, Mul};
 /// ```
 pub fn convolve<T>(a: &Array<T>, b: &Array<T>, mode: &str) -> Result<Array<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + Send + Sync,
 {
     if a.ndim() != 1 || b.ndim() != 1 {
         return Err(crate::error::NumRs2Error::DimensionMismatch(
@@ -102,23 +103,38 @@ where
     let a_vec = a.to_vec();
     let b_vec = b.to_vec();
 
-    // Compute full convolution
-    let mut full_result = Vec::with_capacity(a_len + b_len - 1);
-    for n in 0..(a_len + b_len - 1) {
-        let mut sum = T::zero();
+    // Use parallel processing for large convolutions
+    const PARALLEL_THRESHOLD: usize = 1000;
+    let full_len = a_len + b_len - 1;
 
-        // Compute sum(a[m] * b[n - m])
-        let m_start = n.saturating_sub(b_len - 1);
-        let m_end = (n + 1).min(a_len);
-
-        for m in m_start..m_end {
-            if n >= m && n - m < b_len {
+    let full_result: Vec<T> = if full_len >= PARALLEL_THRESHOLD {
+        // Parallel computation of convolution
+        (0..full_len)
+            .into_par_iter()
+            .map(|n| {
+                let mut sum = T::zero();
+                let m_start = n.saturating_sub(b_len - 1);
+                let m_end = (n + 1).min(a_len);
+                for m in m_start..m_end {
+                    sum = sum + a_vec[m] * b_vec[n - m];
+                }
+                sum
+            })
+            .collect()
+    } else {
+        // Sequential computation for small arrays
+        let mut result = Vec::with_capacity(full_len);
+        for n in 0..full_len {
+            let mut sum = T::zero();
+            let m_start = n.saturating_sub(b_len - 1);
+            let m_end = (n + 1).min(a_len);
+            for m in m_start..m_end {
                 sum = sum + a_vec[m] * b_vec[n - m];
             }
+            result.push(sum);
         }
-
-        full_result.push(sum);
-    }
+        result
+    };
 
     // Extract the appropriate portion based on mode
     let result = match mode {
@@ -163,7 +179,7 @@ where
 /// ```
 pub fn correlate<T>(a: &Array<T>, b: &Array<T>, mode: &str) -> Result<Array<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + Send + Sync,
 {
     if a.ndim() != 1 || b.ndim() != 1 {
         return Err(crate::error::NumRs2Error::DimensionMismatch(
@@ -210,7 +226,7 @@ where
 /// ```
 pub fn convolve2d<T>(input: &Array<T>, kernel: &Array<T>, mode: &str) -> Result<Array<T>>
 where
-    T: Float + Clone + Zero + Add<Output = T> + Mul<Output = T>,
+    T: Float + Clone + Zero + Add<Output = T> + Mul<Output = T> + Send + Sync,
 {
     if input.ndim() != 2 || kernel.ndim() != 2 {
         return Err(crate::error::NumRs2Error::DimensionMismatch(
@@ -246,42 +262,87 @@ where
         }
     };
 
-    let mut result = vec![T::zero(); output_rows * output_cols];
     let input_data = input.to_vec();
     let kernel_data = kernel.to_vec();
 
-    // Perform 2D convolution
-    for out_i in 0..output_rows {
-        for out_j in 0..output_cols {
-            let mut sum = T::zero();
+    // Use parallel processing for larger outputs
+    const PARALLEL_THRESHOLD: usize = 256;
+    let total_output = output_rows * output_cols;
 
-            // Convolve at this output position
-            for k_i in 0..p {
-                for k_j in 0..q {
-                    // Calculate input indices
-                    let in_i = out_i + k_i;
-                    let in_j = out_j + k_j;
+    let result = if total_output >= PARALLEL_THRESHOLD {
+        use scirs2_core::parallel_ops::*;
 
-                    // Adjust for mode offsets
-                    let adj_in_i = in_i as isize - row_offset as isize;
-                    let adj_in_j = in_j as isize - col_offset as isize;
+        // Parallel 2D convolution
+        (0..total_output)
+            .into_par_iter()
+            .map(|idx| {
+                let out_i = idx / output_cols;
+                let out_j = idx % output_cols;
+                let mut sum = T::zero();
 
-                    // Check bounds
-                    if adj_in_i >= 0
-                        && adj_in_i < m as isize
-                        && adj_in_j >= 0
-                        && adj_in_j < n as isize
-                    {
-                        let in_idx = adj_in_i as usize * n + adj_in_j as usize;
-                        let k_idx = k_i * q + k_j;
-                        sum = sum + input_data[in_idx] * kernel_data[k_idx];
+                // Convolve at this output position
+                for k_i in 0..p {
+                    for k_j in 0..q {
+                        // Calculate input indices
+                        let in_i = out_i + k_i;
+                        let in_j = out_j + k_j;
+
+                        // Adjust for mode offsets
+                        let adj_in_i = in_i as isize - row_offset as isize;
+                        let adj_in_j = in_j as isize - col_offset as isize;
+
+                        // Check bounds
+                        if adj_in_i >= 0
+                            && adj_in_i < m as isize
+                            && adj_in_j >= 0
+                            && adj_in_j < n as isize
+                        {
+                            let in_idx = adj_in_i as usize * n + adj_in_j as usize;
+                            let k_idx = k_i * q + k_j;
+                            sum = sum + input_data[in_idx] * kernel_data[k_idx];
+                        }
                     }
                 }
-            }
 
-            result[out_i * output_cols + out_j] = sum;
+                sum
+            })
+            .collect()
+    } else {
+        // Sequential 2D convolution for small outputs
+        let mut result = vec![T::zero(); total_output];
+        for out_i in 0..output_rows {
+            for out_j in 0..output_cols {
+                let mut sum = T::zero();
+
+                // Convolve at this output position
+                for k_i in 0..p {
+                    for k_j in 0..q {
+                        // Calculate input indices
+                        let in_i = out_i + k_i;
+                        let in_j = out_j + k_j;
+
+                        // Adjust for mode offsets
+                        let adj_in_i = in_i as isize - row_offset as isize;
+                        let adj_in_j = in_j as isize - col_offset as isize;
+
+                        // Check bounds
+                        if adj_in_i >= 0
+                            && adj_in_i < m as isize
+                            && adj_in_j >= 0
+                            && adj_in_j < n as isize
+                        {
+                            let in_idx = adj_in_i as usize * n + adj_in_j as usize;
+                            let k_idx = k_i * q + k_j;
+                            sum = sum + input_data[in_idx] * kernel_data[k_idx];
+                        }
+                    }
+                }
+
+                result[out_i * output_cols + out_j] = sum;
+            }
         }
-    }
+        result
+    };
 
     Ok(Array::from_vec(result).reshape(&[output_rows, output_cols]))
 }
@@ -317,7 +378,7 @@ where
 /// ```
 pub fn correlate2d<T>(input: &Array<T>, template: &Array<T>, mode: &str) -> Result<Array<T>>
 where
-    T: Float + Clone + Zero + Add<Output = T> + Mul<Output = T>,
+    T: Float + Clone + Zero + Add<Output = T> + Mul<Output = T> + Send + Sync,
 {
     if input.ndim() != 2 || template.ndim() != 2 {
         return Err(crate::error::NumRs2Error::DimensionMismatch(
@@ -390,15 +451,21 @@ where
 
     match axis {
         None => {
-            // Unwrap flattened array
-            let mut data = phase.to_vec();
+            // Unwrap flattened array using cumulative correction approach
+            // This is O(n) instead of O(n^2) for the nested loop version
+            let data = phase.to_vec();
             if data.is_empty() {
                 return Ok(Array::from_vec(vec![]));
             }
 
-            // Compute differences and find discontinuities
+            let mut result = Vec::with_capacity(data.len());
+            result.push(data[0]);
+            let mut cumulative_correction = T::zero();
+
+            // Single pass: track cumulative correction instead of re-applying
             for i in 1..data.len() {
-                let diff = data[i] - data[i - 1];
+                let adjusted = data[i] + cumulative_correction;
+                let diff = adjusted - result[i - 1];
 
                 // Check for discontinuity
                 if diff.abs() > discont {
@@ -408,15 +475,13 @@ where
                     } else {
                         -((diff - half_period) / period).floor() * period
                     };
-
-                    // Apply correction to all subsequent values
-                    for j in i..data.len() {
-                        data[j] = data[j] + correction;
-                    }
+                    cumulative_correction = cumulative_correction + correction;
                 }
+
+                result.push(data[i] + cumulative_correction);
             }
 
-            Ok(Array::from_vec(data).reshape(&phase.shape()))
+            Ok(Array::from_vec(result).reshape(&phase.shape()))
         }
         Some(ax) => {
             let shape = phase.shape();
@@ -428,13 +493,12 @@ where
                 )));
             }
 
-            let mut result = phase.clone();
             let ndim = shape.len();
 
             // Calculate strides for iteration
             let axis_len = shape[ax];
             if axis_len <= 1 {
-                return Ok(result); // Nothing to unwrap
+                return Ok(phase.clone()); // Nothing to unwrap
             }
 
             // Number of 1D arrays to process along the axis
@@ -443,40 +507,60 @@ where
             let n_arrays: usize = outer_shape.iter().product();
 
             if n_arrays == 0 {
-                return Ok(result);
+                return Ok(phase.clone());
+            }
+
+            // Convert to flat Vec for efficient manipulation
+            let phase_data = phase.to_vec();
+            let mut result_data = phase_data.clone();
+
+            // Compute strides for the array
+            let mut strides = vec![1usize; ndim];
+            for i in (0..ndim - 1).rev() {
+                strides[i] = strides[i + 1] * shape[i + 1];
+            }
+
+            // Precompute outer_strides for multi-index computation
+            let mut outer_strides = vec![1usize; outer_shape.len()];
+            if !outer_shape.is_empty() {
+                for i in (0..outer_shape.len() - 1).rev() {
+                    outer_strides[i] = outer_strides[i + 1] * outer_shape[i + 1];
+                }
             }
 
             // Process each 1D array along the specified axis
             for array_idx in 0..n_arrays {
-                // Convert linear index to multi-dimensional position
-                let mut pos = vec![0; outer_shape.len()];
+                // Compute base index in flat array for this 1D slice
+                let mut base_idx = 0usize;
                 let mut temp = array_idx;
-                for i in (0..outer_shape.len()).rev() {
-                    pos[i] = temp % outer_shape[i];
-                    temp /= outer_shape[i];
-                }
+                let mut outer_dim_idx = 0;
 
-                // Extract 1D slice along axis
-                let mut slice_data = Vec::with_capacity(axis_len);
-                for i in 0..axis_len {
-                    let mut full_pos = Vec::with_capacity(ndim);
-                    let mut outer_idx = 0;
-
-                    for dim in 0..ndim {
-                        if dim == ax {
-                            full_pos.push(i);
+                for dim in 0..ndim {
+                    if dim != ax {
+                        let dim_size = if outer_dim_idx < outer_strides.len() {
+                            (temp / outer_strides[outer_dim_idx]) % outer_shape[outer_dim_idx]
                         } else {
-                            full_pos.push(pos[outer_idx]);
-                            outer_idx += 1;
+                            temp % outer_shape[outer_dim_idx]
+                        };
+                        base_idx += dim_size * strides[dim];
+                        if outer_dim_idx < outer_strides.len() {
+                            temp %= outer_strides[outer_dim_idx];
                         }
+                        outer_dim_idx += 1;
                     }
-
-                    slice_data.push(result.get(&full_pos)?);
                 }
 
-                // Unwrap this 1D slice
+                // Extract 1D slice along axis using stride
+                let axis_stride = strides[ax];
+
+                // Unwrap using cumulative correction (O(axis_len) instead of O(axis_len^2))
+                let mut cumulative_correction = T::zero();
+                let mut prev_val = result_data[base_idx];
+
                 for i in 1..axis_len {
-                    let diff = slice_data[i] - slice_data[i - 1];
+                    let idx = base_idx + i * axis_stride;
+                    let adjusted = result_data[idx] + cumulative_correction;
+                    let diff = adjusted - prev_val;
 
                     if diff.abs() > discont {
                         let correction = if diff > T::zero() {
@@ -484,33 +568,16 @@ where
                         } else {
                             -((diff - half_period) / period).floor() * period
                         };
-
-                        // Apply correction to subsequent values
-                        for j in i..axis_len {
-                            slice_data[j] = slice_data[j] + correction;
-                        }
-                    }
-                }
-
-                // Put unwrapped values back
-                for i in 0..axis_len {
-                    let mut full_pos = Vec::with_capacity(ndim);
-                    let mut outer_idx = 0;
-
-                    for dim in 0..ndim {
-                        if dim == ax {
-                            full_pos.push(i);
-                        } else {
-                            full_pos.push(pos[outer_idx]);
-                            outer_idx += 1;
-                        }
+                        cumulative_correction = cumulative_correction + correction;
                     }
 
-                    result.set(&full_pos, slice_data[i])?;
+                    let new_val = result_data[idx] + cumulative_correction;
+                    result_data[idx] = new_val;
+                    prev_val = new_val;
                 }
             }
 
-            Ok(result)
+            Ok(Array::from_vec(result_data).reshape(&shape))
         }
     }
 }

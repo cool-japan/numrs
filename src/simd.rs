@@ -50,6 +50,26 @@ pub trait SimdOps<T> {
     fn simd_fma(&self, mul: &Array<T>, add: &Array<T>) -> Result<Array<T>>
     where
         T: Float + Copy;
+
+    /// SIMD-accelerated scalar addition (broadcast)
+    fn simd_add_scalar(&self, scalar: T) -> Array<T>
+    where
+        T: std::ops::Add<Output = T> + Copy;
+
+    /// SIMD-accelerated scalar multiplication (broadcast)
+    fn simd_mul_scalar(&self, scalar: T) -> Array<T>
+    where
+        T: std::ops::Mul<Output = T> + Copy;
+
+    /// SIMD-accelerated scalar subtraction (broadcast)
+    fn simd_sub_scalar(&self, scalar: T) -> Array<T>
+    where
+        T: std::ops::Sub<Output = T> + Copy;
+
+    /// SIMD-accelerated scalar division (broadcast)
+    fn simd_div_scalar(&self, scalar: T) -> Result<Array<T>>
+    where
+        T: std::ops::Div<Output = T> + Copy + PartialEq + num_traits::Zero;
 }
 
 impl<T: Float + 'static> SimdOps<T> for Array<T> {
@@ -375,6 +395,43 @@ impl<T: Float + 'static> SimdOps<T> for Array<T> {
             .collect();
 
         Ok(Array::from_vec(result).reshape(&self.shape()))
+    }
+
+    fn simd_add_scalar(&self, scalar: T) -> Array<T>
+    where
+        T: std::ops::Add<Output = T> + Copy,
+    {
+        // Use simd_map with scalar closure for SIMD-accelerated broadcast addition
+        self.simd_map(|x| x + scalar)
+    }
+
+    fn simd_mul_scalar(&self, scalar: T) -> Array<T>
+    where
+        T: std::ops::Mul<Output = T> + Copy,
+    {
+        // Use simd_map with scalar closure for SIMD-accelerated broadcast multiplication
+        self.simd_map(|x| x * scalar)
+    }
+
+    fn simd_sub_scalar(&self, scalar: T) -> Array<T>
+    where
+        T: std::ops::Sub<Output = T> + Copy,
+    {
+        // Use simd_map with scalar closure for SIMD-accelerated broadcast subtraction
+        self.simd_map(|x| x - scalar)
+    }
+
+    fn simd_div_scalar(&self, scalar: T) -> Result<Array<T>>
+    where
+        T: std::ops::Div<Output = T> + Copy + PartialEq + num_traits::Zero,
+    {
+        if scalar.is_zero() {
+            return Err(NumRs2Error::InvalidOperation(
+                "Division by zero".to_string(),
+            ));
+        }
+        // Use simd_map with scalar closure for SIMD-accelerated broadcast division
+        Ok(self.simd_map(|x| x / scalar))
     }
 }
 
@@ -926,5 +983,55 @@ mod tests {
                 // Implementation is valid
             }
         }
+    }
+
+    #[test]
+    fn test_simd_add_scalar() {
+        let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
+        let result = a.simd_add_scalar(10.0);
+        assert_eq!(result.to_vec(), vec![11.0, 12.0, 13.0, 14.0]);
+    }
+
+    #[test]
+    fn test_simd_mul_scalar() {
+        let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
+        let result = a.simd_mul_scalar(2.0);
+        assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0, 8.0]);
+    }
+
+    #[test]
+    fn test_simd_sub_scalar() {
+        let a = Array::from_vec(vec![10.0f64, 20.0, 30.0, 40.0]);
+        let result = a.simd_sub_scalar(5.0);
+        assert_eq!(result.to_vec(), vec![5.0, 15.0, 25.0, 35.0]);
+    }
+
+    #[test]
+    fn test_simd_div_scalar() {
+        let a = Array::from_vec(vec![10.0f64, 20.0, 30.0, 40.0]);
+        let result = a.simd_div_scalar(2.0).unwrap();
+        assert_eq!(result.to_vec(), vec![5.0, 10.0, 15.0, 20.0]);
+    }
+
+    #[test]
+    fn test_simd_div_scalar_zero() {
+        let a = Array::from_vec(vec![10.0f64, 20.0, 30.0, 40.0]);
+        let result = a.simd_div_scalar(0.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_simd_scalar_ops_large_array() {
+        // Test with larger array to exercise SIMD lanes
+        let data: Vec<f64> = (0..1024).map(|i| i as f64).collect();
+        let a = Array::from_vec(data);
+
+        let result = a.simd_add_scalar(1.0);
+        assert_relative_eq!(result.get(&[0]).unwrap(), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(result.get(&[1023]).unwrap(), 1024.0, epsilon = 1e-10);
+
+        let result = a.simd_mul_scalar(2.0);
+        assert_relative_eq!(result.get(&[0]).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(result.get(&[512]).unwrap(), 1024.0, epsilon = 1e-10);
     }
 }

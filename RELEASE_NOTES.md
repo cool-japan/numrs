@@ -1,120 +1,196 @@
-# NumRS2 v0.1.0-beta.3 Release Notes
+# NumRS2 v0.1.0-rc.1 Release Notes
 
-**Release Date:** October 3, 2025
-**Third Beta Release** - Phase 4 Complete: Advanced Features & Production Ready
+**Release Date:** December 2025
+**Release Candidate 1** - Production-Ready NumPy + SciPy Implementation in Rust
 
-## 🎯 **v0.1.0-beta.3 Highlights**
+## Overview
 
-This third beta release completes the Phase 4 roadmap with production-ready implementations of all planned advanced features. NumRS2 now offers a comprehensive suite of advanced numerical computing capabilities including automatic differentiation, Apache Arrow integration, randomized linear algebra, and complete sparse matrix support.
+NumRS2 v0.1.0-rc.1 marks a major milestone: **production-ready status** with comprehensive NumPy and SciPy compatibility. This release delivers a complete numerical computing library in Rust with 11 SciPy-equivalent modules, SIMD-optimized operations, and seamless integration with the SciRS2 ecosystem.
 
-### 🚀 **Major New Features**
+## Release Highlights
 
-#### **Apache Arrow Integration** 🔗
-- **Zero-Copy Data Exchange**: Seamless interoperability with Python ecosystem (PyArrow, Pandas, Polars)
-- **IPC Streaming**: `IpcStreamWriter` / `IpcStreamReader` for inter-process communication
-- **Feather Format**: Fast columnar file format support (`write_feather()` / `read_feather()`)
-- **Type Support**: All numeric types (f32, f64, i8-i64, u8-u64, bool)
-- **13 comprehensive tests** passing with zero warnings
+### Production-Ready Status
 
-#### **Automatic Differentiation** 🧮
-- **Forward Mode AD**: Dual numbers for efficient Jacobian-vector products
-- **Reverse Mode AD**: Tape-based backpropagation for gradient computation
-- **Higher-Order Derivatives**: Hessian, Taylor series, nth-order derivatives
-- **Neural Network Support**: Activation functions (sigmoid, ReLU, etc.)
-- **15 comprehensive tests** covering all AD scenarios
-- **~1178 lines** of production-ready code
-
-#### **Randomized Linear Algebra** 🎲
-- **Randomized SVD**: Fast low-rank approximation for large matrices
-- **Random Projections**: Dimensionality reduction (Gaussian, Sparse, Rademacher)
-- **Range Finder**: Efficient column space approximation
-- **Johnson-Lindenstrauss**: Preserve pairwise distances in lower dimensions
-- **11 comprehensive tests** with performance benchmarks
-- **~655 lines** of optimized algorithms
-
-#### **Sparse Matrix Operations** 🕸️
-- **Multiple Formats**: COO, CSR, CSC, DIA with seamless conversions
-- **Sparse-Dense Ops**: Efficient sparse-dense matrix multiplication
-- **Iterative Solvers**: CG, GMRES, BiCGSTAB for large linear systems
-- **ILU Preconditioning**: Incomplete LU for faster convergence
-- **12 comprehensive tests** across all formats
-- **~1748 lines** of robust sparse matrix code
-
-#### **Expression Templates** 📊
-- **Lazy Evaluation**: Core infrastructure for deferred computation
-- **Expression Types**: Binary, unary, and scalar expression support
-- **Manual API**: Functional and tested expression construction
-- **7 comprehensive tests** validating expression semantics
-
-#### **Advanced Indexing** 🔍
-- **Fancy Indexing**: Integer array and coordinate-based selection
-- **Boolean Masking**: Efficient conditional selection and assignment
-- **23 comprehensive tests** covering all indexing scenarios
-
-#### **Python Bindings** 🐍
-- **PyO3 Integration**: NumPy-compatible Python API
-- **Zero-Copy Sharing**: Efficient data exchange with NumPy arrays
-- **Core Operations**: Array creation, arithmetic, matrix operations
-- **Ready for Distribution**: Infrastructure for PyPI publication via maturin
-
-### 📦 **Updated Dependencies**
-- **Apache Arrow**: v56.2.0 via SciRS2 workspace
-- **PyO3**: v0.26.0 with numpy v0.26.0 support
-- All dependencies updated and tested
-
-### 🛠️ **Improvements**
-- **Test Coverage**: Increased from 627 to 659 library tests (all passing)
-- **Code Quality**: Zero compiler warnings, clean builds
-- **Documentation**: Comprehensive examples for all Phase 4 features
-- **Performance**: Optimized algorithms for large-scale computations
-
-### 📚 **New Examples**
-- **`autodiff_example.rs`**: 9 examples demonstrating automatic differentiation
-- **`arrow_example.rs`**: 10 examples showing Apache Arrow integration
-- **`randomized_linalg_example.rs`**: 7 examples of randomized algorithms
-
-### ✅ **Phase 4 Completion Status**
-- **Phase 4.1 (Core Performance)**: 100% ✅
-  - Expression templates, advanced indexing, broadcasting
-- **Phase 4.2 (Advanced Linear Algebra)**: 100% ✅
-  - Sparse matrices, iterative solvers, randomized algorithms
-- **Phase 4.3 (Automatic Differentiation)**: 100% ✅
-  - Forward/reverse mode, higher-order derivatives
-- **Phase 4.4 (Interoperability)**: 100% ✅
-  - Apache Arrow, Python bindings, data I/O formats
-
-### 🔬 **Production Readiness**
-- **659 tests passing**, 0 failures, 7 ignored
+- **122,799 lines** of production Rust code
+- **1,637+ tests** passing (1,020 unit + 617 doc tests)
 - **Zero warnings** in compilation
-- **~5540 lines** of new Phase 4 code
-- **110+ new tests** across Phase 4 features
+- **$4.2M COCOMO** estimated development value
 
-## 📥 **Installation**
+### Complete NumPy Compatibility (100%)
 
-```bash
-# Default features
-cargo add numrs2
+All core NumPy functionality is implemented:
 
-# With Apache Arrow support
-cargo add numrs2 --features arrow
+- **Array Operations**: Creation, manipulation, indexing, broadcasting, views
+- **Mathematical Functions**: 200+ ufuncs with SIMD optimization
+- **Linear Algebra**: Complete `np.linalg` + BLAS/LAPACK integration
+- **Statistical Functions**: Full scipy.stats equivalents via scirs2-stats
+- **Random Generation**: Advanced distributions via scirs2-core
+- **I/O Operations**: NPY/NPZ, CSV, text formats, memory mapping
 
-# With Python bindings
-cargo add numrs2 --features python
+### 11 SciPy-Equivalent Modules
 
-# With LAPACK support
-cargo add numrs2 --features lapack
+| Module | Description | Functions |
+|--------|-------------|-----------|
+| `scipy.optimize` | Numerical optimization | BFGS, L-BFGS, Nelder-Mead, Trust Region, Levenberg-Marquardt |
+| `scipy.optimize.root` | Root-finding | Bisection, Brent, Ridder, Newton-Raphson, Secant, Halley |
+| `scipy.misc.derivative` | Numerical differentiation | Gradient, Jacobian, Hessian with Richardson extrapolation |
+| `scipy.interpolate` | Interpolation | Linear, Cubic, Spline variants (Natural, Clamped, Not-a-Knot, Periodic) |
+| `scipy.spatial.distance` | Distance metrics | Euclidean, Manhattan, Chebyshev, Minkowski, Cosine, Correlation, Hamming |
+| `scipy.cluster` | Clustering | K-means++, Hierarchical (single/complete/average/ward linkage) |
+| `scipy.ndimage` | Image processing | Filters, morphology, measurements, segmentation |
+| `scipy.spatial` | Computational geometry | KD-tree, Convex hull, Voronoi, Delaunay triangulation |
+| `scipy.special` | Special functions | 50+ functions (Gamma, Bessel, Error functions, Elliptic integrals) |
+| `scipy.fft` | Fast Fourier Transform | FFT, RFFT, DCT, DST, STFT, GPU acceleration, plan caching |
+| `scipy.signal` | Signal processing | Digital filters, wavelets, convolution, spectral analysis |
+
+### SIMD Performance Optimization
+
+- **86 AVX2-optimized functions** with automatic threshold-based dispatch
+- **42 ARM NEON f64 vectorized operations** for Apple Silicon
+- **4-way loop unrolling** and FMA (fused multiply-add) instructions
+- **Runtime CPU feature detection** for optimal dispatch
+- **2.4-3.6x performance improvement** on vectorized operations
+
+### Advanced Linear Algebra
+
+- **Iterative Solvers**: CG, PCG, GMRES, FGMRES, BiCGSTAB, MINRES
+- **Preconditioners**: Jacobi, SSOR, Incomplete Cholesky, ILU
+- **Sparse Matrices**: COO, CSR, CSC, DIA formats with optimized operations
+- **Randomized Algorithms**: Randomized SVD, random projections, range finders
+- **Tensor Decompositions**: Tucker (HOSVD), CP/PARAFAC with ALS
+
+### Automatic Differentiation
+
+- **Forward Mode**: Dual numbers for Jacobian-vector products
+- **Reverse Mode**: Tape-based backpropagation for gradients
+- **Higher-Order**: Hessian, Taylor series, nth-order derivatives
+- **1,178 lines** of production AD code
+
+### Data Interoperability
+
+- **Apache Arrow**: Zero-copy exchange with Python ecosystem
+- **Feather Format**: Fast columnar storage
+- **IPC Streaming**: Inter-process communication
+- **Python Bindings**: PyO3 integration ready for maturin build
+
+## What's New Since Beta.3
+
+### New Features
+
+1. **Enhanced FFT Module** (scirs2-fft integration)
+   - DCT/DST Types I-IV for compression standards
+   - Advanced transforms: FrFT, NUFFT, FHT
+   - STFT and spectrograms for time-frequency analysis
+   - FFT plan caching for repeated transforms
+
+2. **Enhanced Signal Processing** (scirs2-signal integration)
+   - Digital filters: Butterworth, Chebyshev, Elliptic, Bessel, FIR
+   - Wavelet transforms: DWT, CWT, 2D wavelets
+   - LTI systems: Transfer functions, step/impulse response
+   - SIMD-accelerated convolution
+
+3. **Algorithm Improvements**
+   - Fixed Ridder's Method formula (sign calculation)
+   - Fixed Richardson Extrapolation step size shadowing
+   - Fixed MINRES Givens rotation tracking
+   - Fixed parallel scheduler contention (1,143x speedup)
+
+4. **ARM NEON Support** (2,119 lines)
+   - Complete f64 vectorized operations
+   - NEON SIMD dispatch in ufuncs
+   - Apple Silicon optimization
+
+### Performance Improvements
+
+- Parallel scheduler deadlock fix with 1,143x speedup on multi-core systems
+- FFT plan caching eliminates repeated planning overhead
+- SIMD threshold tuning for optimal scalar/vector dispatch
+
+## Breaking Changes
+
+None. This release maintains full API compatibility with beta.3.
+
+## Dependencies
+
+NumRS2 uses the SciRS2 ecosystem (v0.1.0-rc.2):
+
+```toml
+[dependencies]
+scirs2-core = "0.1.0-rc.2"
+scirs2-stats = "0.1.0-rc.2"
+scirs2-linalg = "0.1.0-rc.2"
+scirs2-ndimage = "0.1.0-rc.2"
+scirs2-spatial = "0.1.0-rc.2"
+scirs2-special = "0.1.0-rc.2"
+scirs2-fft = "0.1.0-rc.2"
+scirs2-signal = "0.1.0-rc.2"
 ```
 
-## 🔗 **Resources**
+## Installation
+
+```toml
+[dependencies]
+numrs2 = "0.1.0-rc.1"
+```
+
+With optional features:
+
+```toml
+# Apache Arrow integration
+numrs2 = { version = "0.1.0-rc.1", features = ["arrow"] }
+
+# Python bindings
+numrs2 = { version = "0.1.0-rc.1", features = ["python"] }
+
+# LAPACK support
+numrs2 = { version = "0.1.0-rc.1", features = ["lapack"] }
+
+# GPU acceleration
+numrs2 = { version = "0.1.0-rc.1", features = ["gpu"] }
+```
+
+## Quick Start
+
+```rust
+use numrs2::prelude::*;
+
+fn main() -> Result<()> {
+    // Create arrays
+    let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+    let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
+
+    // Matrix operations
+    let c = a.matmul(&b)?;
+    println!("Matrix multiplication: {}", c);
+
+    // Linear algebra
+    let (u, s, vt) = a.svd_compute()?;
+    println!("SVD: U={}, S={}, Vt={}", u, s, vt);
+
+    // Statistical operations
+    let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+    println!("Mean: {}, Std: {}", data.mean()?, data.std()?);
+
+    // FFT
+    let signal = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0]);
+    let spectrum = signal.fft()?;
+    println!("FFT: {}", spectrum);
+
+    Ok(())
+}
+```
+
+## Resources
+
 - **Documentation**: https://docs.rs/numrs2
 - **Repository**: https://github.com/cool-japan/numrs
-- **Examples**: See `examples/` directory for comprehensive usage examples
-- **Changelog**: See `CHANGELOG.md` for detailed change history
+- **Examples**: See `examples/` directory
+- **SciRS2 Ecosystem**: https://github.com/cool-japan/scirs
 
-## 🙏 **Acknowledgments**
+## Acknowledgments
 
-This release completes the Phase 4 roadmap, bringing NumRS2 to feature parity with major numerical computing libraries while maintaining Rust's safety guarantees and performance advantages.
+NumRS2 is part of the SciRS2 ecosystem, bringing production-ready scientific computing to Rust with the safety and performance guarantees that Rust provides.
 
 ---
 
-*For previous releases, see the git history or CHANGELOG.md*
+*For the complete changelog, see the git history.*

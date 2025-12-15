@@ -186,8 +186,8 @@ fn main() {
     // Initialize aligned data
     unsafe {
         let slice = std::slice::from_raw_parts_mut(aligned_ptr.as_ptr(), size);
-        for i in 0..size {
-            slice[i] = 1.0;
+        for item in slice.iter_mut().take(size) {
+            *item = 1.0;
         }
     }
 
@@ -417,10 +417,9 @@ fn benchmark_allocator_type(strategy: AllocStrategy, size: usize, count: usize) 
                     ptrs.push(ptr);
                 }
             }
-            let elapsed = start.elapsed();
 
             // No need to manually clean up - arena will deallocate everything on drop
-            elapsed
+            start.elapsed()
         }
         AllocStrategy::Aligned => {
             let config = AlignmentConfig::simd_256();

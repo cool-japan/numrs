@@ -11,6 +11,7 @@ use numrs2::prelude::*;
 use scirs2_core::ndarray::{Axis, Slice};
 use scirs2_core::Complex64;
 
+#[allow(clippy::result_large_err)]
 fn main() -> Result<()> {
     println!("NumRS2 Array Views Example");
     println!("========================\n");

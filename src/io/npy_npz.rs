@@ -645,6 +645,184 @@ pub fn load_all_npz_arrays<T: Clone, R: Read + Seek>(
     Ok(arrays)
 }
 
+/// Save multiple arrays to a single NPZ archive
+///
+/// # Arguments
+/// * `arrays` - HashMap mapping array names to arrays
+/// * `writer` - A writable and seekable destination (e.g., File)
+/// * `compressed` - Whether to use compression (Deflated if true, Stored if false)
+///
+/// # Returns
+/// Ok(()) if successful
+///
+/// # Examples
+/// ```rust,no_run
+/// use numrs2::io::save_npz_arrays;
+/// use numrs2::prelude::*;
+/// use std::collections::HashMap;
+/// use std::fs::File;
+///
+/// let mut arrays = HashMap::new();
+/// arrays.insert("data".to_string(), Array::from_vec(vec![1.0, 2.0, 3.0]));
+/// arrays.insert("weights".to_string(), Array::from_vec(vec![0.1, 0.5, 0.4]));
+///
+/// let file = File::create("output.npz").unwrap();
+/// save_npz_arrays(&arrays, file, true).unwrap();
+/// ```
+pub fn save_npz_arrays<T: Clone, W: Write + Seek>(
+    arrays: &std::collections::HashMap<String, Array<T>>,
+    mut writer: W,
+    compressed: bool,
+) -> Result<()> {
+    if arrays.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Cannot save empty array collection to NPZ".to_string(),
+        ));
+    }
+
+    let type_name = std::any::type_name::<T>();
+
+    // Create ZIP writer
+    let mut zip_writer = ZipWriter::new(&mut writer);
+
+    // Determine compression method
+    let compression = if compressed {
+        zip::CompressionMethod::Deflated
+    } else {
+        zip::CompressionMethod::Stored
+    };
+
+    // Save each array to the NPZ archive
+    for (name, array) in arrays.iter() {
+        // Create NPY data for this array
+        let mut npy_data = Vec::new();
+
+        // Create NPY header
+        let header = construct_npy_header::<T>(&array.shape())?;
+        npy_data.extend_from_slice(&header);
+
+        // Write the data based on its type
+        match type_name {
+            "f32" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, f32>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "f64" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, f64>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "i8" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes = unsafe { std::mem::transmute_copy::<T, i8>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "i16" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, i16>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "i32" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, i32>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "i64" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, i64>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "u8" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes = unsafe { std::mem::transmute_copy::<T, u8>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "u16" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, u16>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "u32" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, u32>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "u64" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_bytes =
+                        unsafe { std::mem::transmute_copy::<T, u64>(val) }.to_le_bytes();
+                    npy_data.extend_from_slice(&val_bytes);
+                }
+            }
+            "bool" => {
+                let data = array.to_vec();
+                for val in data.iter() {
+                    let val_byte = if unsafe { std::mem::transmute_copy::<T, bool>(val) } {
+                        1u8
+                    } else {
+                        0u8
+                    };
+                    npy_data.push(val_byte);
+                }
+            }
+            _ => {
+                return Err(NumRs2Error::SerializationError(format!(
+                    "NPZ format does not support type: {}",
+                    type_name
+                )));
+            }
+        }
+
+        // Add this array to the ZIP archive
+        let options: FileOptions<'_, ()> = FileOptions::default()
+            .compression_method(compression)
+            .unix_permissions(0o644);
+
+        let filename = format!("{}.npy", name);
+        zip_writer.start_file(&filename, options).map_err(|e| {
+            NumRs2Error::IOError(format!("Failed to create NPZ entry '{}': {}", name, e))
+        })?;
+
+        zip_writer.write_all(&npy_data).map_err(|e| {
+            NumRs2Error::IOError(format!("Failed to write NPZ entry '{}': {}", name, e))
+        })?;
+    }
+
+    // Finish the ZIP file
+    zip_writer
+        .finish()
+        .map_err(|e| NumRs2Error::IOError(format!("Failed to finalize NPZ file: {}", e)))?;
+
+    Ok(())
+}
+
 // Public function to deserialize an array from a file in NPY or NPZ format
 pub fn deserialize_from_file<T: Clone, R: Read + Seek>(
     reader: R,
@@ -691,5 +869,219 @@ mod tests {
         let (parsed_shape, dtype) = parse_npy_header(&header).unwrap();
         assert_eq!(parsed_shape, shape);
         assert_eq!(dtype, "<f4");
+    }
+
+    #[test]
+    fn test_save_multiple_arrays_npz() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        // Create multiple arrays
+        let mut arrays = HashMap::new();
+        arrays.insert(
+            "data".to_string(),
+            Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]),
+        );
+        arrays.insert(
+            "weights".to_string(),
+            Array::from_vec(vec![0.1f64, 0.5, 0.4]),
+        );
+        arrays.insert("labels".to_string(), Array::from_vec(vec![10.0f64, 20.0]));
+
+        // Save to NPZ
+        let mut buffer = Cursor::new(Vec::new());
+        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+
+        // Load all arrays back
+        buffer.set_position(0);
+        let loaded_arrays = load_all_npz_arrays::<f64, _>(buffer).unwrap();
+
+        // Verify we got all arrays back
+        assert_eq!(loaded_arrays.len(), 3);
+        assert!(loaded_arrays.contains_key("data"));
+        assert!(loaded_arrays.contains_key("weights"));
+        assert!(loaded_arrays.contains_key("labels"));
+
+        // Verify the content
+        let data = &loaded_arrays["data"];
+        assert_eq!(data.shape(), vec![2, 3]);
+        assert_eq!(data.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+
+        let weights = &loaded_arrays["weights"];
+        assert_eq!(weights.shape(), vec![3]);
+        assert_eq!(weights.to_vec(), vec![0.1, 0.5, 0.4]);
+
+        let labels = &loaded_arrays["labels"];
+        assert_eq!(labels.shape(), vec![2]);
+        assert_eq!(labels.to_vec(), vec![10.0, 20.0]);
+    }
+
+    #[test]
+    fn test_save_multiple_arrays_uncompressed() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        // Create multiple arrays with different types
+        let mut arrays = HashMap::new();
+        arrays.insert("a".to_string(), Array::from_vec(vec![1i32, 2, 3]));
+        arrays.insert("b".to_string(), Array::from_vec(vec![4i32, 5, 6, 7]));
+
+        // Save without compression
+        let mut buffer = Cursor::new(Vec::new());
+        save_npz_arrays(&arrays, &mut buffer, false).unwrap();
+
+        // Load back
+        buffer.set_position(0);
+        let loaded = load_all_npz_arrays::<i32, _>(buffer).unwrap();
+
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded["a"].to_vec(), vec![1, 2, 3]);
+        assert_eq!(loaded["b"].to_vec(), vec![4, 5, 6, 7]);
+    }
+
+    #[test]
+    fn test_load_specific_array_from_npz() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        // Create and save multiple arrays
+        let mut arrays = HashMap::new();
+        arrays.insert("first".to_string(), Array::from_vec(vec![1.0f32, 2.0]));
+        arrays.insert(
+            "second".to_string(),
+            Array::from_vec(vec![3.0f32, 4.0, 5.0]),
+        );
+        arrays.insert("third".to_string(), Array::from_vec(vec![6.0f32]));
+
+        let mut buffer = Cursor::new(Vec::new());
+        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+
+        // Load only the second array
+        buffer.set_position(0);
+        let second_array = load_npz_array::<f32, _>(buffer, "second").unwrap();
+        assert_eq!(second_array.to_vec(), vec![3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn test_list_arrays_in_npz() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        // Create and save multiple arrays
+        let mut arrays = HashMap::new();
+        arrays.insert("alpha".to_string(), Array::from_vec(vec![1.0f64]));
+        arrays.insert("beta".to_string(), Array::from_vec(vec![2.0f64]));
+        arrays.insert("gamma".to_string(), Array::from_vec(vec![3.0f64]));
+
+        let mut buffer = Cursor::new(Vec::new());
+        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+
+        // List array names
+        buffer.set_position(0);
+        let mut names = list_npz_arrays(buffer).unwrap();
+        names.sort(); // Sort for consistent comparison
+
+        let mut expected = vec!["alpha".to_string(), "beta".to_string(), "gamma".to_string()];
+        expected.sort();
+
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn test_save_empty_arrays_fails() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        let arrays: HashMap<String, Array<f64>> = HashMap::new();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let result = save_npz_arrays(&arrays, &mut buffer, true);
+        assert!(result.is_err());
+        assert!(matches!(result, Err(NumRs2Error::InvalidOperation(_))));
+    }
+
+    #[test]
+    fn test_save_different_shapes_same_npz() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        // Create arrays with different shapes and dimensions
+        let mut arrays = HashMap::new();
+        arrays.insert("scalar".to_string(), Array::from_vec(vec![42.0f64])); // 1D, size 1
+        arrays.insert(
+            "vector".to_string(),
+            Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0, 5.0]),
+        ); // 1D, size 5
+        arrays.insert(
+            "matrix".to_string(),
+            Array::from_vec(vec![
+                1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ])
+            .reshape(&[3, 4]),
+        ); // 2D, 3x4
+        arrays.insert(
+            "tensor".to_string(),
+            Array::from_vec(vec![1.0f64; 24]).reshape(&[2, 3, 4]),
+        ); // 3D, 2x3x4
+
+        // Save all to NPZ
+        let mut buffer = Cursor::new(Vec::new());
+        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+
+        // Load all back
+        buffer.set_position(0);
+        let loaded = load_all_npz_arrays::<f64, _>(buffer).unwrap();
+
+        // Verify all arrays
+        assert_eq!(loaded["scalar"].shape(), vec![1]);
+        assert_eq!(loaded["vector"].shape(), vec![5]);
+        assert_eq!(loaded["matrix"].shape(), vec![3, 4]);
+        assert_eq!(loaded["tensor"].shape(), vec![2, 3, 4]);
+    }
+
+    #[test]
+    fn test_save_different_types() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        // Test with different numeric types
+        macro_rules! test_type {
+            ($t:ty, $values:expr) => {{
+                let mut arrays = HashMap::new();
+                arrays.insert("test".to_string(), Array::from_vec($values));
+
+                let mut buffer = Cursor::new(Vec::new());
+                save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+
+                buffer.set_position(0);
+                let loaded = load_all_npz_arrays::<$t, _>(buffer).unwrap();
+                assert_eq!(loaded["test"].to_vec(), $values);
+            }};
+        }
+
+        test_type!(f32, vec![1.0f32, 2.0, 3.0]);
+        test_type!(f64, vec![1.0f64, 2.0, 3.0]);
+        test_type!(i32, vec![1i32, 2, 3]);
+        test_type!(i64, vec![1i64, 2, 3]);
+        test_type!(u32, vec![1u32, 2, 3]);
+        test_type!(u64, vec![1u64, 2, 3]);
+    }
+
+    #[test]
+    fn test_load_nonexistent_array() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        // Create and save an array
+        let mut arrays = HashMap::new();
+        arrays.insert("exists".to_string(), Array::from_vec(vec![1.0f64]));
+
+        let mut buffer = Cursor::new(Vec::new());
+        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+
+        // Try to load an array that doesn't exist
+        buffer.set_position(0);
+        let result = load_npz_array::<f64, _>(buffer, "nonexistent");
+        assert!(result.is_err());
     }
 }

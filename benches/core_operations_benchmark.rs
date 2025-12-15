@@ -3,6 +3,8 @@
 //! This benchmark suite focuses on the fundamental array operations that form
 //! the backbone of numerical computing, with detailed performance profiling.
 
+#![allow(deprecated)]
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use numrs2::array::Array;
 use numrs2::array_ops;

@@ -16,7 +16,7 @@ fn test_kron_basic() {
     // [3*7, 3*8, 4*7, 4*8]   [21, 24, 28, 32]
 
     assert_eq!(result.shape(), &[4, 4]);
-    let expected = vec![
+    let expected = [
         5.0, 6.0, 10.0, 12.0, 7.0, 8.0, 14.0, 16.0, 15.0, 18.0, 20.0, 24.0, 21.0, 24.0, 28.0, 32.0,
     ];
 
@@ -46,7 +46,7 @@ fn test_kron_identity() {
     // [0, 0, 7, 8]
 
     assert_eq!(result.shape(), &[4, 4]);
-    let expected = vec![
+    let expected = [
         5.0, 6.0, 0.0, 0.0, 7.0, 8.0, 0.0, 0.0, 0.0, 0.0, 5.0, 6.0, 0.0, 0.0, 7.0, 8.0,
     ];
 

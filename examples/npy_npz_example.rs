@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 use numrs2::io::SerializeFormat;
 use numrs2::prelude::*;
@@ -66,7 +67,7 @@ fn main() -> Result<()> {
     println!("# Load array from NPY file");
     println!("arr_from_npy = np.load('array.npy')");
     println!("print(arr_from_npy)");
-    println!("");
+    println!();
     println!("# Load array from NPZ file");
     println!("npz_file = np.load('array.npz')");
     println!("arr_from_npz = npz_file['arr_0']");
@@ -78,7 +79,7 @@ fn main() -> Result<()> {
     println!("```rust");
     println!("// Read NPY file created by NumPy");
     println!("let array_from_numpy = Array::<f64>::from_file(\"numpy_created.npy\", SerializeFormat::Npy)?;");
-    println!("");
+    println!();
     println!("// Read NPZ file created by NumPy");
     println!("let array_from_numpy_npz = Array::<f64>::from_file(\"numpy_created.npz\", SerializeFormat::Npz)?;");
     println!("```");

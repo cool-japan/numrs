@@ -31,7 +31,15 @@ use scirs2_core::ndarray::Order;
 /// let rolled = roll(&b, -1, Some(0)).unwrap();
 /// assert_eq!(rolled.to_vec(), vec![4, 5, 6, 1, 2, 3]);
 /// ```
-pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Result<Array<T>> {
+pub fn roll<T: Clone + Send + Sync>(
+    array: &Array<T>,
+    shift: isize,
+    axis: Option<usize>,
+) -> Result<Array<T>> {
+    use scirs2_core::parallel_ops::*;
+
+    const PARALLEL_THRESHOLD: usize = 10000;
+
     // If array is empty, return a copy
     if array.size() == 0 {
         return Ok(array.clone());
@@ -67,47 +75,69 @@ pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Re
                 return Ok(array.clone());
             }
 
-            // Create a result array filled with the first element as a placeholder
-            let first_elem = array
-                .array()
-                .first()
-                .ok_or_else(|| NumRs2Error::InvalidOperation("Array is empty".into()))?
-                .clone();
-
-            let mut result = Array::full(&shape, first_elem);
-
             // Calculate the sizes of the pre-axis, axis, and post-axis dimensions
             let pre_axis_size: usize = shape.iter().take(ax).product();
             let post_axis_size: usize = shape.iter().skip(ax + 1).product();
 
             // Create a flat copy of the array data
             let array_vec = array.to_vec();
-            let result_vec = result.array_mut().as_slice_mut().ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to get mutable slice".into())
-            })?;
+            let total_size = array_vec.len();
 
-            // Roll the array elements along the specified axis
-            for i_pre in 0..pre_axis_size {
-                for i_axis in 0..axis_size {
-                    for i_post in 0..post_axis_size {
-                        // Calculate source index
-                        let src_axis_idx = i_axis;
-                        let src_idx = i_pre * (axis_size * post_axis_size)
-                            + src_axis_idx * post_axis_size
-                            + i_post;
+            // Use parallel processing for large arrays
+            if is_parallel_enabled() && total_size >= PARALLEL_THRESHOLD {
+                // Parallel roll - iterate over all output indices in parallel
+                let result_vec: Vec<T> = (0..total_size)
+                    .into_par_iter()
+                    .map(|dst_idx| {
+                        // Decompose dst_idx into (i_pre, dst_axis_idx, i_post)
+                        let pre_stride = axis_size * post_axis_size;
+                        let i_pre = dst_idx / pre_stride;
+                        let remainder = dst_idx % pre_stride;
+                        let dst_axis_idx = remainder / post_axis_size;
+                        let i_post = remainder % post_axis_size;
 
-                        // Calculate destination index with roll
+                        // Reverse the shift to find source axis index
+                        let src_axis_idx =
+                            (dst_axis_idx + axis_size - shift_mod as usize) % axis_size;
+                        let src_idx = i_pre * pre_stride + src_axis_idx * post_axis_size + i_post;
+
+                        array_vec[src_idx].clone()
+                    })
+                    .collect();
+
+                Ok(Array::from_vec(result_vec).reshape(&shape))
+            } else {
+                // Sequential roll for small arrays - optimized with pre-computed indices
+                let first_elem = array
+                    .array()
+                    .first()
+                    .ok_or_else(|| NumRs2Error::InvalidOperation("Array is empty".into()))?
+                    .clone();
+
+                let mut result = Array::full(&shape, first_elem);
+                let result_vec = result.array_mut().as_slice_mut().ok_or_else(|| {
+                    NumRs2Error::InvalidOperation("Failed to get mutable slice".into())
+                })?;
+
+                // Roll with optimized loop order for better cache locality
+                let axis_stride = post_axis_size;
+                let pre_stride = axis_size * post_axis_size;
+
+                for i_pre in 0..pre_axis_size {
+                    let base_pre = i_pre * pre_stride;
+                    for i_axis in 0..axis_size {
                         let dst_axis_idx = (i_axis + shift_mod as usize) % axis_size;
-                        let dst_idx = i_pre * (axis_size * post_axis_size)
-                            + dst_axis_idx * post_axis_size
-                            + i_post;
+                        let src_base = base_pre + i_axis * axis_stride;
+                        let dst_base = base_pre + dst_axis_idx * axis_stride;
 
-                        result_vec[dst_idx] = array_vec[src_idx].clone();
+                        // Copy entire post_axis chunk - more cache friendly
+                        result_vec[dst_base..(post_axis_size + dst_base)]
+                            .clone_from_slice(&array_vec[src_base..(post_axis_size + src_base)]);
                     }
                 }
-            }
 
-            Ok(result)
+                Ok(result)
+            }
         }
         None => {
             // Flatten the array, roll, and then reshape back
@@ -121,24 +151,43 @@ pub fn roll<T: Clone>(array: &Array<T>, shift: isize, axis: Option<usize>) -> Re
 
             // Convert shift to a positive value within range [0, size)
             let shift_mod = ((shift % size as isize) + size as isize) % size as isize;
+            let shift_usize = shift_mod as usize;
 
             // No need to roll if the shift is 0
             if shift_mod == 0 {
                 return Ok(array.clone());
             }
 
-            let mut result_vec = vec![array_vec[0].clone(); size];
+            // Use rotate-based approach for efficiency
+            // For small arrays, use a simple copy approach
+            // For large arrays, use parallel processing
+            if is_parallel_enabled() && size >= PARALLEL_THRESHOLD {
+                // Parallel roll
+                let result_vec: Vec<T> = (0..size)
+                    .into_par_iter()
+                    .map(|i| {
+                        let src_idx = (i + size - shift_usize) % size;
+                        array_vec[src_idx].clone()
+                    })
+                    .collect();
 
-            // Roll the entire flattened array
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..size {
-                let dst_idx = (i + shift_mod as usize) % size;
-                result_vec[dst_idx] = array_vec[i].clone();
+                let result_array = Array::from_vec(result_vec);
+                Ok(result_array.reshape(&shape))
+            } else {
+                // Sequential roll using efficient block copy
+                let mut result_vec = vec![array_vec[0].clone(); size];
+
+                // Copy the two contiguous blocks
+                // [0..shift_mod] comes from [size-shift_mod..size]
+                // [shift_mod..size] comes from [0..size-shift_mod]
+                for i in 0..size {
+                    let dst_idx = (i + shift_usize) % size;
+                    result_vec[dst_idx] = array_vec[i].clone();
+                }
+
+                let result_array = Array::from_vec(result_vec);
+                Ok(result_array.reshape(&shape))
             }
-
-            // Reshape the result back to the original shape
-            let result_array = Array::from_vec(result_vec);
-            Ok(result_array.reshape(&shape))
         }
     }
 }

@@ -3,6 +3,8 @@
 // This is a minimal example to quickly verify
 // the functionality of the random distributions module.
 
+#![allow(clippy::result_large_err)]
+
 use numrs2::error::Result;
 use numrs2::random::distributions::*;
 

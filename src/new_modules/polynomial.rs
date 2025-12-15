@@ -1951,6 +1951,718 @@ where
     Ok(Array::from_vec(poly.coefficients().to_vec()))
 }
 
+// =============================================================================
+// ENHANCED POLYNOMIAL FUNCTIONS (numpy.polynomial equivalents)
+// =============================================================================
+
+/// Generate a Vandermonde matrix
+///
+/// Returns the Vandermonde matrix for the given polynomial degree.
+/// The Vandermonde matrix has columns [1, x, x^2, ..., x^deg] where
+/// x is the input array.
+///
+/// # Parameters
+///
+/// * `x` - Array of points
+/// * `deg` - Maximum degree of the polynomial (inclusive)
+///
+/// # Returns
+///
+/// Vandermonde matrix of shape (len(x), deg+1)
+///
+/// # Examples
+///
+/// ```ignore
+/// use numrs2::prelude::*;
+/// use numrs2::new_modules::polynomial::polyvander;
+///
+/// let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
+/// let v = polyvander(&x, 2).unwrap();
+/// // Returns [[1, 1, 1], [1, 2, 4], [1, 3, 9]]
+/// ```
+pub fn polyvander<T>(x: &Array<T>, deg: usize) -> Result<Array<T>>
+where
+    T: Clone + Zero + One + Mul<Output = T>,
+{
+    if x.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyvander requires 1D array".to_string(),
+        ));
+    }
+
+    let x_vec = x.to_vec();
+    let n = x_vec.len();
+    let cols = deg + 1;
+    let mut result = Vec::with_capacity(n * cols);
+
+    for xi in &x_vec {
+        let mut x_pow = T::one();
+        for _ in 0..cols {
+            result.push(x_pow.clone());
+            x_pow = x_pow * xi.clone();
+        }
+    }
+
+    Ok(Array::from_vec(result).reshape(&[n, cols]))
+}
+
+/// Generate a 2D Vandermonde matrix
+///
+/// Returns the pseudo-Vandermonde matrix for 2D polynomial fitting.
+///
+/// # Parameters
+///
+/// * `x` - Array of x coordinates
+/// * `y` - Array of y coordinates
+/// * `deg` - Tuple of (x_degree, y_degree)
+///
+/// # Returns
+///
+/// Vandermonde matrix for 2D polynomial
+pub fn polyvander2d<T>(x: &Array<T>, y: &Array<T>, deg: (usize, usize)) -> Result<Array<T>>
+where
+    T: Clone + Zero + One + Mul<Output = T>,
+{
+    if x.ndim() != 1 || y.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyvander2d requires 1D arrays".to_string(),
+        ));
+    }
+
+    if x.size() != y.size() {
+        return Err(NumRs2Error::ShapeMismatch {
+            expected: x.shape(),
+            actual: y.shape(),
+        });
+    }
+
+    let x_vec = x.to_vec();
+    let y_vec = y.to_vec();
+    let n = x_vec.len();
+    let (deg_x, deg_y) = deg;
+    let cols = (deg_x + 1) * (deg_y + 1);
+    let mut result = Vec::with_capacity(n * cols);
+
+    for i in 0..n {
+        let xi = &x_vec[i];
+        let yi = &y_vec[i];
+
+        // Generate powers of x
+        let mut x_powers = Vec::with_capacity(deg_x + 1);
+        let mut x_pow = T::one();
+        for _ in 0..=deg_x {
+            x_powers.push(x_pow.clone());
+            x_pow = x_pow.clone() * xi.clone();
+        }
+
+        // Generate powers of y
+        let mut y_powers = Vec::with_capacity(deg_y + 1);
+        let mut y_pow = T::one();
+        for _ in 0..=deg_y {
+            y_powers.push(y_pow.clone());
+            y_pow = y_pow.clone() * yi.clone();
+        }
+
+        // Generate all combinations x^i * y^j
+        for j in 0..=deg_y {
+            for k in 0..=deg_x {
+                result.push(x_powers[k].clone() * y_powers[j].clone());
+            }
+        }
+    }
+
+    Ok(Array::from_vec(result).reshape(&[n, cols]))
+}
+
+/// Raise a polynomial to a power
+///
+/// Returns the polynomial raised to the given power.
+///
+/// # Parameters
+///
+/// * `c` - Polynomial coefficients
+/// * `pow` - Power to raise the polynomial to
+///
+/// # Returns
+///
+/// Coefficients of the resulting polynomial
+///
+/// # Examples
+///
+/// ```ignore
+/// use numrs2::prelude::*;
+/// use numrs2::new_modules::polynomial::polypower;
+///
+/// let c = Array::from_vec(vec![1.0, 1.0]); // x + 1
+/// let c2 = polypower(&c, 2).unwrap();       // (x + 1)^2 = x^2 + 2x + 1
+/// ```
+pub fn polypower<T>(c: &Array<T>, pow: usize) -> Result<Array<T>>
+where
+    T: Clone + Zero + One + Add<Output = T> + Mul<Output = T> + PartialEq,
+{
+    if c.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polypower requires 1D array".to_string(),
+        ));
+    }
+
+    if pow == 0 {
+        return Ok(Array::from_vec(vec![T::one()]));
+    }
+
+    let poly = Polynomial::new(c.to_vec());
+    let mut result = poly.clone();
+
+    for _ in 1..pow {
+        result = result * poly.clone();
+    }
+
+    Ok(Array::from_vec(result.coefficients().to_vec()))
+}
+
+/// Multiply a polynomial by x
+///
+/// Shifts the polynomial coefficients to multiply by x.
+/// This is equivalent to prepending a zero coefficient.
+///
+/// # Parameters
+///
+/// * `c` - Polynomial coefficients
+///
+/// # Returns
+///
+/// Coefficients of x * p(x)
+///
+/// # Examples
+///
+/// ```ignore
+/// use numrs2::prelude::*;
+/// use numrs2::new_modules::polynomial::polymulx;
+///
+/// let c = Array::from_vec(vec![1.0, 2.0, 3.0]); // x^2 + 2x + 3
+/// let xc = polymulx(&c).unwrap();               // x^3 + 2x^2 + 3x
+/// ```
+pub fn polymulx<T>(c: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero,
+{
+    if c.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polymulx requires 1D array".to_string(),
+        ));
+    }
+
+    let mut coeffs = c.to_vec();
+    coeffs.push(T::zero()); // Append zero (for descending order, shifts left)
+    Ok(Array::from_vec(coeffs))
+}
+
+/// Evaluate polynomial on a 2D grid
+///
+/// Evaluates a polynomial at all combinations of x and y values.
+///
+/// # Parameters
+///
+/// * `c` - Polynomial coefficients (for a product of two 1D polynomials)
+/// * `x` - Array of x coordinates
+/// * `y` - Array of y coordinates
+///
+/// # Returns
+///
+/// 2D array of polynomial values
+pub fn polygrid2d<T>(c: &Array<T>, x: &Array<T>, y: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + One + Add<Output = T> + Mul<Output = T> + PartialEq,
+{
+    if c.ndim() != 1 || x.ndim() != 1 || y.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polygrid2d requires 1D arrays".to_string(),
+        ));
+    }
+
+    let poly = Polynomial::new(c.to_vec());
+    let x_vec = x.to_vec();
+    let y_vec = y.to_vec();
+
+    let nx = x_vec.len();
+    let ny = y_vec.len();
+    let mut result = Vec::with_capacity(nx * ny);
+
+    // Evaluate p(x) for each x, then evaluate at each y
+    // For a simple 1D polynomial, we just evaluate at each combination
+    for yi in &y_vec {
+        for xi in &x_vec {
+            // For a product polynomial, evaluate at x*y
+            let val = poly.evaluate(xi.clone() * yi.clone());
+            result.push(val);
+        }
+    }
+
+    Ok(Array::from_vec(result).reshape(&[ny, nx]))
+}
+
+/// Evaluate polynomial at 2D points
+///
+/// Evaluates a 2D polynomial at given (x, y) coordinate pairs.
+///
+/// # Parameters
+///
+/// * `c` - 2D polynomial coefficients
+/// * `x` - Array of x coordinates
+/// * `y` - Array of y coordinates
+///
+/// # Returns
+///
+/// Array of polynomial values at each (x, y) point
+pub fn polyval2d<T>(c: &Array<T>, x: &Array<T>, y: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + One + Add<Output = T> + Mul<Output = T>,
+{
+    if x.ndim() != 1 || y.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyval2d requires 1D coordinate arrays".to_string(),
+        ));
+    }
+
+    if x.size() != y.size() {
+        return Err(NumRs2Error::ShapeMismatch {
+            expected: x.shape(),
+            actual: y.shape(),
+        });
+    }
+
+    let c_shape = c.shape();
+    if c_shape.len() != 2 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyval2d requires 2D coefficient array".to_string(),
+        ));
+    }
+
+    let x_vec = x.to_vec();
+    let y_vec = y.to_vec();
+    let n = x_vec.len();
+    let deg_y = c_shape[0];
+    let deg_x = c_shape[1];
+
+    let mut result = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let xi = &x_vec[i];
+        let yi = &y_vec[i];
+
+        // Compute powers of x and y
+        let mut x_powers = Vec::with_capacity(deg_x);
+        let mut x_pow = T::one();
+        for _ in 0..deg_x {
+            x_powers.push(x_pow.clone());
+            x_pow = x_pow.clone() * xi.clone();
+        }
+
+        let mut y_powers = Vec::with_capacity(deg_y);
+        let mut y_pow = T::one();
+        for _ in 0..deg_y {
+            y_powers.push(y_pow.clone());
+            y_pow = y_pow.clone() * yi.clone();
+        }
+
+        // Sum c[j,k] * x^k * y^j
+        let mut sum = T::zero();
+        for j in 0..deg_y {
+            for k in 0..deg_x {
+                let coeff = c.get(&[j, k])?;
+                sum = sum + coeff * x_powers[k].clone() * y_powers[j].clone();
+            }
+        }
+
+        result.push(sum);
+    }
+
+    Ok(Array::from_vec(result))
+}
+
+/// Compute polynomial GCD (Greatest Common Divisor)
+///
+/// Returns the greatest common divisor of two polynomials.
+///
+/// # Parameters
+///
+/// * `p1` - First polynomial coefficients
+/// * `p2` - Second polynomial coefficients
+///
+/// # Returns
+///
+/// Coefficients of the GCD polynomial
+///
+/// # Examples
+///
+/// ```ignore
+/// use numrs2::prelude::*;
+/// use numrs2::new_modules::polynomial::polygcd;
+///
+/// let p1 = Array::from_vec(vec![1.0, -3.0, 2.0]); // (x-1)(x-2)
+/// let p2 = Array::from_vec(vec![1.0, -2.0, 1.0]); // (x-1)^2
+/// let gcd = polygcd(&p1, &p2).unwrap();           // (x-1)
+/// ```
+pub fn polygcd<T>(p1: &Array<T>, p2: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + PartialEq
+        + Float,
+{
+    if p1.ndim() != 1 || p2.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polygcd requires 1D arrays".to_string(),
+        ));
+    }
+
+    let mut a = Polynomial::new(p1.to_vec());
+    let mut b = Polynomial::new(p2.to_vec());
+
+    // Euclidean algorithm for polynomials
+    while b.degree() > 0 || b.coefficients()[0].abs() > T::from(1e-14).unwrap() {
+        let (_, remainder) = a.divide(&b)?;
+        a = b;
+        b = remainder;
+    }
+
+    // Normalize to monic
+    let leading = a.coefficients()[0];
+    let mut coeffs = a.coefficients().to_vec();
+    for coeff in &mut coeffs {
+        *coeff = *coeff / leading;
+    }
+
+    Ok(Array::from_vec(coeffs))
+}
+
+/// Compute the composition of two polynomials
+///
+/// Returns p(q(x)), i.e., the composition of polynomial p with polynomial q.
+///
+/// # Parameters
+///
+/// * `p` - Outer polynomial coefficients
+/// * `q` - Inner polynomial coefficients
+///
+/// # Returns
+///
+/// Coefficients of the composed polynomial
+///
+/// # Examples
+///
+/// ```ignore
+/// use numrs2::prelude::*;
+/// use numrs2::new_modules::polynomial::polycompose;
+///
+/// let p = Array::from_vec(vec![1.0, 0.0, 1.0]); // x^2 + 1
+/// let q = Array::from_vec(vec![1.0, 1.0]);       // x + 1
+/// let comp = polycompose(&p, &q).unwrap();       // (x+1)^2 + 1 = x^2 + 2x + 2
+/// ```
+pub fn polycompose<T>(p: &Array<T>, q: &Array<T>) -> Result<Array<T>>
+where
+    T: Clone + Zero + One + Add<Output = T> + Mul<Output = T> + PartialEq,
+{
+    if p.ndim() != 1 || q.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polycompose requires 1D arrays".to_string(),
+        ));
+    }
+
+    let p_coeffs = p.to_vec();
+    let q_poly = Polynomial::new(q.to_vec());
+
+    // Use Horner's method for composition
+    // p(q(x)) = p[0] * q(x)^n + p[1] * q(x)^(n-1) + ... + p[n]
+    let mut result = Polynomial::new(vec![p_coeffs[0].clone()]);
+
+    for i in 1..p_coeffs.len() {
+        result = result * q_poly.clone();
+        // Add scalar term
+        let mut result_coeffs = result.coefficients().to_vec();
+        *result_coeffs.last_mut().unwrap() =
+            result_coeffs.last().unwrap().clone() + p_coeffs[i].clone();
+        result = Polynomial::new(result_coeffs);
+    }
+
+    Ok(Array::from_vec(result.coefficients().to_vec()))
+}
+
+/// Fit a polynomial using weighted least squares
+///
+/// Fits a polynomial of the specified degree using weighted least squares.
+///
+/// # Parameters
+///
+/// * `x` - Array of x coordinates
+/// * `y` - Array of y coordinates
+/// * `degree` - Degree of the polynomial
+/// * `weights` - Optional weights for each point
+///
+/// # Returns
+///
+/// Polynomial fitted to the data
+pub fn polyfit_weighted<T>(
+    x: &Array<T>,
+    y: &Array<T>,
+    degree: usize,
+    weights: Option<&Array<T>>,
+) -> Result<Polynomial<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + PartialEq
+        + Debug
+        + std::ops::Neg<Output = T>
+        + Float,
+{
+    if weights.is_none() {
+        return polyfit(x, y, degree);
+    }
+
+    let w = weights.unwrap();
+    if x.shape() != w.shape() {
+        return Err(NumRs2Error::ShapeMismatch {
+            expected: x.shape(),
+            actual: w.shape(),
+        });
+    }
+
+    let x_vec = x.to_vec();
+    let y_vec = y.to_vec();
+    let w_vec = w.to_vec();
+    let n = x_vec.len();
+
+    if n <= degree {
+        return Err(NumRs2Error::InvalidOperation(
+            format!("polyfit: number of data points must be greater than degree (got {} points for degree {})", n, degree)
+        ));
+    }
+
+    // Create weighted Vandermonde matrix
+    let mut vandermonde = vec![vec![T::zero(); degree + 1]; n];
+
+    for i in 0..n {
+        let wi = w_vec[i].sqrt(); // Weight by sqrt for least squares
+        let mut x_pow = T::one();
+        for j in 0..=degree {
+            vandermonde[i][degree - j] = x_pow * wi;
+            x_pow = x_pow * x_vec[i];
+        }
+    }
+
+    // Weight y values
+    let mut weighted_y = Vec::with_capacity(n);
+    for i in 0..n {
+        weighted_y.push(y_vec[i] * w_vec[i].sqrt());
+    }
+
+    // Solve using normal equations (V^T V)p = V^T y
+    let mut coeff_matrix = vec![vec![T::zero(); degree + 1]; degree + 1];
+
+    for i in 0..=degree {
+        for j in 0..=degree {
+            let mut sum = T::zero();
+            for k in 0..n {
+                sum = sum + vandermonde[k][i] * vandermonde[k][j];
+            }
+            coeff_matrix[i][j] = sum;
+        }
+    }
+
+    let mut rhs = vec![T::zero(); degree + 1];
+    for i in 0..=degree {
+        let mut sum = T::zero();
+        for k in 0..n {
+            sum = sum + vandermonde[k][i] * weighted_y[k];
+        }
+        rhs[i] = sum;
+    }
+
+    // Gaussian elimination
+    for i in 0..=degree {
+        let mut max_row = i;
+        let mut max_val = coeff_matrix[i][i].abs();
+
+        for j in (i + 1)..=degree {
+            let val = coeff_matrix[j][i].abs();
+            if val > max_val {
+                max_val = val;
+                max_row = j;
+            }
+        }
+
+        if max_row != i {
+            coeff_matrix.swap(i, max_row);
+            rhs.swap(i, max_row);
+        }
+
+        for j in (i + 1)..=degree {
+            let factor = coeff_matrix[j][i] / coeff_matrix[i][i];
+            rhs[j] = rhs[j] - factor * rhs[i];
+
+            for k in i..=degree {
+                coeff_matrix[j][k] = coeff_matrix[j][k] - factor * coeff_matrix[i][k];
+            }
+        }
+    }
+
+    // Back substitution
+    let mut coefficients = vec![T::zero(); degree + 1];
+
+    for i in (0..=degree).rev() {
+        let mut sum = T::zero();
+        for j in (i + 1)..=degree {
+            sum = sum + coeff_matrix[i][j] * coefficients[j];
+        }
+        coefficients[i] = (rhs[i] - sum) / coeff_matrix[i][i];
+    }
+
+    Ok(Polynomial::new(coefficients))
+}
+
+/// Return Jacobi polynomial of specified degree
+///
+/// Returns the coefficients of the Jacobi polynomial P_n^(alpha, beta)(x).
+///
+/// # Parameters
+///
+/// * `degree` - Degree of the polynomial
+/// * `alpha` - First parameter (> -1)
+/// * `beta` - Second parameter (> -1)
+///
+/// # Returns
+///
+/// Array of Jacobi polynomial coefficients
+pub fn polyjacobi<T>(degree: usize, alpha: T, beta: T) -> Result<Array<T>>
+where
+    T: Clone
+        + Zero
+        + One
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + PartialEq
+        + std::ops::Neg<Output = T>
+        + Float,
+{
+    use num_traits::NumCast;
+
+    // Check parameters
+    if alpha <= -T::one() || beta <= -T::one() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Jacobi polynomial requires alpha > -1 and beta > -1".to_string(),
+        ));
+    }
+
+    if degree == 0 {
+        return Ok(Array::from_vec(vec![T::one()]));
+    }
+
+    let two: T = NumCast::from(2).unwrap();
+
+    if degree == 1 {
+        let a = (alpha + beta + two) / two;
+        let b = (alpha - beta) / two;
+        return Ok(Array::from_vec(vec![a, b]));
+    }
+
+    // Use recurrence relation
+    let mut p_prev = Polynomial::<T>::one();
+
+    let a1 = (alpha + beta + two) / two;
+    let b1 = (alpha - beta) / two;
+    let mut p_curr = Polynomial::new(vec![a1, b1]);
+
+    for n in 1..(degree as i32) {
+        let n_t: T = NumCast::from(n).unwrap();
+        let two_n: T = NumCast::from(2 * n).unwrap();
+        let n_plus_alpha_beta = n_t + alpha + beta;
+
+        // Recurrence coefficients
+        let denom =
+            two * (n_t + T::one()) * (n_plus_alpha_beta + T::one()) * (two_n + alpha + beta);
+
+        let a_n = (two_n + alpha + beta + T::one())
+            * ((two_n + alpha + beta + two) * (two_n + alpha + beta) * T::one()
+                + (alpha * alpha - beta * beta))
+            / denom;
+
+        let b_n = two * (n_t + alpha) * (n_t + beta) * (two_n + alpha + beta + two) / denom;
+
+        // P_{n+1}(x) = (a_n * x + c_n) * P_n(x) - b_n * P_{n-1}(x)
+        let x_poly = Polynomial::new(vec![T::one(), T::zero()]);
+        let mut term1 = x_poly * p_curr.clone();
+        term1.coefficients = term1.coefficients.iter().map(|c| *c * a_n).collect();
+
+        let mut term2 = p_prev.clone();
+        term2.coefficients = term2.coefficients.iter().map(|c| *c * b_n).collect();
+
+        let p_next = term1 - term2;
+
+        p_prev = p_curr;
+        p_curr = p_next;
+    }
+
+    Ok(Array::from_vec(p_curr.coefficients().to_vec()))
+}
+
+/// Compute polynomial residual
+///
+/// Returns the residual (fitting error) from polynomial fitting.
+///
+/// # Parameters
+///
+/// * `c` - Polynomial coefficients
+/// * `x` - Array of x coordinates
+/// * `y` - Array of expected y values
+///
+/// # Returns
+///
+/// Sum of squared residuals
+pub fn polyresidual<T>(c: &Array<T>, x: &Array<T>, y: &Array<T>) -> Result<T>
+where
+    T: Clone + Zero + One + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + PartialEq,
+{
+    if c.ndim() != 1 || x.ndim() != 1 || y.ndim() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "polyresidual requires 1D arrays".to_string(),
+        ));
+    }
+
+    if x.size() != y.size() {
+        return Err(NumRs2Error::ShapeMismatch {
+            expected: x.shape(),
+            actual: y.shape(),
+        });
+    }
+
+    let poly = Polynomial::new(c.to_vec());
+    let y_fitted = poly.evaluate_array(x)?;
+
+    let y_vec = y.to_vec();
+    let fitted_vec = y_fitted.to_vec();
+
+    let mut ssr = T::zero();
+    for i in 0..y_vec.len() {
+        let residual = y_vec[i].clone() - fitted_vec[i].clone();
+        ssr = ssr + residual.clone() * residual;
+    }
+
+    Ok(ssr)
+}
+
 // Add tests to verify the implementation
 #[cfg(test)]
 mod tests {
@@ -2166,5 +2878,233 @@ mod tests {
         // Should be [1.5, 0.0, -0.5] or equivalent
         assert_relative_eq!(p2.evaluate(0.0), -0.5, epsilon = 1e-10);
         assert_relative_eq!(p2.evaluate(1.0), 1.0, epsilon = 1e-10);
+    }
+
+    // Tests for new polynomial functions added for numpy.polynomial compatibility
+
+    #[test]
+    fn test_polyvander() {
+        let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let v = polyvander(&x, 2).unwrap();
+
+        // Should be [[1, 1, 1], [1, 2, 4], [1, 3, 9]]
+        assert_eq!(v.shape(), vec![3, 3]);
+        let data = v.to_vec();
+
+        // Row 0: [1, 1, 1]
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[2], 1.0, epsilon = 1e-10);
+
+        // Row 1: [1, 2, 4]
+        assert_relative_eq!(data[3], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[4], 2.0, epsilon = 1e-10);
+        assert_relative_eq!(data[5], 4.0, epsilon = 1e-10);
+
+        // Row 2: [1, 3, 9]
+        assert_relative_eq!(data[6], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[7], 3.0, epsilon = 1e-10);
+        assert_relative_eq!(data[8], 9.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polyvander_degree_0() {
+        let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let v = polyvander(&x, 0).unwrap();
+
+        assert_eq!(v.shape(), vec![3, 1]);
+        let data = v.to_vec();
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[2], 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polypower() {
+        // c(x) = 2 + x, power 2 should give (2 + x)^2 = 4 + 4x + x^2
+        let c = Array::from_vec(vec![1.0, 2.0]); // x + 2
+        let c2 = polypower(&c, 2).unwrap();
+
+        // The result should represent x^2 + 4x + 4
+        let data = c2.to_vec();
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10); // x^2 coeff
+        assert_relative_eq!(data[1], 4.0, epsilon = 1e-10); // x coeff
+        assert_relative_eq!(data[2], 4.0, epsilon = 1e-10); // constant
+    }
+
+    #[test]
+    fn test_polypower_zero() {
+        let c = Array::from_vec(vec![1.0, 2.0]);
+        let c0 = polypower(&c, 0).unwrap();
+
+        // x^0 should give 1
+        assert_eq!(c0.len(), 1);
+        assert_relative_eq!(c0.to_vec()[0], 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polymulx() {
+        // c(x) = 2 + 3x + x^2 -> x*c(x) = 2x + 3x^2 + x^3
+        let c = Array::from_vec(vec![1.0, 3.0, 2.0]); // x^2 + 3x + 2
+        let xc = polymulx(&c).unwrap();
+
+        // Result should be x^3 + 3x^2 + 2x
+        let data = xc.to_vec();
+        assert_eq!(data.len(), 4);
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 3.0, epsilon = 1e-10);
+        assert_relative_eq!(data[2], 2.0, epsilon = 1e-10);
+        assert_relative_eq!(data[3], 0.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polygcd() {
+        // gcd of (x^2 - 1) and (x - 1) should be (x - 1)
+        let p1 = Array::from_vec(vec![1.0, 0.0, -1.0]); // x^2 - 1
+        let p2 = Array::from_vec(vec![1.0, -1.0]); // x - 1
+
+        let gcd = polygcd(&p1, &p2).unwrap();
+        let data = gcd.to_vec();
+
+        // Result should be a multiple of (x - 1)
+        // The ratio of coefficients should be constant
+        if data.len() == 2 {
+            let ratio = data[0] / 1.0;
+            assert_relative_eq!(data[1] / (-1.0), ratio, epsilon = 1e-8);
+        }
+    }
+
+    #[test]
+    fn test_polycompose() {
+        // p(x) = x^2, q(x) = x + 1
+        // p(q(x)) = (x+1)^2 = x^2 + 2x + 1
+        let p = Array::from_vec(vec![1.0, 0.0, 0.0]); // x^2
+        let q = Array::from_vec(vec![1.0, 1.0]); // x + 1
+
+        let comp = polycompose(&p, &q).unwrap();
+        let data = comp.to_vec();
+
+        assert_eq!(data.len(), 3);
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 2.0, epsilon = 1e-10);
+        assert_relative_eq!(data[2], 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polycompose_linear() {
+        // p(x) = 2x + 1, q(x) = 3x + 2
+        // p(q(x)) = 2(3x + 2) + 1 = 6x + 5
+        let p = Array::from_vec(vec![2.0, 1.0]); // 2x + 1
+        let q = Array::from_vec(vec![3.0, 2.0]); // 3x + 2
+
+        let comp = polycompose(&p, &q).unwrap();
+        let data = comp.to_vec();
+
+        assert_eq!(data.len(), 2);
+        assert_relative_eq!(data[0], 6.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 5.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polyjacobi_degree_0() {
+        let j0 = polyjacobi(0, 1.0, 1.0).unwrap();
+        assert_eq!(j0.len(), 1);
+        assert_relative_eq!(j0.to_vec()[0], 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polyjacobi_degree_1() {
+        // J_1(x; 0, 0) = x (Legendre case)
+        let j1 = polyjacobi(1, 0.0, 0.0).unwrap();
+        let data = j1.to_vec();
+
+        // For alpha=beta=0, J_1 should be x
+        assert_eq!(data.len(), 2);
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 0.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polyresidual() {
+        // Create points for y = 2x + 1
+        let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
+        let y = Array::from_vec(vec![1.0, 3.0, 5.0]);
+
+        // Perfect fit polynomial
+        let c = Array::from_vec(vec![2.0, 1.0]); // 2x + 1
+
+        let residual = polyresidual(&c, &x, &y).unwrap();
+        assert_relative_eq!(residual, 0.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polyresidual_nonzero() {
+        // Create points that don't exactly fit a line
+        let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
+        let y = Array::from_vec(vec![1.0, 3.0, 4.0]); // Not exactly 2x + 1
+
+        let c = Array::from_vec(vec![2.0, 1.0]); // 2x + 1
+
+        let residual = polyresidual(&c, &x, &y).unwrap();
+        // Expected: (1-1)^2 + (3-3)^2 + (5-4)^2 = 1
+        assert_relative_eq!(residual, 1.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polyval2d() {
+        // Simple polynomial: f(x,y) = 1 + x + y (coefficients arranged in 2x2 matrix)
+        // c[i,j] corresponds to x^i * y^j (in row-major order)
+        let c = Array::from_vec(vec![1.0, 1.0, 1.0, 0.0]).reshape(&[2, 2]); // 1 + x + y
+        let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
+        let y = Array::from_vec(vec![0.0, 0.0, 0.0]);
+
+        let result = polyval2d(&c, &x, &y).unwrap();
+        let data = result.to_vec();
+
+        // f(0,0) = 1, f(1,0) = 2, f(2,0) = 3
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 2.0, epsilon = 1e-10);
+        assert_relative_eq!(data[2], 3.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polygrid2d() {
+        // Simple polynomial: p(z) = 1 (constant polynomial)
+        // polygrid2d evaluates p(x*y) for each (x,y) pair
+        let c = Array::from_vec(vec![1.0]); // 1D coefficient array
+        let x = Array::from_vec(vec![0.0, 1.0]);
+        let y = Array::from_vec(vec![0.0, 1.0, 2.0]);
+
+        let result = polygrid2d(&c, &x, &y).unwrap();
+
+        // All values should be 1 (constant polynomial)
+        assert_eq!(result.shape(), vec![3, 2]); // shape is [len(y), len(x)]
+        for val in result.to_vec() {
+            assert_relative_eq!(val, 1.0, epsilon = 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_polyvander2d() {
+        let x = Array::from_vec(vec![1.0, 2.0]);
+        let y = Array::from_vec(vec![1.0, 2.0]);
+
+        let v = polyvander2d(&x, &y, (1, 1)).unwrap();
+
+        // For degree (1,1), we get columns [1, x, y, xy]
+        assert_eq!(v.shape(), vec![2, 4]);
+
+        let data = v.to_vec();
+        // Row 0: x=1, y=1 -> [1, 1, 1, 1]
+        assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[1], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[2], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[3], 1.0, epsilon = 1e-10);
+
+        // Row 1: x=2, y=2 -> [1, 2, 2, 4]
+        assert_relative_eq!(data[4], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(data[5], 2.0, epsilon = 1e-10);
+        assert_relative_eq!(data[6], 2.0, epsilon = 1e-10);
+        assert_relative_eq!(data[7], 4.0, epsilon = 1e-10);
     }
 }

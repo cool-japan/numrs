@@ -502,7 +502,7 @@ impl OptimizedBlas {
                 let y_array = Array::from_vec(f64_y_data);
 
                 use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-                let result = EnhancedSimdOps::vectorized_dot_f64(&x_array, &y_array)?;
+                let result = EnhancedSimdOps::vectorized_dot_f64(&x_array, &y_array);
                 return Ok(T::from(result).unwrap());
             }
         }

@@ -1,10 +1,9 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
 
-/// This file implements property-based testing for the random module.
-/// Instead of using a full property testing framework, we'll use statistical properties
-/// to validate that our random distributions behave as expected.
-
+// This file implements property-based testing for the random module.
+// Instead of using a full property testing framework, we'll use statistical properties
+// to validate that our random distributions behave as expected.
 const SAMPLE_SIZE: usize = 10000;
 
 // Helper function to calculate the mean of an array
@@ -189,7 +188,7 @@ fn test_beta_distribution_properties() {
     );
 
     // 3. All values should be within [0, 1]
-    let all_in_range = samples.to_vec().iter().all(|&x| x >= 0.0 && x <= 1.0);
+    let all_in_range = samples.to_vec().iter().all(|&x| (0.0..=1.0).contains(&x));
     assert!(all_in_range, "Some values are outside [0, 1]");
 }
 

@@ -3,6 +3,8 @@
 //! This example shows how to use NumRS2's large-scale memory management features
 //! for handling datasets that are too large to fit entirely in memory.
 
+#![allow(clippy::result_large_err)]
+
 use numrs2::array::Array;
 use numrs2::error::Result;
 use numrs2::memory_alloc::{
@@ -220,10 +222,8 @@ fn example_data_spilling() -> Result<()> {
         processed_elements += chunk.len();
 
         // Periodically check if we should spill
-        if processed_elements % (chunk_size * 4) == 0 {
-            if should_spill_globally() {
-                println!("    Warning: Memory usage high, spilling recommended");
-            }
+        if processed_elements % (chunk_size * 4) == 0 && should_spill_globally() {
+            println!("    Warning: Memory usage high, spilling recommended");
         }
     }
 

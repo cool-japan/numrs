@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 // Benchmark for the `unique` function in NumRS2
 //
@@ -119,7 +120,7 @@ fn main() -> Result<()> {
     println!("----------------");
 
     // Array with mostly unique elements
-    let mostly_unique = Array::from_vec((0..10000).map(|i| i).collect::<Vec<i32>>());
+    let mostly_unique = Array::from_vec((0..10000).collect::<Vec<i32>>());
 
     benchmark("unique - mostly unique elements", 100, || {
         unique(&mostly_unique, None, None, None, None)

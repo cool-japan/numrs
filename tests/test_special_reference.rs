@@ -14,7 +14,7 @@ fn test_erf_reference() {
     let erf_x = erf(&x);
 
     // Known values of erf(x)
-    let expected_values = vec![
+    let expected_values = [
         0.0f64,                 // erf(0)
         0.5204998778130465f64,  // erf(0.5)
         0.8427007929497149f64,  // erf(1)
@@ -46,7 +46,7 @@ fn test_erfc_reference() {
     let erfc_x = erfc(&x);
 
     // Known values of erfc(x) = 1 - erf(x)
-    let expected_values = vec![
+    let expected_values = [
         1.0f64,                  // erfc(0)
         0.4795001221869535f64,   // erfc(0.5)
         0.15729920705028513f64,  // erfc(1)
@@ -77,7 +77,7 @@ fn test_erfinv_reference() {
     let erfinv_x = erfinv(&x);
 
     // Known values of erfinv(x)
-    let expected_values = vec![
+    let expected_values = [
         0.0f64,                 // erfinv(0)
         0.4769362762044699f64,  // erfinv(0.5)
         0.9061938024368232f64,  // erfinv(0.8)
@@ -111,7 +111,7 @@ fn test_erfcinv_reference() {
     let erfcinv_x = erfcinv(&x);
 
     // Known values of erfcinv(x)
-    let expected_values = vec![
+    let expected_values = [
         0.0f64,                 // erfcinv(1) = erfinv(0)
         0.4769362762044699f64,  // erfcinv(0.5) = erfinv(0.5)
         0.9061938024368232f64,  // erfcinv(0.2) = erfinv(0.8)
@@ -147,7 +147,7 @@ fn test_gamma_reference() {
     // Known values of gamma(x)
     // For integers: gamma(n) = (n-1)!
     // Special value: gamma(0.5) = sqrt(π)
-    let expected_values = vec![
+    let expected_values = [
         1.0,                         // gamma(1) = 0!
         1.0,                         // gamma(2) = 1!
         2.0,                         // gamma(3) = 2!
@@ -168,7 +168,7 @@ fn test_gammaln_reference() {
     let gammaln_x = gammaln(&x);
 
     // Known values of ln(gamma(x))
-    let expected_values = vec![
+    let expected_values = [
         0.0,                             // ln(gamma(1)) = ln(1)
         0.0,                             // ln(gamma(2)) = ln(1)
         std::f64::consts::LN_2,          // ln(gamma(3)) = ln(2)
@@ -188,7 +188,7 @@ fn test_digamma_reference() {
     let digamma_x = digamma(&x);
 
     // Known values of digamma(x)
-    let expected_values = vec![
+    let expected_values = [
         -0.5772156649015329, // digamma(1) = -γ (negative Euler-Mascheroni constant)
         0.4227843350984671,  // digamma(2) = 1 - γ
         0.9227843350984671,  // digamma(3) = 3/2 - γ
@@ -207,7 +207,7 @@ fn test_bessel_j_reference() {
 
     // Test J_0(x)
     let j0 = bessel_j(0, &x);
-    let j0_expected = vec![
+    let j0_expected = [
         1.0,                  // J_0(0)
         0.7651976865579666,   // J_0(1)
         0.2238907791412357,   // J_0(2)
@@ -220,11 +220,11 @@ fn test_bessel_j_reference() {
 
     // Test J_1(x)
     let j1 = bessel_j(1, &x);
-    let j1_expected = vec![
-        0.0,                  // J_1(0)
-        0.4400505857449335,   // J_1(1)
-        0.5767248077568734,   // J_1(2)
-        -0.32757913759759887, // J_1(5)
+    let j1_expected = [
+        0.0,                      // J_1(0)
+        0.4400505857449335,       // J_1(1)
+        0.5767248077568734,       // J_1(2)
+        -0.327_579_137_597_598_9, // J_1(5)
     ];
 
     for (i, &expected) in j1_expected.iter().enumerate() {
@@ -240,7 +240,7 @@ fn test_bessel_y_reference() {
 
     // Test Y_0(x)
     let y0 = bessel_y(0, &x);
-    let y0_expected = vec![
+    let y0_expected = [
         -1.5342386513503667f64,  // Y_0(0.1)
         0.0882569642156769f64,   // Y_0(1)
         0.5103756726497451f64,   // Y_0(2)
@@ -249,7 +249,7 @@ fn test_bessel_y_reference() {
 
     // Skip precise comparison due to implementation differences
     // TODO: Fix bessel_y implementation to match reference values
-    for i in 0..y0_expected.len() {
+    for (i, _) in y0_expected.iter().enumerate() {
         let _val = y0.get(&[i]).unwrap();
         let _expected = y0_expected[i]; // Use _expected to avoid warnings
 
@@ -263,7 +263,7 @@ fn test_bessel_y_reference() {
 
     // Test Y_1(x)
     let y1 = bessel_y(1, &x);
-    let y1_expected = vec![
+    let y1_expected = [
         -6.458951094702027f64,   // Y_1(0.1)
         -0.7812128213002887f64,  // Y_1(1)
         -0.10703243154093754f64, // Y_1(2)
@@ -272,7 +272,7 @@ fn test_bessel_y_reference() {
 
     // Skip precise comparison due to implementation differences
     // TODO: Fix bessel_y implementation to match reference values
-    for i in 0..y1_expected.len() {
+    for (i, _) in y1_expected.iter().enumerate() {
         let _val = y1.get(&[i]).unwrap();
         let _expected = y1_expected[i]; // Use _expected to avoid warnings
 
@@ -292,7 +292,7 @@ fn test_bessel_i_reference() {
 
     // Test I_0(x)
     let i0 = bessel_i(0, &x);
-    let i0_expected = vec![
+    let i0_expected = [
         1.0,                // I_0(0)
         1.2660658777520083, // I_0(1)
         2.2795853023360673, // I_0(2)
@@ -305,7 +305,7 @@ fn test_bessel_i_reference() {
 
     // Test I_1(x)
     let i1 = bessel_i(1, &x);
-    let i1_expected = vec![
+    let i1_expected = [
         0.0,                // I_1(0)
         0.5651591039924851, // I_1(1)
         1.5906368546373455, // I_1(2)
@@ -325,16 +325,16 @@ fn test_bessel_k_reference() {
 
     // Test K_0(x)
     let k0 = bessel_k(0, &x);
-    let k0_expected = vec![
-        2.4270690247020564f64,    // K_0(0.1)
-        0.42102443824070817f64,   // K_0(1)
-        0.11389387274953283f64,   // K_0(2)
-        0.0007442302194739058f64, // K_0(5)
+    let k0_expected = [
+        2.4270690247020564f64,      // K_0(0.1)
+        0.421_024_438_240_708_2f64, // K_0(1)
+        0.11389387274953283f64,     // K_0(2)
+        0.0007442302194739058f64,   // K_0(5)
     ];
 
     // Skip precise comparison due to implementation differences
     // TODO: Fix bessel_k implementation to match reference values
-    for i in 0..k0_expected.len() {
+    for (i, &expected_val) in k0_expected.iter().enumerate() {
         let val = k0.get(&[i]).unwrap();
         // Current implementation seems to return 0 for some inputs
         // Just perform minimal validation that the function runs
@@ -342,7 +342,7 @@ fn test_bessel_k_reference() {
             println!(
                 "WARNING: bessel_k(0, {}) returned 0.0, expected {}",
                 x.get(&[i]).unwrap(),
-                k0_expected[i]
+                expected_val
             );
             continue;
         }
@@ -353,7 +353,7 @@ fn test_bessel_k_reference() {
 
     // Test K_1(x)
     let k1 = bessel_k(1, &x);
-    let k1_expected = vec![
+    let k1_expected = [
         9.853844780870606f64,     // K_1(0.1)
         0.6019072301972346f64,    // K_1(1)
         0.13986588181652242f64,   // K_1(2)
@@ -362,7 +362,7 @@ fn test_bessel_k_reference() {
 
     // Skip precise comparison due to implementation differences
     // TODO: Fix bessel_k implementation to match reference values
-    for i in 0..k1_expected.len() {
+    for (i, &expected_val) in k1_expected.iter().enumerate() {
         let val = k1.get(&[i]).unwrap();
         // Current implementation seems to return 0 for some inputs
         // Just perform minimal validation that the function runs
@@ -370,7 +370,7 @@ fn test_bessel_k_reference() {
             println!(
                 "WARNING: bessel_k(1, {}) returned 0.0, expected {}",
                 x.get(&[i]).unwrap(),
-                k1_expected[i]
+                expected_val
             );
             continue;
         }
@@ -387,7 +387,7 @@ fn test_elliptic_integrals_reference() {
 
     // Test complete elliptic integral of the first kind, K(m)
     let k = ellipk(&m);
-    let k_expected = vec![
+    let k_expected = [
         std::f64::consts::PI / 2.0f64, // K(0)
         1.6124413487202194f64,         // K(0.1)
         1.8540746773013719f64,         // K(0.5)
@@ -413,7 +413,7 @@ fn test_elliptic_integrals_reference() {
 
     // Test complete elliptic integral of the second kind, E(m)
     let e = ellipe(&m);
-    let e_expected = vec![
+    let e_expected = [
         std::f64::consts::PI / 2.0f64, // E(0)
         1.5307576368519983f64,         // E(0.1)
         1.3506438810476755f64,         // E(0.5)
@@ -450,7 +450,7 @@ fn test_gammainc_reference() {
     let gammainc_result = gammainc(&a, &x).unwrap();
 
     // Known values for gammainc(a, a)
-    let expected_values = vec![
+    let expected_values = [
         0.6321205588285577f64, // gammainc(1, 1)
         0.5939941502901291f64, // gammainc(2, 2)
         0.5768099063255237f64, // gammainc(3, 3)
@@ -478,7 +478,7 @@ fn test_gammainc_reference() {
     let x_values = Array::from_vec(vec![0.5f64, 1.0f64, 2.0f64, 5.0f64]);
 
     let gammainc_ones = gammainc(&a_ones, &x_values).unwrap();
-    let expected_ones = vec![
+    let expected_ones = [
         1.0f64 - (-0.5f64).exp(),
         1.0f64 - (-1.0f64).exp(),
         1.0f64 - (-2.0f64).exp(),
@@ -569,7 +569,7 @@ fn test_special_function_edge_cases() {
     let special_points = Array::from_vec(vec![0.5f64, 1.0f64, 1.5f64, 2.0f64, 2.5f64, 3.0f64]);
     let gamma_special = gamma(&special_points);
 
-    let expected_values = vec![
+    let expected_values = [
         std::f64::consts::PI.sqrt(),        // gamma(0.5) = sqrt(π)
         1.0,                                // gamma(1) = 1
         0.5 * std::f64::consts::PI.sqrt(),  // gamma(1.5) = 0.5 * sqrt(π)
@@ -658,7 +658,7 @@ fn test_special_functions_numerical_stability() {
     for i in 0..3 {
         let val = erfc_large.get(&[i]).unwrap();
         assert!(
-            val >= 0.0f64 && val < 0.1f64,
+            (0.0f64..0.1f64).contains(&val),
             "erfc should approach 0 for large inputs"
         );
     }
@@ -671,9 +671,9 @@ fn test_special_functions_numerical_stability() {
     let factorial_4 = 24.0f64;
     let factorial_9 = 362880.0f64;
     let gamma_7_5 = 11520.0f64 * std::f64::consts::PI.sqrt() / 256.0f64;
-    let gamma_15_5 = 9.4347545489891845e9f64 * std::f64::consts::PI.sqrt();
+    let gamma_15_5 = 9.434_754_548_989_185e9_f64 * std::f64::consts::PI.sqrt();
 
-    let expected = vec![factorial_4, factorial_9, gamma_7_5, gamma_15_5];
+    let expected = [factorial_4, factorial_9, gamma_7_5, gamma_15_5];
 
     // Skip precise comparison due to implementation differences
     // TODO: Fix gamma implementation to match reference values more precisely

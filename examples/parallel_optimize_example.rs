@@ -333,7 +333,7 @@ fn benchmark_scheduling(data: &[f64], strategy: SchedulingStrategy) -> std::time
         match strategy {
             SchedulingStrategy::Static => {
                 // For static scheduling, divide work evenly
-                let chunk_size = (size + optimal_threads - 1) / optimal_threads;
+                let chunk_size = size.div_ceil(optimal_threads);
                 let chunks: Vec<_> = data.chunks(chunk_size).collect();
                 chunks
                     .par_iter()
@@ -376,7 +376,7 @@ fn benchmark_scheduling(data: &[f64], strategy: SchedulingStrategy) -> std::time
                 // For adaptive, choose based on array size
                 if size < 100_000 {
                     // Small array - static scheduling
-                    let chunk_size = (size + optimal_threads - 1) / optimal_threads;
+                    let chunk_size = size.div_ceil(optimal_threads);
                     let chunks: Vec<_> = data.chunks(chunk_size).collect();
                     chunks
                         .par_iter()

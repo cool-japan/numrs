@@ -9,6 +9,8 @@
 //! cargo run --example gpu_example --features gpu
 //! ```
 
+#![allow(clippy::result_large_err)]
+
 use numrs2::array::Array;
 use numrs2::error::Result;
 use std::time::Instant;
@@ -17,6 +19,7 @@ use std::time::Instant;
 #[cfg(feature = "gpu")]
 use numrs2::gpu;
 
+#[allow(clippy::result_large_err)]
 fn main() -> Result<()> {
     println!("NumRS2 GPU Acceleration Example");
     println!("===============================");

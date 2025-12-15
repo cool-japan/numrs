@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::needless_range_loop)]
 
 use numrs2::memory_optimize::{
     align_data, optimize_layout, optimize_memory, optimize_placement, AlignmentStrategy,

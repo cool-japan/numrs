@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::needless_range_loop)]
 
 use numrs2::prelude::*;
 

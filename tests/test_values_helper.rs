@@ -1,9 +1,8 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
 
-/// This is a helper file to generate reference values from the current implementation
-/// to be used in the test_random_reference.rs file.
-
+// This is a helper file to generate reference values from the current implementation
+// to be used in the test_random_reference.rs file.
 fn main() {
     // Set the seed to 42 for reproducibility
     set_seed(42);

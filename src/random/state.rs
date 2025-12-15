@@ -562,9 +562,10 @@ impl RandomState {
         let mut vec = Vec::with_capacity(size);
 
         // Use the RandomState's RNG for reproducibility
-        let mut rng = self.rng.lock().map_err(|_| {
-            NumRs2Error::InvalidOperation("Failed to lock RNG".to_string())
-        })?;
+        let mut rng = self
+            .rng
+            .lock()
+            .map_err(|_| NumRs2Error::InvalidOperation("Failed to lock RNG".to_string()))?;
 
         // Convert to f64 for scirs2_core compatibility
         let low_f64 = low.to_f64().ok_or_else(|| {

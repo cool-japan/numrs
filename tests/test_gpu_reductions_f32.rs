@@ -1,6 +1,7 @@
 //! Tests for GPU reduction operations (f32 only for Metal compatibility)
 
 #[cfg(feature = "gpu")]
+#[allow(clippy::result_large_err)]
 mod gpu_reduction_tests {
     use numrs2::array::Array;
     use numrs2::error::Result;

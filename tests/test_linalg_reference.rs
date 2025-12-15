@@ -7,6 +7,7 @@
 
 #![cfg(feature = "lapack")]
 #![allow(deprecated)] // Suppress deprecation warnings for transitional modules
+#![allow(clippy::result_large_err)]
 
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use num_traits::sign::Signed;
@@ -180,7 +181,7 @@ fn test_matmul_reference() {
     // Expected result of [ 1  2  3 ] * [ 1  2  3 ] = [ 30  36  42 ]
     //                    [ 4  5  6 ]   [ 4  5  6 ]   [ 66  81  96 ]
     //                    [ 7  8  9 ]   [ 7  8  9 ]   [102 126 150 ]
-    let expected_values = vec![30.0, 36.0, 42.0, 66.0, 81.0, 96.0, 102.0, 126.0, 150.0];
+    let expected_values = [30.0, 36.0, 42.0, 66.0, 81.0, 96.0, 102.0, 126.0, 150.0];
 
     let c = a.matmul(&b).unwrap();
 
@@ -196,7 +197,7 @@ fn test_matmul_reference() {
     // Expected result of [ 1  2  3 ] * [ 1 ] = [ 14 ]
     //                    [ 4  5  6 ]   [ 2 ]   [ 32 ]
     //                    [ 7  8  9 ]   [ 3 ]   [ 50 ]
-    let expected_values = vec![14.0, 32.0, 50.0];
+    let expected_values = [14.0, 32.0, 50.0];
 
     let result = a.matmul(&v.reshape(&[3, 1])).unwrap().reshape(&[3]);
 
@@ -239,7 +240,7 @@ fn test_inverse_reference() {
     // [ 0.29411764705882354 -0.05882353 -0.11764706 ]
     // [-0.05882353  0.41176471 -0.17647059 ]
     // [-0.11764706 -0.17647059  0.64705882 ]
-    let expected_values = vec![
+    let expected_values = [
         0.29411764705882354,
         -0.058823529411764705,
         -0.11764705882352941,
@@ -342,7 +343,7 @@ fn test_qr_decomposition_reference() {
     println!("R matrix: {:?}", r.to_vec());
 
     // Expected values for Q (approximate due to potential sign differences)
-    let expected_q_abs = vec![
+    let expected_q_abs = [
         6.0 / 7.0,
         -69.0 / 175.0,
         -58.0 / 175.0,
@@ -367,7 +368,7 @@ fn test_qr_decomposition_reference() {
 
     // Check Q's components (absolute values to account for possible sign differences)
     let q_vec = q.to_vec();
-    for (_idx, (actual, expected)) in q_vec.iter().zip(expected_q_abs.iter()).enumerate() {
+    for (actual, expected) in q_vec.iter().zip(expected_q_abs.iter()) {
         assert_relative_eq!(actual.abs(), expected.abs(), epsilon = 0.01);
     }
 
@@ -763,7 +764,7 @@ fn test_inner_outer_product_reference() {
     // [ 3*4 3*5 3*6 ]   [12 15 18 ]
     let outer_ab = outer(&a, &b).unwrap();
 
-    let expected_outer = vec![4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 12.0, 15.0, 18.0];
+    let expected_outer = [4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 12.0, 15.0, 18.0];
     let outer_ab_vec = outer_ab.to_vec();
 
     for (actual, expected) in outer_ab_vec.iter().zip(expected_outer.iter()) {
@@ -868,7 +869,7 @@ fn test_kron_reference() {
     // [ 3*0.3 3*0.4 4*0.3 4*0.4 ]   [ 0.9 1.2 1.2 1.6 ]
 
     // Define expected values row by row
-    let expected = vec![
+    let expected = [
         0.1, 0.2, 0.2, 0.4, 0.3, 0.4, 0.6, 0.8, 0.3, 0.6, 0.4, 0.8, 0.9, 1.2, 1.2, 1.6,
     ];
 

@@ -524,7 +524,7 @@ mod tests {
         writer
             .write_batch(&[("col1", &arr1), ("col2", &arr2)])
             .unwrap();
-        let buffer = writer.finish().unwrap();
+        writer.finish().unwrap();
 
         // Read back (note: This test is simplified and may need adjustment)
         // In practice, you'd use the buffer bytes for reading

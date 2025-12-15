@@ -1,5 +1,7 @@
 //! Simple benchmark for NumRS2 core operations
 
+#![allow(deprecated)]
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::array::Array;
 use numrs2::stats::Statistics;

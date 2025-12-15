@@ -127,7 +127,7 @@ fn missing_data_example() {
 
     // Create masked array from condition
     let data2 = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
-    let condition = data2.map(|x| x < 3.0 || x > 6.0); // Mask values < 3 or > 6
+    let condition = data2.map(|x| !(3.0..=6.0).contains(&x)); // Mask values < 3 or > 6
     let masked2 = MaskedArray::masked_where(data2, condition, Some(0.0)).unwrap();
     println!(
         "\nData with values masked by condition (x < 3 || x > 6): {}",

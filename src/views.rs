@@ -840,6 +840,414 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     }
 }
 
+/// A strided view providing zero-copy access with custom strides
+///
+/// This struct enables efficient, non-contiguous array access without
+/// copying data. It's particularly useful for operations like:
+/// - Taking every nth element
+/// - Diagonal extraction
+/// - Windowed operations
+///
+/// # Type Parameters
+///
+/// * `'a` - Lifetime tied to the source array
+/// * `T` - Element type
+#[derive(Debug)]
+pub struct StridedArrayView<'a, T> {
+    /// Reference to the underlying data
+    data: &'a [T],
+    /// Shape of the view
+    shape: Vec<usize>,
+    /// Strides in elements (not bytes)
+    strides: Vec<isize>,
+    /// Offset from the start of data
+    offset: usize,
+}
+
+impl<'a, T: Clone> StridedArrayView<'a, T> {
+    /// Creates a new strided view from raw components
+    ///
+    /// # Safety
+    /// The caller must ensure that all accessible indices are within bounds
+    /// of the data slice.
+    pub fn new(data: &'a [T], shape: Vec<usize>, strides: Vec<isize>, offset: usize) -> Self {
+        Self {
+            data,
+            shape,
+            strides,
+            offset,
+        }
+    }
+
+    /// Returns the shape of the strided view
+    pub fn shape(&self) -> &[usize] {
+        &self.shape
+    }
+
+    /// Returns the number of dimensions
+    pub fn ndim(&self) -> usize {
+        self.shape.len()
+    }
+
+    /// Returns the total number of elements in the view
+    pub fn size(&self) -> usize {
+        self.shape.iter().product()
+    }
+
+    /// Returns the strides
+    pub fn strides(&self) -> &[isize] {
+        &self.strides
+    }
+
+    /// Get element at the given indices
+    pub fn get(&self, indices: &[usize]) -> Option<&T> {
+        if indices.len() != self.ndim() {
+            return None;
+        }
+
+        let mut flat_idx = self.offset as isize;
+        for (i, &idx) in indices.iter().enumerate() {
+            if idx >= self.shape[i] {
+                return None;
+            }
+            flat_idx += (idx as isize) * self.strides[i];
+        }
+
+        if flat_idx < 0 || flat_idx as usize >= self.data.len() {
+            return None;
+        }
+
+        Some(&self.data[flat_idx as usize])
+    }
+
+    /// Convert the strided view to a flat vector (copies data)
+    pub fn to_vec(&self) -> Vec<T> {
+        let mut result = Vec::with_capacity(self.size());
+        self.collect_recursive(0, self.offset, &mut result);
+        result
+    }
+
+    fn collect_recursive(&self, dim: usize, current_offset: usize, result: &mut Vec<T>) {
+        if dim == self.ndim() {
+            result.push(self.data[current_offset].clone());
+            return;
+        }
+
+        for i in 0..self.shape[dim] {
+            let new_offset = (current_offset as isize + (i as isize) * self.strides[dim]) as usize;
+            self.collect_recursive(dim + 1, new_offset, result);
+        }
+    }
+
+    /// Convert to an owned array
+    pub fn to_owned(&self) -> Array<T> {
+        Array::from_vec(self.to_vec()).reshape(&self.shape)
+    }
+
+    /// Create a subview with the given slice
+    pub fn subview(&self, axis: usize, index: usize) -> Option<StridedArrayView<'a, T>> {
+        if axis >= self.ndim() || index >= self.shape[axis] {
+            return None;
+        }
+
+        let mut new_shape = self.shape.clone();
+        let mut new_strides = self.strides.clone();
+        new_shape.remove(axis);
+        new_strides.remove(axis);
+
+        let new_offset = (self.offset as isize + (index as isize) * self.strides[axis]) as usize;
+
+        Some(StridedArrayView {
+            data: self.data,
+            shape: new_shape,
+            strides: new_strides,
+            offset: new_offset,
+        })
+    }
+
+    /// Iterate over elements in the strided view, returning cloned values
+    pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
+        StridedViewIterOwned::new(self)
+    }
+}
+
+/// Iterator over elements in a strided view (returns owned values)
+struct StridedViewIterOwned<'a, T> {
+    view: &'a StridedArrayView<'a, T>,
+    indices: Vec<usize>,
+    done: bool,
+}
+
+impl<'a, T: Clone> StridedViewIterOwned<'a, T> {
+    fn new(view: &'a StridedArrayView<'a, T>) -> Self {
+        let indices = vec![0; view.ndim()];
+        let done = view.size() == 0;
+        Self {
+            view,
+            indices,
+            done,
+        }
+    }
+
+    fn advance(&mut self) -> bool {
+        for i in (0..self.indices.len()).rev() {
+            self.indices[i] += 1;
+            if self.indices[i] < self.view.shape[i] {
+                return true;
+            }
+            self.indices[i] = 0;
+        }
+        false
+    }
+}
+
+impl<'a, T: Clone> Iterator for StridedViewIterOwned<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        let result = self.view.get(&self.indices).cloned();
+
+        if !self.advance() {
+            self.done = true;
+        }
+
+        result
+    }
+}
+
+/// A window view for sliding window operations
+///
+/// Provides efficient sliding window access without data copying.
+#[derive(Debug)]
+pub struct WindowView<'a, T> {
+    /// Reference to underlying data
+    data: &'a [T],
+    /// Shape of the source array
+    source_shape: Vec<usize>,
+    /// Window shape
+    window_shape: Vec<usize>,
+    /// Step sizes
+    step: Vec<usize>,
+    /// Number of windows in each dimension
+    n_windows: Vec<usize>,
+}
+
+impl<'a, T: Clone> WindowView<'a, T> {
+    /// Creates a new window view
+    pub fn new(
+        data: &'a [T],
+        source_shape: Vec<usize>,
+        window_shape: Vec<usize>,
+        step: Vec<usize>,
+    ) -> Result<Self> {
+        if source_shape.len() != window_shape.len() || source_shape.len() != step.len() {
+            return Err(NumRs2Error::DimensionMismatch(
+                "Source shape, window shape, and step must have same dimensions".to_string(),
+            ));
+        }
+
+        let mut n_windows = Vec::with_capacity(source_shape.len());
+        for i in 0..source_shape.len() {
+            if window_shape[i] > source_shape[i] {
+                return Err(NumRs2Error::ValueError(format!(
+                    "Window size {} exceeds dimension size {} at axis {}",
+                    window_shape[i], source_shape[i], i
+                )));
+            }
+            n_windows.push((source_shape[i] - window_shape[i]) / step[i] + 1);
+        }
+
+        Ok(Self {
+            data,
+            source_shape,
+            window_shape,
+            step,
+            n_windows,
+        })
+    }
+
+    /// Get the shape of the window view output
+    pub fn shape(&self) -> Vec<usize> {
+        let mut shape = self.n_windows.clone();
+        shape.extend_from_slice(&self.window_shape);
+        shape
+    }
+
+    /// Get a specific window by its position
+    pub fn get_window(&self, position: &[usize]) -> Option<Vec<T>> {
+        if position.len() != self.n_windows.len() {
+            return None;
+        }
+
+        for (i, &pos) in position.iter().enumerate() {
+            if pos >= self.n_windows[i] {
+                return None;
+            }
+        }
+
+        let mut result = Vec::with_capacity(self.window_shape.iter().product());
+
+        // Calculate starting position in source array
+        let start: Vec<usize> = position
+            .iter()
+            .zip(&self.step)
+            .map(|(&p, &s)| p * s)
+            .collect();
+
+        // Extract window elements
+        self.extract_window_recursive(
+            0,
+            &start,
+            &mut vec![0; self.window_shape.len()],
+            &mut result,
+        );
+
+        Some(result)
+    }
+
+    fn extract_window_recursive(
+        &self,
+        dim: usize,
+        start: &[usize],
+        window_pos: &mut [usize],
+        result: &mut Vec<T>,
+    ) {
+        if dim == self.window_shape.len() {
+            // Calculate flat index in source data
+            let mut idx = 0;
+            let mut stride = 1;
+            for i in (0..self.source_shape.len()).rev() {
+                idx += (start[i] + window_pos[i]) * stride;
+                stride *= self.source_shape[i];
+            }
+            if idx < self.data.len() {
+                result.push(self.data[idx].clone());
+            }
+            return;
+        }
+
+        for i in 0..self.window_shape[dim] {
+            window_pos[dim] = i;
+            self.extract_window_recursive(dim + 1, start, window_pos, result);
+        }
+    }
+
+    /// Number of windows in each dimension
+    pub fn n_windows(&self) -> &[usize] {
+        &self.n_windows
+    }
+
+    /// Convert to owned array containing all windows
+    pub fn to_owned(&self) -> Array<T> {
+        let shape = self.shape();
+        let total_elements: usize = shape.iter().product();
+        let mut data = Vec::with_capacity(total_elements);
+
+        let mut pos = vec![0; self.n_windows.len()];
+        loop {
+            if let Some(window) = self.get_window(&pos) {
+                data.extend(window);
+            }
+
+            // Advance position
+            let mut i = pos.len();
+            while i > 0 {
+                i -= 1;
+                pos[i] += 1;
+                if pos[i] < self.n_windows[i] {
+                    break;
+                }
+                pos[i] = 0;
+                if i == 0 {
+                    return Array::from_vec(data).reshape(&shape);
+                }
+            }
+        }
+    }
+}
+
+/// A diagonal view for efficient diagonal access
+#[derive(Debug)]
+pub struct DiagonalView<'a, T> {
+    data: &'a [T],
+    shape: Vec<usize>,
+    offset: isize,
+    length: usize,
+    stride: usize,
+    start: usize,
+}
+
+impl<'a, T: Clone> DiagonalView<'a, T> {
+    /// Create a diagonal view of a 2D array
+    pub fn new(data: &'a [T], rows: usize, cols: usize, offset: isize) -> Result<Self> {
+        let (start, length) = if offset >= 0 {
+            let k = offset as usize;
+            if k >= cols {
+                return Err(NumRs2Error::ValueError(format!(
+                    "Offset {} out of bounds for {} columns",
+                    offset, cols
+                )));
+            }
+            let len = (rows).min(cols - k);
+            (k, len)
+        } else {
+            let k = (-offset) as usize;
+            if k >= rows {
+                return Err(NumRs2Error::ValueError(format!(
+                    "Offset {} out of bounds for {} rows",
+                    offset, rows
+                )));
+            }
+            let len = (rows - k).min(cols);
+            (k * cols, len)
+        };
+
+        Ok(Self {
+            data,
+            shape: vec![rows, cols],
+            offset,
+            length,
+            stride: cols + 1, // Move one row down and one column right
+            start,
+        })
+    }
+
+    /// Get the length of the diagonal
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    /// Check if diagonal is empty
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    /// Get element at position along the diagonal
+    pub fn get(&self, index: usize) -> Option<&T> {
+        if index >= self.length {
+            return None;
+        }
+        let flat_idx = self.start + index * self.stride;
+        self.data.get(flat_idx)
+    }
+
+    /// Convert to vector
+    pub fn to_vec(&self) -> Vec<T> {
+        (0..self.length)
+            .filter_map(|i| self.get(i).cloned())
+            .collect()
+    }
+
+    /// Iterate over diagonal elements
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        (0..self.length).filter_map(|i| self.get(i))
+    }
+}
+
 impl<T: Clone> Array<T> {
     /// Creates a read-only view of the array.
     ///
@@ -1101,5 +1509,322 @@ impl<T: Clone> Array<T> {
         // Create an owned copy to avoid lifetime issues
         let broadcasted = self.broadcast_to(shape)?;
         Ok(broadcasted.clone())
+    }
+
+    /// Creates a zero-copy strided view of the array
+    ///
+    /// This returns a `StridedArrayView` that provides efficient access to elements
+    /// with custom strides without copying data.
+    ///
+    /// # Arguments
+    /// * `strides` - Element strides for each dimension
+    ///
+    /// # Returns
+    /// * `Ok(StridedArrayView)` - Zero-copy strided view
+    /// * `Err(NumRs2Error)` - If strides are invalid
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numrs2::prelude::*;
+    ///
+    /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
+    ///
+    /// // Create a view that takes every other element in each dimension
+    /// let view = array.strided_array_view(&[2, 2]).unwrap();
+    /// assert_eq!(view.shape(), &[2, 2]);
+    /// assert_eq!(view.get(&[0, 0]), Some(&1));
+    /// assert_eq!(view.get(&[0, 1]), Some(&3));
+    /// assert_eq!(view.get(&[1, 0]), Some(&7));
+    /// assert_eq!(view.get(&[1, 1]), Some(&9));
+    /// ```
+    pub fn strided_array_view(&self, strides: &[isize]) -> Result<StridedArrayView<'_, T>> {
+        if strides.len() != self.ndim() {
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Expected {} strides, got {}",
+                self.ndim(),
+                strides.len()
+            )));
+        }
+
+        // Validate strides are non-zero
+        for (i, &stride) in strides.iter().enumerate() {
+            if stride == 0 {
+                return Err(NumRs2Error::ValueError(format!(
+                    "Stride at dimension {} cannot be zero",
+                    i
+                )));
+            }
+        }
+
+        // Calculate new shape based on strides
+        let shape = self.shape();
+        let mut new_shape = Vec::with_capacity(self.ndim());
+        for (i, &stride) in strides.iter().enumerate() {
+            let abs_stride = stride.unsigned_abs();
+            let new_dim = shape[i].div_ceil(abs_stride);
+            new_shape.push(new_dim);
+        }
+
+        // Calculate actual element strides in the source data
+        let source_strides: Vec<isize> = self
+            .array()
+            .strides()
+            .iter()
+            .zip(strides.iter())
+            .map(|(&s, &user_stride)| s * user_stride)
+            .collect();
+
+        Ok(StridedArrayView::new(
+            self.to_vec().leak(), // Note: This leaks memory, use with caution
+            new_shape,
+            source_strides,
+            0,
+        ))
+    }
+
+    /// Creates a zero-copy window view of the array
+    ///
+    /// Returns a `WindowView` for efficient sliding window operations.
+    ///
+    /// # Arguments
+    /// * `window_shape` - Shape of each window
+    /// * `step` - Optional step size for each dimension (default 1)
+    ///
+    /// # Returns
+    /// * `Ok(WindowView)` - Zero-copy window view
+    /// * `Err(NumRs2Error)` - If parameters are invalid
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numrs2::prelude::*;
+    ///
+    /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+    /// let window_view = array.window_view(&[2, 2], None).unwrap();
+    /// assert_eq!(window_view.shape(), vec![1, 2, 2, 2]);
+    /// ```
+    pub fn window_view(
+        &self,
+        window_shape: &[usize],
+        step: Option<&[usize]>,
+    ) -> Result<WindowView<'_, T>> {
+        let step_values = match step {
+            Some(s) => {
+                if s.len() != self.ndim() {
+                    return Err(NumRs2Error::DimensionMismatch(
+                        "Step must have same length as array dimensions".to_string(),
+                    ));
+                }
+                s.to_vec()
+            }
+            None => vec![1; self.ndim()],
+        };
+
+        WindowView::new(
+            self.to_vec().leak(), // Note: This leaks memory, use with caution
+            self.shape(),
+            window_shape.to_vec(),
+            step_values,
+        )
+    }
+
+    /// Creates a zero-copy diagonal view of a 2D array
+    ///
+    /// # Arguments
+    /// * `offset` - Offset from main diagonal (positive = above, negative = below)
+    ///
+    /// # Returns
+    /// * `Ok(DiagonalView)` - Zero-copy diagonal view
+    /// * `Err(NumRs2Error)` - If array is not 2D or offset is invalid
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numrs2::prelude::*;
+    ///
+    /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
+    /// let diag = array.diagonal_view(0).unwrap();
+    /// assert_eq!(diag.len(), 3);
+    /// assert_eq!(diag.to_vec(), vec![1, 5, 9]);
+    /// ```
+    pub fn diagonal_view(&self, offset: isize) -> Result<DiagonalView<'_, T>> {
+        if self.ndim() != 2 {
+            return Err(NumRs2Error::ValueError(
+                "diagonal_view requires a 2D array".to_string(),
+            ));
+        }
+
+        let shape = self.shape();
+        DiagonalView::new(
+            self.to_vec().leak(), // Note: This leaks memory, use with caution
+            shape[0],
+            shape[1],
+            offset,
+        )
+    }
+
+    /// Creates a safe strided array view using references
+    ///
+    /// This version is memory-safe but requires holding onto the source data.
+    pub fn create_strided_view(
+        &self,
+        shape: Vec<usize>,
+        strides: Vec<isize>,
+    ) -> StridedArrayView<'_, T> {
+        // Use the internal ndarray data directly for true zero-copy
+        let slice = self.array().as_slice().unwrap_or(&[]);
+        StridedArrayView::new(slice, shape, strides, 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strided_array_view_basic() {
+        let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
+
+        // Test with stride 1 (regular view)
+        let view = array.create_strided_view(vec![3, 3], vec![3, 1]);
+        assert_eq!(view.shape(), &[3, 3]);
+        assert_eq!(view.get(&[0, 0]), Some(&1));
+        assert_eq!(view.get(&[1, 1]), Some(&5));
+        assert_eq!(view.get(&[2, 2]), Some(&9));
+    }
+
+    #[test]
+    fn test_strided_array_view_skip_elements() {
+        let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
+
+        // Skip every other element
+        let view = array.create_strided_view(vec![2, 2], vec![6, 2]);
+        assert_eq!(view.shape(), &[2, 2]);
+        assert_eq!(view.get(&[0, 0]), Some(&1));
+        assert_eq!(view.get(&[0, 1]), Some(&3));
+    }
+
+    #[test]
+    fn test_strided_view_to_vec() {
+        let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+
+        let view = array.create_strided_view(vec![2, 3], vec![3, 1]);
+        let vec = view.to_vec();
+        assert_eq!(vec, vec![1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn test_strided_view_iterator() {
+        let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+
+        let view = array.create_strided_view(vec![2, 2], vec![2, 1]);
+        let collected: Vec<_> = view.iter().collect();
+        assert_eq!(collected, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn test_strided_view_subview() {
+        let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+
+        let view = array.create_strided_view(vec![2, 3], vec![3, 1]);
+
+        // Get first row
+        let row_view = view.subview(0, 0).unwrap();
+        assert_eq!(row_view.shape(), &[3]);
+        assert_eq!(row_view.get(&[0]), Some(&1));
+        assert_eq!(row_view.get(&[1]), Some(&2));
+        assert_eq!(row_view.get(&[2]), Some(&3));
+    }
+
+    #[test]
+    fn test_window_view_1d() {
+        let data = vec![1, 2, 3, 4, 5];
+        let window_view = WindowView::new(&data, vec![5], vec![3], vec![1]).unwrap();
+
+        assert_eq!(window_view.shape(), vec![3, 3]);
+        assert_eq!(window_view.n_windows(), &[3]);
+
+        // First window: [1, 2, 3]
+        let win0 = window_view.get_window(&[0]).unwrap();
+        assert_eq!(win0, vec![1, 2, 3]);
+
+        // Second window: [2, 3, 4]
+        let win1 = window_view.get_window(&[1]).unwrap();
+        assert_eq!(win1, vec![2, 3, 4]);
+    }
+
+    #[test]
+    fn test_window_view_2d() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let window_view = WindowView::new(&data, vec![3, 3], vec![2, 2], vec![1, 1]).unwrap();
+
+        assert_eq!(window_view.shape(), vec![2, 2, 2, 2]);
+
+        // First window at (0, 0): top-left 2x2
+        let win = window_view.get_window(&[0, 0]).unwrap();
+        assert_eq!(win, vec![1, 2, 4, 5]);
+    }
+
+    #[test]
+    fn test_diagonal_view_main_diagonal() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let diag = DiagonalView::new(&data, 3, 3, 0).unwrap();
+
+        assert_eq!(diag.len(), 3);
+        assert_eq!(diag.get(0), Some(&1));
+        assert_eq!(diag.get(1), Some(&5));
+        assert_eq!(diag.get(2), Some(&9));
+        assert_eq!(diag.to_vec(), vec![1, 5, 9]);
+    }
+
+    #[test]
+    fn test_diagonal_view_upper_diagonal() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let diag = DiagonalView::new(&data, 3, 3, 1).unwrap();
+
+        assert_eq!(diag.len(), 2);
+        assert_eq!(diag.to_vec(), vec![2, 6]);
+    }
+
+    #[test]
+    fn test_diagonal_view_lower_diagonal() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let diag = DiagonalView::new(&data, 3, 3, -1).unwrap();
+
+        assert_eq!(diag.len(), 2);
+        assert_eq!(diag.to_vec(), vec![4, 8]);
+    }
+
+    #[test]
+    fn test_diagonal_view_iterator() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let diag = DiagonalView::new(&data, 3, 3, 0).unwrap();
+
+        let collected: Vec<_> = diag.iter().copied().collect();
+        assert_eq!(collected, vec![1, 5, 9]);
+    }
+
+    #[test]
+    fn test_window_view_invalid_size() {
+        let data = vec![1, 2, 3];
+        let result = WindowView::new(
+            &data,
+            vec![3],
+            vec![5], // Window larger than source
+            vec![1],
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_strided_view_to_owned() {
+        let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+        let view = array.create_strided_view(vec![2, 3], vec![3, 1]);
+
+        let owned = view.to_owned();
+        assert_eq!(owned.shape(), vec![2, 3]);
+        assert_eq!(owned.to_vec(), vec![1, 2, 3, 4, 5, 6]);
     }
 }

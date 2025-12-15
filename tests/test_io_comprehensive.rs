@@ -36,8 +36,10 @@ fn test_loadtxt_with_comments_and_skip() {
     writeln!(temp_file, "# This is a comment in the middle").unwrap();
     writeln!(temp_file, "7.0 8.0 9.0").unwrap();
 
-    let mut options = LoadTxtOptions::default();
-    options.skiprows = 0; // Don't skip any rows, just ignore comments
+    let options = LoadTxtOptions {
+        skiprows: 0, // Don't skip any rows, just ignore comments
+        ..Default::default()
+    };
 
     let array = loadtxt::<f64>(temp_file.path(), options).unwrap();
     assert_eq!(array.shape(), &[3, 3]);
@@ -53,8 +55,10 @@ fn test_loadtxt_with_delimiter() {
     writeln!(temp_file, "1.0,2.0,3.0").unwrap();
     writeln!(temp_file, "4.0,5.0,6.0").unwrap();
 
-    let mut options = LoadTxtOptions::default();
-    options.delimiter = Some(",".to_string());
+    let options = LoadTxtOptions {
+        delimiter: Some(",".to_string()),
+        ..Default::default()
+    };
 
     let array = loadtxt::<f64>(temp_file.path(), options).unwrap();
     assert_eq!(array.shape(), &[2, 3]);
@@ -67,8 +71,10 @@ fn test_loadtxt_with_usecols() {
     writeln!(temp_file, "1.0 2.0 3.0 4.0").unwrap();
     writeln!(temp_file, "5.0 6.0 7.0 8.0").unwrap();
 
-    let mut options = LoadTxtOptions::default();
-    options.usecols = Some(vec![0, 2]); // Only columns 0 and 2
+    let options = LoadTxtOptions {
+        usecols: Some(vec![0, 2]), // Only columns 0 and 2
+        ..Default::default()
+    };
 
     let array = loadtxt::<f64>(temp_file.path(), options).unwrap();
     assert_eq!(array.shape(), &[2, 2]);
@@ -83,8 +89,10 @@ fn test_loadtxt_with_max_rows() {
     writeln!(temp_file, "5.0 6.0").unwrap();
     writeln!(temp_file, "7.0 8.0").unwrap();
 
-    let mut options = LoadTxtOptions::default();
-    options.max_rows = Some(2);
+    let options = LoadTxtOptions {
+        max_rows: Some(2),
+        ..Default::default()
+    };
 
     let array = loadtxt::<f64>(temp_file.path(), options).unwrap();
     assert_eq!(array.shape(), &[2, 2]);
@@ -121,8 +129,10 @@ fn test_savetxt_with_delimiter() {
     let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
     let temp_file = NamedTempFile::new().unwrap();
 
-    let mut options = SaveTxtOptions::default();
-    options.delimiter = ",".to_string();
+    let options = SaveTxtOptions {
+        delimiter: ",".to_string(),
+        ..Default::default()
+    };
 
     savetxt(temp_file.path(), &array, options).unwrap();
 
@@ -135,9 +145,11 @@ fn test_savetxt_with_header_footer() {
     let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
     let temp_file = NamedTempFile::new().unwrap();
 
-    let mut options = SaveTxtOptions::default();
-    options.header = Some("x y".to_string());
-    options.footer = Some("End of data".to_string());
+    let options = SaveTxtOptions {
+        header: Some("x y".to_string()),
+        footer: Some("End of data".to_string()),
+        ..Default::default()
+    };
 
     savetxt(temp_file.path(), &array, options).unwrap();
 
@@ -182,9 +194,11 @@ fn test_genfromtxt_with_skip_header_footer() {
     writeln!(temp_file, "3.0 4.0").unwrap();
     writeln!(temp_file, "Footer line").unwrap();
 
-    let mut options = GenFromTxtOptions::default();
-    options.skip_header = 2;
-    options.skip_footer = 1;
+    let options = GenFromTxtOptions {
+        skip_header: 2,
+        skip_footer: 1,
+        ..Default::default()
+    };
 
     let array = genfromtxt::<f64>(temp_file.path(), options).unwrap();
     assert_eq!(array.shape(), &[2, 2]);
@@ -198,9 +212,10 @@ fn test_genfromtxt_with_custom_missing_values() {
     writeln!(temp_file, "4.0 MISSING 6.0").unwrap();
     writeln!(temp_file, "7.0 8.0 EMPTY").unwrap();
 
-    let mut options = GenFromTxtOptions::default();
-    options.default_missing.push("MISSING".to_string());
-    options.default_missing.push("EMPTY".to_string());
+    let options = GenFromTxtOptions {
+        default_missing: vec!["MISSING".to_string(), "EMPTY".to_string()],
+        ..Default::default()
+    };
 
     let array = genfromtxt::<f64>(temp_file.path(), options).unwrap();
     assert_eq!(array.shape(), &[3, 3]);
@@ -483,14 +498,14 @@ fn test_error_handling() {
     // Test invalid file path
     let array = Array::from_vec(vec![1.0, 2.0]);
     let result = array.to_file(
-        &std::path::Path::new("/invalid/path/file.npy"),
+        std::path::Path::new("/invalid/path/file.npy"),
         SerializeFormat::Npy,
     );
     assert!(result.is_err());
 
     // Test loading non-existent file
     let result = Array::<f64>::from_file(
-        &std::path::Path::new("/non/existent/file.npy"),
+        std::path::Path::new("/non/existent/file.npy"),
         SerializeFormat::Npy,
     );
     assert!(result.is_err());
@@ -517,13 +532,17 @@ fn test_text_io_roundtrip() {
     let temp_file = NamedTempFile::new().unwrap();
 
     // Save using savetxt
-    let mut save_options = SaveTxtOptions::default();
-    save_options.delimiter = " ".to_string();
+    let save_options = SaveTxtOptions {
+        delimiter: " ".to_string(),
+        ..Default::default()
+    };
     savetxt(temp_file.path(), &array, save_options).unwrap();
 
     // Load using loadtxt
-    let mut load_options = LoadTxtOptions::default();
-    load_options.delimiter = None; // Use whitespace as delimiter
+    let load_options = LoadTxtOptions {
+        delimiter: None, // Use whitespace as delimiter
+        ..Default::default()
+    };
     let loaded_array = loadtxt::<f64>(temp_file.path(), load_options).unwrap();
 
     assert_eq!(loaded_array.shape(), array.shape());

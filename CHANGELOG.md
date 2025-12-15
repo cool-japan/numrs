@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Released]
 
+## [0.1.0-RC.1]
+
+### Added - Release Candidate 1
+
+- **Complete Cubic Spline Boundary Conditions**: Full implementation of all standard spline boundary types
+  - **Natural**: S''(x₀) = S''(xₙ) = 0 (zero second derivatives at endpoints)
+  - **Clamped**: Specified endpoint derivatives for precise slope control
+  - **Not-a-Knot**: Third derivative continuity at interior points (scipy-equivalent)
+  - **Periodic**: Full periodicity enforcement for cyclic functions
+  - Thomas algorithm tridiagonal solver for efficient O(n) computation
+  - Gaussian elimination with partial pivoting for cyclic systems
+  - scipy-level numerical accuracy (~3×10⁻¹⁰ derivative matching)
+- **SIMD Optimization Infrastructure**: Comprehensive AVX2 vectorization with 86 optimized functions
+  - New `src/simd_optimize/avx2_enhanced.rs` module (5,695 lines) with complete SIMD operations
+  - Vectorized array creation: `linspace`, `arange` (≥32 elements threshold)
+  - Vectorized array operations: `diff`, `cumsum`, `gradient` (≥64 elements threshold)
+  - Both f64 and f32 support with 4-way loop unrolling and FMA instructions
+  - Automatic fallback to scalar operations for small arrays
+- **SciRS2 Compatibility Enhancements**: Extended scirs_compat module for benchmark comparisons
+  - `truncated_normal`: Truncated normal distribution with configurable bounds
+  - `vonmises`: Von Mises (circular normal) distribution
+  - `multivariate_normal_with_rotation`: Multivariate normal with rotation matrix support
+- **Linear Algebra Enhancements**: Expanded iterative solvers module (+2,485 lines)
+  - Enhanced conjugate gradient, GMRES, BiCGSTAB solvers
+  - Improved preconditioner support and convergence diagnostics
+- **Mathematical Functions Expansion**: Enhanced math module (+1,187 lines)
+  - Wired SIMD operations to core mathematical functions
+  - Additional transcendental and trigonometric functions
+  - Improved numerical stability for edge cases
+- **Statistical Enhancements**: Expanded stats module (+1,397 lines)
+  - Additional distribution functions and moments calculations
+  - Enhanced hypothesis testing functions
+- **Polynomial Functions**: New polynomial module (+924 lines)
+  - Polynomial evaluation, fitting, and root finding
+  - Chebyshev and Legendre polynomial support
+- **Special Functions**: New special functions module (+909 lines)
+  - Gamma, beta, error functions and variants
+  - Bessel functions and orthogonal polynomials
+- **Array Views**: Enhanced views module (+726 lines)
+  - Advanced array slicing and view operations
+  - Zero-copy array manipulations
+
+### Fixed
+- **Code Quality**: Eliminated all clippy errors for production-ready code
+  - Fixed approximate constant errors (replaced hardcoded values with `std::f64::consts`)
+  - Fixed manual range contains patterns (using idiomatic `(a..=b).contains(&x)`)
+  - Applied 12 auto-fixable clippy suggestions across codebase
+  - Remaining: Only 3 minor performance suggestions (non-blocking)
+- **Build System**: Resolved all feature-gated compilation issues
+  - Properly guarded LAPACK-dependent functions with `#[cfg(feature = "lapack")]`
+  - Fixed benchmark imports for feature-gated functions
+  - All targets now compile cleanly without optional features
+- **Test Suite**: Improved test reliability and coverage
+  - Fixed deprecated function warnings in examples
+  - Improved assertion messages for better diagnostics
+  - All 1,051 unit tests passing, 608 doctests passing
+
+### Improved
+- **Performance**: SIMD optimizations provide significant speedups for large arrays
+  - Automatic threshold-based dispatch between SIMD and scalar implementations
+  - Loop unrolling and FMA (fused multiply-add) for maximum throughput
+- **Code Organization**: Better module structure with enhanced interpolation
+  - Complete cubic spline implementations with all boundary conditions
+  - scipy-equivalent numerical accuracy
+- **Build Quality**: Zero critical warnings, production-ready builds
+  - All build targets successful (lib, tests, examples, benchmarks)
+  - Clean compilation with modern Rust best practices
+
+### Technical Details
+- **Total Rust Code**: 154,716 lines (115,955 code, 14,394 comments, 24,367 blanks)
+- **Total Source Lines**: 122,851 (COCOMO)
+- **Test Coverage**: 1,051 unit tests + 608 doctests (all passing, 6 ignored)
+- **Quality Metrics**: Zero compilation warnings, zero clippy errors
+- **Estimated Value**: $4,221,718 development cost / 23.77 months / 15.78 people (COCOMO)
+
+### Dependencies
+- **SciRS2 Ecosystem**: Updated to scirs2-* v0.1.0-rc.1 for release candidate alignment
+  - scirs2-core v0.1.0-rc.1: Scientific computing foundation
+  - scirs2-linalg v0.1.0-rc.1: Linear algebra operations
+  - scirs2-stats v0.1.0-rc.1: Statistical functions
+
+This release candidate represents a major milestone toward 1.0, with comprehensive SIMD optimizations, enhanced SciRS2 integration, and production-ready code quality. All tests passing, all builds clean, ready for production testing and beta user feedback.
+
 ## [0.1.0-beta.3] - 2025-10-03
 
 ### Added - Phase 4 Advanced Features

@@ -3,6 +3,9 @@
 //! This file contains benchmarks for various special functions
 //! to track performance and identify bottlenecks.
 
+#![allow(clippy::needless_range_loop)]
+#![allow(deprecated)]
+
 #[macro_use]
 extern crate criterion;
 use criterion::{BenchmarkId, Criterion};
@@ -285,14 +288,14 @@ mod numerics {
 
             let g = 7.0; // Lanczos parameter
             let coeffs = [
-                0.99999999999980993,
+                0.999_999_999_999_809_9,
                 676.5203681218851,
                 -1259.1392167224028,
-                771.32342877765313,
-                -176.61502916214059,
+                771.323_428_777_653_1,
+                -176.615_029_162_140_6,
                 12.507343278686905,
                 -0.13857109526572012,
-                9.9843695780195716e-6,
+                9.984_369_578_019_572e-6,
                 1.5056327351493116e-7,
             ];
 
@@ -302,11 +305,11 @@ mod numerics {
             // Calculate the approximation
             let mut sum = coeffs[0];
             for i in 1..coeffs.len() {
-                sum = sum + coeffs[i] / (x + i as f64);
+                sum += coeffs[i] / (x + i as f64);
             }
 
             let t = x + g + 0.5;
-            let sqrt_2pi = 2.506628274631000502415765284811; // sqrt(2*pi)
+            let sqrt_2pi = 2.506_628_274_631_000_7; // sqrt(2*pi)
 
             sqrt_2pi * sum * t.powf(x + 0.5) * (-t).exp()
         }

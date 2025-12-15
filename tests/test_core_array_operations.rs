@@ -117,7 +117,7 @@ mod array_creation_tests {
 
         // Test with different endpoints
         let arr2 = linspace(-1.0, 1.0, 5);
-        let expected = vec![-1.0, -0.5, 0.0, 0.5, 1.0];
+        let expected = [-1.0, -0.5, 0.0, 0.5, 1.0];
         for (actual, &expected) in arr2.to_vec().iter().zip(expected.iter()) {
             assert_relative_eq!(*actual, expected, epsilon = 1e-10);
         }
@@ -348,7 +348,7 @@ mod arithmetic_operations_tests {
         let result_vec = result.to_vec();
         assert_eq!(result_vec.len(), 4);
         // All values should be sums of original arrays
-        assert!(result_vec.iter().all(|&x| x >= 11.0 && x <= 24.0));
+        assert!(result_vec.iter().all(|&x| (11.0..=24.0).contains(&x)));
     }
 
     #[test]
@@ -1022,7 +1022,7 @@ mod sorting_searching_tests {
             let count_vec = counts.to_vec();
             assert_eq!(count_vec.len(), 4);
             // Each unique value should have appropriate count
-            assert!(count_vec.iter().all(|&c| c >= 1 && c <= 2));
+            assert!(count_vec.iter().all(|&c| (1..=2).contains(&c)));
         } else {
             // If counts weren't returned, that's also okay - just verify unique values
             println!("Counts not returned, which is acceptable for this implementation");

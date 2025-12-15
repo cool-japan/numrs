@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 // NumRS2 Type Conversion Example
 //

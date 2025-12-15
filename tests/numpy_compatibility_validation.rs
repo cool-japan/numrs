@@ -124,7 +124,7 @@ fn test_complex_operations_numpy_equivalence() {
 
     // Test conjugate
     // >>> np.conj(a)
-    let expected_conj = vec![
+    let expected_conj = [
         Complex::new(3.0, -4.0),
         Complex::new(1.0, 0.0),
         Complex::new(0.0, -1.0),
@@ -176,7 +176,7 @@ fn test_mathematical_functions_numpy_equivalence() {
         1.0,
         0.8775825618903728,
         0.5403023058681398,
-        0.07073720166770291,
+        0.070_737_201_667_702_9,
         -0.4161468365471424,
     ];
     let result_cos = test_data.cos();

@@ -1,4 +1,5 @@
 //! Tests for GPU reduction operations
+#![allow(clippy::result_large_err)]
 
 #[cfg(feature = "gpu")]
 mod gpu_reduction_tests {

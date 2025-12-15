@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 // Example demonstrating the `unique` function in NumRS2
 //

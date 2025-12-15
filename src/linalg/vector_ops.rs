@@ -29,17 +29,23 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             // L1 norm (sum of absolute values)
             #[cfg(target_arch = "x86_64")]
             {
-                // Use SIMD for large f32 vectors
-                if a.len() >= SIMD_THRESHOLD
-                    && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>()
-                {
-                    // Convert to f32, compute SIMD norm, and convert back
-                    let data = a.to_vec();
-                    let f32_data: Vec<f32> =
-                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
-                    let f32_array = Array::from_vec(f32_data);
-                    let result = EnhancedSimdOps::vectorized_norm_l1_f32(&f32_array);
-                    return Ok(T::from(result).unwrap());
+                // Use SIMD for large vectors
+                if a.len() >= SIMD_THRESHOLD {
+                    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                        let data = a.to_vec();
+                        let f32_data: Vec<f32> =
+                            data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                        let f32_array = Array::from_vec(f32_data);
+                        let result = EnhancedSimdOps::vectorized_norm_l1_f32(&f32_array);
+                        return Ok(T::from(result).unwrap());
+                    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                        let data = a.to_vec();
+                        let f64_data: Vec<f64> =
+                            data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                        let f64_array = Array::from_vec(f64_data);
+                        let result = EnhancedSimdOps::vectorized_norm_l1_f64(&f64_array);
+                        return Ok(T::from(result).unwrap());
+                    }
                 }
             }
 
@@ -75,6 +81,28 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             Ok(sum_squares.sqrt())
         } else if ord == T::from(f64::INFINITY).unwrap() {
             // L-infinity norm (maximum absolute value)
+            #[cfg(target_arch = "x86_64")]
+            {
+                // Use SIMD for large vectors
+                if a.len() >= SIMD_THRESHOLD {
+                    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                        let data = a.to_vec();
+                        let f32_data: Vec<f32> =
+                            data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                        let f32_array = Array::from_vec(f32_data);
+                        let result = EnhancedSimdOps::vectorized_norm_linf_f32(&f32_array);
+                        return Ok(T::from(result).unwrap());
+                    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                        let data = a.to_vec();
+                        let f64_data: Vec<f64> =
+                            data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                        let f64_array = Array::from_vec(f64_data);
+                        let result = EnhancedSimdOps::vectorized_norm_linf_f64(&f64_array);
+                        return Ok(T::from(result).unwrap());
+                    }
+                }
+            }
+
             let data = a.to_vec();
             let max_abs = data.iter().fold(T::zero(), |acc, &x| T::max(acc, x.abs()));
             Ok(max_abs)
@@ -414,7 +442,7 @@ pub fn inner<T: Float + Clone + Debug + 'static>(a: &Array<T>, b: &Array<T>) -> 
                 let f64_b_data: Vec<f64> = b_data.iter().map(|&x| x.to_f64().unwrap()).collect();
                 let f64_a = Array::from_vec(f64_a_data);
                 let f64_b = Array::from_vec(f64_b_data);
-                let result = EnhancedSimdOps::vectorized_dot_f64(&f64_a, &f64_b)?;
+                let result = EnhancedSimdOps::vectorized_dot_f64(&f64_a, &f64_b);
                 return Ok(T::from(result).unwrap());
             }
         }

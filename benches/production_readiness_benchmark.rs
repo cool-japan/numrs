@@ -4,7 +4,11 @@
 //! essential for production use, including memory efficiency, SIMD optimization,
 //! parallel processing, and numerical stability.
 
+#![allow(deprecated)]
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+#[cfg(feature = "lapack")]
+use numrs2::linalg::inv;
 use numrs2::parallel::parallel_algorithms::ParallelArrayOps;
 use numrs2::prelude::*;
 use numrs2::stats::Statistics;
@@ -143,6 +147,7 @@ impl ProductionBenchmarks {
         group.measurement_time(Duration::from_secs(5));
 
         for size in [32, 64, 128].iter() {
+            #[cfg(feature = "lapack")]
             group.bench_with_input(
                 BenchmarkId::new("matrix_inverse", size),
                 size,
@@ -160,7 +165,7 @@ impl ProductionBenchmarks {
                     }
                     let matrix = Array::from_vec(data).reshape(&[size, size]);
 
-                    bench.iter(|| black_box(matrix.inv().unwrap()));
+                    bench.iter(|| black_box(inv(&matrix).unwrap()));
                 },
             );
 

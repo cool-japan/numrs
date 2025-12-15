@@ -186,7 +186,7 @@ where
 /// let result_2d = where_cond(&condition_2d, &x_scalar, &y_2d).unwrap();
 /// assert_eq!(result_2d.to_vec(), vec![100, 2, 100, 4]);
 /// ```
-pub fn where_cond<T: Clone + Display>(
+pub fn where_cond<T: Clone + Display + Send + Sync>(
     condition: &Array<bool>,
     x: &Array<T>,
     y: &Array<T>,
@@ -210,20 +210,37 @@ pub fn where_cond<T: Clone + Display>(
     let x_data = x_broadcast.to_vec();
     let y_data = y_broadcast.to_vec();
 
-    let result_data: Vec<T> = cond_data
-        .iter()
-        .zip(x_data.iter())
-        .zip(y_data.iter())
-        .map(
-            |((&cond, x_val), y_val)| {
-                if cond {
-                    x_val.clone()
+    const PARALLEL_THRESHOLD: usize = 1000;
+
+    let result_data: Vec<T> = if cond_data.len() >= PARALLEL_THRESHOLD {
+        use scirs2_core::parallel_ops::*;
+
+        (0..cond_data.len())
+            .into_par_iter()
+            .map(|i| {
+                if cond_data[i] {
+                    x_data[i].clone()
                 } else {
-                    y_val.clone()
+                    y_data[i].clone()
                 }
-            },
-        )
-        .collect();
+            })
+            .collect()
+    } else {
+        cond_data
+            .iter()
+            .zip(x_data.iter())
+            .zip(y_data.iter())
+            .map(
+                |((&cond, x_val), y_val)| {
+                    if cond {
+                        x_val.clone()
+                    } else {
+                        y_val.clone()
+                    }
+                },
+            )
+            .collect()
+    };
 
     Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
 }

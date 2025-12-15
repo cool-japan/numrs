@@ -34,3 +34,5 @@ output.*
 **/.ipynb_checkpoints/
 ./.ipynb_checkpoints/
 
+*.proptest-regressions
+proptest-regressions/

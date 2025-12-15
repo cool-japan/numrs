@@ -288,7 +288,7 @@ fn test_multiple_data_types() {
 
     // Get field arrays and verify values
     let bool_field: Array<bool> = arr.field("bool_field").unwrap();
-    assert_eq!(bool_field.array()[[0]], true);
+    assert!(bool_field.array()[[0]]);
 
     let int8_field: Array<i8> = arr.field("int8_field").unwrap();
     assert_eq!(int8_field.array()[[0]], 42i8);

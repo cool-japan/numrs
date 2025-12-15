@@ -193,11 +193,9 @@ fn benchmark_adaptive_algorithms() {
 
         let time = {
             let start = Instant::now();
-            let _ = SimdMathOps::adaptive_math_function(
-                &data_view,
-                |data| enhanced_exp::simd_sqrt(data),
-                |x| x.sqrt(),
-            );
+            let _ = SimdMathOps::adaptive_math_function(&data_view, enhanced_exp::simd_sqrt, |x| {
+                x.sqrt()
+            });
             start.elapsed()
         };
 

@@ -4,6 +4,8 @@
 //! for core array operations, demonstrating the performance characteristics of the Rust
 //! implementation.
 
+#![allow(deprecated)]
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::array::Array;
 use numrs2::array_ops;

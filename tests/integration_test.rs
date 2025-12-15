@@ -43,7 +43,7 @@ fn test_complex_ops_and_advanced_indexing_integration() {
     let imag_vec = imag_part.to_vec();
     let complex_vec: Vec<Complex<f64>> = real_vec
         .into_iter()
-        .zip(imag_vec.into_iter())
+        .zip(imag_vec)
         .map(|(r, i)| Complex::new(r, i))
         .collect();
     let complex_array = Array::from_vec(complex_vec);
@@ -82,7 +82,7 @@ fn test_complex_bitwise_advanced_indexing_chain() {
     let orig_vec = int_data.to_vec();
     let complex_with_imag_vec: Vec<Complex<f64>> = complex_vec
         .into_iter()
-        .zip(orig_vec.into_iter())
+        .zip(orig_vec)
         .map(|(c, orig)| Complex::new(c.re, orig as f64))
         .collect();
     let complex_with_imag = Array::from_vec(complex_with_imag_vec);
@@ -92,7 +92,7 @@ fn test_complex_bitwise_advanced_indexing_chain() {
     let large_real_complex = advanced_indexing::extract(&complex_with_imag, &condition).unwrap();
 
     // Verify we got the expected results
-    assert!(large_real_complex.len() > 0);
+    assert!(!large_real_complex.is_empty());
     for complex_num in large_real_complex.to_vec() {
         assert!(complex_num.re > 100.0);
     }
@@ -260,7 +260,7 @@ fn test_performance_integration_large_arrays() {
     let extracted = advanced_indexing::extract(&complex_large, &condition).unwrap();
 
     // Verify we got reasonable results
-    assert!(extracted.len() > 0);
+    assert!(!extracted.is_empty());
     assert!(extracted.len() < size as usize); // Should have filtered some elements
 
     // Verify all extracted elements meet the condition

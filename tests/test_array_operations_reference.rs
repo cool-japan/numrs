@@ -307,7 +307,7 @@ mod arithmetic_operations_tests {
         let reference_data = load_reference_data();
         let arithmetic_tests = &reference_data["arithmetic_operations"];
 
-        for (_test_name, test_data) in arithmetic_tests {
+        for test_data in arithmetic_tests.values() {
             let test_obj = test_data.as_object().unwrap();
             let operation = test_obj["operation"].as_str().unwrap();
 
@@ -377,7 +377,7 @@ mod mathematical_functions_tests {
         let reference_data = load_reference_data();
         let math_tests = &reference_data["mathematical_functions"];
 
-        for (_test_name, test_data) in math_tests {
+        for test_data in math_tests.values() {
             let test_obj = test_data.as_object().unwrap();
             let operation = test_obj["operation"].as_str().unwrap();
 
@@ -411,7 +411,7 @@ mod mathematical_functions_tests {
                     "Array sizes don't match"
                 );
 
-                for (_i, (&a, &e)) in actual_vec.iter().zip(expected_vec.iter()).enumerate() {
+                for (&a, &e) in actual_vec.iter().zip(expected_vec.iter()) {
                     // Skip comparisons involving NaN or infinite values since they indicate
                     // different approaches to handling edge cases (log of negative, etc.)
                     if a.is_nan() || e.is_nan() || a.is_infinite() || e.is_infinite() {
@@ -452,7 +452,7 @@ mod mathematical_functions_tests {
         let reference_data = load_reference_data();
         let math_tests = &reference_data["mathematical_functions"];
 
-        for (_test_name, test_data) in math_tests {
+        for test_data in math_tests.values() {
             let test_obj = test_data.as_object().unwrap();
             let operation = test_obj["operation"].as_str().unwrap();
 

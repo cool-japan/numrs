@@ -3,6 +3,7 @@
 use numrs2::math::{arange, geomspace, linspace, logspace, meshgrid, ElementWiseMath};
 use numrs2::prelude::*;
 
+#[allow(clippy::result_large_err)]
 fn main() -> Result<()> {
     println!("NumRS2 Array Creation and Manipulation Example");
     println!("===========================================");

@@ -7,6 +7,8 @@
 //! Run with: `cargo bench --bench bench_distributions`
 //! To include SciRS2: `cargo bench --bench bench_distributions --features scirs`
 
+#![allow(deprecated)]
+
 #[macro_use]
 extern crate criterion;
 use criterion::{BenchmarkId, Criterion};
@@ -171,7 +173,8 @@ fn bench_multivariate_distributions(c: &mut Criterion) {
     let cov = Array::from_vec(cov_data).reshape(&[2, 2]);
 
     // Create a rotation matrix for 45 degrees
-    let rotation_data = vec![0.7071, 0.7071, -0.7071, 0.7071];
+    use std::f64::consts::FRAC_1_SQRT_2;
+    let rotation_data = vec![FRAC_1_SQRT_2, FRAC_1_SQRT_2, -FRAC_1_SQRT_2, FRAC_1_SQRT_2];
     let rotation = Array::from_vec(rotation_data.clone()).reshape(&[2, 2]);
 
     for size in sizes.iter() {

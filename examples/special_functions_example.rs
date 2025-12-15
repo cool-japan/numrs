@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::needless_range_loop)]
 
 use numrs2::math::{linspace, ElementWiseMath};
 use numrs2::prelude::*;
@@ -68,7 +69,7 @@ fn main() {
     // Create x/sqrt(2) manually
     let mut scaled_w = w.to_vec();
     for i in 0..scaled_w.len() {
-        scaled_w[i] = scaled_w[i] / sqrt2;
+        scaled_w[i] /= sqrt2;
     }
 
     // Calculate normal CDF

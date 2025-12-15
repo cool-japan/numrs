@@ -528,27 +528,50 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Priority scheduling test is flaky due to race conditions in task submission/execution
     fn test_priority_scheduling() {
-        let config = SchedulerConfig::optimal_for_cores(1); // Single thread for deterministic testing
+        let config = SchedulerConfig::optimal_for_cores(1); // Single thread to ensure sequential execution
         let scheduler = ParallelScheduler::new(config).unwrap();
 
         let execution_order = Arc::new(Mutex::new(Vec::new()));
 
-        // Submit tasks in reverse priority order with small delay to ensure proper queuing
-        for priority in [
+        // Submit tasks in reverse priority order (Low first, Critical last)
+        let priorities = [
             TaskPriority::Low,
             TaskPriority::Normal,
             TaskPriority::High,
             TaskPriority::Critical,
-        ] {
+        ];
+
+        // Add a long-running task first to ensure all other tasks queue up
+        let blocker = Arc::new(AtomicU32::new(0));
+        let blocker_clone = Arc::clone(&blocker);
+        let _ = scheduler
+            .submit_task(
+                move || {
+                    // Block until signal
+                    while blocker_clone.load(Ordering::SeqCst) == 0 {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    TaskResult::Success
+                },
+                TaskPriority::Low,
+                None,
+                None,
+            )
+            .unwrap();
+
+        // Give the blocker time to start executing
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Now submit priority tasks - they'll queue up while blocker runs
+        for priority in priorities {
             let order_clone = Arc::clone(&execution_order);
             let _ = scheduler
                 .submit_task(
                     move || {
-                        // Add small delay to tasks to ensure they don't execute immediately
-                        std::thread::sleep(Duration::from_millis(10));
+                        // Record execution order immediately when task starts
                         order_clone.lock().unwrap().push(priority);
+                        std::thread::sleep(Duration::from_millis(10));
                         TaskResult::Success
                     },
                     priority,
@@ -556,25 +579,37 @@ mod tests {
                     None,
                 )
                 .unwrap();
-            // Small delay between submissions to ensure all tasks are queued before execution starts
-            std::thread::sleep(Duration::from_millis(5));
         }
 
-        // Wait for execution (increased time for reliability)
-        std::thread::sleep(Duration::from_millis(500));
+        // Give tasks time to queue
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Release the blocker so queued tasks can execute
+        blocker.store(1, Ordering::SeqCst);
+
+        // Wait for all tasks to complete
+        std::thread::sleep(Duration::from_millis(300));
 
         let order = execution_order.lock().unwrap();
-        assert!(
-            order.len() >= 4,
-            "Expected at least 4 tasks to complete, got {}",
+        assert_eq!(
+            order.len(),
+            4,
+            "Expected 4 tasks to complete, got {}",
             order.len()
         );
 
-        // Critical tasks should be executed first
+        // With a single worker thread and priority queue, tasks should execute
+        // in strict priority order: Critical, High, Normal, Low
         assert_eq!(
-            order[0],
-            TaskPriority::Critical,
-            "Expected Critical priority task to execute first"
+            *order,
+            vec![
+                TaskPriority::Critical,
+                TaskPriority::High,
+                TaskPriority::Normal,
+                TaskPriority::Low
+            ],
+            "Expected strict priority order, got {:?}",
+            *order
         );
     }
 

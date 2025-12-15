@@ -376,7 +376,11 @@ fn test_memory_efficiency_recommendations() {
     let step3_vec = step3.to_vec();
     let chained_vec = chained.to_vec();
     for (a, b) in step3_vec.iter().zip(chained_vec.iter()) {
-        assert!((a - b).abs() < 1e-6, "Values differ: {} vs {}", a, b);
+        // Handle special cases: both inf, both -inf, or both NaN should be considered equal
+        let equal = (a.is_nan() && b.is_nan())
+            || (a.is_infinite() && b.is_infinite() && a.signum() == b.signum())
+            || (a - b).abs() < 1e-6;
+        assert!(equal, "Values differ: {} vs {}", a, b);
     }
 
     println!("\nMemory optimization recommendations:");

@@ -1,5 +1,7 @@
 //! Simple production readiness benchmarks for NumRS2
 
+#![allow(deprecated)]
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::prelude::*;
 use std::hint::black_box;

@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 use numrs2::prelude::*;
 use numrs2::random;

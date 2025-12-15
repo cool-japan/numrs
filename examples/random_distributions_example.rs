@@ -12,6 +12,7 @@ use numrs2::random::distributions::*;
 // Import the SciRS2 integration for advanced distributions (removed wildcard to avoid conflicts)
 use std::time::Instant;
 
+#[allow(clippy::result_large_err)]
 fn main() -> Result<()> {
     println!("NumRS2 Random Distributions Example");
     println!("====================================");
@@ -304,7 +305,7 @@ fn main() -> Result<()> {
             let data = samples.to_vec();
             let in_range = data
                 .iter()
-                .all(|&x| x >= -std::f64::consts::PI && x <= std::f64::consts::PI);
+                .all(|&x| (-std::f64::consts::PI..=std::f64::consts::PI).contains(&x));
             println!("All values in range [-PI, PI]: {}", in_range);
         }
         Err(e) => println!("Note on von Mises: {}", e),
@@ -334,7 +335,7 @@ fn main() -> Result<()> {
 
             // All values should be within the truncation bounds
             let data = samples.to_vec();
-            let in_bounds = data.iter().all(|&x| x >= -2.0 && x <= 2.0);
+            let in_bounds = data.iter().all(|&x| (-2.0..=2.0).contains(&x));
             println!("All values within bounds [-2, 2]: {}", in_bounds);
         }
         Err(e) => println!("Note on truncated normal: {}", e),
@@ -348,8 +349,10 @@ fn main() -> Result<()> {
 
     // Create a rotation matrix for 45 degrees
     let rotation_data = vec![
-        0.7071, 0.7071, // cos(45°), sin(45°)
-        -0.7071, 0.7071, // -sin(45°), cos(45°)
+        std::f64::consts::FRAC_1_SQRT_2,
+        std::f64::consts::FRAC_1_SQRT_2, // cos(45°), sin(45°)
+        -std::f64::consts::FRAC_1_SQRT_2,
+        std::f64::consts::FRAC_1_SQRT_2, // -sin(45°), cos(45°)
     ];
     let rotation = Array::from_vec(rotation_data).reshape(&[2, 2]);
 

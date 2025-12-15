@@ -1,10 +1,9 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
 
-/// This file contains statistical property tests for random distributions.
-/// Instead of testing specific values, we test that the distributions
-/// satisfy statistical properties like mean, variance, etc.
-
+// This file contains statistical property tests for random distributions.
+// Instead of testing specific values, we test that the distributions
+// satisfy statistical properties like mean, variance, etc.
 // Sample size for statistical tests
 const SAMPLE_SIZE: usize = 10000;
 
@@ -130,7 +129,7 @@ fn test_beta_distribution_statistics() {
     );
 
     // Check if all values are within [0, 1]
-    let all_in_range = samples.to_vec().iter().all(|&x| x >= 0.0 && x <= 1.0);
+    let all_in_range = samples.to_vec().iter().all(|&x| (0.0..=1.0).contains(&x));
     assert!(
         all_in_range,
         "Beta distribution: Some values are outside [0, 1]"

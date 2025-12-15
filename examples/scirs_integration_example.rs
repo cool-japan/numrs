@@ -10,6 +10,8 @@
 //! Run this example with:
 //! `cargo run --example scirs_integration_example --features scirs`
 
+#![allow(clippy::result_large_err)]
+
 #[cfg(feature = "scirs")]
 use numrs2::array::Array;
 use numrs2::error::Result;
@@ -208,8 +210,10 @@ fn main() -> Result<()> {
 
         // With 45-degree rotation
         let rot_data = vec![
-            0.7071, 0.7071, // cos(45°), sin(45°)
-            -0.7071, 0.7071, // -sin(45°), cos(45°)
+            std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2, // cos(45°), sin(45°)
+            -std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2, // -sin(45°), cos(45°)
         ];
         let rotation = Array::from_vec(rot_data).reshape(&[2, 2]);
 

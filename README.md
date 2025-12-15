@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **🚀 Version 0.1.0-beta.3** - This beta release completes Phase 4 with advanced features including Apache Arrow integration, randomized linear algebra algorithms, comprehensive sparse matrix support, and automatic differentiation. Production-ready with 659 tests passing and zero warnings.
+> **🚀 Version 0.1.0-rc.1** - Release Candidate: Production-ready SIMD optimizations, 11 scipy-equivalent modules, and complete NumPy compatibility. Features 86 AVX2-vectorized functions + 42 ARM NEON operations, comprehensive interpolation, and 1,637+ tests passing (1,020 unit + 617 doctests) with zero warnings. 122,799 lines of production Rust code.
 
 ## ✨ Architecture Highlights
 
@@ -32,6 +32,9 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
   - Sparse matrices (COO, CSR, CSC, DIA formats) with format conversions
   - Iterative solvers (CG, GMRES, BiCGSTAB) for large systems
   - Randomized algorithms (randomized SVD, random projections, range finders)
+- **Numerical Optimization**: BFGS, L-BFGS, Trust Region, Nelder-Mead, Levenberg-Marquardt, constrained optimization
+- **Root-Finding**: Bisection, Brent, Newton-Raphson, Secant, Halley, fixed-point iteration
+- **Numerical Differentiation**: Gradient, Jacobian, Hessian with Richardson extrapolation
 - **Automatic Differentiation**: Forward and reverse mode AD with higher-order derivatives
 - **Data Interoperability**:
   - Apache Arrow integration for zero-copy data exchange
@@ -66,7 +69,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-beta.3", features = ["arrow"] }
+numrs2 = { version = "0.1.0-rc.1", features = ["arrow"] }
 ```
 
 Or, when building:
@@ -75,9 +78,9 @@ Or, when building:
 cargo build --features scirs
 ```
 
-### 🚀 Performance Optimizations (New in 0.1.0-beta.2)
+### 🚀 Performance Optimizations
 
-NumRS2 now leverages SciRS2-Core for cutting-edge performance optimizations:
+NumRS2 leverages SciRS2-Core (v0.1.0-rc.2) for cutting-edge performance optimizations:
 
 - **Unified SIMD Operations**: All SIMD code goes through SciRS2-Core's SimdUnifiedOps trait
 - **Adaptive Algorithm Selection**: AutoOptimizer automatically chooses between scalar, SIMD, or GPU implementations
@@ -110,6 +113,45 @@ The GPU acceleration feature provides:
 - WGPU backend for cross-platform GPU support (Vulkan, Metal, DX12, WebGPU)
 
 For examples, see [gpu_example.rs](examples/gpu_example.rs)
+
+### 🎯 Release Candidate 1 Highlights (v0.1.0-rc.1)
+
+**Numerical Optimization (scipy.optimize equivalent)**
+- BFGS & L-BFGS: Quasi-Newton methods for large-scale optimization
+- Trust Region: Robust optimization with dogleg path
+- Nelder-Mead: Derivative-free simplex method
+- Levenberg-Marquardt: Nonlinear least squares
+- Constrained optimization: Projected gradient, penalty methods
+
+**Root-Finding Algorithms (scipy.optimize.root_scalar)**
+- Bracketing methods: Bisection, Brent, Ridder, Illinois
+- Open methods: Newton-Raphson, Secant, Halley
+- Fixed-point iteration for implicit equations
+
+**Numerical Differentiation**
+- Gradient, Jacobian, and Hessian computation
+- Forward, backward, central differences
+- Richardson extrapolation for high accuracy
+
+**SIMD Optimization Infrastructure**
+- 86 AVX2-optimized functions with automatic threshold-based dispatch
+- 4-way loop unrolling and FMA (fused multiply-add) instructions
+- ARM NEON support with 42 vectorized f64 operations
+- Support for both f32 and f64 numeric types
+
+**Production-Ready Features**
+- Complete multi-array NPZ support for NumPy compatibility
+- Zero clippy warnings and zero critical errors
+- 1,637+ comprehensive tests (1,020 unit + 617 doc tests)
+- Enhanced scheduler with critical deadlock fix (1,143x speedup)
+- 122,799 lines of production Rust code
+
+**Enhanced Modules**
+- Linear algebra: Extended iterative solvers (CG, GMRES, BiCGSTAB, FGMRES, MINRES)
+- Mathematical functions: 1,187 lines of enhanced operations
+- Statistics: 1,397 lines of enhanced distributions and testing
+- Polynomial operations: Complete NumPy polynomial compatibility
+- Special functions: Spherical harmonics, Jacobi elliptic, Lambert W, and more
 
 ## Example
 
@@ -200,7 +242,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-beta.3"
+numrs2 = "0.1.0-rc.1"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:

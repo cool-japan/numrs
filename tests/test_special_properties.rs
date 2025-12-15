@@ -193,7 +193,7 @@ fn test_gamma_properties() {
     let gamma_integers = gamma(&integers);
 
     // Expected factorials: 0!, 1!, 2!, 3!, 4!
-    let expected = vec![1.0, 1.0, 2.0, 6.0, 24.0];
+    let expected = [1.0, 1.0, 2.0, 6.0, 24.0];
 
     for (i, &expected_val) in expected.iter().enumerate() {
         assert_abs_diff_eq!(
@@ -293,7 +293,7 @@ fn test_digamma_properties() {
     // Property 2: digamma(1) = -γ (negative Euler-Mascheroni constant)
     let one = Array::from_vec(vec![1.0]);
     let digamma_one = digamma(&one);
-    let euler_mascheroni = 0.57721566490153286060;
+    let euler_mascheroni = 0.577_215_664_901_532_9;
 
     assert_abs_diff_eq!(
         digamma_one.get(&[0]).unwrap(),
@@ -569,7 +569,7 @@ fn test_special_function_limits() {
     // Test gamma(x) grows rapidly for large x
     let x_values = Array::from_vec(vec![10.0, 11.0, 12.0, 13.0]);
     let gamma_x = gamma(&x_values);
-    let factorial_values = vec![
+    let factorial_values = [
         362880.0,    // gamma(10) = 9!
         3628800.0,   // gamma(11) = 10!
         39916800.0,  // gamma(12) = 11!
@@ -685,7 +685,7 @@ fn test_special_functions_with_vector_args() {
     for i in 0..SAMPLE_SIZE {
         let val = gammainc_result.get(&[i]).unwrap();
         assert!(
-            val >= 0.0 && val <= 1.0,
+            (0.0..=1.0).contains(&val),
             "gammainc values should be between 0 and 1"
         );
     }

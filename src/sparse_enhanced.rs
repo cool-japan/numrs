@@ -433,6 +433,214 @@ impl SparseOpsAdvanced {
         Ok((x, max_iter, final_residual))
     }
 
+    /// GMRES (Generalized Minimal Residual) solver for sparse non-symmetric systems
+    ///
+    /// This is the sparse matrix variant of GMRES, optimized for sparse matrices.
+    /// It uses restarted GMRES with Arnoldi iteration and Givens rotations.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Sparse coefficient matrix (must be square)
+    /// * `b` - Right-hand side vector
+    /// * `x0` - Optional initial guess (zeros if None)
+    /// * `tol` - Convergence tolerance
+    /// * `max_iter` - Maximum number of iterations
+    /// * `restart` - Restart parameter (Krylov subspace dimension)
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (solution, iterations, final_residual_norm)
+    pub fn solve_gmres<T>(
+        a: &SparseMatrix<T>,
+        b: &Array<T>,
+        x0: Option<&Array<T>>,
+        tol: T,
+        max_iter: usize,
+        restart: usize,
+    ) -> Result<(Array<T>, usize, T)>
+    where
+        T: Float + Clone + Debug,
+    {
+        let n = a.shape()[0];
+
+        if a.shape()[1] != n {
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix must be square for GMRES solver".to_string(),
+            ));
+        }
+
+        if b.shape()[0] != n {
+            return Err(NumRs2Error::DimensionMismatch(
+                "Right-hand side dimension mismatch".to_string(),
+            ));
+        }
+
+        let restart = restart.min(n);
+
+        // Initialize solution vector
+        let mut x = if let Some(x_init) = x0 {
+            x_init.clone()
+        } else {
+            Array::zeros(&[n])
+        };
+
+        // Compute b norm for relative residual check
+        let b_norm = Self::dot_product(b, b)?.sqrt();
+        if b_norm.is_zero() {
+            return Ok((x, 0, T::zero()));
+        }
+
+        let mut total_iter = 0;
+
+        // Outer iteration (restarts)
+        for _ in 0..(max_iter / restart + 1) {
+            // Compute residual r = b - Ax
+            let mut ax = Array::zeros(&[n]);
+            Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
+
+            let mut r = Array::zeros(&[n]);
+            for i in 0..n {
+                let b_val = b.get(&[i])?;
+                let ax_val = ax.get(&[i])?;
+                r.set(&[i], b_val - ax_val)?;
+            }
+
+            let r_norm = Self::dot_product(&r, &r)?.sqrt();
+
+            // Check convergence
+            if r_norm / b_norm < tol {
+                return Ok((x, total_iter, r_norm));
+            }
+
+            // Initialize Arnoldi iteration
+            let mut v = vec![Array::zeros(&[n]); restart + 1];
+            for i in 0..n {
+                v[0].set(&[i], r.get(&[i])? / r_norm)?;
+            }
+
+            let mut h = vec![vec![T::zero(); restart]; restart + 1];
+            let mut g = vec![T::zero(); restart + 1];
+            g[0] = r_norm;
+
+            // Givens rotation coefficients
+            let mut cs_vec = vec![T::zero(); restart];
+            let mut sn_vec = vec![T::zero(); restart];
+
+            let mut k = 0;
+            for j in 0..restart {
+                if total_iter >= max_iter {
+                    break;
+                }
+                total_iter += 1;
+
+                // Arnoldi step: w = A * v[j]
+                let mut w = Array::zeros(&[n]);
+                Self::spmv_dense(a, &v[j], &mut w, T::one(), T::zero())?;
+
+                // Modified Gram-Schmidt orthogonalization
+                for i in 0..=j {
+                    h[i][j] = Self::dot_product(&v[i], &w)?;
+                    for l in 0..n {
+                        let val = w.get(&[l])? - h[i][j] * v[i].get(&[l])?;
+                        w.set(&[l], val)?;
+                    }
+                }
+
+                h[j + 1][j] = Self::dot_product(&w, &w)?.sqrt();
+
+                // Check for lucky breakdown
+                if h[j + 1][j].abs() < T::from(1e-14).unwrap() {
+                    k = j + 1;
+                    break;
+                }
+
+                // Normalize
+                for i in 0..n {
+                    v[j + 1].set(&[i], w.get(&[i])? / h[j + 1][j])?;
+                }
+
+                // Apply previous Givens rotations to new column
+                for i in 0..j {
+                    let temp = h[i][j];
+                    h[i][j] = cs_vec[i] * temp + sn_vec[i] * h[i + 1][j];
+                    h[i + 1][j] = -sn_vec[i] * temp + cs_vec[i] * h[i + 1][j];
+                }
+
+                // Compute new Givens rotation
+                let r_val = (h[j][j].powi(2) + h[j + 1][j].powi(2)).sqrt();
+                if r_val < T::from(1e-14).unwrap() {
+                    k = j + 1;
+                    break;
+                }
+
+                let cs = h[j][j] / r_val;
+                let sn = h[j + 1][j] / r_val;
+                cs_vec[j] = cs;
+                sn_vec[j] = sn;
+
+                // Apply new rotation to H
+                h[j][j] = r_val;
+                h[j + 1][j] = T::zero();
+
+                // Apply new rotation to g
+                let temp_g = g[j];
+                g[j] = cs * temp_g;
+                g[j + 1] = -sn * temp_g;
+
+                k = j + 1;
+
+                // Check convergence
+                if g[j + 1].abs() / b_norm < tol {
+                    break;
+                }
+            }
+
+            // Solve upper triangular system H*y = g
+            let mut y = vec![T::zero(); k];
+            for i in (0..k).rev() {
+                let mut sum = g[i];
+                for j in (i + 1)..k {
+                    sum = sum - h[i][j] * y[j];
+                }
+                y[i] = sum / h[i][i];
+            }
+
+            // Update solution: x = x + V * y
+            for j in 0..k {
+                for i in 0..n {
+                    let x_val = x.get(&[i])? + y[j] * v[j].get(&[i])?;
+                    x.set(&[i], x_val)?;
+                }
+            }
+
+            // Check final residual
+            let mut ax_final = Array::zeros(&[n]);
+            Self::spmv_dense(a, &x, &mut ax_final, T::one(), T::zero())?;
+
+            let mut r_final = Array::zeros(&[n]);
+            for i in 0..n {
+                r_final.set(&[i], b.get(&[i])? - ax_final.get(&[i])?)?;
+            }
+            let final_r_norm = Self::dot_product(&r_final, &r_final)?.sqrt();
+
+            if final_r_norm / b_norm < tol || total_iter >= max_iter {
+                return Ok((x, total_iter, final_r_norm));
+            }
+        }
+
+        // Compute final residual
+        let mut ax = Array::zeros(&[n]);
+        Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
+
+        let mut r = Array::zeros(&[n]);
+        for i in 0..n {
+            r.set(&[i], b.get(&[i])? - ax.get(&[i])?)?;
+        }
+        let final_residual = Self::dot_product(&r, &r)?.sqrt();
+
+        Ok((x, max_iter, final_residual))
+    }
+
     /// Incomplete LU decomposition for preconditioning
     pub fn incomplete_lu<T>(
         a: &SparseMatrix<T>,
@@ -682,6 +890,148 @@ mod tests {
 
         assert!(iter < 100);
         assert!(residual < 1e-8);
+    }
+
+    #[test]
+    fn test_gmres_solver() {
+        // Create a general matrix (non-symmetric)
+        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
+        a.set(0, 0, 3.0).unwrap();
+        a.set(0, 1, 1.0).unwrap();
+        a.set(0, 2, 0.5).unwrap();
+        a.set(1, 0, 1.0).unwrap();
+        a.set(1, 1, 4.0).unwrap();
+        a.set(1, 2, 1.0).unwrap();
+        a.set(2, 0, 0.0).unwrap();
+        a.set(2, 1, 2.0).unwrap();
+        a.set(2, 2, 5.0).unwrap();
+
+        // Right-hand side
+        let b = Array::from_vec(vec![5.5, 9.0, 17.0]);
+
+        // Solve using GMRES
+        let (x, iter, residual) =
+            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).unwrap();
+
+        // Check that the solution satisfies A*x = b (approximately)
+        let mut ax = Array::zeros(&[3]);
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+
+        for i in 0..3 {
+            let b_val = b.get(&[i]).unwrap();
+            let ax_val = ax.get(&[i]).unwrap();
+            assert_relative_eq!(ax_val, b_val, epsilon = 1e-8);
+        }
+
+        assert!(iter < 100);
+        assert!(residual < 1e-8);
+    }
+
+    #[test]
+    fn test_gmres_solver_larger_system() {
+        // Create a larger sparse matrix (5x5 diagonally dominant)
+        let n = 5;
+        let mut a = SparseMatrix::new(&[n, n]).unwrap();
+
+        // Tridiagonal matrix with strong diagonal dominance
+        for i in 0..n {
+            a.set(i, i, 4.0).unwrap(); // Main diagonal
+            if i > 0 {
+                a.set(i, i - 1, -1.0).unwrap(); // Lower diagonal
+            }
+            if i < n - 1 {
+                a.set(i, i + 1, -1.0).unwrap(); // Upper diagonal
+            }
+        }
+
+        // Right-hand side: solution should be [1, 2, 3, 4, 5]
+        let b = Array::from_vec(vec![2.0, 1.0, 2.0, 3.0, 16.0]);
+
+        // Solve using GMRES
+        let (x, iter, residual) =
+            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).unwrap();
+
+        // Check that the solution satisfies A*x = b
+        let mut ax = Array::zeros(&[n]);
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+
+        for i in 0..n {
+            let b_val = b.get(&[i]).unwrap();
+            let ax_val = ax.get(&[i]).unwrap();
+            assert_relative_eq!(ax_val, b_val, epsilon = 1e-8);
+        }
+
+        assert!(iter < 100);
+        assert!(residual < 1e-8);
+    }
+
+    #[test]
+    fn test_gmres_with_restart() {
+        // Create a matrix that might need restart
+        let n = 4;
+        let mut a = SparseMatrix::new(&[n, n]).unwrap();
+
+        // Create a diagonally dominant matrix
+        for i in 0..n {
+            a.set(i, i, 5.0).unwrap();
+            for j in 0..n {
+                if i != j {
+                    a.set(i, j, 0.5).unwrap();
+                }
+            }
+        }
+
+        let b = Array::from_vec(vec![7.5, 7.5, 7.5, 7.5]);
+
+        // Solve with small restart parameter to force restarts
+        let (x, _iter, residual) =
+            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 2).unwrap();
+
+        // Verify solution
+        let mut ax = Array::zeros(&[n]);
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+
+        for i in 0..n {
+            let b_val = b.get(&[i]).unwrap();
+            let ax_val = ax.get(&[i]).unwrap();
+            assert_relative_eq!(ax_val, b_val, epsilon = 1e-6);
+        }
+
+        assert!(residual < 1e-6);
+    }
+
+    #[test]
+    fn test_gmres_vs_bicgstab() {
+        // Compare GMRES and BiCGSTAB on the same problem
+        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
+        a.set(0, 0, 4.0).unwrap();
+        a.set(0, 1, 1.0).unwrap();
+        a.set(1, 0, 2.0).unwrap();
+        a.set(1, 1, 3.0).unwrap();
+        a.set(1, 2, 1.0).unwrap();
+        a.set(2, 1, 1.0).unwrap();
+        a.set(2, 2, 4.0).unwrap();
+
+        let b = Array::from_vec(vec![6.0, 9.0, 5.0]);
+
+        // Solve with GMRES
+        let (x_gmres, _, residual_gmres) =
+            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).unwrap();
+
+        // Solve with BiCGSTAB
+        let (x_bicgstab, _, residual_bicgstab) =
+            SparseOpsAdvanced::solve_bicgstab(&a, &b, None, 1e-10, 100).unwrap();
+
+        // Both should converge
+        assert!(residual_gmres < 1e-8);
+        assert!(residual_bicgstab < 1e-8);
+
+        // Solutions should be similar
+        for i in 0..3 {
+            let g_val = x_gmres.get(&[i]).unwrap();
+            let b_val = x_bicgstab.get(&[i]).unwrap();
+            assert_relative_eq!(g_val, b_val, epsilon = 1e-6);
+        }
     }
 
     #[test]
