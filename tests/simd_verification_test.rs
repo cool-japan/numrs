@@ -1,34 +1,30 @@
 //! SIMD Verification Tests
 //!
 //! This module tests that SIMD optimizations are correctly activated and functional.
+//! Uses scirs2-core's SimdUnifiedOps for platform-independent SIMD operations.
 
 use numrs2::prelude::*;
-use numrs2::simd_optimize::avx2_enhanced::EnhancedSimdOps;
+use scirs2_core::ndarray::Array1;
+use scirs2_core::simd_ops::SimdUnifiedOps;
 
 #[test]
 fn test_simd_exp_functionality() {
     // Test that SIMD exp function works correctly
     let input = Array::from_vec(vec![0.0f32, 1.0, 2.0, -1.0, 0.5, -0.5]);
 
-    #[cfg(target_arch = "x86_64")]
-    {
-        let simd_result = EnhancedSimdOps::vectorized_exp_f32(&input);
-        let expected_values = input
-            .to_vec()
-            .iter()
-            .map(|&x| x.exp())
-            .collect::<Vec<f32>>();
-        let expected = Array::from_vec(expected_values);
+    // Use SimdUnifiedOps for platform-independent SIMD
+    let nd_input = Array1::from_vec(input.to_vec());
+    let simd_result = f32::simd_exp(&nd_input.view());
+    let expected_values: Vec<f32> = input.to_vec().iter().map(|&x| x.exp()).collect();
 
-        // Check that SIMD and scalar results are close
-        for (simd_val, expected_val) in simd_result.to_vec().iter().zip(expected.to_vec().iter()) {
-            assert!(
-                (simd_val - expected_val).abs() < 1e-5,
-                "SIMD exp mismatch: got {}, expected {}",
-                simd_val,
-                expected_val
-            );
-        }
+    // Check that SIMD and scalar results are close
+    for (simd_val, expected_val) in simd_result.iter().zip(expected_values.iter()) {
+        assert!(
+            (simd_val - expected_val).abs() < 1e-5,
+            "SIMD exp mismatch: got {}, expected {}",
+            simd_val,
+            expected_val
+        );
     }
 }
 
@@ -72,35 +68,46 @@ fn test_simd_performance_threshold() {
 }
 
 #[test]
-fn test_simd_cache_aware_matmul() {
-    // Test cache-aware matrix multiplication
-    let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+fn test_simd_matrix_operations() {
+    // Test SIMD matrix operations via SimdUnifiedOps
+    let a_data: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+    let b_data: Vec<f32> = vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0];
 
-    let b = Array::from_vec(vec![7.0f32, 8.0, 9.0, 10.0, 11.0, 12.0]).reshape(&[3, 2]);
+    let a = Array1::from_vec(a_data.clone());
+    let b = Array1::from_vec(b_data.clone());
 
-    #[allow(unused_mut)]
-    let mut c: Array<f32> = Array::zeros(&[2, 2]);
+    // Test element-wise operations
+    let add_result = f32::simd_add(&a.view(), &b.view());
+    let mul_result = f32::simd_mul(&a.view(), &b.view());
 
-    #[cfg(target_arch = "x86_64")]
-    {
-        let result = EnhancedSimdOps::cache_aware_matmul_f32(&a, &b, &mut c, 32);
+    // Verify add: [8, 10, 12, 14, 16, 18]
+    let expected_add: Vec<f32> = a_data
+        .iter()
+        .zip(b_data.iter())
+        .map(|(x, y)| x + y)
+        .collect();
+    for (got, expected) in add_result.iter().zip(expected_add.iter()) {
+        assert!(
+            (got - expected).abs() < 1e-5,
+            "Add mismatch: got {}, expected {}",
+            got,
+            expected
+        );
+    }
 
-        if let Ok(()) = result {
-            // Expected result of matrix multiplication:
-            // [1*7 + 2*9 + 3*11, 1*8 + 2*10 + 3*12]  = [58, 64]
-            // [4*7 + 5*9 + 6*11, 4*8 + 5*10 + 6*12]  = [139, 154]
-            let expected = vec![58.0f32, 64.0, 139.0, 154.0];
-            let result_vec = c.to_vec();
-
-            for (got, expected) in result_vec.iter().zip(expected.iter()) {
-                assert!(
-                    (got - expected).abs() < 1e-4,
-                    "Matrix multiplication mismatch: got {}, expected {}",
-                    got,
-                    expected
-                );
-            }
-        }
+    // Verify mul: [7, 16, 27, 40, 55, 72]
+    let expected_mul: Vec<f32> = a_data
+        .iter()
+        .zip(b_data.iter())
+        .map(|(x, y)| x * y)
+        .collect();
+    for (got, expected) in mul_result.iter().zip(expected_mul.iter()) {
+        assert!(
+            (got - expected).abs() < 1e-5,
+            "Mul mismatch: got {}, expected {}",
+            got,
+            expected
+        );
     }
 }
 
@@ -203,28 +210,71 @@ fn test_simd_alignment_and_remainder_handling() {
     }
 }
 
-#[cfg(target_arch = "x86_64")]
 #[test]
-fn test_target_feature_availability() {
-    // This test just verifies that the code compiles with target features
-    // Actual feature detection would require runtime checks
+fn test_simd_unified_ops_availability() {
+    // Test that SimdUnifiedOps functions are available and work correctly
+    let test_data: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+    let nd_array = Array1::from_vec(test_data.clone());
 
-    use std::arch::is_x86_feature_detected;
+    // Test various SIMD operations
+    let exp_result = f64::simd_exp(&nd_array.view());
+    let sqrt_result = f64::simd_sqrt(&nd_array.view());
+    let sum_result = f64::simd_sum(&nd_array.view());
 
-    // These checks verify that the CPU supports the required features
-    // The tests will be skipped if the features aren't available
-    if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-        println!("AVX2 and FMA features are available");
+    // Verify exp
+    assert_eq!(exp_result.len(), 8);
+    assert!((exp_result[0] - std::f64::consts::E).abs() < 1e-10);
 
-        // Test a simple SIMD operation
-        let test_array = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-        let result = EnhancedSimdOps::vectorized_exp_f32(&test_array);
+    // Verify sqrt
+    assert_eq!(sqrt_result.len(), 8);
+    assert!((sqrt_result[0] - 1.0).abs() < 1e-10);
+    assert!((sqrt_result[3] - 2.0).abs() < 1e-10);
 
-        assert_eq!(result.len(), 8);
+    // Verify sum: 1+2+3+4+5+6+7+8 = 36
+    assert!((sum_result - 36.0).abs() < 1e-10);
+}
 
-        // First element should be exp(1) ≈ 2.718
-        assert!((result.to_vec()[0] - std::f32::consts::E).abs() < 1e-4);
-    } else {
-        println!("AVX2/FMA not available, skipping SIMD-specific tests");
+#[test]
+fn test_simd_transcendental_functions() {
+    // Test transcendental functions via SimdUnifiedOps
+    let test_data: Vec<f64> = vec![0.0, 0.5, 1.0, 1.5, 2.0];
+    let nd_array = Array1::from_vec(test_data.clone());
+
+    // Test sin
+    let sin_result = f64::simd_sin(&nd_array.view());
+    for (i, &x) in test_data.iter().enumerate() {
+        assert!(
+            (sin_result[i] - x.sin()).abs() < 1e-10,
+            "sin mismatch at index {}: got {}, expected {}",
+            i,
+            sin_result[i],
+            x.sin()
+        );
+    }
+
+    // Test cos
+    let cos_result = f64::simd_cos(&nd_array.view());
+    for (i, &x) in test_data.iter().enumerate() {
+        assert!(
+            (cos_result[i] - x.cos()).abs() < 1e-10,
+            "cos mismatch at index {}: got {}, expected {}",
+            i,
+            cos_result[i],
+            x.cos()
+        );
+    }
+
+    // Test ln
+    let positive_data: Vec<f64> = vec![0.5, 1.0, 2.0, 3.0, std::f64::consts::E];
+    let nd_positive = Array1::from_vec(positive_data.clone());
+    let ln_result = f64::simd_ln(&nd_positive.view());
+    for (i, &x) in positive_data.iter().enumerate() {
+        assert!(
+            (ln_result[i] - x.ln()).abs() < 1e-10,
+            "ln mismatch at index {}: got {}, expected {}",
+            i,
+            ln_result[i],
+            x.ln()
+        );
     }
 }

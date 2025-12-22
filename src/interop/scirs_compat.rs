@@ -110,7 +110,7 @@ where
 ///
 /// * `mean` - Mean vector
 /// * `cov` - Covariance matrix
-/// * `size` - Number of samples to generate (as &[size])
+/// * `size` - Number of samples to generate (as `&[size]`)
 /// * `rotation` - Optional rotation matrix to apply to samples
 ///
 /// # Returns

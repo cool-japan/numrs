@@ -91,8 +91,8 @@ pub struct Pde2dResult<T> {
 /// Solves: ∂u/∂t = α ∂²u/∂x²
 ///
 /// Uses Forward-Time Central-Space (FTCS) discretization:
-/// u[n+1][i] = u[n][i] + r*(u[n][i+1] - 2*u[n][i] + u[n][i-1])
-/// where r = α*dt/dx²
+/// `u[n+1][i] = u[n][i] + r*(u[n][i+1] - 2*u[n][i] + u[n][i-1])`
+/// where `r = α*dt/dx²`
 ///
 /// # Arguments
 /// * `initial` - Initial condition u(x, 0)

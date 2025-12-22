@@ -1,17 +1,10 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast, One, Zero};
+use scirs2_core::ndarray::Array1;
+use scirs2_core::simd_ops::SimdUnifiedOps;
 use scirs2_core::Complex;
 use std::ops::{Add, Div, Mul, Sub};
-
-// Import SIMD optimizations when available
-#[cfg(target_arch = "x86_64")]
-use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-#[cfg(target_arch = "aarch64")]
-use crate::simd_optimize::neon_enhanced::NeonEnhancedOps;
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-#[allow(unused_imports)] // Used in SIMD operations but may not be visible to compiler
-use std::any::TypeId;
 
 /// Threshold for using SIMD optimizations (minimum array size)
 const SIMD_THRESHOLD: usize = 32;
@@ -20,6 +13,25 @@ const SIMD_THRESHOLD: usize = 32;
 #[inline]
 fn should_use_simd<T: Clone>(array: &Array<T>) -> bool {
     array.len() >= SIMD_THRESHOLD
+}
+
+/// Helper to convert Array<f64> to ndarray Array1
+#[inline]
+fn to_nd_array_f64(arr: &Array<f64>) -> Array1<f64> {
+    Array1::from_vec(arr.to_vec())
+}
+
+/// Helper to convert Array<f32> to ndarray Array1
+#[inline]
+fn to_nd_array_f32(arr: &Array<f32>) -> Array1<f32> {
+    Array1::from_vec(arr.to_vec())
+}
+
+/// Helper to convert ndarray Array1 back to NumRS2 Array
+#[inline]
+fn from_nd_array<T: Clone + std::fmt::Debug + NumCast>(nd: Array1<T>, shape: &[usize]) -> Array<T> {
+    let data: Vec<T> = nd.into_iter().collect();
+    Array::from_vec(data).reshape(shape)
 }
 
 // Basic element-wise math operations
@@ -78,252 +90,286 @@ pub trait ElementWiseMath<T> {
 }
 
 impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
-    // Basic operations
+    // Basic operations - using SimdUnifiedOps for platform-independent SIMD
     fn abs(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_abs_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_abs(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
-        }
-        #[cfg(target_arch = "aarch64")]
-        {
-            if should_use_simd(self) && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-            {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_abs_f64(f64_array);
-                return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_abs(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.abs())
     }
 
     fn exp(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                // Check if we can cast to f32 for SIMD optimization
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_exp_f32(f32_array);
-                    // Safety: We're transmuting back to the same type
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                // Check if we can cast to f64 for SIMD optimization
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_exp_f64(f64_array);
-                    // Safety: We're transmuting back to the same type
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_exp(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_exp(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-        #[cfg(target_arch = "aarch64")]
-        {
-            if should_use_simd(self) && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-            {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_exp_f64(f64_array);
-                return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-            }
-        }
-
-        // Fallback to element-wise operation
         self.map(|x| x.exp())
     }
 
     fn log(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_log_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_log_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_ln(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_ln(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-        #[cfg(target_arch = "aarch64")]
-        {
-            if should_use_simd(self) && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-            {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_log_f64(f64_array);
-                return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-            }
-        }
-
-        // Fallback to element-wise operation
         self.map(|x| x.ln())
     }
 
     fn log10(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_log10_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_log10_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_log10(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_log10(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-
-        // Fallback to element-wise operation
         self.map(|x| x.log10())
     }
 
     fn log2(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_log2_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_log2_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_log2(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_log2(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-
-        // Fallback to element-wise operation
         self.map(|x| x.log2())
     }
 
     fn log1p(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_log1p_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_ln_1p(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_ln_1p(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| (x + T::one()).ln())
     }
 
     fn expm1(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_expm1_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_exp_m1(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_exp_m1(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.exp() - T::one())
     }
 
     fn sqrt(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_sqrt_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_sqrt_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_sqrt(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_sqrt(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-        #[cfg(target_arch = "aarch64")]
-        {
-            if should_use_simd(self) && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-            {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_sqrt_f64(f64_array);
-                return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-            }
-        }
-
-        // Fallback to element-wise operation
         self.map(|x| x.sqrt())
     }
 
     fn cbrt(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_cbrt_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_cbrt(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_cbrt(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.powf(T::from(1.0 / 3.0).unwrap()))
     }
 
     fn pow(&self, n: T) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                // Check for f32 SIMD optimization
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let n_f32 = unsafe { *(&n as *const T as *const f32) };
-                    let result = EnhancedSimdOps::vectorized_pow_f32(f32_array, n_f32);
-                    // Safety: We're transmuting back to the same type
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                // Check for f64 SIMD optimization
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let n_f64 = unsafe { *(&n as *const T as *const f64) };
-                    let result = EnhancedSimdOps::vectorized_pow_f64(f64_array, n_f64);
-                    // Safety: We're transmuting back to the same type
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let n_f64 = unsafe { *(&n as *const T as *const f64) };
+                let result = f64::simd_powf(&nd.view(), n_f64);
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let n_f32 = unsafe { *(&n as *const T as *const f32) };
+                let result = f32::simd_powf(&nd.view(), n_f32);
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-
-        // Fallback to element-wise operation
         self.map(|x| x.powf(n))
     }
 
@@ -372,141 +418,204 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
 
     // Trigonometric functions
     fn sin(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_sin_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_sin_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_sin(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_sin(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-        #[cfg(target_arch = "aarch64")]
-        {
-            if should_use_simd(self) && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-            {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_sin_f64(f64_array);
-                return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-            }
-        }
-
-        // Fallback to element-wise operation
         self.map(|x| x.sin())
     }
 
     fn cos(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_cos_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_cos_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_cos(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_cos(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-        #[cfg(target_arch = "aarch64")]
-        {
-            if should_use_simd(self) && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-            {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_cos_f64(f64_array);
-                return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-            }
-        }
-
-        // Fallback to element-wise operation
         self.map(|x| x.cos())
     }
 
     fn tan(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_tan_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_tan_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_tan(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_tan(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-
-        // Fallback to element-wise operation
         self.map(|x| x.tan())
     }
 
     fn asin(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_asin_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_asin(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_asin(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.asin())
     }
 
     fn acos(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_acos_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_acos(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_acos(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.acos())
     }
 
     fn atan(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_atan_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_atan(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_atan(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.atan())
     }
 
     fn atan2(&self, other: &Array<T>) -> Array<T> {
+        if should_use_simd(self) && should_use_simd(other) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd_y =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let nd_x = to_nd_array_f64(unsafe {
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(other)
+                });
+                let result = f64::simd_atan2(&nd_y.view(), &nd_x.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd_y =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let nd_x = to_nd_array_f32(unsafe {
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(other)
+                });
+                let result = f32::simd_atan2(&nd_y.view(), &nd_x.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+        }
         self.zip_with(other, |a, b| a.atan2(b)).unwrap_or_else(|e| {
             panic!(
                 "Failed to broadcast in atan2: {}. Consider using safe_atan2() for error handling.",
@@ -516,17 +625,34 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
     }
 
     fn hypot(&self, other: &Array<T>) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) && should_use_simd(other) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array_x =
-                        unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let f64_array_y =
-                        unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(other) };
-                    let result = EnhancedSimdOps::vectorized_hypot_f64(f64_array_x, f64_array_y);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) && should_use_simd(other) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd_x =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let nd_y = to_nd_array_f64(unsafe {
+                    std::mem::transmute::<&Array<T>, &Array<f64>>(other)
+                });
+                let result = f64::simd_hypot(&nd_x.view(), &nd_y.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd_x =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let nd_y = to_nd_array_f32(unsafe {
+                    std::mem::transmute::<&Array<T>, &Array<f32>>(other)
+                });
+                let result = f32::simd_hypot(&nd_x.view(), &nd_y.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.zip_with(other, |a, b| (a * a + b * b).sqrt())
@@ -534,14 +660,28 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
     }
 
     fn degrees(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_degrees_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_to_degrees(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_to_degrees(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         let rad_to_deg = T::from(180.0).unwrap() / T::from(std::f64::consts::PI).unwrap();
@@ -549,14 +689,28 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
     }
 
     fn radians(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_radians_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_to_radians(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_to_radians(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         let deg_to_rad = T::from(std::f64::consts::PI).unwrap() / T::from(180.0).unwrap();
@@ -565,117 +719,168 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
 
     // Hyperbolic functions
     fn sinh(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_sinh_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_sinh_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_sinh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_sinh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-
-        // Fallback to element-wise operation
         self.map(|x| x.sinh())
     }
 
     fn cosh(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_cosh_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_cosh_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_cosh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_cosh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-
-        // Fallback to element-wise operation
         self.map(|x| x.cosh())
     }
 
     fn tanh(&self) -> Array<T> {
-        // Use SIMD optimization for f32/f64 arrays when beneficial
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    // Safety: We've verified the type above
-                    let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) };
-                    let result = EnhancedSimdOps::vectorized_tanh_f32(f32_array);
-                    return unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) };
-                }
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_tanh_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_tanh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_tanh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
-
-        // Fallback to element-wise operation
         self.map(|x| x.tanh())
     }
 
     fn asinh(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_asinh_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_asinh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_asinh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.asinh())
     }
 
     fn acosh(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_acosh_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_acosh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_acosh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.acosh())
     }
 
     fn atanh(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    // Safety: We've verified the type above
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_atanh_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_atanh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_atanh(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.atanh())
@@ -683,56 +888,112 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
 
     // Rounding functions - Hardware SIMD accelerated
     fn floor(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_floor_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_floor(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_floor(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.floor())
     }
 
     fn ceil(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_ceil_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_ceil(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_ceil(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.ceil())
     }
 
     fn round(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_round_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_round(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_round(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.round())
     }
 
     fn trunc(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_trunc_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_trunc(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_trunc(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| x.trunc())
@@ -740,16 +1001,32 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
 
     // Utility functions
     fn clip(&self, min: T, max: T) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let min_f64: f64 = unsafe { std::mem::transmute_copy(&min) };
-                    let max_f64: f64 = unsafe { std::mem::transmute_copy(&max) };
-                    let result = EnhancedSimdOps::vectorized_clip_f64(f64_array, min_f64, max_f64);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let min_f64: f64 = unsafe { std::mem::transmute_copy(&min) };
+                let max_f64: f64 = unsafe { std::mem::transmute_copy(&max) };
+                let result = f64::simd_clip(&nd.view(), min_f64, max_f64);
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let min_f32: f32 = unsafe { std::mem::transmute_copy(&min) };
+                let max_f32: f32 = unsafe { std::mem::transmute_copy(&max) };
+                let result = f32::simd_clip(&nd.view(), min_f32, max_f32);
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| {
@@ -764,14 +1041,28 @@ impl<T: Float + Clone + 'static> ElementWiseMath<T> for Array<T> {
     }
 
     fn sign(&self) -> Array<T> {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if should_use_simd(self) {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                    let result = EnhancedSimdOps::vectorized_sign_f64(f64_array);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
+        if should_use_simd(self) {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                let nd =
+                    to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) });
+                let result = f64::simd_sign(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
+            }
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                let nd =
+                    to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(self) });
+                let result = f32::simd_sign(&nd.view());
+                return unsafe {
+                    std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                        result,
+                        &self.shape(),
+                    ))
+                };
             }
         }
         self.map(|x| {
@@ -892,18 +1183,6 @@ pub fn linspace<T: Float + Clone + 'static>(start: T, stop: T, num: usize) -> Ar
         return Array::from_vec(vec![start]);
     }
 
-    // Use SIMD for f64 arrays with sufficient size
-    #[cfg(target_arch = "x86_64")]
-    {
-        use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-        if num >= 32 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            let start_f64: f64 = unsafe { std::mem::transmute_copy(&start) };
-            let stop_f64: f64 = unsafe { std::mem::transmute_copy(&stop) };
-            let result = EnhancedSimdOps::vectorized_linspace_f64(start_f64, stop_f64, num);
-            return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-        }
-    }
-
     let mut vec = Vec::with_capacity(num);
     let step = (stop - start) / T::from(num - 1).unwrap();
 
@@ -924,26 +1203,6 @@ where
     }
     if step < T::zero() && start <= stop {
         return Array::from_vec(vec![]);
-    }
-
-    // Use SIMD for f64 with positive step and sufficient size
-    #[cfg(target_arch = "x86_64")]
-    {
-        use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            let start_f64: f64 = unsafe { std::mem::transmute_copy(&start) };
-            let stop_f64: f64 = unsafe { std::mem::transmute_copy(&stop) };
-            let step_f64: f64 = unsafe { std::mem::transmute_copy(&step) };
-            if step_f64 > 0.0 {
-                // Estimate size and use SIMD if large enough
-                let estimated_size = ((stop_f64 - start_f64) / step_f64).ceil() as usize;
-                if estimated_size >= 32 {
-                    let result =
-                        EnhancedSimdOps::vectorized_arange_f64(start_f64, stop_f64, step_f64);
-                    return unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) };
-                }
-            }
-        }
     }
 
     let mut vec = Vec::new();
@@ -1553,20 +1812,28 @@ where
         return Ok(Array::zeros(&new_shape));
     }
 
-    // Use SIMD for 1D f64 arrays with n=1 and sufficient size
-    #[cfg(target_arch = "x86_64")]
-    {
-        use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-        if array.ndim() == 1 && n == 1 && array.len() >= 64 {
-            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(array) };
-                let result = EnhancedSimdOps::vectorized_diff_f64(f64_array);
-                return Ok(unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) });
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                let f32_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(array) };
-                let result = EnhancedSimdOps::vectorized_diff_f32(f32_array);
-                return Ok(unsafe { std::mem::transmute::<Array<f32>, Array<T>>(result) });
-            }
+    // Use SIMD for 1D f64/f32 arrays with n=1 and sufficient size
+    if array.ndim() == 1 && n == 1 && array.len() >= 64 {
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            let nd =
+                to_nd_array_f64(unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(array) });
+            let result = f64::simd_diff(&nd.view());
+            return Ok(unsafe {
+                std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                    result,
+                    &[array.len() - 1],
+                ))
+            });
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+            let nd =
+                to_nd_array_f32(unsafe { std::mem::transmute::<&Array<T>, &Array<f32>>(array) });
+            let result = f32::simd_diff(&nd.view());
+            return Ok(unsafe {
+                std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                    result,
+                    &[array.len() - 1],
+                ))
+            });
         }
     }
 
@@ -2302,15 +2569,31 @@ where
 
     match axis {
         None => {
-            // Use SIMD for f64 arrays with sufficient size
-            #[cfg(target_arch = "x86_64")]
-            {
-                use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-                if array.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-                {
-                    let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(array) };
-                    let result = EnhancedSimdOps::vectorized_cumsum_f64(f64_array);
-                    return Ok(unsafe { std::mem::transmute::<Array<f64>, Array<T>>(result) });
+            // Use SIMD for f64/f32 arrays with sufficient size
+            if array.len() >= 64 {
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                    let nd = to_nd_array_f64(unsafe {
+                        std::mem::transmute::<&Array<T>, &Array<f64>>(array)
+                    });
+                    let result = f64::simd_cumsum(&nd.view());
+                    return Ok(unsafe {
+                        std::mem::transmute::<Array<f64>, Array<T>>(from_nd_array(
+                            result,
+                            &array.shape(),
+                        ))
+                    });
+                }
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                    let nd = to_nd_array_f32(unsafe {
+                        std::mem::transmute::<&Array<T>, &Array<f32>>(array)
+                    });
+                    let result = f32::simd_cumsum(&nd.view());
+                    return Ok(unsafe {
+                        std::mem::transmute::<Array<f32>, Array<T>>(from_nd_array(
+                            result,
+                            &array.shape(),
+                        ))
+                    });
                 }
             }
 
@@ -5179,8 +5462,8 @@ where
 /// * `x` - The x-coordinates at which to evaluate the interpolated values
 /// * `xp` - The x-coordinates of the data points, must be increasing
 /// * `fp` - The y-coordinates of the data points
-/// * `left` - Value to return for x < xp[0], default is fp[0]
-/// * `right` - Value to return for x > xp[-1], default is fp[-1]
+/// * `left` - Value to return for `x < xp[0]`, default is `fp[0]`
+/// * `right` - Value to return for `x > xp[-1]`, default is `fp[-1]`
 ///
 /// # Returns
 ///
@@ -6260,7 +6543,7 @@ where
 ///
 /// # Returns
 ///
-/// Array with the same shape as the input where each element is x[i] * 2^exp[i]
+/// Array with the same shape as the input where each element is `x[i] * 2^exp[i]`
 ///
 /// # Examples
 ///
@@ -6883,37 +7166,6 @@ where
         return Err(NumRs2Error::ValueError(
             "edge_order must be 1 or 2".to_string(),
         ));
-    }
-
-    // Use SIMD for 1D f64 arrays with uniform spacing and edge_order=1
-    #[cfg(target_arch = "x86_64")]
-    {
-        use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-        if ndim == 1
-            && f.len() >= 64
-            && edge_order == 1
-            && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>()
-        {
-            let spacing = match &varargs {
-                None => 1.0,
-                Some(GradientSpacing::Uniform(h)) => {
-                    let h_f64: f64 = unsafe { std::mem::transmute_copy(h) };
-                    h_f64
-                }
-                Some(GradientSpacing::PerAxis(spacings)) if spacings.len() == 1 => {
-                    let h_f64: f64 = unsafe { std::mem::transmute_copy(&spacings[0]) };
-                    h_f64
-                }
-                _ => -1.0, // Flag to skip SIMD
-            };
-            if spacing > 0.0 {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(f) };
-                let result = EnhancedSimdOps::vectorized_gradient_f64(f64_array, spacing);
-                return Ok(vec![unsafe {
-                    std::mem::transmute::<Array<f64>, Array<T>>(result)
-                }]);
-            }
-        }
     }
 
     // Determine axes to compute gradient for

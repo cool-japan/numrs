@@ -1,12 +1,12 @@
 use crate::error::{NumRs2Error, Result};
-#[cfg(target_arch = "x86_64")]
-use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
-#[cfg(target_arch = "aarch64")]
-use crate::simd_optimize::neon_enhanced::NeonEnhancedOps;
 // SCIRS2 POLICY COMPLIANT imports - always use SciRS2
+// All SIMD operations use SimdUnifiedOps trait for automatic platform detection
 use num_traits::{One, Zero};
-use scirs2_core::ndarray::{Array as NdArray, ArrayView, ArrayView2, Axis, Dimension, IxDyn};
+use scirs2_core::ndarray::{
+    Array as NdArray, Array1, ArrayView, ArrayView1, ArrayView2, Axis, Dimension, IxDyn,
+};
 use scirs2_core::parallel_ops::*;
+use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::cmp;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
@@ -1614,49 +1614,44 @@ where
     T: Clone + Add<Output = T> + Zero + Mul<Output = T> + num_traits::One + 'static,
 {
     /// Calculate the sum of all elements in the array
+    /// Uses SimdUnifiedOps for SIMD acceleration on supported platforms
     pub fn sum(&self) -> T {
-        #[cfg(target_arch = "x86_64")]
-        {
-            // Use SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = EnhancedSimdOps::vectorized_sum_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
+        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
+        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            let data: Vec<f64> = self
+                .to_vec()
+                .iter()
+                .map(|x| {
+                    // Safe type conversion through f64
+                    let ptr = x as *const T as *const f64;
+                    unsafe { *ptr }
+                })
+                .collect();
+            let nd_array = Array1::from_vec(data);
+            let result = f64::simd_sum(&nd_array.view());
+            return unsafe { std::mem::transmute_copy(&result) };
         }
-        #[cfg(target_arch = "aarch64")]
-        {
-            // Use NEON SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_sum_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
+        // Use SIMD for f32 arrays with sufficient size via SimdUnifiedOps
+        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+            let data: Vec<f32> = self
+                .to_vec()
+                .iter()
+                .map(|x| {
+                    let ptr = x as *const T as *const f32;
+                    unsafe { *ptr }
+                })
+                .collect();
+            let nd_array = Array1::from_vec(data);
+            let result = f32::simd_sum(&nd_array.view());
+            return unsafe { std::mem::transmute_copy(&result) };
         }
         let data = self.to_vec();
         data.iter().fold(T::zero(), |acc, x| acc + x.clone())
     }
 
     /// Calculate the product of all elements in the array
+    /// Note: Product reduction doesn't have direct SIMD support, uses scalar fallback
     pub fn product(&self) -> T {
-        #[cfg(target_arch = "x86_64")]
-        {
-            // Use SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = EnhancedSimdOps::vectorized_prod_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
-        }
-        #[cfg(target_arch = "aarch64")]
-        {
-            // Use NEON SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = NeonEnhancedOps::vectorized_prod_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
-        }
         let data = self.to_vec();
         data.iter().fold(T::one(), |acc, x| acc * x.clone())
     }
@@ -1905,10 +1900,10 @@ where
     }
 }
 
-// SIMD-optimized dot product for f64
+// SIMD-optimized operations for f64 using SimdUnifiedOps
 impl Array<f64> {
     /// Compute SIMD-optimized dot product of two f64 vectors
-    #[cfg(target_arch = "x86_64")]
+    /// Uses SimdUnifiedOps for automatic platform detection (AVX-512, AVX2, NEON)
     pub fn dot_simd(&self, other: &Self) -> Result<f64> {
         let a_shape = self.shape();
         let b_shape = other.shape();
@@ -1927,56 +1922,24 @@ impl Array<f64> {
             });
         }
 
-        // Use SIMD-optimized implementation
-        Ok(EnhancedSimdOps::vectorized_dot_f64(self, other))
+        // Use SimdUnifiedOps for platform-independent SIMD acceleration
+        let a_nd = Array1::from_vec(self.to_vec());
+        let b_nd = Array1::from_vec(other.to_vec());
+        Ok(f64::simd_dot(&a_nd.view(), &b_nd.view()))
     }
 
     /// Compute SIMD-optimized L2 norm (Euclidean norm)
-    #[cfg(target_arch = "x86_64")]
+    /// Uses SimdUnifiedOps for automatic platform detection
     pub fn norm_l2_simd(&self) -> f64 {
-        EnhancedSimdOps::vectorized_norm_l2_f64(self)
+        let nd_array = Array1::from_vec(self.to_vec());
+        f64::simd_norm(&nd_array.view())
     }
 
     /// Compute SIMD-optimized L1 norm (Manhattan norm)
-    #[cfg(target_arch = "x86_64")]
+    /// Uses SimdUnifiedOps for automatic platform detection
     pub fn norm_l1_simd(&self) -> f64 {
-        EnhancedSimdOps::vectorized_norm_l1_f64(self)
-    }
-
-    /// Compute SIMD-optimized dot product of two f64 vectors (NEON)
-    #[cfg(target_arch = "aarch64")]
-    pub fn dot_simd(&self, other: &Self) -> Result<f64> {
-        let a_shape = self.shape();
-        let b_shape = other.shape();
-
-        // Check dimensions
-        if a_shape.len() != 1 || b_shape.len() != 1 {
-            return Err(NumRs2Error::DimensionMismatch(
-                "dot product requires 1D arrays".to_string(),
-            ));
-        }
-
-        if a_shape[0] != b_shape[0] {
-            return Err(NumRs2Error::ShapeMismatch {
-                expected: a_shape,
-                actual: b_shape,
-            });
-        }
-
-        // Use NEON SIMD-optimized implementation
-        Ok(NeonEnhancedOps::vectorized_dot_f64(self, other))
-    }
-
-    /// Compute SIMD-optimized L2 norm (Euclidean norm) (NEON)
-    #[cfg(target_arch = "aarch64")]
-    pub fn norm_l2_simd(&self) -> f64 {
-        NeonEnhancedOps::vectorized_norm_l2_f64(self)
-    }
-
-    /// Compute SIMD-optimized L1 norm (Manhattan norm) (NEON)
-    #[cfg(target_arch = "aarch64")]
-    pub fn norm_l1_simd(&self) -> f64 {
-        NeonEnhancedOps::vectorized_norm_l1_f64(self)
+        let nd_array = Array1::from_vec(self.to_vec());
+        f64::simd_norm_l1(&nd_array.view())
     }
 }
 

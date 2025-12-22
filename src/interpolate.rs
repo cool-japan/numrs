@@ -315,8 +315,10 @@ pub enum SplineBoundary<T> {
 /// Enhanced cubic spline interpolator with boundary conditions
 pub struct CubicSplineInterp<T> {
     x: Vec<T>,
+    #[allow(dead_code)] // Stored for potential future use (get_y accessor)
     y: Vec<T>,
     coeffs: Vec<[T; 4]>,
+    #[allow(dead_code)] // Stored for potential future use (get_boundary accessor)
     boundary: SplineBoundary<T>,
 }
 
@@ -812,7 +814,7 @@ where
     ///
     /// * `x` - X grid coordinates (strictly increasing)
     /// * `y` - Y grid coordinates (strictly increasing)
-    /// * `z` - Function values at grid points (z[i][j] = f(x[i], y[j]))
+    /// * `z` - Function values at grid points (`z[i][j] = f(x[i], y[j])`)
     ///
     /// # Examples
     ///

@@ -1229,7 +1229,7 @@ fn dot_product<T: Float + std::iter::Sum>(a: &[T], b: &[T]) -> T {
 ///
 /// * `f` - Objective function
 /// * `grad` - Gradient function
-/// * `hess` - Hessian function (returns matrix as Vec<Vec<T>>)
+/// * `hess` - Hessian function (returns matrix as `Vec<Vec<T>>`)
 /// * `x0` - Initial guess
 /// * `config` - Optional configuration
 ///

@@ -205,7 +205,7 @@ pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 MatMul Pipeline Layout"),
                 bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
     let pipeline = context
@@ -350,7 +350,7 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("NumRS2 Transpose Pipeline Layout"),
                     bind_group_layouts: &[&bind_group_layout],
-                    push_constant_ranges: &[],
+                    immediate_size: 0,
                 });
 
         let pipeline = context
@@ -505,7 +505,7 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Element-wise Pipeline Layout"),
                 bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
     let pipeline = context
@@ -684,7 +684,7 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Reduction Pipeline Layout"),
                 bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
     let pipeline = context
@@ -766,7 +766,10 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
         tx.send(result).unwrap();
     });
 
-    context.device().poll(wgpu::PollType::Wait).unwrap();
+    context
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .unwrap();
     rx.recv()
         .unwrap()
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
@@ -863,7 +866,7 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Reduction Pipeline Layout"),
                 bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
     let pipeline = context
@@ -945,7 +948,10 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
         tx.send(result).unwrap();
     });
 
-    context.device().poll(wgpu::PollType::Wait).unwrap();
+    context
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .unwrap();
     rx.recv()
         .unwrap()
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
@@ -1039,7 +1045,7 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Unary Element-wise Pipeline Layout"),
                 bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
     let pipeline = context

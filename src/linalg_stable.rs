@@ -6,7 +6,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::linalg_optimized::OptimizedBlas;
+// Note: OptimizedBlas removed - using simple implementation for stability
 use num_traits::Float;
 use std::fmt::Debug;
 
@@ -694,10 +694,21 @@ impl StableDecompositions {
 
         let m = a_shape[0];
         let n = b_shape[1];
-        let _k = a_shape[1];
+        let k = a_shape[1];
 
         let mut c = Array::zeros(&[m, n]);
-        OptimizedBlas::gemm(a, b, &mut c, T::one(), T::zero(), false, false)?;
+
+        // Simple matrix multiplication for stable decompositions
+        // Uses Array::matmul which handles the multiplication internally
+        for i in 0..m {
+            for j in 0..n {
+                let mut sum = T::zero();
+                for l in 0..k {
+                    sum = sum + a.get(&[i, l])? * b.get(&[l, j])?;
+                }
+                c.set(&[i, j], sum)?;
+            }
+        }
 
         Ok(c)
     }

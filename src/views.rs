@@ -1174,7 +1174,9 @@ impl<'a, T: Clone> WindowView<'a, T> {
 #[derive(Debug)]
 pub struct DiagonalView<'a, T> {
     data: &'a [T],
+    #[allow(dead_code)] // Stored for potential future use (get_shape accessor)
     shape: Vec<usize>,
+    #[allow(dead_code)] // Stored for potential future use (get_offset accessor)
     offset: isize,
     length: usize,
     stride: usize,

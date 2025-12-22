@@ -177,12 +177,8 @@ impl BitGenerator for PCG64BitGenerator {
         let xorshifted = (((old_state >> 64) ^ old_state) >> 64) as u64;
         let rot = (old_state >> 122) as u32;
 
-        // Rotate right - need to handle the case where rot is 0
-        if rot == 0 {
-            xorshifted
-        } else {
-            (xorshifted >> rot) | (xorshifted << (64 - rot))
-        }
+        // Rotate right
+        xorshifted.rotate_right(rot)
     }
 
     fn next_u32(&mut self) -> u32 {

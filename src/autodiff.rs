@@ -353,7 +353,7 @@ where
 /// Compute Jacobian matrix of a vector-valued function using forward mode AD
 ///
 /// This function computes the Jacobian J of a function f: ℝⁿ → ℝᵐ at a given point.
-/// The Jacobian is an m×n matrix where J[i,j] = ∂fᵢ/∂xⱼ.
+/// The Jacobian is an m×n matrix where `J[i,j] = ∂fᵢ/∂xⱼ`.
 ///
 /// # Arguments
 ///

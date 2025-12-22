@@ -1914,7 +1914,7 @@ pub fn packbits(
 ///
 /// * `packed` - Array of type uint8 to be unpacked
 /// * `axis` - The dimension along which unpacking is performed. If None, the array is flattened
-/// * `count` - The number of elements to unpack along the given axis. If None, unpacks 8 * packed.shape[axis]
+/// * `count` - The number of elements to unpack along the given axis. If None, unpacks `8 * packed.shape[axis]`
 /// * `bitorder` - Bit order ('big' or 'little'). 'big' means the most significant bit is at the beginning
 ///
 /// # Returns

@@ -397,6 +397,7 @@ pub fn errstate() -> ErrorStateBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_error_state_default() {
@@ -408,6 +409,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_seterr_geterr() {
         // Save current state
         let original_state = geterr();
@@ -433,6 +435,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_errstate_context_manager() {
         let original_state = geterr();
 
@@ -472,6 +475,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_handle_error_ignore() {
         let _guard = errstate().divide(ErrorAction::Ignore).enter();
         let result = handle_error(FloatingPointError::DivideByZero, "test error");
@@ -479,6 +483,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_handle_error_warn() {
         let _guard = errstate().divide(ErrorAction::Warn).enter();
         let result = handle_error(FloatingPointError::DivideByZero, "test error");
@@ -486,6 +491,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     #[should_panic(expected = "NumRS2 Error: divide by zero - test error")]
     fn test_handle_error_raise() {
         let _guard = errstate().divide(ErrorAction::Raise).enter();

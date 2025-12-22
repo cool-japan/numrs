@@ -2,13 +2,18 @@
 //!
 //! This module contains vector-specific operations including norm calculations,
 //! dot products, inner products, trace operations, and outer products.
+//!
+//! # SCIRS2 POLICY Compliance
+//!
+//! All SIMD operations use scirs2-core's SimdUnifiedOps trait for automatic
+//! platform detection (AVX-512, AVX2, NEON). No direct platform intrinsics.
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-#[cfg(target_arch = "x86_64")]
-use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
 use num_traits::Float;
+use scirs2_core::ndarray::{Array1, ArrayView1};
 use scirs2_core::random::prelude::*;
+use scirs2_core::simd_ops::SimdUnifiedOps;
 use scirs2_core::Complex;
 use std::fmt::Debug;
 
@@ -27,25 +32,21 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
         // Vector norm
         if ord == T::from(1.0).unwrap() {
             // L1 norm (sum of absolute values)
-            #[cfg(target_arch = "x86_64")]
-            {
-                // Use SIMD for large vectors
-                if a.len() >= SIMD_THRESHOLD {
-                    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                        let data = a.to_vec();
-                        let f32_data: Vec<f32> =
-                            data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
-                        let f32_array = Array::from_vec(f32_data);
-                        let result = EnhancedSimdOps::vectorized_norm_l1_f32(&f32_array);
-                        return Ok(T::from(result).unwrap());
-                    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                        let data = a.to_vec();
-                        let f64_data: Vec<f64> =
-                            data.iter().map(|&x| x.to_f64().unwrap()).collect();
-                        let f64_array = Array::from_vec(f64_data);
-                        let result = EnhancedSimdOps::vectorized_norm_l1_f64(&f64_array);
-                        return Ok(T::from(result).unwrap());
-                    }
+            // Use SIMD for large vectors via SimdUnifiedOps
+            if a.len() >= SIMD_THRESHOLD {
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                    let data = a.to_vec();
+                    let f32_data: Vec<f32> =
+                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                    let f32_array = Array1::from_vec(f32_data);
+                    let result = f32::simd_norm_l1(&f32_array.view());
+                    return Ok(T::from(result).unwrap());
+                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                    let data = a.to_vec();
+                    let f64_data: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                    let f64_array = Array1::from_vec(f64_data);
+                    let result = f64::simd_norm_l1(&f64_array.view());
+                    return Ok(T::from(result).unwrap());
                 }
             }
 
@@ -54,25 +55,21 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             Ok(sum)
         } else if ord == T::from(2.0).unwrap() {
             // L2 norm (Euclidean norm)
-            #[cfg(target_arch = "x86_64")]
-            {
-                // Use SIMD for large vectors
-                if a.len() >= SIMD_THRESHOLD {
-                    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                        let data = a.to_vec();
-                        let f32_data: Vec<f32> =
-                            data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
-                        let f32_array = Array::from_vec(f32_data);
-                        let result = EnhancedSimdOps::vectorized_norm_l2_f32(&f32_array);
-                        return Ok(T::from(result).unwrap());
-                    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                        let data = a.to_vec();
-                        let f64_data: Vec<f64> =
-                            data.iter().map(|&x| x.to_f64().unwrap()).collect();
-                        let f64_array = Array::from_vec(f64_data);
-                        let result = EnhancedSimdOps::vectorized_norm_l2_f64(&f64_array);
-                        return Ok(T::from(result).unwrap());
-                    }
+            // Use SIMD for large vectors via SimdUnifiedOps
+            if a.len() >= SIMD_THRESHOLD {
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                    let data = a.to_vec();
+                    let f32_data: Vec<f32> =
+                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                    let f32_array = Array1::from_vec(f32_data);
+                    let result = f32::simd_norm(&f32_array.view());
+                    return Ok(T::from(result).unwrap());
+                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                    let data = a.to_vec();
+                    let f64_data: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                    let f64_array = Array1::from_vec(f64_data);
+                    let result = f64::simd_norm(&f64_array.view());
+                    return Ok(T::from(result).unwrap());
                 }
             }
 
@@ -81,25 +78,21 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             Ok(sum_squares.sqrt())
         } else if ord == T::from(f64::INFINITY).unwrap() {
             // L-infinity norm (maximum absolute value)
-            #[cfg(target_arch = "x86_64")]
-            {
-                // Use SIMD for large vectors
-                if a.len() >= SIMD_THRESHOLD {
-                    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                        let data = a.to_vec();
-                        let f32_data: Vec<f32> =
-                            data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
-                        let f32_array = Array::from_vec(f32_data);
-                        let result = EnhancedSimdOps::vectorized_norm_linf_f32(&f32_array);
-                        return Ok(T::from(result).unwrap());
-                    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                        let data = a.to_vec();
-                        let f64_data: Vec<f64> =
-                            data.iter().map(|&x| x.to_f64().unwrap()).collect();
-                        let f64_array = Array::from_vec(f64_data);
-                        let result = EnhancedSimdOps::vectorized_norm_linf_f64(&f64_array);
-                        return Ok(T::from(result).unwrap());
-                    }
+            // Use SIMD for large vectors via SimdUnifiedOps
+            if a.len() >= SIMD_THRESHOLD {
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                    let data = a.to_vec();
+                    let f32_data: Vec<f32> =
+                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                    let f32_array = Array1::from_vec(f32_data);
+                    let result = f32::simd_norm_linf(&f32_array.view());
+                    return Ok(T::from(result).unwrap());
+                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                    let data = a.to_vec();
+                    let f64_data: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                    let f64_array = Array1::from_vec(f64_data);
+                    let result = f64::simd_norm_linf(&f64_array.view());
+                    return Ok(T::from(result).unwrap());
                 }
             }
 
@@ -420,31 +413,26 @@ pub fn inner<T: Float + Clone + Debug + 'static>(a: &Array<T>, b: &Array<T>) -> 
         });
     }
 
-    // Use SIMD for large vectors when available
-    #[cfg(target_arch = "x86_64")]
-    {
-        if a.len() >= SIMD_THRESHOLD {
-            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                let a_data = a.to_vec();
-                let b_data = b.to_vec();
-                let f32_a_data: Vec<f32> =
-                    a_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
-                let f32_b_data: Vec<f32> =
-                    b_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
-                let f32_a = Array::from_vec(f32_a_data);
-                let f32_b = Array::from_vec(f32_b_data);
-                let result = EnhancedSimdOps::vectorized_dot_f32(&f32_a, &f32_b)?;
-                return Ok(T::from(result).unwrap());
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let a_data = a.to_vec();
-                let b_data = b.to_vec();
-                let f64_a_data: Vec<f64> = a_data.iter().map(|&x| x.to_f64().unwrap()).collect();
-                let f64_b_data: Vec<f64> = b_data.iter().map(|&x| x.to_f64().unwrap()).collect();
-                let f64_a = Array::from_vec(f64_a_data);
-                let f64_b = Array::from_vec(f64_b_data);
-                let result = EnhancedSimdOps::vectorized_dot_f64(&f64_a, &f64_b);
-                return Ok(T::from(result).unwrap());
-            }
+    // Use SIMD for large vectors via SimdUnifiedOps
+    if a.len() >= SIMD_THRESHOLD {
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+            let a_data = a.to_vec();
+            let b_data = b.to_vec();
+            let f32_a_data: Vec<f32> = a_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+            let f32_b_data: Vec<f32> = b_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+            let f32_a = Array1::from_vec(f32_a_data);
+            let f32_b = Array1::from_vec(f32_b_data);
+            let result = f32::simd_dot(&f32_a.view(), &f32_b.view());
+            return Ok(T::from(result).unwrap());
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            let a_data = a.to_vec();
+            let b_data = b.to_vec();
+            let f64_a_data: Vec<f64> = a_data.iter().map(|&x| x.to_f64().unwrap()).collect();
+            let f64_b_data: Vec<f64> = b_data.iter().map(|&x| x.to_f64().unwrap()).collect();
+            let f64_a = Array1::from_vec(f64_a_data);
+            let f64_b = Array1::from_vec(f64_b_data);
+            let result = f64::simd_dot(&f64_a.view(), &f64_b.view());
+            return Ok(T::from(result).unwrap());
         }
     }
 

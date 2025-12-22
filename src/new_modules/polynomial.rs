@@ -1384,7 +1384,7 @@ where
 /// Create companion matrix of a polynomial
 ///
 /// The companion matrix of a monic polynomial
-/// p(x) = x^n + c[0]*x^(n-1) + ... + c[n-2]*x + c[n-1]
+/// `p(x) = x^n + c[0]*x^(n-1) + ... + c[n-2]*x + c[n-1]`
 /// is the n x n matrix:
 /// ```text
 /// [  0    0   ...   0  -c[n-1] ]

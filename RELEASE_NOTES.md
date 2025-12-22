@@ -1,18 +1,18 @@
-# NumRS2 v0.1.0-rc.1 Release Notes
+# NumRS2 v0.1.0-rc.3 Release Notes
 
 **Release Date:** December 2025
-**Release Candidate 1** - Production-Ready NumPy + SciPy Implementation in Rust
+**Release Candidate 3** - Production-Ready NumPy + SciPy Implementation in Rust with Expression Templates
 
 ## Overview
 
-NumRS2 v0.1.0-rc.1 marks a major milestone: **production-ready status** with comprehensive NumPy and SciPy compatibility. This release delivers a complete numerical computing library in Rust with 11 SciPy-equivalent modules, SIMD-optimized operations, and seamless integration with the SciRS2 ecosystem.
+NumRS2 v0.1.0-rc.3 marks a major milestone: **production-ready status** with comprehensive NumPy and SciPy compatibility. This release delivers a complete numerical computing library in Rust with 11 SciPy-equivalent modules, SIMD-optimized operations, expression templates for lazy evaluation, and seamless integration with the SciRS2 ecosystem.
 
 ## Release Highlights
 
 ### Production-Ready Status
 
-- **122,799 lines** of production Rust code
-- **1,637+ tests** passing (1,020 unit + 617 doc tests)
+- **119,358 lines** of production Rust code (298 files)
+- **647 tests** passing (unit + doc tests)
 - **Zero warnings** in compilation
 - **$4.2M COCOMO** estimated development value
 
@@ -73,11 +73,24 @@ All core NumPy functionality is implemented:
 - **IPC Streaming**: Inter-process communication
 - **Python Bindings**: PyO3 integration ready for maturin build
 
-## What's New Since Beta.3
+## What's New in RC.3
 
 ### New Features
 
-1. **Enhanced FFT Module** (scirs2-fft integration)
+1. **Expression Templates System** - Complete lazy evaluation infrastructure
+   - **SharedArray<T>**: Reference-counted arrays with ArcArray storage for O(1) cloning
+   - **Operator Overloading**: Natural syntax for array operations (+, -, *, /, scalar ops)
+   - **SharedExpr**: Lifetime-free expression templates using Arc for zero-lifetime DAG construction
+   - **CachedExpr**: Common Subexpression Elimination (CSE) with automatic result caching
+   - **CSEOptimizer**: Automatic detection and elimination of repeated computations
+
+2. **Memory Access Pattern Optimization** - Cache-aware iteration strategies
+   - **BlockedIterator**: Cache-efficient blocked iteration for 1D arrays
+   - **TiledIterator2D**: 2D cache-blocking for matrix operations
+   - **StrideOptimizer**: Analyzes memory layout and suggests optimal iteration order
+   - Cache-aware operations for improved data locality
+
+3. **Enhanced FFT Module** (scirs2-fft integration)
    - DCT/DST Types I-IV for compression standards
    - Advanced transforms: FrFT, NUFFT, FHT
    - STFT and spectrograms for time-frequency analysis
@@ -112,41 +125,41 @@ None. This release maintains full API compatibility with beta.3.
 
 ## Dependencies
 
-NumRS2 uses the SciRS2 ecosystem (v0.1.0-rc.2):
+NumRS2 uses the SciRS2 ecosystem (v0.1.0-rc.4):
 
 ```toml
 [dependencies]
-scirs2-core = "0.1.0-rc.2"
-scirs2-stats = "0.1.0-rc.2"
-scirs2-linalg = "0.1.0-rc.2"
-scirs2-ndimage = "0.1.0-rc.2"
-scirs2-spatial = "0.1.0-rc.2"
-scirs2-special = "0.1.0-rc.2"
-scirs2-fft = "0.1.0-rc.2"
-scirs2-signal = "0.1.0-rc.2"
+scirs2-core = "0.1.0-rc.4"
+scirs2-stats = "0.1.0-rc.4"
+scirs2-linalg = "0.1.0-rc.4"
+scirs2-ndimage = "0.1.0-rc.4"
+scirs2-spatial = "0.1.0-rc.4"
+scirs2-special = "0.1.0-rc.4"
+scirs2-fft = "0.1.0-rc.4"
+scirs2-signal = "0.1.0-rc.4"
 ```
 
 ## Installation
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-rc.1"
+numrs2 = "0.1.0-rc.3"
 ```
 
 With optional features:
 
 ```toml
 # Apache Arrow integration
-numrs2 = { version = "0.1.0-rc.1", features = ["arrow"] }
+numrs2 = { version = "0.1.0-rc.3", features = ["arrow"] }
 
 # Python bindings
-numrs2 = { version = "0.1.0-rc.1", features = ["python"] }
+numrs2 = { version = "0.1.0-rc.3", features = ["python"] }
 
 # LAPACK support
-numrs2 = { version = "0.1.0-rc.1", features = ["lapack"] }
+numrs2 = { version = "0.1.0-rc.3", features = ["lapack"] }
 
 # GPU acceleration
-numrs2 = { version = "0.1.0-rc.1", features = ["gpu"] }
+numrs2 = { version = "0.1.0-rc.3", features = ["gpu"] }
 ```
 
 ## Quick Start

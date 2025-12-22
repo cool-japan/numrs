@@ -1152,7 +1152,7 @@ where
 ///
 /// * `a` - First parameter array
 /// * `b` - Second parameter array
-/// * `x` - Upper limit array (should be in [0,1])
+/// * `x` - Upper limit array (should be in `[0,1]`)
 ///
 /// # Returns
 ///

@@ -1646,7 +1646,7 @@ impl NeonEnhancedOps {
         base.map(|x| x.powf(exp))
     }
 
-    /// NEON vectorized element-wise power for f64: base[i]^exp[i]
+    /// NEON vectorized element-wise power for f64: `base[i]^exp[i]`
     #[cfg(target_arch = "aarch64")]
     pub fn vectorized_pow_f64(base: &Array<f64>, exp: &Array<f64>) -> Array<f64> {
         let data_base = base.to_vec();
@@ -1700,9 +1700,6 @@ impl NeonEnhancedOps {
         let len = data_mag.len().min(data_sign.len());
         let mut result = vec![0.0f64; len];
         let simd_len = len & !(NEON_F64_LANES - 1);
-
-        // Sign bit mask for f64
-        const SIGN_MASK: u64 = 0x8000_0000_0000_0000u64;
 
         unsafe {
             for i in (0..simd_len).step_by(NEON_F64_LANES) {

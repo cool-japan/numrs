@@ -28,7 +28,7 @@ use std::ops::{Add, Mul};
 /// Compute the 1D convolution of two arrays
 ///
 /// The discrete convolution operation is defined as:
-/// (a * b)[n] = sum(a[m] * b[n - m]) for m from 0 to M-1
+/// `(a * b)[n] = sum(a[m] * b[n - m])` for m from 0 to M-1
 /// where M is the length of array a.
 ///
 /// # Parameters
@@ -148,7 +148,7 @@ where
 /// Compute the cross-correlation of two 1D arrays
 ///
 /// The correlation is defined as:
-/// (a ⋆ b)[n] = sum(a[m] * conj(b[m - n])) for all m
+/// `(a ⋆ b)[n] = sum(a[m] * conj(b[m - n]))` for all m
 ///
 /// This is related to convolution by: correlate(a, b) = convolve(a, b[::-1])
 ///

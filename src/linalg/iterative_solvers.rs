@@ -2068,26 +2068,6 @@ where
     Ok(sum.sqrt())
 }
 
-/// Compute dot product of two vectors
-fn dot<T>(a: &Array<T>, b: &Array<T>) -> Result<T>
-where
-    T: Float + Clone + Zero,
-{
-    if a.size() != b.size() {
-        return Err(NumRs2Error::ShapeMismatch {
-            expected: a.shape(),
-            actual: b.shape(),
-        });
-    }
-
-    let n = a.size();
-    let mut sum = T::zero();
-    for i in 0..n {
-        sum = sum + a.get(&[i])? * b.get(&[i])?;
-    }
-    Ok(sum)
-}
-
 // ============================================================================
 // ITERATIVE REFINEMENT
 // ============================================================================

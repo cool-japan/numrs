@@ -475,8 +475,8 @@ pub fn choose<T: Clone + num_traits::Zero>(
 ///
 /// Given a set of conditions and corresponding functions, evaluate the piecewise
 /// function defined by:
-///   - where condition[0] is True: func[0](x)
-///   - where condition[1] is True: func[1](x)
+///   - where `condition[0]` is True: `func[0](x)`
+///   - where `condition[1]` is True: `func[1](x)`
 ///   - ...
 ///   - otherwise: fill_value
 ///

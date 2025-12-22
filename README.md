@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **🚀 Version 0.1.0-rc.1** - Release Candidate: Production-ready SIMD optimizations, 11 scipy-equivalent modules, and complete NumPy compatibility. Features 86 AVX2-vectorized functions + 42 ARM NEON operations, comprehensive interpolation, and 1,637+ tests passing (1,020 unit + 617 doctests) with zero warnings. 122,799 lines of production Rust code.
+> **🚀 Version 0.1.0-rc.3** - Release Candidate: Production-ready SIMD optimizations, 11 scipy-equivalent modules, and complete NumPy compatibility. Features 86 AVX2-vectorized functions + 42 ARM NEON operations, comprehensive interpolation, and 647 tests passing with zero warnings.
 
 ## ✨ Architecture Highlights
 
@@ -69,7 +69,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-rc.1", features = ["arrow"] }
+numrs2 = { version = "0.1.0-rc.3", features = ["arrow"] }
 ```
 
 Or, when building:
@@ -80,7 +80,7 @@ cargo build --features scirs
 
 ### 🚀 Performance Optimizations
 
-NumRS2 leverages SciRS2-Core (v0.1.0-rc.2) for cutting-edge performance optimizations:
+NumRS2 leverages SciRS2-Core (v0.1.0-rc.3) for cutting-edge performance optimizations:
 
 - **Unified SIMD Operations**: All SIMD code goes through SciRS2-Core's SimdUnifiedOps trait
 - **Adaptive Algorithm Selection**: AutoOptimizer automatically chooses between scalar, SIMD, or GPU implementations
@@ -114,7 +114,7 @@ The GPU acceleration feature provides:
 
 For examples, see [gpu_example.rs](examples/gpu_example.rs)
 
-### 🎯 Release Candidate 1 Highlights (v0.1.0-rc.1)
+### 🎯 Release Candidate 3 Highlights (v0.1.0-rc.3)
 
 **Numerical Optimization (scipy.optimize equivalent)**
 - BFGS & L-BFGS: Quasi-Newton methods for large-scale optimization
@@ -236,13 +236,87 @@ NumRS is designed with performance as a primary goal:
 - **Fine-grained Parallelism**: Advanced workload partitioning for better load balancing
 - **Modern Random Generation**: Advanced thread-safe RNG with PCG64 algorithm for high-quality randomness
 
+## Expression Templates
+
+NumRS2 provides a powerful expression templates system for lazy evaluation and performance optimization:
+
+### SharedArray - Reference-Counted Arrays
+
+```rust
+use numrs2::prelude::*;
+
+// Create shared arrays with natural operator syntax
+let a: SharedArray<f64> = SharedArray::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+let b: SharedArray<f64> = SharedArray::from_vec(vec![10.0, 20.0, 30.0, 40.0]);
+
+// Cheap cloning (O(1) - just increments reference count)
+let a_clone = a.clone();
+
+// Natural operator overloading
+let sum = a.clone() + b.clone();         // [11.0, 22.0, 33.0, 44.0]
+let product = a.clone() * b.clone();     // [10.0, 40.0, 90.0, 160.0]
+let scaled = a.clone() * 2.0;            // [2.0, 4.0, 6.0, 8.0]
+let result = (a.clone() + b.clone()) * 2.0 - 5.0;  // Chained operations
+```
+
+### SharedExpr - Lifetime-Free Lazy Evaluation
+
+```rust
+use numrs2::expr::{SharedExpr, SharedExprBuilder};
+
+// Build expressions lazily - no computation until eval()
+let c: SharedArray<f64> = SharedArray::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+let expr = SharedExprBuilder::from_shared_array(c);
+let squared = expr.map(|x| x * x);   // Expression built, not evaluated
+let result = squared.eval();         // [1.0, 4.0, 9.0, 16.0] - evaluated here
+```
+
+### Common Subexpression Elimination (CSE)
+
+```rust
+use numrs2::expr::{CachedExpr, ExprCache};
+
+// Automatic caching of repeated computations
+let cache: ExprCache<f64> = ExprCache::new();
+let cached_expr = CachedExpr::new(sum_expr.into_expr(), cache.clone());
+
+let result1 = cached_expr.eval();  // Computes and caches
+let result2 = cached_expr.eval();  // Uses cached result
+```
+
+### Memory Access Pattern Optimization
+
+```rust
+use numrs2::memory_optimize::access_patterns::*;
+
+// Detect memory layout for optimization
+let layout = detect_layout(&[100, 100], &[100, 1]);  // CContiguous
+
+// Get optimization hints for array shapes
+let hints = OptimizationHints::default_for::<f64>(10000);
+println!("Block size: {}", hints.block_size);
+println!("Use parallel: {}", hints.use_parallel);
+
+// Cache-aware iteration for large arrays
+let block_iter = BlockedIterator::new(10000, 64);
+for block in block_iter {
+    // Process block.start..block.end with cache efficiency
+}
+
+// Cache-aware operations
+cache_aware_transform(&src, &mut dst, |x| x * 2.0);
+cache_aware_binary_op(&a, &b, &mut result, |x, y| x + y);
+```
+
+See the [expression templates example](examples/expression_templates_example.rs) for a comprehensive demonstration.
+
 ## Installation
 
 Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-rc.1"
+numrs2 = "0.1.0-rc.3"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:

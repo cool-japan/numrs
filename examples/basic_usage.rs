@@ -5,7 +5,7 @@ use numrs2::prelude::*;
 use numrs2::random;
 
 fn main() -> Result<()> {
-    println!("NumRS2 v0.1.0-beta.2 Basic Usage Example");
+    println!("NumRS2 v0.1.0-rc.3 Basic Usage Example");
     println!("==========================================");
 
     // Create arrays

@@ -57,6 +57,7 @@ impl GpuContext {
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::default(),
+                experimental_features: wgpu::ExperimentalFeatures::default(),
             })
             .await
             .map_err(|e| {

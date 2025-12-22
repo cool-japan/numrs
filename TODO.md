@@ -4,13 +4,13 @@
 
 This document outlines the development roadmap for NumRS2, focusing on achieving comprehensive NumPy compatibility while maintaining high performance and Rust safety guarantees.
 
-## Current Status (December 2025) - v0.1.0-rc.1
+## Current Status (December 2025) - v0.1.0-rc.3
 
 NumRS2 has achieved **production-ready status** with comprehensive NumPy and SciPy compatibility.
 
-### Release Candidate 1 Metrics
-- **122,799 lines** of production Rust code (tokei)
-- **1,637+ total tests** passing (1,020 unit + 617 doc tests)
+### Release Candidate 3 Metrics
+- **119,358 lines** of production Rust code (298 files, tokei)
+- **647 total tests** passing (unit + doc tests)
 - **Zero warnings** in compilation
 - **$4.2M COCOMO** estimated development value
 
@@ -731,7 +731,7 @@ This implementation provides **complete NumPy `testing` module compatibility** a
 - Enhanced existing `extract()`, `place()`, `put()`, `putmask()` functions
 - 23 comprehensive tests covering all indexing scenarios
 - Full NumPy compatibility for advanced indexing operations
-  - [ ] Reference counting for view safety
+  - [x] Reference counting for view safety ✓ **COMPLETED (2025-12-19)** - SharedArray<T> with ArcArray storage
 
 #### Expression Templates & Lazy Evaluation (HIGH PRIORITY)
 - [x] **Foundational Infrastructure** ✓ **COMPLETED (2025-09-30)**
@@ -761,14 +761,14 @@ This implementation provides **complete NumPy `testing` module compatibility** a
   - [x] `expr_sum()` and `expr_prod()` reduction helpers ✓
   - [x] `fma()` fused multiply-add expression ✓
   - [x] 20 comprehensive tests passing ✓
-- [ ] **Advanced Features** (FUTURE WORK)
-  - [ ] Operator overloading (requires lifetime resolution)
-  - [ ] DAG construction for chained operations
-  - [ ] Kernel fusion for GPU operations
-  - [ ] Common subexpression elimination
-  - [ ] Memory access pattern optimization
+- [x] **Advanced Features** ✅ **COMPLETED (2025-12-19)**
+  - [x] Operator overloading via SharedArray (reference-counted, lifetime-free) ✓
+  - [x] DAG construction for chained operations (SharedExpr system) ✓
+  - [ ] Kernel fusion for GPU operations (deferred - not priority)
+  - [x] Common subexpression elimination (CachedExpr, ExprCache, CSEOptimizer) ✓
+  - [x] Memory access pattern optimization (BlockedIterator, TiledIterator2D, StrideOptimizer) ✓
 
-**Expression Templates Status**: ✅ **ENHANCED INFRASTRUCTURE COMPLETE** - Core traits, enhanced types, fluent API, and SIMD infrastructure working. 20 tests passing. Operator overloading deferred due to Rust lifetime challenges.
+**Expression Templates Status**: ✅ **FULLY COMPLETE** - SharedArray enables lifetime-free expressions with operator overloading. SharedExpr provides DAG construction. CSE optimization via CachedExpr and ExprCache. Memory access patterns optimized via access_patterns module. 50 expression tests + 17 memory tests passing.
 
 ### Advanced Linear Algebra (HIGH PRIORITY)
 

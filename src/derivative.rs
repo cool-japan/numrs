@@ -195,7 +195,7 @@ where
 
 /// Compute Jacobian matrix of a vector-valued function
 ///
-/// Returns matrix J where J[i][j] = ∂f_i/∂x_j
+/// Returns matrix J where `J[i][j] = ∂f_i/∂x_j`
 ///
 /// # Examples
 ///
@@ -254,7 +254,7 @@ where
 
 /// Compute Hessian matrix (matrix of second derivatives)
 ///
-/// Returns matrix H where H[i][j] = ∂²f/∂x_i∂x_j
+/// Returns matrix H where `H[i][j] = ∂²f/∂x_i∂x_j`
 ///
 /// # Examples
 ///

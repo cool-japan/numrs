@@ -97,7 +97,7 @@ pub struct OdeResult<T> {
 
 /// Solve an initial value problem for a system of ODEs
 ///
-/// Solves dy/dt = f(t, y), y(t_span[0]) = y0
+/// Solves `dy/dt = f(t, y), y(t_span[0]) = y0`
 ///
 /// # Arguments
 /// * `f` - The right-hand side function f(t, y) returning dy/dt

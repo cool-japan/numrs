@@ -1,32 +1,18 @@
-#![allow(deprecated)]
+//! SIMD Operations Example
+//!
+//! This example demonstrates the SIMD-accelerated operations available in NumRS2
+//! using scirs2-core's SimdUnifiedOps trait.
 
 use numrs2::prelude::*;
-use numrs2::simd::{
-    simd_add, simd_div, simd_exp, simd_log, simd_mul, simd_prod, simd_sqrt, simd_sum,
-};
+use numrs2::simd::{get_simd_implementation_name, SimdOps};
 
 fn main() {
     println!("NumRS SIMD Operations Example");
-    println!("===========================");
+    println!("=============================");
 
-    // Detect CPU features and select SIMD implementation
-    let features = detect_cpu_features();
-    let implementation = get_simd_implementation();
-
-    println!("Detected CPU features:");
-    println!("  SSE2: {}", features.sse2);
-    println!("  SSE3: {}", features.sse3);
-    println!("  SSSE3: {}", features.ssse3);
-    println!("  SSE4.1: {}", features.sse4_1);
-    println!("  SSE4.2: {}", features.sse4_2);
-    println!("  AVX: {}", features.avx);
-    println!("  AVX2: {}", features.avx2);
-    println!("  FMA: {}", features.fma);
-    println!("  AVX-512F: {}", features.avx512f);
-    println!("  NEON: {}", features.neon);
-    println!("  SVE: {}", features.sve);
-
-    println!("\nSelected SIMD implementation: {}", implementation.name());
+    // Get SIMD implementation info
+    let implementation_name = get_simd_implementation_name();
+    println!("\nUsing SIMD implementation: {}", implementation_name);
 
     // Create arrays
     let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
@@ -38,46 +24,51 @@ fn main() {
     println!("\nArray b:");
     println!("{}", b);
 
+    // SIMD operations using SimdOps trait
+    println!("\n--- SIMD Operations via SimdOps Trait ---");
+
+    // Flatten arrays for SIMD operations
+    let a_flat = a.flatten(None);
+    let b_flat = b.flatten(None);
+
     // SIMD addition
-    let c = simd_add(&a, &b).unwrap();
-    println!("\nSIMD Add (a + b):");
-    println!("{}", c);
+    let c = a_flat.simd_add(&b_flat).unwrap();
+    println!("\nSIMD Add (a + b): {:?}", c.to_vec());
 
     // SIMD multiplication
-    let d = simd_mul(&a, &b).unwrap();
-    println!("\nSIMD Multiply (a * b):");
-    println!("{}", d);
+    let d = a_flat.simd_mul(&b_flat).unwrap();
+    println!("SIMD Multiply (a * b): {:?}", d.to_vec());
 
     // SIMD division
-    let e = simd_div(&a, &b).unwrap();
-    println!("\nSIMD Divide (a / b):");
-    println!("{}", e);
+    let e = a_flat.simd_div(&b_flat).unwrap();
+    println!("SIMD Divide (a / b): {:?}", e.to_vec());
 
-    // SIMD exponential
-    let f = simd_exp(&a);
-    println!("\nSIMD Exp (exp(a)):");
-    println!("{}", f);
-
-    // SIMD logarithm
-    let g = simd_log(&b);
-    println!("\nSIMD Log (log(b)):");
-    println!("{}", g);
-
-    // SIMD square root
-    let h = simd_sqrt(&a);
-    println!("\nSIMD Sqrt (sqrt(a)):");
-    println!("{}", h);
+    // SIMD dot product
+    let dot_result = a_flat.simd_dot(&b_flat).unwrap();
+    println!("SIMD Dot product (a · b): {}", dot_result);
 
     // SIMD reduction operations
-    let sum = simd_sum(&a);
+    let sum = a_flat.simd_sum();
     println!("\nSIMD Sum of all elements in a: {}", sum);
 
-    let prod = simd_prod(&a);
-    println!("SIMD Product of all elements in a: {}", prod);
+    let mean = a_flat.simd_mean();
+    println!("SIMD Mean of all elements in a: {}", mean);
+
+    // SIMD scalar operations
+    let scaled = a_flat.simd_mul_scalar(2.0);
+    println!("\nSIMD Scalar multiply (a * 2): {:?}", scaled.to_vec());
+
+    let shifted = a_flat.simd_add_scalar(10.0);
+    println!("SIMD Scalar add (a + 10): {:?}", shifted.to_vec());
+
+    // SIMD FMA (fused multiply-add)
+    let mul_factor = Array::from_vec(vec![2.0f64; 6]);
+    let add_factor = Array::from_vec(vec![1.0f64; 6]);
+    let fma_result = a_flat.simd_fma(&mul_factor, &add_factor).unwrap();
+    println!("SIMD FMA (a * 2 + 1): {:?}", fma_result.to_vec());
 
     // Performance comparison
-    println!("\nPerformance Comparison");
-    println!("===========================");
+    println!("\n--- Performance Comparison ---");
 
     // Create a larger array for performance testing
     let large_array_size = 1_000_000;
@@ -91,11 +82,23 @@ fn main() {
 
     // Time SIMD operations
     let start = std::time::Instant::now();
-    let _ = simd_add(&large_array, &large_array).unwrap();
+    let _ = large_array.simd_add(&large_array).unwrap();
     let simd_duration = start.elapsed();
     println!("SIMD addition time: {:?}", simd_duration);
 
     // Calculate speedup
-    let speedup = standard_duration.as_secs_f64() / simd_duration.as_secs_f64();
-    println!("Speedup: {:.2}x", speedup);
+    if simd_duration.as_nanos() > 0 {
+        let speedup = standard_duration.as_secs_f64() / simd_duration.as_secs_f64();
+        println!("Speedup: {:.2}x", speedup);
+    } else {
+        println!("SIMD was too fast to measure accurately!");
+    }
+
+    // Demonstrate platform capabilities
+    println!("\n--- Platform Capabilities ---");
+    println!(
+        "This NumRS2 build uses scirs2-core's SimdUnifiedOps trait,\n\
+         which automatically selects the best SIMD implementation\n\
+         for your platform (AVX2, AVX-512, NEON, etc.)"
+    );
 }

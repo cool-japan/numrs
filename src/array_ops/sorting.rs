@@ -644,15 +644,15 @@ where
 
 /// Return the indices of the bins to which each value in input array belongs
 ///
-/// Each value in x is assigned to a bin such that bin[i-1] <= x < bin[i].
+/// Each value in x is assigned to a bin such that `bin[i-1] <= x < bin[i]`.
 /// If values in x are beyond the bounds of bins, 0 or len(bins) is returned as appropriate.
 ///
 /// # Parameters
 ///
 /// * `x` - Input array to be binned
 /// * `bins` - Array of bin edges (must be 1-D and monotonic)
-/// * `right` - If false (default), bins[i-1] <= x < bins[i]
-///   If true, bins[i-1] < x <= bins[i]
+/// * `right` - If false (default), `bins[i-1] <= x < bins[i]`
+///   If true, `bins[i-1] < x <= bins[i]`
 ///
 /// # Returns
 ///

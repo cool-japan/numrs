@@ -1,9 +1,9 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-#[cfg(target_arch = "x86_64")]
-use crate::simd_optimize::avx2_enhanced::EnhancedSimdOps;
 use num_traits::{Float, NumCast, Zero};
+use scirs2_core::ndarray::Array1;
 use scirs2_core::parallel_ops::*;
+use scirs2_core::simd_ops::SimdUnifiedOps;
 
 /// Threshold for using parallel processing (minimum array size)
 const PARALLEL_THRESHOLD: usize = 10000;
@@ -40,14 +40,19 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync + 'stat
     }
 
     fn var(&self) -> T {
-        #[cfg(target_arch = "x86_64")]
-        {
-            // Use SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = EnhancedSimdOps::vectorized_variance_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
+        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
+        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            let data: Vec<f64> = self
+                .to_vec()
+                .iter()
+                .map(|x| {
+                    let ptr = x as *const T as *const f64;
+                    unsafe { *ptr }
+                })
+                .collect();
+            let nd_array = Array1::from_vec(data);
+            let result = f64::simd_variance(&nd_array.view());
+            return unsafe { std::mem::transmute_copy(&result) };
         }
         let data = self.to_vec();
         if data.is_empty() {
@@ -70,27 +75,37 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync + 'stat
     }
 
     fn std(&self) -> T {
-        #[cfg(target_arch = "x86_64")]
-        {
-            // Use SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = EnhancedSimdOps::vectorized_std_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
+        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
+        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            let data: Vec<f64> = self
+                .to_vec()
+                .iter()
+                .map(|x| {
+                    let ptr = x as *const T as *const f64;
+                    unsafe { *ptr }
+                })
+                .collect();
+            let nd_array = Array1::from_vec(data);
+            let result = f64::simd_std(&nd_array.view());
+            return unsafe { std::mem::transmute_copy(&result) };
         }
         self.var().sqrt()
     }
 
     fn min(&self) -> T {
-        #[cfg(target_arch = "x86_64")]
-        {
-            // Use SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = EnhancedSimdOps::vectorized_min_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
+        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
+        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            let data: Vec<f64> = self
+                .to_vec()
+                .iter()
+                .map(|x| {
+                    let ptr = x as *const T as *const f64;
+                    unsafe { *ptr }
+                })
+                .collect();
+            let nd_array = Array1::from_vec(data);
+            let result = f64::simd_min_element(&nd_array.view());
+            return unsafe { std::mem::transmute_copy(&result) };
         }
         let data = self.to_vec();
         if data.is_empty() {
@@ -110,14 +125,19 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync + 'stat
     }
 
     fn max(&self) -> T {
-        #[cfg(target_arch = "x86_64")]
-        {
-            // Use SIMD for f64 arrays with sufficient size
-            if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                let f64_array = unsafe { std::mem::transmute::<&Array<T>, &Array<f64>>(self) };
-                let result = EnhancedSimdOps::vectorized_max_f64(f64_array);
-                return unsafe { std::mem::transmute_copy(&result) };
-            }
+        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
+        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+            let data: Vec<f64> = self
+                .to_vec()
+                .iter()
+                .map(|x| {
+                    let ptr = x as *const T as *const f64;
+                    unsafe { *ptr }
+                })
+                .collect();
+            let nd_array = Array1::from_vec(data);
+            let result = f64::simd_max_element(&nd_array.view());
+            return unsafe { std::mem::transmute_copy(&result) };
         }
         let data = self.to_vec();
         if data.is_empty() {

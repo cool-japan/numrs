@@ -91,21 +91,18 @@ pub struct SimdOpsResult {
     pub div: Array<f64>,
 }
 
-/// Optimized vector operations using SIMD
+/// Optimized vector operations using SIMD via SimdUnifiedOps
 pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
-    use crate::simd_optimize::simd_traits::SimdArrayOps;
-
-    // Convert ArrayView to Array
-    let array = crate::array::Array::from_vec(v.to_vec());
-    let sum = array.simd_sum();
+    // Use SimdUnifiedOps from scirs2-core for SIMD operations
+    let sum = f32::simd_sum(v);
     let mean = sum / v.len() as f32;
 
-    // Calculate norm: sqrt(sum of squares)
-    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    // Calculate L2 norm using SIMD
+    let norm = f32::simd_norm(v);
 
-    // Find min and max
-    let min = v.iter().fold(f32::INFINITY, |a, &b| a.min(b));
-    let max = v.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+    // Find min and max using SIMD
+    let min = f32::simd_min_element(v);
+    let max = f32::simd_max_element(v);
 
     SimdVectorResult {
         sum,

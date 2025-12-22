@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "numrs2"
-version = "0.1.0-beta.2"
+version = "0.1.0-rc.3"
 description = "A Rust implementation inspired by NumPy for numerical computing"
 authors = [
     {name = "cool-japan/NumRS2 (KitaSan) Team"}

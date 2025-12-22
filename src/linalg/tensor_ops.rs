@@ -326,7 +326,7 @@ fn einsum_general<T: Float + Clone + Debug + std::ops::AddAssign>(
 /// Compute the Kronecker product of two arrays
 ///
 /// The Kronecker product is a matrix operation that takes two matrices A (m×n) and B (p×q)
-/// and produces a matrix of size (mp)×(nq). Each element A[i,j] is multiplied by the entire
+/// and produces a matrix of size (mp)×(nq). Each element `A[i,j]` is multiplied by the entire
 /// matrix B and placed at the appropriate block position in the result.
 ///
 /// # Arguments

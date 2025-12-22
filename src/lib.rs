@@ -4,10 +4,10 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.1.0-RC.1** - Release Candidate: Production-ready SIMD optimizations,
+//! **Version 0.1.0-RC.3** - Release Candidate: Production-ready SIMD optimizations,
 //! scipy-equivalent numerical computing, complete NumPy compatibility. Features 86 AVX2-vectorized
 //! functions, comprehensive interpolation with all cubic spline boundary conditions (Natural,
-//! Clamped, Not-a-Knot, Periodic), and 1051 tests passing with zero warnings.
+//! Clamped, Not-a-Knot, Periodic), and 647 tests passing with zero warnings.
 //!
 //! ## Quick Start
 //!
@@ -96,6 +96,7 @@ pub mod interop;
 pub mod interpolate;
 pub mod io;
 pub mod linalg;
+pub mod linalg_accelerated;
 pub mod linalg_extended;
 pub mod linalg_optimized;
 pub mod linalg_parallel;
@@ -121,6 +122,7 @@ pub mod python;
 pub mod random;
 pub mod roots;
 pub mod set_ops;
+pub mod shared_array;
 pub mod signal;
 pub mod simd;
 pub mod simd_optimize;
@@ -304,8 +306,7 @@ pub mod prelude {
     };
     pub use crate::signal::{convolve, convolve2d, correlate, correlate2d};
     // Explicit SIMD imports to avoid glob conflicts
-    pub use crate::simd::{get_simd_implementation, get_simd_implementation_name};
-    pub use crate::simd_optimize::{detect_cpu_features, CpuFeatures, SimdImplementation};
+    pub use crate::simd::get_simd_implementation_name;
     pub use crate::sparse;
     pub use crate::sparse_enhanced::SparseOpsAdvanced;
     // Explicit stats imports to avoid potential conflicts
@@ -468,6 +469,45 @@ pub mod prelude {
         TimezoneDateTime,
     };
     pub use crate::types::structured::{DType, Field, RecordArray, StructuredArray};
+
+    // SharedArray - reference-counted arrays for safe sharing
+    pub use crate::shared_array::{SharedArray, SharedArrayView};
+
+    // Expression templates and lazy evaluation
+    pub use crate::expr::{
+        ArrayExpr,
+        BinaryExpr,
+        CSEOptimizer,
+        CSESupport,
+        // CSE (Common Subexpression Elimination)
+        CachedExpr,
+        // Core expression types
+        Expr,
+        // Expression builder
+        ExprBuilder,
+        ExprCache,
+        ExprId,
+        ExprKey,
+        LazyEval,
+        ScalarExpr,
+        SharedArrayExpr,
+        SharedBinaryExpr,
+        // SharedExpr types (lifetime-free)
+        SharedExpr,
+        SharedExprBuilder,
+        SharedScalarExpr,
+        SharedUnaryExpr,
+        UnaryExpr,
+    };
+
+    // Memory access pattern optimization (non-conflicting types only)
+    // Note: MemoryLayout, CacheConfig, CacheLevel not exported here to avoid conflicts
+    // with util::MemoryLayout and memory_alloc::CacheConfig/CacheLevel
+    pub use crate::memory_optimize::access_patterns::{
+        cache_aware_binary_op, cache_aware_copy, cache_aware_transform, detect_layout,
+        AccessPattern, AccessStats, Block, BlockedIterator, OptimizationHints, StrideOptimizer,
+        Tile2D, TiledIterator2D,
+    };
 
     // Re-export ndarray types for convenience
     pub use scirs2_core::ndarray::{Axis, Dimension, IxDyn, ShapeBuilder};

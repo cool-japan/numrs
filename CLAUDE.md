@@ -37,7 +37,7 @@ Always leverage existing abstractions: array operations, BLAS integration, and S
 1. **Mandatory SciRS2 Foundation**: NumRS2 builds upon SciRS2's scientific computing foundation
 2. **NO Direct External Dependencies**: NEVER use `rand`, `ndarray`, `rayon`, BLAS libraries directly
 3. **ALWAYS Use SciRS2-Core Abstractions**: All external functionality through `scirs2_core::*`
-4. **Version**: Currently using SciRS2 0.1.0-beta.3
+4. **Version**: Currently using SciRS2 0.1.0-rc.4
 
 ### Required Import Patterns
 

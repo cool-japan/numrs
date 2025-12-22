@@ -126,7 +126,7 @@ pub type StringArray = Array<StringElement>;
 /// # Parameters
 ///
 /// * `strings` - Vector of string data
-/// * `dtype` - String data type specification ("U" for Unicode, "S<len>" for fixed)
+/// * `dtype` - String data type specification ("U" for Unicode, `"S<len>"` for fixed)
 /// * `shape` - Optional shape for the resulting array
 ///
 /// # Examples

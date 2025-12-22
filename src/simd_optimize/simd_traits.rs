@@ -7,7 +7,7 @@ use super::unified_dispatcher::global_dispatcher;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 
-/// SIMD-optimized extension methods for Array<f32>
+/// SIMD-optimized extension methods for `Array<f32>`
 ///
 /// These methods provide high-performance SIMD implementations that can be used
 /// to accelerate numerical computations on x86_64 and ARM architectures.

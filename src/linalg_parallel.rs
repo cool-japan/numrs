@@ -27,7 +27,14 @@ impl ParallelLinAlg {
         num_threads: Option<usize>,
     ) -> Result<()>
     where
-        T: Float + Clone + Debug + Send + Sync + 'static,
+        T: Float
+            + num_traits::NumAssign
+            + num_traits::NumCast
+            + Clone
+            + Debug
+            + Send
+            + Sync
+            + 'static,
     {
         let a_shape = a.shape();
         let b_shape = b.shape();
@@ -85,7 +92,16 @@ impl ParallelLinAlg {
         num_threads: Option<usize>,
     ) -> Result<(Array<T>, Array<T>, Array<usize>)>
     where
-        T: Float + Clone + Debug + Send + Sync + 'static,
+        T: Float
+            + num_traits::NumAssign
+            + num_traits::NumCast
+            + Clone
+            + Debug
+            + std::iter::Sum
+            + Send
+            + Sync
+            + scirs2_core::ndarray::ScalarOperand
+            + 'static,
     {
         let shape = a.shape();
         if shape.len() != 2 || shape[0] != shape[1] {
@@ -203,7 +219,14 @@ impl ParallelLinAlg {
         num_threads: Option<usize>,
     ) -> Result<()>
     where
-        T: Float + Clone + Debug + Send + Sync + 'static,
+        T: Float
+            + num_traits::NumAssign
+            + num_traits::NumCast
+            + Clone
+            + Debug
+            + Send
+            + Sync
+            + 'static,
     {
         let a_shape = a.shape();
         let x_shape = x.shape();
