@@ -92,7 +92,7 @@ where
             k,
             init,
             max_iter: 300,
-            tol: T::from(1e-4).unwrap(),
+            tol: T::from(1e-4).expect("Failed to convert default tolerance value"),
             centroids: None,
             inertia: None,
             n_iter: 0,

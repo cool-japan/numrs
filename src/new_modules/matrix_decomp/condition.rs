@@ -7,11 +7,12 @@ use num_traits::{Float, Zero};
 use std::fmt::Debug;
 
 /// Type alias for complex least squares return type
+/// Returns (solution, residuals, rank, singular_values)
 type LstsqResult<T> = Result<(
     Array<T>,
-    Array<<T as ndarray_linalg::Scalar>::Real>,
+    Array<T>, // Residuals are same type as matrix elements
     usize,
-    Array<<T as ndarray_linalg::Scalar>::Real>,
+    Array<T>, // Singular values are same type as matrix elements
 )>;
 
 /// Compute the condition number of a matrix using the SVD method
@@ -24,10 +25,9 @@ type LstsqResult<T> = Result<(
 /// 1. Proper handling of very small singular values
 /// 2. Scaling to avoid overflow in calculations
 /// 3. Classification of different condition number ranges
-pub fn condition_number<T>(a: &Array<T>) -> Result<<T as ndarray_linalg::Scalar>::Real>
+pub fn condition_number<T>(a: &Array<T>) -> Result<T>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
-    <T as ndarray_linalg::Scalar>::Real: Clone + num_traits::Float,
+    T: Float + Clone + Debug,
 {
     // SVD is the most numerically stable method for computing condition number
     let (_, s, _) = svd(a)?;
@@ -43,21 +43,17 @@ where
     }
 
     // Get the largest singular value
-    let max_sv = s_vec.iter().cloned().fold(
-        <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero(),
-        |a, b| if a > b { a } else { b },
-    );
+    let max_sv = s_vec
+        .iter()
+        .cloned()
+        .fold(T::zero(), |a, b| if a > b { a } else { b });
 
     // Get the smallest non-zero singular value
     // We use a threshold based on machine epsilon to determine effective zeros
-    let eps = <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::epsilon();
+    let eps = T::epsilon();
     let threshold = max_sv
         * eps
-        * <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(std::cmp::max(
-            a.shape()[0],
-            a.shape()[1],
-        ))
-        .unwrap_or_else(<<T as ndarray_linalg::Scalar>::Real as num_traits::One>::one);
+        * T::from(std::cmp::max(a.shape()[0], a.shape()[1])).unwrap_or_else(|| T::one());
 
     // Filter out singular values effectively zero
     let non_zero_sv = s_vec
@@ -66,9 +62,9 @@ where
         .filter(|&sv| sv > threshold)
         .collect::<Vec<_>>();
 
-    if non_zero_sv.is_empty() || max_sv == <T as ndarray_linalg::Scalar>::Real::zero() {
+    if non_zero_sv.is_empty() || max_sv == T::zero() {
         // Matrix is numerically singular (all singular values effectively zero)
-        return Ok(<<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::infinity());
+        return Ok(T::infinity());
     }
 
     // Also check if there are singular values that are almost zero
@@ -78,10 +74,8 @@ where
         .fold(max_sv, |a, b| if a < b { a } else { b });
 
     // If the ratio between largest and smallest is very large, return infinity
-    if max_sv / min_sv_all
-        > <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(1e16).unwrap()
-    {
-        return Ok(<<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::infinity());
+    if max_sv / min_sv_all > T::from(1e16).unwrap_or_else(|| T::max_value()) {
+        return Ok(T::infinity());
     }
 
     // Get the smallest non-zero singular value
@@ -96,7 +90,7 @@ where
     // Check for overflow and handle appropriately
     if cond.is_infinite() || cond.is_nan() {
         // If we get overflow or NaN, return a high but finite condition number
-        return Ok(<<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::max_value());
+        return Ok(T::max_value());
     }
 
     Ok(cond)
@@ -107,18 +101,17 @@ where
 ///
 /// Returns a value between 0 and 1, where values close to 0 indicate ill-conditioning,
 /// and values close to 1 indicate good conditioning.
-pub fn rcond<T>(a: &Array<T>) -> Result<<T as ndarray_linalg::Scalar>::Real>
+pub fn rcond<T>(a: &Array<T>) -> Result<T>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
-    <T as ndarray_linalg::Scalar>::Real: Clone + num_traits::Float,
+    T: Float + Clone + Debug,
 {
     let cond = condition_number(a)?;
 
     // Compute the reciprocal, handling potential underflow
     if cond.is_infinite() {
-        Ok(<<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero())
+        Ok(T::zero())
     } else {
-        Ok(<<T as ndarray_linalg::Scalar>::Real as num_traits::One>::one() / cond)
+        Ok(T::one() / cond)
     }
 }
 
@@ -146,10 +139,16 @@ where
 /// let (sign, logdet) = slogdet(&a).unwrap();
 /// // For this diagonal matrix: det = 2*3 = 6, so sign = 1, logdet = ln(6) ≈ 1.79
 /// ```
-pub fn slogdet<T>(a: &Array<T>) -> Result<(i8, <T as ndarray_linalg::Scalar>::Real)>
+pub fn slogdet<T>(a: &Array<T>) -> Result<(i8, T)>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
-    <T as ndarray_linalg::Scalar>::Real: Clone + num_traits::Float,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -165,24 +164,13 @@ where
     if n <= 3 {
         let det = a.det()?;
 
-        // Convert to real type for processing
-        let det_real = <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(det)
-            .unwrap_or_else(<<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero);
-
-        if det_real == <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero() {
-            return Ok((
-                0,
-                <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::neg_infinity(),
-            ));
+        if det == T::zero() {
+            return Ok((0, T::neg_infinity()));
         }
 
-        let sign = if det_real > <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero() {
-            1
-        } else {
-            -1
-        };
+        let sign = if det > T::zero() { 1 } else { -1 };
 
-        let logdet = num_traits::Float::ln(num_traits::Float::abs(det_real));
+        let logdet = num_traits::Float::ln(num_traits::Float::abs(det));
         return Ok((sign, logdet));
     }
 
@@ -224,32 +212,23 @@ where
             let mut sign = if num_swaps % 2 == 0 { 1i8 } else { -1i8 };
 
             // Calculate log absolute value of determinant from U's diagonal
-            let mut logdet = <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero();
+            let mut logdet = T::zero();
 
             for i in 0..n {
                 let u_diag = u.get(&[i, i])?;
-                let u_diag_real =
-                    <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(u_diag)
-                        .unwrap_or_else(
-                            <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero,
-                        );
 
-                if u_diag_real == <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero()
-                {
+                if u_diag == T::zero() {
                     // Matrix is singular
-                    return Ok((
-                        0,
-                        <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::neg_infinity(),
-                    ));
+                    return Ok((0, T::neg_infinity()));
                 }
 
                 // Update sign if diagonal element is negative
-                if u_diag_real < <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero() {
+                if u_diag < T::zero() {
                     sign = -sign;
                 }
 
                 // Add log of absolute value
-                logdet += num_traits::Float::ln(num_traits::Float::abs(u_diag_real));
+                logdet += num_traits::Float::ln(num_traits::Float::abs(u_diag));
             }
 
             Ok((sign, logdet))
@@ -260,15 +239,15 @@ where
             let s_vec = s.to_vec();
 
             // Check if any singular value is effectively zero
-            let eps = <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::epsilon();
+            let eps = T::epsilon();
             let threshold = eps
-                * <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(n).unwrap()
-                * s_vec.iter().cloned().fold(
-                    <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero(),
-                    |a, b| if a > b { a } else { b },
-                );
+                * T::from(n).unwrap_or_else(|| T::one())
+                * s_vec
+                    .iter()
+                    .cloned()
+                    .fold(T::zero(), |a, b| if a > b { a } else { b });
 
-            let mut logdet = <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero();
+            let mut logdet = T::zero();
             let mut zero_count = 0;
 
             for &sv in &s_vec {
@@ -281,10 +260,7 @@ where
 
             if zero_count > 0 {
                 // Matrix is singular or numerically singular
-                Ok((
-                    0,
-                    <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::neg_infinity(),
-                ))
+                Ok((0, T::neg_infinity()))
             } else {
                 // For SVD, determinant is always positive since we're using |det|
                 // But we need to account for the actual sign of the determinant
@@ -327,14 +303,9 @@ where
 /// let b = Array::from_vec(vec![3.0, 4.0]);
 /// let (x, residuals, rank, sv) = lstsq(&a, &b, None).unwrap();
 /// ```
-pub fn lstsq<T>(
-    a: &Array<T>,
-    b: &Array<T>,
-    rcond: Option<<T as ndarray_linalg::Scalar>::Real>,
-) -> LstsqResult<T>
+pub fn lstsq<T>(a: &Array<T>, b: &Array<T>, rcond: Option<T>) -> LstsqResult<T>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
-    <T as ndarray_linalg::Scalar>::Real: Clone + num_traits::Float,
+    T: Float + Clone + Debug,
 {
     // Check input dimensions
     let a_shape = a.shape();
@@ -366,20 +337,16 @@ where
     let s_vec = s.to_vec();
 
     // Determine the effective rank using rcond
-    let max_sv = s_vec.iter().cloned().fold(
-        <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero(),
-        |a, b| if a > b { a } else { b },
-    );
+    let max_sv = s_vec
+        .iter()
+        .cloned()
+        .fold(T::zero(), |a, b| if a > b { a } else { b });
 
     let cutoff = match rcond {
         Some(rc) => rc * max_sv,
         None => {
-            let eps = <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::epsilon();
-            eps * <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(std::cmp::max(
-                m, n,
-            ))
-            .unwrap()
-                * max_sv
+            let eps = T::epsilon();
+            eps * T::from(std::cmp::max(m, n)).unwrap_or_else(|| T::one()) * max_sv
         }
     };
 
@@ -450,17 +417,14 @@ where
         // Compute sum of squares for each column
         let mut residuals_vec = Vec::with_capacity(k);
         for j in 0..k {
-            let mut sum_sq = <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero();
+            let mut sum_sq = T::zero();
             for i in 0..m {
                 let val = if b_is_vector && k == 1 {
                     diff.get(&[i])?
                 } else {
                     diff.get(&[i, j])?
                 };
-                let val_squared = val * val;
-                let val_real = <T::Real as num_traits::NumCast>::from(val_squared)
-                    .unwrap_or_else(<T::Real as num_traits::Zero>::zero);
-                sum_sq += val_real;
+                sum_sq = sum_sq + val * val;
             }
             residuals_vec.push(sum_sq);
         }

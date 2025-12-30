@@ -71,7 +71,14 @@ pub fn set_lapack_threads(threads: usize) {
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 impl<T> Array<T>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
     /// Compute the determinant of a matrix using LU decomposition for large matrices
     /// and direct formula for small matrices.

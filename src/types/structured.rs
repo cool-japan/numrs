@@ -455,14 +455,9 @@ impl RecordArray {
 
     /// Get a mutable reference to a field by name
     pub fn field_mut(&mut self, field_name: &str) -> Result<&mut Array<f64>> {
-        if self.field_cache.contains_key(field_name) {
-            Ok(self.field_cache.get_mut(field_name).unwrap())
-        } else {
-            Err(NumRs2Error::IndexError(format!(
-                "Field '{}' not found",
-                field_name
-            )))
-        }
+        self.field_cache
+            .get_mut(field_name)
+            .ok_or_else(|| NumRs2Error::IndexError(format!("Field '{}' not found", field_name)))
     }
 
     /// Set a field value at the given index
@@ -561,16 +556,11 @@ impl RecordArray {
 
     /// Remove a field from the record array
     pub fn remove_field(&mut self, field_name: &str) -> Result<Array<f64>> {
-        // Check if the field exists
-        if !self.field_cache.contains_key(field_name) {
-            return Err(NumRs2Error::IndexError(format!(
-                "Field '{}' not found",
-                field_name
-            )));
-        }
-
         // Remove the field from the cache
-        let arr = self.field_cache.remove(field_name).unwrap();
+        let arr = self
+            .field_cache
+            .remove(field_name)
+            .ok_or_else(|| NumRs2Error::IndexError(format!("Field '{}' not found", field_name)))?;
 
         // Update the dtype of the structured array
         if let DType::Struct(ref mut fields) = &mut self.array.dtype {

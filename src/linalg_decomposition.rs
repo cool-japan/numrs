@@ -48,13 +48,7 @@ use std::fmt::Debug;
 /// assert_eq!(rank, 2);
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn matrix_rank<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
-    a: &Array<T>,
-    tol: Option<T>,
-) -> Result<usize>
-where
-    <T as ndarray_linalg::Scalar>::Real: Clone + num_traits::Float,
-{
+pub fn matrix_rank<T: Float + Clone + Debug>(a: &Array<T>, tol: Option<T>) -> Result<usize> {
     // Check that the matrix is 2D
     let shape = a.shape();
     if shape.len() != 2 {
@@ -68,26 +62,19 @@ where
 
     // Get the tolerance
     let tol_val = match tol {
-        Some(t) => {
-            // Convert user tolerance to Real type
-            <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(t)
-                .unwrap_or_else(<<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero)
-        }
+        Some(t) => t,
         None => {
             // Default is max(M, N) * eps * max(S)
             let m = shape[0];
             let n = shape[1];
             let max_dim = std::cmp::max(m, n);
-            let eps = <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::epsilon();
+            let eps = T::epsilon();
             let s_data = s.to_vec();
-            let max_s = s_data.iter().fold(
-                <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero(),
-                |max, &val| if val > max { val } else { max },
-            );
+            let max_s = s_data
+                .iter()
+                .fold(T::zero(), |max, &val| if val > max { val } else { max });
 
-            <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(max_dim).unwrap()
-                * eps
-                * max_s
+            T::from(max_dim).unwrap_or_else(|| T::one()) * eps * max_s
         }
     };
 
@@ -121,7 +108,16 @@ where
 /// let (q, r) = qr(&a).unwrap();
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn qr<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
+pub fn qr<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>)> {
     // Use the proper implementation from new_modules
@@ -189,7 +185,15 @@ pub fn qr<
 /// let l = cholesky(&a).unwrap();
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn cholesky<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
+pub fn cholesky<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::fmt::Display,
+>(
     a: &Array<T>,
 ) -> Result<Array<T>> {
     // Use the proper implementation from new_modules
@@ -260,7 +264,17 @@ pub fn cholesky<
 /// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn eig<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
+pub fn eig<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display
+        + 'static,
+>(
     a: &Array<T>,
     sort: Option<&str>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -459,12 +473,7 @@ pub fn eig<
 /// let (u, s, vt) = svd(&a).unwrap();
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn svd<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
-    a: &Array<T>,
-) -> Result<(Array<T>, Array<T>, Array<T>)>
-where
-    <T as ndarray_linalg::Scalar>::Real: Float + Clone + Debug,
-{
+pub fn svd<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>, Array<T>)> {
     // Use the proper implementation from new_modules
     let (u, s_vec, vt) = crate::new_modules::matrix_decomp::svd(a)?;
 

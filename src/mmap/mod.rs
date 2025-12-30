@@ -202,8 +202,8 @@ impl<T: Copy> MmapArray<T> {
                     .as_secs(),
             };
 
-            let config = bincode::config::standard();
-            let meta_bytes = bincode::serde::encode_to_vec(&meta, config)
+            let config = oxicode::config::standard();
+            let meta_bytes = oxicode::serde::encode_to_vec(&meta, config)
                 .map_err(|e| NumRs2Error::SerializationError(e.to_string()))?;
             let mut file = file;
             file.write_all(&meta_bytes)?;
@@ -217,9 +217,9 @@ impl<T: Copy> MmapArray<T> {
             let mut meta_bytes = vec![0u8; meta_size];
             file.read_exact(&mut meta_bytes)?;
 
-            let config = bincode::config::standard();
+            let config = oxicode::config::standard();
             let (meta, _): (MmapArrayMeta, usize) =
-                bincode::serde::decode_from_slice(&meta_bytes, config)
+                oxicode::serde::decode_from_slice(&meta_bytes, config)
                     .map_err(|e| NumRs2Error::DeserializationError(e.to_string()))?;
 
             // Verify metadata
@@ -779,8 +779,8 @@ pub fn open_mmap_info<P: AsRef<Path>>(path: &P) -> Result<MmapArrayMeta> {
     let mut meta_bytes = vec![0u8; meta_size];
     file.read_exact(&mut meta_bytes)?;
 
-    let config = bincode::config::standard();
-    let (meta, _): (MmapArrayMeta, usize) = bincode::serde::decode_from_slice(&meta_bytes, config)
+    let config = oxicode::config::standard();
+    let (meta, _): (MmapArrayMeta, usize) = oxicode::serde::decode_from_slice(&meta_bytes, config)
         .map_err(|e| NumRs2Error::DeserializationError(e.to_string()))?;
 
     Ok(meta)

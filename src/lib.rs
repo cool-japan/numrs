@@ -4,10 +4,10 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.1.0-RC.3** - Release Candidate: Production-ready SIMD optimizations,
+//! **Version 0.1.1** - First Stable Release (2025-12-30): Production-ready SIMD optimizations,
 //! scipy-equivalent numerical computing, complete NumPy compatibility. Features 86 AVX2-vectorized
-//! functions, comprehensive interpolation with all cubic spline boundary conditions (Natural,
-//! Clamped, Not-a-Knot, Periodic), and 647 tests passing with zero warnings.
+//! functions + 42 ARM NEON operations, comprehensive interpolation with all cubic spline boundary
+//! conditions, and 1,111+ tests passing with zero warnings. Built on pure Rust SciRS2 ecosystem.
 //!
 //! ## Quick Start
 //!

@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.1.0-rc.3"
+version = "0.1.1"
 edition = "2021"
 authors = ["COOLJAPAN OU (Team KitaSan)"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -28,7 +28,7 @@ fast = []  # Minimal feature set for fast compilation during development
 scirs = []  # MANDATORY: Always enabled by default per SCIRS2 POLICY - DO NOT DISABLE
 # SciRS2 integration is mandatory - this feature exists only for backward compatibility
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
-lapack = ["dep:ndarray-linalg", "dep:blas", "dep:lapack"]  # Enable LAPACK-dependent linear algebra operations
+lapack = []  # Enable LAPACK-dependent linear algebra operations (through scirs2-linalg which uses OxiBLAS)
 python = ["dep:pyo3", "dep:numpy"]  # Python bindings via PyO3
 arrow = ["dep:arrow", "dep:arrow-array", "dep:arrow-buffer", "dep:arrow-cast", "dep:arrow-schema"]  # Apache Arrow integration
 ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without external dependencies
@@ -57,20 +57,20 @@ lazy_static = "1.5.0"  # For static initialization patterns
 
 # Serialization/IO support
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.146"
+serde_json = "1.0.148"
 csv = "1.4.0"
-bincode = { version = "2.0.1", features = ["serde"] }
+oxicode = { version = "0.1.1", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
-zip = "7.0.0"          # For NPZ file format support
+zip = { version = "6", default-features = false, features = ["deflate", "bzip2"] }
+# NPZ format support with pure Rust compression (deflate, bzip2)
+# Note: zstd compression disabled to avoid C dependencies (Pure Rust policy)
 serde-pickle = "1.2.0" # Python pickle format support
 memmap2 = "0.9.9"      # Memory-mapped file I/O
 num_cpus = "1.17.0"
 regex = "1.12.2"
 
-# Optional LAPACK bindings (for additional linalg features)
-ndarray-linalg = { version = "0.18.0", optional = true }
-blas = { version = "0.23.0", optional = true }
-lapack = { version = "0.20.0", optional = true }
+# Note: BLAS/LAPACK operations go through scirs2-linalg (which uses OxiBLAS internally)
+# No direct BLAS/LAPACK dependencies needed - pure Rust via SciRS2 ecosystem
 
 # ===================================================================
 # FORBIDDEN (Removed per SCIRS2 POLICY)
@@ -82,6 +82,10 @@ lapack = { version = "0.20.0", optional = true }
 # ❌ num-complex = "0.4.6"     # FORBIDDEN - Use scirs2_core::complex
 # ❌ nalgebra = "0.34.1"       # FORBIDDEN - BLAS through scirs2-core
 # ❌ simba = "0.9.1"           # FORBIDDEN - SIMD through scirs2_core::simd_ops
+# ❌ blas = "0.23.0"           # FORBIDDEN - Use oxiblas-blas (pure Rust)
+# ❌ lapack = "0.20.0"         # FORBIDDEN - Use oxiblas-lapack (pure Rust)
+# ❌ openblas-src = "*"        # FORBIDDEN - Use oxiblas (pure Rust, no C dependencies)
+# ❌ ndarray-linalg = "*"      # FORBIDDEN - Use oxiblas-ndarray (pure Rust)
 
 # Optional GPU acceleration dependencies
 wgpu = { version = "28.0.0", optional = true }
@@ -105,11 +109,11 @@ arrow-schema = { workspace = true, optional = true }
 [dev-dependencies]
 criterion = "0.8.1"  # Benchmarking library
 approx = "0.5.1"     # Approximate floating-point comparisons for tests
-tempfile = "3.23.0"   # Temporary files for testing I/O functionality
+tempfile = "3.24.0"   # Temporary files for testing I/O functionality
 proptest = "1.9.0"   # Property-based testing for mathematical invariants
 serial_test = "3.2.0"  # For tests that require serial execution (global state)
 # For performance benchmarks in bench.rs
-serde_json = "1.0.146"  # For loading NumPy benchmark results
+serde_json = "1.0.148"  # For loading NumPy benchmark results
 tokio = { version = "1.48.0", features = ["rt", "macros"] }  # For GPU tests
 
 [workspace.lints.rust]
@@ -155,14 +159,14 @@ harness = false
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.1.0-rc.4" }
-scirs2-stats = { version = "0.1.0-rc.4" }
-scirs2-linalg = { version = "0.1.0-rc.4" }
-scirs2-ndimage = { version = "0.1.0-rc.4" }
-scirs2-spatial = { version = "0.1.0-rc.4" }
-scirs2-special = { version = "0.1.0-rc.4" }
-scirs2-fft = { version = "0.1.0-rc.4" }
-scirs2-signal = { version = "0.1.0-rc.4" }
+scirs2-core = { version = "0.1.1" }
+scirs2-stats = { version = "0.1.1" }
+scirs2-linalg = { version = "0.1.1" }
+scirs2-ndimage = { version = "0.1.1" }
+scirs2-spatial = { version = "0.1.1" }
+scirs2-special = { version = "0.1.1" }
+scirs2-fft = { version = "0.1.1" }
+scirs2-signal = { version = "0.1.1" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
 arrow = "57.1.0"

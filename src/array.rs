@@ -1,7 +1,7 @@
 use crate::error::{NumRs2Error, Result};
 // SCIRS2 POLICY COMPLIANT imports - always use SciRS2
 // All SIMD operations use SimdUnifiedOps trait for automatic platform detection
-use num_traits::{One, Zero};
+use num_traits::{Float, One, Zero};
 use scirs2_core::ndarray::{
     Array as NdArray, Array1, ArrayView, ArrayView1, ArrayView2, Axis, Dimension, IxDyn,
 };
@@ -9,15 +9,17 @@ use scirs2_core::parallel_ops::*;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::cmp;
 use std::fmt;
+use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
 
-/// Type alias for complex least squares return type
+/// Type alias for least squares return type
+/// Returns (solution, residuals, rank, singular_values)
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 type LstsqResult<T> = Result<(
     Array<T>,
-    Array<<T as ndarray_linalg::Scalar>::Real>,
+    Array<T>, // Residuals are same type as matrix elements
     usize,
-    Array<<T as ndarray_linalg::Scalar>::Real>,
+    Array<T>, // Singular values are same type as matrix elements
 )>;
 
 /// Flags that describe the memory layout and properties of an array
@@ -2156,7 +2158,17 @@ impl<T: fmt::Debug + Clone> fmt::Debug for Array<T> {
 }
 
 // Additional linear algebra methods for Array
-impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
+impl<
+        T: num_traits::Float
+            + Clone
+            + fmt::Debug
+            + std::ops::AddAssign
+            + std::ops::MulAssign
+            + std::ops::DivAssign
+            + std::ops::SubAssign
+            + std::fmt::Display,
+    > Array<T>
+{
     /// Compute the condition number of a matrix
     ///
     /// The condition number is the ratio of the largest to smallest singular value.
@@ -2167,10 +2179,9 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     ///
     /// The condition number (L2 norm)
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    pub fn cond(&self) -> Result<T::Real>
+    pub fn cond(&self) -> Result<T>
     where
-        T: ndarray_linalg::Lapack,
-        T::Real: Clone + num_traits::Float,
+        T: Float + Clone + Debug,
     {
         crate::new_modules::matrix_decomp::condition_number(self)
     }
@@ -2197,10 +2208,9 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     ///
     /// The reciprocal condition number
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    pub fn rcond(&self) -> Result<T::Real>
+    pub fn rcond(&self) -> Result<T>
     where
-        T: ndarray_linalg::Lapack,
-        T::Real: Clone + num_traits::Float,
+        T: Float + Clone + Debug,
     {
         crate::new_modules::matrix_decomp::rcond(self)
     }
@@ -2222,12 +2232,10 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub fn is_well_conditioned(&self) -> Result<bool>
     where
-        T: ndarray_linalg::Lapack,
-        T::Real: Clone + num_traits::Float,
+        T: Float + Clone + Debug,
     {
         let cond = crate::new_modules::matrix_decomp::condition_number(self)?;
-        let threshold: T::Real = num_traits::NumCast::from(1e4_f64)
-            .unwrap_or_else(|| num_traits::NumCast::from(1e3_f64).unwrap());
+        let threshold = T::from(1e4_f64).unwrap_or_else(|| T::from(1e3_f64).unwrap());
         Ok(cond < threshold)
     }
 
@@ -2253,10 +2261,9 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// A tuple (sign, logdet) where sign is -1, 0, or 1, and logdet is the natural
     /// logarithm of the absolute value of the determinant.
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    pub fn slogdet(&self) -> Result<(i8, T::Real)>
+    pub fn slogdet(&self) -> Result<(i8, T)>
     where
-        T: ndarray_linalg::Lapack,
-        T::Real: Clone + num_traits::Float,
+        T: Float + Clone + Debug,
     {
         crate::new_modules::matrix_decomp::slogdet(self)
     }
@@ -2274,10 +2281,9 @@ impl<T: num_traits::Float + Clone + fmt::Debug> Array<T> {
     /// # Returns
     /// A tuple (x, residuals, rank, singular_values)
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-    pub fn lstsq(&self, b: &Array<T>, rcond: Option<T::Real>) -> LstsqResult<T>
+    pub fn lstsq(&self, b: &Array<T>, rcond: Option<T>) -> LstsqResult<T>
     where
-        T: ndarray_linalg::Lapack,
-        T::Real: Clone + num_traits::Float,
+        T: Float + Clone + Debug,
     {
         crate::new_modules::matrix_decomp::lstsq(self, b, rcond)
     }

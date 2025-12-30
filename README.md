@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **🚀 Version 0.1.0-rc.3** - Release Candidate: Production-ready SIMD optimizations, 11 scipy-equivalent modules, and complete NumPy compatibility. Features 86 AVX2-vectorized functions + 42 ARM NEON operations, comprehensive interpolation, and 647 tests passing with zero warnings.
+> **🚀 Version 0.1.1** - First stable release (2025-12-30): Production-ready SIMD optimizations, comprehensive scipy-equivalent modules, and NumPy compatibility. Features 86 AVX2-vectorized functions + 42 ARM NEON operations, 1,111+ tests passing with zero warnings, built on pure Rust SciRS2 ecosystem.
 
 ## ✨ Architecture Highlights
 
@@ -69,7 +69,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-rc.3", features = ["arrow"] }
+numrs2 = { version = "0.1.1", features = ["arrow"] }
 ```
 
 Or, when building:
@@ -80,7 +80,7 @@ cargo build --features scirs
 
 ### 🚀 Performance Optimizations
 
-NumRS2 leverages SciRS2-Core (v0.1.0-rc.3) for cutting-edge performance optimizations:
+NumRS2 leverages SciRS2-Core (v0.1.1) for cutting-edge performance optimizations:
 
 - **Unified SIMD Operations**: All SIMD code goes through SciRS2-Core's SimdUnifiedOps trait
 - **Adaptive Algorithm Selection**: AutoOptimizer automatically chooses between scalar, SIMD, or GPU implementations
@@ -114,7 +114,7 @@ The GPU acceleration feature provides:
 
 For examples, see [gpu_example.rs](examples/gpu_example.rs)
 
-### 🎯 Release Candidate 3 Highlights (v0.1.0-rc.3)
+### 🎯 Key Features
 
 **Numerical Optimization (scipy.optimize equivalent)**
 - BFGS & L-BFGS: Quasi-Newton methods for large-scale optimization
@@ -316,35 +316,24 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-rc.3"
+numrs2 = "0.1.1"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
 
-```bash
-# Ubuntu/Debian
-sudo apt-get install libopenblas-dev liblapack-dev
+**Note:** NumRS2 uses OxiBLAS, a pure Rust BLAS/LAPACK implementation with no C dependencies. You do NOT need to install system BLAS/LAPACK libraries.
 
-# macOS
-brew install openblas lapack
-```
-
-### macOS Apple Silicon Configuration
-
-For Apple Silicon Macs (M1/M2/M3), additional configuration is required to properly link LAPACK libraries. Create a `.cargo/config.toml` file in your project root:
-
-```toml
-[build]
-rustflags = ["-L", "/opt/homebrew/opt/openblas/lib", "-l", "openblas"]
-```
-
-This configuration ensures that the OpenBLAS library installed via Homebrew is properly linked when using LAPACK features. Without this configuration, you may encounter linking errors when building with the `lapack` feature enabled.
-
-To use LAPACK functionality:
+To use LAPACK functionality (pure Rust via OxiBLAS):
 ```bash
 cargo build --features lapack
 cargo test --features lapack
 ```
+
+OxiBLAS provides:
+- Pure Rust implementation with SIMD optimizations (AVX2/NEON)
+- No external C dependencies required
+- 80-172% of OpenBLAS performance (competitive or faster on Apple M3)
+- Complete BLAS Level 1/2/3 and LAPACK operations
 
 ## Implementation Details
 

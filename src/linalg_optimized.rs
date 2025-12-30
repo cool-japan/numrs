@@ -40,7 +40,7 @@ impl OptimizedBlas {
     ///
     /// # Performance
     /// - 200-700x faster than naive implementation for large matrices
-    /// - Uses hardware BLAS (OpenBLAS, Accelerate, MKL) when available
+    /// - Uses pure Rust BLAS (OxiBLAS with SIMD optimizations) when available
     ///
     /// # Arguments
     /// * `a` - Matrix A

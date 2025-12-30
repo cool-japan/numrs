@@ -10,11 +10,11 @@ This directory contains modules for integrating NumRS2 with other Rust numerical
 
 ## SciRS2 Integration Status
 
-The SciRS2 integration has been updated to use the correct module paths with SciRS2 beta.2. The implementation provides adapter functions for advanced statistical distributions from SciRS2.
+The SciRS2 integration uses the correct module paths. The implementation provides adapter functions for advanced statistical distributions from SciRS2.
 
 ### Current Features
 
-1. **Module Paths**: The imports in `scirs_compat.rs` have been updated to match the actual module structure of SciRS2 beta.2:
+1. **Module Paths**: The imports in `scirs_compat.rs` match the SciRS2 module structure:
    - `scirs2_stats::distributions::continuous` for most continuous distributions
    - `scirs2_core::array::Array` for array types
    - `scirs2_core::random::Generator` for random generators
@@ -41,8 +41,9 @@ The SciRS2 integration has been updated to use the correct module paths with Sci
 
 ### Resources
 
-- SciRS2 Core: `~/.cargo/registry/src/index.crates.io-*/scirs2-core-0.1.0-beta.2/`
-- SciRS2 Stats: `~/.cargo/registry/src/index.crates.io-*/scirs2-stats-0.1.0-beta.2/`
+- SciRS2 Core: https://crates.io/crates/scirs2-core
+- SciRS2 Stats: https://crates.io/crates/scirs2-stats
+- SciRS2 Documentation: https://docs.rs/scirs2-core
 
 ## Usage
 
@@ -50,7 +51,7 @@ To use the SciRS2 integration, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.1.0-beta.2", features = ["scirs"] }
+numrs2 = { version = "0.1.1", features = ["scirs"] }
 ```
 
 Then import the SciRS2 compatibility module:

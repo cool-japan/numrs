@@ -3,8 +3,8 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray_linalg::QR;
 use num_traits::{Float, One, Zero};
+use scirs2_core::linalg::qr_ndarray;
 use scirs2_core::ndarray::ArrayView2;
 use std::fmt::Debug;
 
@@ -17,7 +17,14 @@ use std::fmt::Debug;
 /// 4. Fallback to more stable Householder algorithm when needed
 pub fn qr<T>(a: &Array<T>) -> Result<(Array<T>, Array<T>)>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
     // Check that the matrix is 2D
     let shape = a.shape();
@@ -58,13 +65,22 @@ where
         }
     }
 
-    // Get the 2D view and compute QR using ndarray-linalg
+    // Get the 2D view and compute QR using OxiBLAS
     let a_view: ArrayView2<T> = a_scaled.view_2d()?;
 
-    // Try with column pivoting first for better numerical stability
-    // This is especially important for rank-deficient or ill-conditioned matrices
-    let (q, r) = match a_view.qr() {
-        Ok(result) => result,
+    // Convert to f64 for OxiBLAS
+    let mut a_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((m, n));
+    for i in 0..m {
+        for j in 0..n {
+            a_f64[[i, j]] = a_view[[i, j]].to_f64().ok_or_else(|| {
+                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+            })?;
+        }
+    }
+
+    // Try QR decomposition using OxiBLAS
+    let result = match qr_ndarray(&a_f64) {
+        Ok(r) => r,
         Err(_e) => {
             // If the standard QR fails, use our fallback implementation
             // which uses Householder reflections for better stability
@@ -72,10 +88,44 @@ where
         }
     };
 
-    // Convert to Array types
+    // Convert back to T
+    let (q_f64, r_f64) = (result.q, result.r);
+
+    // OxiBLAS returns full QR (Q is m x m, R is m x n)
+    // We need to return reduced/economy QR (Q is m x n, R is n x n)
+    // Extract the first n columns of Q and first n rows of R
+    let q_rows = q_f64.nrows();
+    let q_cols = std::cmp::min(m, n); // For economy QR, Q is m x min(m,n)
+    let r_rows = q_cols;
+    let r_cols = n;
+
+    // Convert Q from f64 to T (only first n columns)
+    let mut q_vec: Vec<T> = Vec::with_capacity(q_rows * q_cols);
+    for i in 0..q_rows {
+        for j in 0..q_cols {
+            q_vec.push(
+                T::from(q_f64[[i, j]]).ok_or_else(|| {
+                    NumRs2Error::ComputationError("Conversion failed".to_string())
+                })?,
+            );
+        }
+    }
+
+    // Convert R from f64 to T (only first n rows)
+    let mut r_vec: Vec<T> = Vec::with_capacity(r_rows * r_cols);
+    for i in 0..r_rows {
+        for j in 0..r_cols {
+            r_vec.push(
+                T::from(r_f64[[i, j]]).ok_or_else(|| {
+                    NumRs2Error::ComputationError("Conversion failed".to_string())
+                })?,
+            );
+        }
+    }
+
     #[allow(unused_mut)] // q_array is only modified in debug builds for orthogonality correction
-    let mut q_array = Array::from_ndarray(q.into_dyn());
-    let mut r_array = Array::from_ndarray(r.into_dyn());
+    let mut q_array = Array::from_vec(q_vec).reshape(&[q_rows, q_cols]);
+    let mut r_array = Array::from_vec(r_vec).reshape(&[r_rows, r_cols]);
 
     // If we scaled the matrix, rescale R appropriately
     if scaling_factor != <T as num_traits::One>::one() {
@@ -102,8 +152,8 @@ where
 
     // Verify and enhance orthogonality of Q with advanced techniques
     #[cfg(debug_assertions)]
-    if shape[0] >= shape[1] {
-        // Only needed if Q is tall or square
+    {
+        // For economy QR, Q is m x n and Q^T * Q should be n x n identity
         // 1. First, assess the orthogonality of Q
         let qt = q_array.transpose();
         let product = qt.matmul(&q_array)?;
@@ -120,12 +170,14 @@ where
             eps * matrix_size * correction_factor * <T as num_traits::NumCast>::from(10.0).unwrap();
 
         // Check that Q^T * Q is close to the identity matrix
+        // Product should be n x n (or min(m,n) x min(m,n))
         let mut max_deviation = <T as num_traits::Zero>::zero();
         let mut avg_deviation = <T as num_traits::Zero>::zero();
         let mut num_elements = 0;
 
-        for i in 0..std::cmp::min(m, n) {
-            for j in 0..std::cmp::min(m, n) {
+        let prod_size = std::cmp::min(m, n);
+        for i in 0..prod_size {
+            for j in 0..prod_size {
                 let expected = if i == j {
                     <T as num_traits::One>::one()
                 } else {
@@ -267,7 +319,14 @@ where
 /// This is more numerically stable than classical Gram-Schmidt
 pub fn householder_qr<T>(a: &Array<T>) -> Result<(Array<T>, Array<T>)>
 where
-    T: Float + Clone + Debug,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
     let shape = a.shape();
     let m = shape[0];
@@ -290,7 +349,7 @@ where
         // Accumulate sum manually to avoid using Sum trait
         let mut sum_xx: T = <T as num_traits::Zero>::zero();
         for &val in &x {
-            sum_xx = sum_xx + val * val;
+            sum_xx += val * val;
         }
         let x_norm = num_traits::Float::sqrt(sum_xx);
 
@@ -306,18 +365,18 @@ where
 
             // Compute v = x - alpha*e1
             let mut v = x.clone();
-            v[0] = v[0] - alpha;
+            v[0] -= alpha;
 
             // Normalize v - accumulate sum manually again
             let mut sum_vv: T = <T as num_traits::Zero>::zero();
             for &val in &v {
-                sum_vv = sum_vv + val * val;
+                sum_vv += val * val;
             }
             let v_norm = num_traits::Float::sqrt(sum_vv);
 
             if v_norm > eps {
                 for val in &mut v {
-                    *val = *val / v_norm;
+                    *val /= v_norm;
                 }
 
                 // Apply Householder reflection to R: R = R - 2 * v * (v^T * R)
@@ -325,7 +384,7 @@ where
                     let mut vtr: T = <T as num_traits::Zero>::zero();
                     for i in 0..(m - k) {
                         let r_val = r.get(&[i + k, j])?;
-                        vtr = vtr + v[i] * r_val;
+                        vtr += v[i] * r_val;
                     }
 
                     for i in 0..(m - k) {
@@ -343,7 +402,7 @@ where
                         let mut q_row_dot_v: T = <T as num_traits::Zero>::zero();
                         for l in 0..(m - k) {
                             let q_val = q.get(&[i, l + k])?;
-                            q_row_dot_v = q_row_dot_v + q_val * v[l];
+                            q_row_dot_v += q_val * v[l];
                         }
 
                         let q_val = q.get(&[i, j])?;

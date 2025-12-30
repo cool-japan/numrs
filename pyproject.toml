@@ -4,16 +4,16 @@ build-backend = "maturin"
 
 [project]
 name = "numrs2"
-version = "0.1.0-rc.3"
+version = "0.1.1"
 description = "A Rust implementation inspired by NumPy for numerical computing"
 authors = [
-    {name = "cool-japan/NumRS2 (KitaSan) Team"}
+    {name = "COOLJAPAN OU (Team KitaSan)"}
 ]
 license = {text = "MIT OR Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",

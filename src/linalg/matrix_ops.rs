@@ -32,7 +32,18 @@ use std::fmt::Debug;
 /// assert_eq!(det_val, -2.0);
 /// ```
 #[cfg(feature = "lapack")]
-pub fn det<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> Result<T> {
+pub fn det<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
+    a: &Array<T>,
+) -> Result<T> {
     a.det()
 }
 
@@ -66,7 +77,16 @@ pub fn det<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> R
 /// * `n > 1`: Computes A * A * ... * A (n times)
 /// * `n < -1`: Computes (A^-1)^|n|
 #[cfg(feature = "lapack")]
-pub fn matrix_power<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
+pub fn matrix_power<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
     a: &Array<T>,
     n: i32,
 ) -> Result<Array<T>> {

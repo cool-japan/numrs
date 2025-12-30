@@ -137,7 +137,15 @@ where
 #[cfg(feature = "lapack")]
 pub fn solve_linear_system<T>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
 where
-    T: Float + NumCast + Clone + Debug + Display + ndarray_linalg::Lapack,
+    T: Float
+        + NumCast
+        + Clone
+        + Debug
+        + Display
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign,
 {
     // Use NumRS2's built-in linear algebra solve function
     crate::linalg::solve(a, b)

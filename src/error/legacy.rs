@@ -91,7 +91,7 @@ impl From<io::Error> for NumRs2Error {
     }
 }
 
-// Note: bincode v2 changed its error types; we map them explicitly at call sites
+// Note: oxicode changed its error types; we map them explicitly at call sites
 // using map_err instead of a blanket From implementation.
 
 impl NumRs2Error {

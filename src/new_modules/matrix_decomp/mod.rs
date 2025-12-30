@@ -5,9 +5,9 @@ use crate::array::Array;
 #[cfg(feature = "lapack")]
 use crate::error::{NumRs2Error, Result};
 #[cfg(feature = "lapack")]
-use ndarray_linalg::{Scalar, SVD};
-#[cfg(feature = "lapack")]
 use num_traits::{Float, NumCast, Zero};
+#[cfg(feature = "lapack")]
+use scirs2_core::linalg::svd_ndarray;
 #[cfg(feature = "lapack")]
 use scirs2_core::ndarray::ArrayView2;
 #[cfg(feature = "lapack")]
@@ -46,9 +46,10 @@ pub use utils::calculate_max_diff;
 
 #[cfg(feature = "lapack")]
 /// Type alias for SVD result to reduce complexity
+/// (U, S, Vt) where U and Vt are orthogonal matrices, S is singular values
 pub type SvdResult<T> = (
     Array<T>,
-    Array<<T as ndarray_linalg::Scalar>::Real>,
+    Array<T>, // Singular values are same type as matrix elements
     Array<T>,
 );
 
@@ -63,8 +64,7 @@ pub type SvdResult<T> = (
 /// 3. Verification of orthogonality and reconstruction error
 pub fn svd<T>(a: &Array<T>) -> Result<SvdResult<T>>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
-    <T as ndarray_linalg::Scalar>::Real: Clone + num_traits::Float,
+    T: Float + Clone + Debug,
 {
     // Check that the matrix is 2D
     let shape = a.shape();
@@ -79,82 +79,98 @@ where
 
     // Scale the matrix to avoid overflow in large-magnitude entries
     // Find the maximum absolute value in the matrix
-    let mut max_val = <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero();
+    let mut max_val = T::zero();
     let mut a_scaled = a.clone();
 
     for i in 0..m {
         for j in 0..n {
             let val = a.get(&[i, j])?;
             let abs_val = num_traits::Float::abs(val);
-            if abs_val > num_traits::NumCast::from(max_val).unwrap() {
-                max_val = num_traits::NumCast::from(abs_val).unwrap();
+            if abs_val > max_val {
+                max_val = abs_val;
             }
         }
     }
 
     // Apply scaling if maximum is very large or very small
-    let mut scaling_factor = <<T as ndarray_linalg::Scalar>::Real as num_traits::One>::one();
-    if max_val > <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(1e6).unwrap() {
-        scaling_factor = <<T as ndarray_linalg::Scalar>::Real as num_traits::NumCast>::from(1.0)
-            .unwrap()
-            / max_val;
+    let mut scaling_factor = T::one();
+    if max_val > T::from(1e6).unwrap_or_else(|| T::one()) {
+        scaling_factor = T::one() / max_val;
 
         for i in 0..m {
             for j in 0..n {
                 let val = a.get(&[i, j])?;
-                a_scaled.set(
-                    &[i, j],
-                    val * num_traits::NumCast::from(scaling_factor).unwrap(),
-                )?;
+                a_scaled.set(&[i, j], val * scaling_factor)?;
             }
         }
     }
 
-    // Get the 2D view and compute SVD using ndarray-linalg
+    // Get the 2D view and convert to f64 for OxiBLAS
     let a_view: ArrayView2<T> = a_scaled.view_2d()?;
 
-    // Use ndarray-linalg's SVD implementation with explicit parameters
-    // Request both left and right singular vectors
-    let (u, s, vt) = match a_view.svd(true, true) {
-        Ok(result) => result,
-        Err(_e) => {
-            // If SVD fails with default parameters, try a more robust algorithm
-            // For a full implementation, we would select different LAPACK routines
-            // For now, we'll just report the error
-            return Err(NumRs2Error::ComputationError(
-                "SVD computation failed".to_string(),
-            ));
+    // Convert to f64 for OxiBLAS
+    let mut a_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((m, n));
+    for i in 0..m {
+        for j in 0..n {
+            a_f64[[i, j]] = a_view[[i, j]].to_f64().ok_or_else(|| {
+                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+            })?;
         }
-    };
+    }
 
-    // Convert to Array type - unwrap the Option values
-    let u_converted = Array::from_ndarray(u.unwrap().into_dyn());
-    let mut s_converted = Array::from_ndarray(s.into_owned().into_dyn());
-    let vt_converted = Array::from_ndarray(vt.unwrap().into_dyn());
+    // Use OxiBLAS SVD implementation
+    let svd_result = svd_ndarray(&a_f64)
+        .map_err(|e| NumRs2Error::ComputationError(format!("SVD computation failed: {:?}", e)))?;
+
+    // Convert U from f64 to T
+    let u_f64 = svd_result.u;
+    let mut u_vec: Vec<T> = Vec::with_capacity(u_f64.len());
+    for &v in u_f64.iter() {
+        u_vec.push(
+            T::from(v)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
+        );
+    }
+    let u_converted = Array::from_vec(u_vec).reshape(&[u_f64.nrows(), u_f64.ncols()]);
+
+    // Convert singular values from f64 to T
+    let s_f64 = svd_result.s;
+    let mut s_vec: Vec<T> = Vec::with_capacity(s_f64.len());
+    for &v in s_f64.iter() {
+        s_vec.push(
+            T::from(v)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
+        );
+    }
+    let mut s_converted = Array::from_vec(s_vec);
+
+    // Convert Vt from f64 to T
+    let vt_f64 = svd_result.vt;
+    let mut vt_vec: Vec<T> = Vec::with_capacity(vt_f64.len());
+    for &v in vt_f64.iter() {
+        vt_vec.push(
+            T::from(v)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
+        );
+    }
+    let vt_converted = Array::from_vec(vt_vec).reshape(&[vt_f64.nrows(), vt_f64.ncols()]);
 
     // Rescale singular values if we scaled the matrix
-    if scaling_factor != <<T as ndarray_linalg::Scalar>::Real as num_traits::One>::one() {
+    if scaling_factor != T::one() {
         for i in 0..s_converted.size() {
             let s_val = s_converted.get(&[i])?;
-            s_converted.set(
-                &[i],
-                s_val / num_traits::NumCast::from(scaling_factor).unwrap(),
-            )?;
+            s_converted.set(&[i], s_val / scaling_factor)?;
         }
     }
 
     // Set very small singular values to zero for numerical stability
-    let eps = <<T as ndarray_linalg::Scalar>::Real as num_traits::Float>::epsilon();
-    let tolerance =
-        eps * num_traits::NumCast::from(std::cmp::max(m, n)).unwrap() * s_converted.get(&[0])?;
+    let eps = T::epsilon();
+    let tolerance = eps * T::from(std::cmp::max(m, n)).unwrap() * s_converted.get(&[0])?;
 
     for i in 0..s_converted.size() {
         let s_val = s_converted.get(&[i])?;
         if s_val < tolerance {
-            s_converted.set(
-                &[i],
-                <<T as ndarray_linalg::Scalar>::Real as num_traits::Zero>::zero(),
-            )?;
+            s_converted.set(&[i], T::zero())?;
         }
     }
 
@@ -179,9 +195,18 @@ where
 /// 3. Proper handling of ill-conditioned matrices
 pub fn cod<T>(a: &Array<T>) -> Result<SvdResult<T>>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
-    <T as ndarray_linalg::Scalar>::Real:
-        Clone + PartialOrd + NumCast + num_traits::Zero + num_traits::Float,
+    T: Float
+        + Clone
+        + Debug
+        + PartialOrd
+        + NumCast
+        + num_traits::Zero
+        + std::iter::Sum
+        + std::ops::DivAssign
+        + std::ops::AddAssign
+        + std::ops::SubAssign
+        + std::ops::MulAssign
+        + std::fmt::Display,
 {
     // Check if the matrix is 2D
     let shape = a.shape();
@@ -337,19 +362,11 @@ where
     // Determine numerical rank by identifying singular values above threshold
     // Use a more robust threshold based on machine precision, matrix dimensions, and condition number
     let s_vec = s.to_vec();
-    let max_sv = s_vec
-        .first()
-        .cloned()
-        .unwrap_or_else(<<T as Scalar>::Real as num_traits::Zero>::zero);
+    let max_sv = s_vec.first().cloned().unwrap_or_else(|| T::zero());
 
     // Condition-number-based threshold
-    let tol_factor = <<T as Scalar>::Real as num_traits::Float>::sqrt(
-        <<T as Scalar>::Real as num_traits::Float>::epsilon(),
-    );
-    let tol_real = max_sv
-        * tol_factor
-        * <<T as Scalar>::Real as NumCast>::from(std::cmp::max(m, n))
-            .unwrap_or_else(<<T as Scalar>::Real as num_traits::One>::one);
+    let tol_factor = T::sqrt(T::epsilon());
+    let tol_real = max_sv * tol_factor * T::from(std::cmp::max(m, n)).unwrap_or_else(|| T::one());
 
     let rank = s_vec.iter().filter(|&&sv| sv > tol_real).count();
 
@@ -397,20 +414,26 @@ where
 /// Extend the Array type with the decomposition methods
 impl<T> Array<T>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
-    <T as ndarray_linalg::Scalar>::Real: Clone,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
-    /// Enhanced SVD implementation using ndarray-linalg
+    /// Enhanced SVD implementation using OxiBLAS
     pub fn svd_compute(&self) -> Result<SvdResult<T>> {
         svd(self)
     }
 
-    /// Enhanced QR decomposition using ndarray-linalg
+    /// Enhanced QR decomposition using OxiBLAS
     pub fn qr_compute(&self) -> Result<(Array<T>, Array<T>)> {
         qr(self)
     }
 
-    /// Enhanced Cholesky decomposition using ndarray-linalg
+    /// Enhanced Cholesky decomposition using OxiBLAS
     pub fn cholesky_compute(&self) -> Result<Array<T>> {
         cholesky(self)
     }
@@ -428,13 +451,20 @@ where
     /// Complete orthogonal decomposition
     pub fn cod(&self) -> Result<SvdResult<T>>
     where
-        <T as ndarray_linalg::Scalar>::Real: PartialOrd + NumCast + Zero,
+        T: PartialOrd
+            + NumCast
+            + Zero
+            + std::iter::Sum
+            + std::ops::DivAssign
+            + std::ops::AddAssign
+            + std::ops::SubAssign
+            + std::ops::MulAssign,
     {
         cod(self)
     }
 
     /// Compute the reciprocal condition number of the matrix
-    pub fn rcond_compute(&self) -> Result<<T as ndarray_linalg::Scalar>::Real> {
+    pub fn rcond_compute(&self) -> Result<T> {
         rcond(self)
     }
 }
@@ -471,29 +501,50 @@ mod tests {
         assert_eq!(q.shape(), vec![3, 3]);
         assert_eq!(r.shape(), vec![3, 3]);
 
-        // For this simple diagonal matrix, Q should be identity and R should be equal to A
+        // Verify QR decomposition properties:
+        // 1. Q*R should equal A
+        let qr_product = q.matmul(&r).unwrap();
         for i in 0..3 {
             for j in 0..3 {
-                // Check Q is identity
-                let expected_q = if i == j { 1.0 } else { 0.0 };
-                let actual_q = q.get(&[i, j]).unwrap();
+                let expected = a.get(&[i, j]).unwrap();
+                let actual = qr_product.get(&[i, j]).unwrap();
                 assert!(
-                    num_traits::Float::abs(actual_q - expected_q) < 1e-10,
-                    "QR: Q should be identity for diagonal matrix - expected {}, got {} at ({},{})",
-                    expected_q,
-                    actual_q,
+                    num_traits::Float::abs(actual - expected) < 1e-10,
+                    "QR: Q*R should equal A - expected {}, got {} at ({},{})",
+                    expected,
+                    actual,
                     i,
                     j
                 );
+            }
+        }
 
-                // Check R equals A
-                let expected_r = a.get(&[i, j]).unwrap();
-                let actual_r = r.get(&[i, j]).unwrap();
+        // 2. Q should be orthogonal (Q^T * Q = I)
+        let qt = q.transpose();
+        let qtq = qt.matmul(&q).unwrap();
+        for i in 0..3 {
+            for j in 0..3 {
+                let expected = if i == j { 1.0 } else { 0.0 };
+                let actual = qtq.get(&[i, j]).unwrap();
                 assert!(
-                    num_traits::Float::abs(actual_r - expected_r) < 1e-10,
-                    "QR: R should equal A for diagonal matrix - expected {}, got {} at ({},{})",
-                    expected_r,
-                    actual_r,
+                    num_traits::Float::abs(actual - expected) < 1e-10,
+                    "QR: Q should be orthogonal - Q^T*Q expected {}, got {} at ({},{})",
+                    expected,
+                    actual,
+                    i,
+                    j
+                );
+            }
+        }
+
+        // 3. R should be upper triangular
+        for i in 1..3 {
+            for j in 0..i {
+                let val = r.get(&[i, j]).unwrap();
+                assert!(
+                    num_traits::Float::abs(val) < 1e-10,
+                    "QR: R should be upper triangular - got {} at ({},{})",
+                    val,
                     i,
                     j
                 );

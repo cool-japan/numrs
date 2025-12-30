@@ -592,7 +592,8 @@ fn broadcast_shape(shapes: &[Vec<usize>]) -> Result<Vec<usize>> {
     }
 
     // Find the maximum number of dimensions
-    let max_ndim = shapes.iter().map(|s| s.len()).max().unwrap();
+    // Safe: shapes is non-empty (checked above), so max() returns Some
+    let max_ndim = shapes.iter().map(|s| s.len()).max().unwrap_or(0);
 
     // Initialize the output shape with 1s
     let mut output_shape = vec![1; max_ndim];

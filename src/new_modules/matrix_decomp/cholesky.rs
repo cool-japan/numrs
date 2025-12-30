@@ -3,8 +3,8 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use ndarray_linalg::{Cholesky, UPLO};
 use num_traits::Float;
+use scirs2_core::linalg::cholesky_ndarray;
 use scirs2_core::ndarray::ArrayView2;
 use std::fmt::Debug;
 
@@ -21,7 +21,13 @@ use std::fmt::Debug;
 /// 8. Comprehensive error checking with detailed diagnostics
 pub fn cholesky<T>(a: &Array<T>) -> Result<Array<T>>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::fmt::Display,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -180,12 +186,34 @@ where
                   min_diagonal, min_eigenvalue_approx);
     }
 
-    // Step 4: Get 2D view of the array and attempt Cholesky decomposition
+    // Step 4: Convert to f64 for OxiBLAS and attempt Cholesky decomposition
     let a_view: ArrayView2<T> = scaled_a.view_2d()?;
 
+    // Convert to f64 for OxiBLAS
+    let mut a_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((n, n));
+    for i in 0..n {
+        for j in 0..n {
+            a_f64[[i, j]] = a_view[[i, j]].to_f64().ok_or_else(|| {
+                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+            })?;
+        }
+    }
+
     // Attempt standard Cholesky first
-    let l = match a_view.cholesky(UPLO::Lower) {
-        Ok(result) => result,
+    let l = match cholesky_ndarray(&a_f64) {
+        Ok(result) => {
+            // Convert back to T
+            let l_f64 = result.l;
+            let mut l_ndarray = scirs2_core::ndarray::Array2::<T>::zeros((n, n));
+            for i in 0..n {
+                for j in 0..n {
+                    l_ndarray[[i, j]] = T::from(l_f64[[i, j]]).ok_or_else(|| {
+                        NumRs2Error::ComputationError("Conversion failed".to_string())
+                    })?;
+                }
+            }
+            l_ndarray.into_dyn()
+        }
         Err(_e) => {
             // If standard Cholesky fails, try an adaptive approach with gradually
             // increasing diagonal perturbation and eigenvalue shifting
@@ -217,12 +245,36 @@ where
 
                 // Try Cholesky with current perturbation
                 let perturbed_view = perturbed_a.view_2d()?;
-                match perturbed_view.cholesky(UPLO::Lower) {
-                    Ok(result) => {
+
+                // Convert to f64 for OxiBLAS
+                let mut perturbed_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((n, n));
+                for i in 0..n {
+                    for j in 0..n {
+                        perturbed_f64[[i, j]] =
+                            perturbed_view[[i, j]].to_f64().ok_or_else(|| {
+                                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+                            })?;
+                    }
+                }
+
+                match cholesky_ndarray(&perturbed_f64) {
+                    Ok(chol_result) => {
+                        // Convert back to T as ndarray
+                        let l_f64 = chol_result.l;
+                        let mut l_ndarray = scirs2_core::ndarray::Array2::<T>::zeros((n, n));
+                        for i in 0..n {
+                            for j in 0..n {
+                                l_ndarray[[i, j]] = T::from(l_f64[[i, j]]).ok_or_else(|| {
+                                    NumRs2Error::ComputationError("Conversion failed".to_string())
+                                })?;
+                            }
+                        }
+                        let result_ndarray = l_ndarray.into_dyn();
+
                         // Success with perturbation - store if it's the smallest successful perturbation
                         if perturbation < min_working_perturbation {
                             min_working_perturbation = perturbation;
-                            best_result = Some(result.clone());
+                            best_result = Some(result_ndarray.clone());
                         }
 
                         // If we're on the last attempt or perturbation is sufficiently small, stop here
@@ -230,7 +282,7 @@ where
                             eprintln!("Warning: Applied diagonal perturbation of {} to compute Cholesky decomposition.", perturbation);
 
                             // Convert to Array and unscale the result
-                            let mut l_array = Array::from_ndarray(result.into_dyn());
+                            let mut l_array = Array::from_ndarray(result_ndarray);
 
                             // Unscale L: L_original = D^-1 * L_scaled
                             if needs_scaling {
@@ -370,7 +422,14 @@ where
 /// Returns (L, P) where P*A*P^T = L*L^T and P is a permutation matrix.
 pub fn pivoted_cholesky<T>(a: &Array<T>) -> Result<(Array<T>, Array<usize>)>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
     // Check if the matrix is square
     let shape = a.shape();

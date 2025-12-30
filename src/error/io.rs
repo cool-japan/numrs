@@ -30,7 +30,7 @@ pub enum IOError {
     /// Serialization failed
     #[error("Serialization failed: {format} - {reason}")]
     Serialization {
-        format: String, // "bincode", "json", "messagepack", etc.
+        format: String, // "oxicode", "json", "messagepack", etc.
         reason: String,
         data_type: Option<String>,
         context: OperationContext,

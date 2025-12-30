@@ -10,7 +10,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! numrs2 = { version = "0.1.0-beta.1", features = ["gpu"] }
+//! numrs2 = { version = "0.1.1", features = ["gpu"] }
 //! ```
 //!
 //! ## Example

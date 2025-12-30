@@ -273,7 +273,6 @@ fn test_weibull_distribution_statistics() {
     // Expected mean for Weibull distribution with shape k=2, scale λ=3
     // For Weibull, mean = λ * Γ(1 + 1/k), where Γ is the gamma function
     // With k=2, λ=3: mean = 3 * Γ(1.5) = 3 * sqrt(π)/2 ≈ 2.66
-    // Beta.4 fixed the Weibull parameterization, now using correct formula
     let expected_mean = 2.66;
 
     // Check if mean is within expected range

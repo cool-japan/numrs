@@ -4,7 +4,7 @@
 //! NumRS2 and SciRS2, particularly for advanced statistical distributions.
 //! These tests only run when the "scirs" feature is enabled.
 //!
-//! Note: This file has been updated to match the SciRS2 v0.1.0-beta.2 module structure
+//! Note: This file has been updated to match the SciRS2 v0.1.1 module structure
 //! and class names (NoncentralChiSquared, FNoncentral, MaxwellBoltzmann, etc.).
 
 #![cfg(feature = "scirs")]

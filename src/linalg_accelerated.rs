@@ -603,7 +603,7 @@ where
 /// High-performance BLAS wrapper using scirs2-linalg
 ///
 /// This struct provides a namespace for BLAS operations that are accelerated
-/// via hardware BLAS libraries (OpenBLAS, Accelerate, MKL, etc.) through
+/// via OxiBLAS (pure Rust BLAS/LAPACK implementation with SIMD optimizations) through
 /// scirs2-linalg.
 ///
 /// # Performance

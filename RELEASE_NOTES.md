@@ -1,209 +1,168 @@
-# NumRS2 v0.1.0-rc.3 Release Notes
+# NumRS2 v0.1.1 Release Notes
 
-**Release Date:** December 2025
-**Release Candidate 3** - Production-Ready NumPy + SciPy Implementation in Rust with Expression Templates
+**First Stable Release** - Production-Ready NumPy + SciPy Implementation in Rust
 
-## Overview
+*Release Date: December 30, 2025*
 
-NumRS2 v0.1.0-rc.3 marks a major milestone: **production-ready status** with comprehensive NumPy and SciPy compatibility. This release delivers a complete numerical computing library in Rust with 11 SciPy-equivalent modules, SIMD-optimized operations, expression templates for lazy evaluation, and seamless integration with the SciRS2 ecosystem.
+NumRS2 v0.1.1 is the **first stable release** of NumRS2, a comprehensive numerical computing library for Rust. This release delivers production-ready NumPy and SciPy compatibility with SIMD-optimized operations, expression templates for lazy evaluation, and seamless integration with the SciRS2 ecosystem.
 
-## Release Highlights
+## 🎯 Overview
 
-### Production-Ready Status
+NumRS2 provides a complete numerical computing stack in pure Rust:
+- **NumPy-compatible array operations** with broadcasting and advanced indexing
+- **SciPy-equivalent modules** for optimization, interpolation, signal processing, and more
+- **SIMD optimization** with AVX2/AVX512 and ARM NEON support
+- **Expression templates** for lazy evaluation and automatic optimization
+- **Pure Rust dependencies** with OxiBLAS (no C/C++ dependencies)
 
-- **119,358 lines** of production Rust code (298 files)
-- **647 tests** passing (unit + doc tests)
-- **Zero warnings** in compilation
-- **$4.2M COCOMO** estimated development value
+## ✨ Key Features
 
-### Complete NumPy Compatibility (100%)
+### Core Array Operations
+- N-dimensional arrays with efficient memory layout
+- NumPy-compatible broadcasting
+- Advanced indexing (fancy indexing, boolean masking)
+- Zero-copy views and slicing
+- Expression templates for lazy evaluation
+- Common Subexpression Elimination (CSE)
 
-All core NumPy functionality is implemented:
+### Linear Algebra
+- Matrix operations (multiplication, transpose, inverse, determinant)
+- Decompositions (SVD, QR, LU, Cholesky, Eigenvalue)
+- Iterative solvers (CG, GMRES, BiCGSTAB)
+- Randomized algorithms for large-scale computations
+- Sparse matrix support (COO, CSR, CSC, DIA)
 
-- **Array Operations**: Creation, manipulation, indexing, broadcasting, views
-- **Mathematical Functions**: 200+ ufuncs with SIMD optimization
-- **Linear Algebra**: Complete `np.linalg` + BLAS/LAPACK integration
-- **Statistical Functions**: Full scipy.stats equivalents via scirs2-stats
-- **Random Generation**: Advanced distributions via scirs2-core
-- **I/O Operations**: NPY/NPZ, CSV, text formats, memory mapping
-
-### 11 SciPy-Equivalent Modules
-
-| Module | Description | Functions |
-|--------|-------------|-----------|
-| `scipy.optimize` | Numerical optimization | BFGS, L-BFGS, Nelder-Mead, Trust Region, Levenberg-Marquardt |
-| `scipy.optimize.root` | Root-finding | Bisection, Brent, Ridder, Newton-Raphson, Secant, Halley |
-| `scipy.misc.derivative` | Numerical differentiation | Gradient, Jacobian, Hessian with Richardson extrapolation |
-| `scipy.interpolate` | Interpolation | Linear, Cubic, Spline variants (Natural, Clamped, Not-a-Knot, Periodic) |
-| `scipy.spatial.distance` | Distance metrics | Euclidean, Manhattan, Chebyshev, Minkowski, Cosine, Correlation, Hamming |
-| `scipy.cluster` | Clustering | K-means++, Hierarchical (single/complete/average/ward linkage) |
-| `scipy.ndimage` | Image processing | Filters, morphology, measurements, segmentation |
-| `scipy.spatial` | Computational geometry | KD-tree, Convex hull, Voronoi, Delaunay triangulation |
-| `scipy.special` | Special functions | 50+ functions (Gamma, Bessel, Error functions, Elliptic integrals) |
-| `scipy.fft` | Fast Fourier Transform | FFT, RFFT, DCT, DST, STFT, GPU acceleration, plan caching |
-| `scipy.signal` | Signal processing | Digital filters, wavelets, convolution, spectral analysis |
-
-### SIMD Performance Optimization
-
+### SIMD Optimization
 - **86 AVX2-optimized functions** with automatic threshold-based dispatch
-- **42 ARM NEON f64 vectorized operations** for Apple Silicon
-- **4-way loop unrolling** and FMA (fused multiply-add) instructions
-- **Runtime CPU feature detection** for optimal dispatch
-- **2.4-3.6x performance improvement** on vectorized operations
+- **42 ARM NEON operations** for f64 vectorization
+- 4-way loop unrolling and FMA (fused multiply-add) instructions
+- Support for both f32 and f64 numeric types
+- Automatic fallback to scalar implementations
 
-### Advanced Linear Algebra
+### Mathematical & Statistical Functions
+- Comprehensive mathematical operations (trigonometric, exponential, logarithmic)
+- Special functions (gamma, beta, error functions, Bessel functions)
+- Polynomial operations (evaluation, fitting, root finding)
+- Cubic spline interpolation with multiple boundary conditions
+- Statistical analysis and distribution functions
 
-- **Iterative Solvers**: CG, PCG, GMRES, FGMRES, BiCGSTAB, MINRES
-- **Preconditioners**: Jacobi, SSOR, Incomplete Cholesky, ILU
-- **Sparse Matrices**: COO, CSR, CSC, DIA formats with optimized operations
-- **Randomized Algorithms**: Randomized SVD, random projections, range finders
-- **Tensor Decompositions**: Tucker (HOSVD), CP/PARAFAC with ALS
+### Numerical Optimization
+- BFGS & L-BFGS quasi-Newton methods
+- Trust Region optimization
+- Nelder-Mead simplex method
+- Levenberg-Marquardt for nonlinear least squares
+- Constrained optimization algorithms
 
-### Automatic Differentiation
+### Root-Finding Algorithms
+- Bracketing methods (Bisection, Brent, Ridder)
+- Open methods (Newton-Raphson, Secant, Halley)
+- Fixed-point iteration
 
-- **Forward Mode**: Dual numbers for Jacobian-vector products
-- **Reverse Mode**: Tape-based backpropagation for gradients
-- **Higher-Order**: Hessian, Taylor series, nth-order derivatives
-- **1,178 lines** of production AD code
+### Signal Processing
+- Fast Fourier Transform (FFT/IFFT)
+- Convolution and correlation
+- Digital filtering operations
 
-### Data Interoperability
+### Interoperability
+- NumPy format (.npy, .npz) support
+- Apache Arrow integration for zero-copy data exchange
+- CSV and binary serialization
+- Memory-mapped file I/O
+- Optional Python bindings via PyO3
 
-- **Apache Arrow**: Zero-copy exchange with Python ecosystem
-- **Feather Format**: Fast columnar storage
-- **IPC Streaming**: Inter-process communication
-- **Python Bindings**: PyO3 integration ready for maturin build
+### SciRS2 Ecosystem Integration
 
-## What's New in RC.3
-
-### New Features
-
-1. **Expression Templates System** - Complete lazy evaluation infrastructure
-   - **SharedArray<T>**: Reference-counted arrays with ArcArray storage for O(1) cloning
-   - **Operator Overloading**: Natural syntax for array operations (+, -, *, /, scalar ops)
-   - **SharedExpr**: Lifetime-free expression templates using Arc for zero-lifetime DAG construction
-   - **CachedExpr**: Common Subexpression Elimination (CSE) with automatic result caching
-   - **CSEOptimizer**: Automatic detection and elimination of repeated computations
-
-2. **Memory Access Pattern Optimization** - Cache-aware iteration strategies
-   - **BlockedIterator**: Cache-efficient blocked iteration for 1D arrays
-   - **TiledIterator2D**: 2D cache-blocking for matrix operations
-   - **StrideOptimizer**: Analyzes memory layout and suggests optimal iteration order
-   - Cache-aware operations for improved data locality
-
-3. **Enhanced FFT Module** (scirs2-fft integration)
-   - DCT/DST Types I-IV for compression standards
-   - Advanced transforms: FrFT, NUFFT, FHT
-   - STFT and spectrograms for time-frequency analysis
-   - FFT plan caching for repeated transforms
-
-2. **Enhanced Signal Processing** (scirs2-signal integration)
-   - Digital filters: Butterworth, Chebyshev, Elliptic, Bessel, FIR
-   - Wavelet transforms: DWT, CWT, 2D wavelets
-   - LTI systems: Transfer functions, step/impulse response
-   - SIMD-accelerated convolution
-
-3. **Algorithm Improvements**
-   - Fixed Ridder's Method formula (sign calculation)
-   - Fixed Richardson Extrapolation step size shadowing
-   - Fixed MINRES Givens rotation tracking
-   - Fixed parallel scheduler contention (1,143x speedup)
-
-4. **ARM NEON Support** (2,119 lines)
-   - Complete f64 vectorized operations
-   - NEON SIMD dispatch in ufuncs
-   - Apple Silicon optimization
-
-### Performance Improvements
-
-- Parallel scheduler deadlock fix with 1,143x speedup on multi-core systems
-- FFT plan caching eliminates repeated planning overhead
-- SIMD threshold tuning for optimal scalar/vector dispatch
-
-## Breaking Changes
-
-None. This release maintains full API compatibility with beta.3.
-
-## Dependencies
-
-NumRS2 uses the SciRS2 ecosystem (v0.1.0-rc.4):
-
+NumRS2 uses the SciRS2 ecosystem (v0.1.1):
 ```toml
-[dependencies]
-scirs2-core = "0.1.0-rc.4"
-scirs2-stats = "0.1.0-rc.4"
-scirs2-linalg = "0.1.0-rc.4"
-scirs2-ndimage = "0.1.0-rc.4"
-scirs2-spatial = "0.1.0-rc.4"
-scirs2-special = "0.1.0-rc.4"
-scirs2-fft = "0.1.0-rc.4"
-scirs2-signal = "0.1.0-rc.4"
+scirs2-core = "0.1.1"
+scirs2-stats = "0.1.1"
+scirs2-linalg = "0.1.1"
+scirs2-ndimage = "0.1.1"
+scirs2-spatial = "0.1.1"
+scirs2-special = "0.1.1"
+scirs2-fft = "0.1.1"
+scirs2-signal = "0.1.1"
 ```
 
-## Installation
+All dependencies use **stable releases** with:
+- OxiBLAS v0.1.2 (pure Rust BLAS/LAPACK)
+- Oxicode v0.1.1 (pure Rust serialization)
+- No C/C++ dependencies
+
+## 📦 Installation
+
+Add to your `Cargo.toml`:
 
 ```toml
-[dependencies]
-numrs2 = "0.1.0-rc.3"
+numrs2 = "0.1.1"
 ```
 
 With optional features:
-
 ```toml
-# Apache Arrow integration
-numrs2 = { version = "0.1.0-rc.3", features = ["arrow"] }
-
-# Python bindings
-numrs2 = { version = "0.1.0-rc.3", features = ["python"] }
-
-# LAPACK support
-numrs2 = { version = "0.1.0-rc.3", features = ["lapack"] }
-
-# GPU acceleration
-numrs2 = { version = "0.1.0-rc.3", features = ["gpu"] }
+numrs2 = { version = "0.1.1", features = ["arrow"] }
+numrs2 = { version = "0.1.1", features = ["python"] }
+numrs2 = { version = "0.1.1", features = ["lapack"] }
+numrs2 = { version = "0.1.1", features = ["gpu"] }
 ```
 
-## Quick Start
+## 📊 Technical Metrics
 
-```rust
-use numrs2::prelude::*;
+- **Total Rust Code**: ~155,000 lines of production code
+- **Test Coverage**: 1,111+ unit tests passing
+- **Quality Metrics**: Zero compilation warnings, zero clippy errors
+- **SIMD Operations**: 128 vectorized functions (86 AVX2 + 42 NEON)
+- **Documentation**: Comprehensive docs with examples and migration guides
 
-fn main() -> Result<()> {
-    // Create arrays
-    let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-    let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
+## 🚀 Performance
 
-    // Matrix operations
-    let c = a.matmul(&b)?;
-    println!("Matrix multiplication: {}", c);
+- **SIMD-optimized** operations with automatic threshold-based dispatch
+- **Cache-aware** memory access patterns
+- **Expression templates** eliminate temporary allocations
+- **Parallel operations** with work-stealing scheduler
+- **Pure Rust** implementation with no C/C++ overhead
 
-    // Linear algebra
-    let (u, s, vt) = a.svd_compute()?;
-    println!("SVD: U={}, S={}, Vt={}", u, s, vt);
+## 🔧 Optional Features
 
-    // Statistical operations
-    let data = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
-    println!("Mean: {}, Std: {}", data.mean()?, data.std()?);
+- `matrix_decomp` (default): Matrix decomposition functions
+- `lapack`: LAPACK-dependent operations (via OxiBLAS)
+- `validation`: Additional runtime validation
+- `arrow`: Apache Arrow integration
+- `python`: Python bindings via PyO3
+- `gpu`: GPU acceleration via WGPU
 
-    // FFT
-    let signal = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0]);
-    let spectrum = signal.fft()?;
-    println!("FFT: {}", spectrum);
+## 📚 Documentation
 
-    Ok(())
-}
-```
+- [Getting Started Guide](GETTING_STARTED.md)
+- [API Documentation](https://docs.rs/numrs2)
+- [Examples Directory](examples/)
+- [Migration Guide](docs/MIGRATION_GUIDE.md)
+- [SciRS2 Integration Guide](SCIRS2_INTEGRATION_POLICY.md)
 
-## Resources
+## 🎉 What's New in 0.1.1
 
-- **Documentation**: https://docs.rs/numrs2
+This is the **first stable release** of NumRS2. Key highlights:
+
+- Production-ready quality with comprehensive test coverage
+- Pure Rust dependencies (SciRS2 v0.1.1, OxiBLAS v0.1.2)
+- Complete NumPy and SciPy compatibility
+- SIMD optimization for maximum performance
+- Expression templates for automatic optimization
+- Zero compilation warnings and clippy errors
+
+## 🔗 Links
+
 - **Repository**: https://github.com/cool-japan/numrs
-- **Examples**: See `examples/` directory
-- **SciRS2 Ecosystem**: https://github.com/cool-japan/scirs
+- **Crates.io**: https://crates.io/crates/numrs2
+- **Documentation**: https://docs.rs/numrs2
+- **License**: MIT OR Apache-2.0
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-NumRS2 is part of the SciRS2 ecosystem, bringing production-ready scientific computing to Rust with the safety and performance guarantees that Rust provides.
+NumRS2 builds on the excellent work of:
+- The SciRS2 ecosystem for scientific computing
+- OxiBLAS for pure Rust BLAS/LAPACK
+- The Rust community for foundational libraries
 
 ---
 
-*For the complete changelog, see the git history.*
+**NumRS2 v0.1.1** - Production-ready numerical computing for Rust 🚀

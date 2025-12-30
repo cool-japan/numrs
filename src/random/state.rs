@@ -646,8 +646,7 @@ impl RandomState {
             NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
         })?;
 
-        // Beta.4 fixed the gamma distribution scale parameter bug
-        // Now passing scale directly (shape, scale, location)
+        // Gamma distribution parameters: (shape, scale, location)
         let dist = Gamma::new(shape_f64, scale_f64, 0.0).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create gamma distribution: {}", e))
         })?;

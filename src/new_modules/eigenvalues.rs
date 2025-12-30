@@ -2,9 +2,11 @@ use crate::array::Array;
 #[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
 #[cfg(feature = "lapack")]
-use ndarray_linalg::{Eig, EigVals, Eigh, Scalar};
-#[cfg(feature = "lapack")]
 use num_traits::{Float, NumCast, Zero};
+#[cfg(feature = "lapack")]
+use scirs2_core::linalg::{
+    eig_ndarray, eig_symmetric, eigvals_ndarray, eigvals_symmetric, Eigenvalue,
+};
 #[allow(unused_imports)] // Used conditionally based on features
 use scirs2_core::ndarray::ArrayView2;
 use scirs2_core::Complex;
@@ -14,16 +16,12 @@ use std::fmt::Debug;
 /// Type alias for eigenvalue/eigenvector result to reduce complexity
 pub type EigResult<T> = (Array<Complex<T>>, Array<Complex<T>>);
 
-/// Enhanced eigenvalue and eigenvector computation using ndarray-linalg
+/// Enhanced eigenvalue and eigenvector computation using OxiBLAS
 /// Compute eigenvalues and eigenvectors of a symmetric/Hermitian matrix
 #[cfg(feature = "lapack")]
-pub fn eigh<T>(
-    a: &Array<T>,
-    uplo: &str,
-) -> Result<(Array<<T as ndarray_linalg::Scalar>::Real>, Array<T>)>
+pub fn eigh<T>(a: &Array<T>, _uplo: &str) -> Result<(Array<T>, Array<T>)>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
-    <T as ndarray_linalg::Scalar>::Real: Clone,
+    T: Float + Clone + Debug + 'static,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -36,35 +34,79 @@ where
     // Get 2D view of the array
     let a_view: ArrayView2<T> = a.view_2d()?;
 
-    // Configure upper/lower triangular option
-    let uplo = match uplo.to_lowercase().as_str() {
-        "u" | "upper" => ndarray_linalg::UPLO::Upper,
-        "l" | "lower" => ndarray_linalg::UPLO::Lower,
-        _ => {
-            return Err(NumRs2Error::InvalidOperation(
-                "uplo must be 'upper' or 'lower'".to_string(),
-            ))
+    // For f64, use OxiBLAS directly
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+        // Cast to f64 array
+        let a_f64 = unsafe { std::mem::transmute::<ArrayView2<T>, ArrayView2<f64>>(a_view) };
+
+        // Compute eigenvalues and eigenvectors for a symmetric matrix using OxiBLAS
+        let result = eig_symmetric(&a_f64.to_owned()).map_err(|e| {
+            NumRs2Error::ComputationError(format!("Eigendecomposition failed: {:?}", e))
+        })?;
+
+        // Convert back to T
+        let eigenvalues = unsafe {
+            std::mem::transmute::<scirs2_core::ndarray::Array1<f64>, scirs2_core::ndarray::Array1<T>>(
+                result.eigenvalues,
+            )
+        };
+        let eigenvectors = unsafe {
+            std::mem::transmute::<scirs2_core::ndarray::Array2<f64>, scirs2_core::ndarray::Array2<T>>(
+                result.eigenvectors,
+            )
+        };
+
+        // Convert to Array type
+        let eigenvalues_converted = Array::from_ndarray(eigenvalues.into_dyn());
+        let eigenvectors_converted = Array::from_ndarray(eigenvectors.into_dyn());
+
+        return Ok((eigenvalues_converted, eigenvectors_converted));
+    }
+
+    // For f32, convert to f64, compute, and convert back
+    let mut a_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((a_view.nrows(), a_view.ncols()));
+    for i in 0..a_view.nrows() {
+        for j in 0..a_view.ncols() {
+            a_f64[[i, j]] = a_view[[i, j]].to_f64().ok_or_else(|| {
+                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+            })?;
         }
-    };
+    }
 
-    // Compute eigenvalues and eigenvectors for a symmetric matrix
-    let (vals, vecs) = a_view
-        .eigh(uplo)
-        .map_err(|e| NumRs2Error::ComputationError(format!("Eigendecomposition failed: {}", e)))?;
+    let result = eig_symmetric(&a_f64).map_err(|e| {
+        NumRs2Error::ComputationError(format!("Eigendecomposition failed: {:?}", e))
+    })?;
 
-    // Convert to Array type
-    let eigenvalues_converted = Array::from_ndarray(vals.into_dyn());
-    let eigenvectors_converted = Array::from_ndarray(vecs.into_dyn());
+    // Convert eigenvalues back to T
+    let eigenvalues: Vec<T> = result
+        .eigenvalues
+        .iter()
+        .map(|&v| {
+            T::from(v).ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))
+        })
+        .collect::<Result<Vec<T>>>()?;
+
+    // Convert eigenvectors back to T
+    let mut eigenvectors: Vec<T> = Vec::with_capacity(result.eigenvectors.len());
+    for &v in result.eigenvectors.iter() {
+        eigenvectors.push(
+            T::from(v)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
+        );
+    }
+
+    let n = a_view.nrows();
+    let eigenvalues_converted = Array::from_vec(eigenvalues);
+    let eigenvectors_converted = Array::from_vec(eigenvectors).reshape(&[n, n]);
 
     Ok((eigenvalues_converted, eigenvectors_converted))
 }
 
 /// Compute eigenvalues of a symmetric/Hermitian matrix
 #[cfg(feature = "lapack")]
-pub fn eigvalsh<T>(a: &Array<T>, uplo: &str) -> Result<Array<<T as ndarray_linalg::Scalar>::Real>>
+pub fn eigvalsh<T>(a: &Array<T>, _uplo: &str) -> Result<Array<T>>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
-    <T as ndarray_linalg::Scalar>::Real: Clone,
+    T: Float + Clone + Debug + 'static,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -77,26 +119,45 @@ where
     // Get 2D view of the array
     let a_view: ArrayView2<T> = a.view_2d()?;
 
-    // Configure upper/lower triangular option
-    let uplo = match uplo.to_lowercase().as_str() {
-        "u" | "upper" => ndarray_linalg::UPLO::Upper,
-        "l" | "lower" => ndarray_linalg::UPLO::Lower,
-        _ => {
-            return Err(NumRs2Error::InvalidOperation(
-                "uplo must be 'upper' or 'lower'".to_string(),
-            ))
-        }
-    };
+    // For f64, use OxiBLAS directly
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+        let a_f64 = unsafe { std::mem::transmute::<ArrayView2<T>, ArrayView2<f64>>(a_view) };
 
-    // Compute only eigenvalues by discarding eigenvectors from eigh result
-    let (vals, _) = a_view.eigh(uplo).map_err(|e| {
-        NumRs2Error::ComputationError(format!("Eigenvalue computation failed: {}", e))
+        let result = eigvals_symmetric(&a_f64.to_owned()).map_err(|e| {
+            NumRs2Error::ComputationError(format!("Eigenvalue computation failed: {:?}", e))
+        })?;
+
+        let eigenvalues = unsafe {
+            std::mem::transmute::<scirs2_core::ndarray::Array1<f64>, scirs2_core::ndarray::Array1<T>>(
+                result,
+            )
+        };
+
+        return Ok(Array::from_ndarray(eigenvalues.into_dyn()));
+    }
+
+    // For f32, convert to f64, compute, and convert back
+    let mut a_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((a_view.nrows(), a_view.ncols()));
+    for i in 0..a_view.nrows() {
+        for j in 0..a_view.ncols() {
+            a_f64[[i, j]] = a_view[[i, j]].to_f64().ok_or_else(|| {
+                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+            })?;
+        }
+    }
+
+    let result = eigvals_symmetric(&a_f64).map_err(|e| {
+        NumRs2Error::ComputationError(format!("Eigenvalue computation failed: {:?}", e))
     })?;
 
-    // Convert to Array type
-    let eigenvalues_converted = Array::from_ndarray(vals.into_dyn());
+    let eigenvalues: Vec<T> = result
+        .iter()
+        .map(|&v| {
+            T::from(v).ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))
+        })
+        .collect::<Result<Vec<T>>>()?;
 
-    Ok(eigenvalues_converted)
+    Ok(Array::from_vec(eigenvalues))
 }
 
 /// Compute eigenvalues and eigenvectors of a general square matrix
@@ -104,8 +165,7 @@ where
 #[cfg(feature = "lapack")]
 pub fn eig<T>(a: &Array<T>) -> Result<EigResult<T>>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
-    Complex<T>: ndarray_linalg::Scalar,
+    T: Float + Clone + Debug,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -117,35 +177,51 @@ where
 
     // Get 2D view of the array
     let a_view: ArrayView2<T> = a.view_2d()?;
+    let n = a_view.nrows();
 
-    // Compute eigenvalues and eigenvectors for a general matrix
-    let eig_result = a_view
-        .eig()
-        .map_err(|e| NumRs2Error::ComputationError(format!("Eigendecomposition failed: {}", e)))?;
+    // Convert to f64 for OxiBLAS
+    let mut a_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((n, n));
+    for i in 0..n {
+        for j in 0..n {
+            a_f64[[i, j]] = a_view[[i, j]].to_f64().ok_or_else(|| {
+                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+            })?;
+        }
+    }
 
-    // Extract eigenvalues and eigenvectors
-    let (vals, vecs) = eig_result;
+    // Compute eigenvalues and eigenvectors using OxiBLAS
+    let result = eig_ndarray(&a_f64).map_err(|e| {
+        NumRs2Error::ComputationError(format!("Eigendecomposition failed: {:?}", e))
+    })?;
 
-    // Convert to Array type with complex values
-    let n = a.shape()[0];
-
-    // Convert eigenvalues to our Array type
-    let vals_vec: Vec<Complex<T>> = vals
+    // Convert eigenvalues from Vec<Eigenvalue<f64>> to Array<Complex<T>>
+    let vals_vec: Vec<Complex<T>> = result
+        .eigenvalues
         .iter()
-        .map(|&c| {
-            let re = <T as NumCast>::from(c.re()).unwrap_or_else(|| T::zero());
-            let im = <T as NumCast>::from(c.im()).unwrap_or_else(|| T::zero());
-            Complex::new(re, im)
+        .map(|e| {
+            let re = T::from(e.real)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?;
+            let im = T::from(e.imag)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?;
+            Ok(Complex::new(re, im))
         })
-        .collect();
+        .collect::<Result<Vec<Complex<T>>>>()?;
 
-    // Convert eigenvectors to our Array type
+    // Convert eigenvectors from real/imag parts to Array<Complex<T>>
+    let eigvecs_real = result.eigenvectors_real.ok_or_else(|| {
+        NumRs2Error::ComputationError("Eigenvectors real part missing".to_string())
+    })?;
+    let eigvecs_imag = result.eigenvectors_imag.ok_or_else(|| {
+        NumRs2Error::ComputationError("Eigenvectors imag part missing".to_string())
+    })?;
+
     let mut vecs_vec: Vec<Complex<T>> = Vec::with_capacity(n * n);
     for i in 0..n {
         for j in 0..n {
-            let c = vecs[(i, j)];
-            let re = <T as NumCast>::from(c.re()).unwrap_or_else(|| T::zero());
-            let im = <T as NumCast>::from(c.im()).unwrap_or_else(|| T::zero());
+            let re = T::from(eigvecs_real[[i, j]])
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?;
+            let im = T::from(eigvecs_imag[[i, j]])
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?;
             vecs_vec.push(Complex::new(re, im));
         }
     }
@@ -161,8 +237,7 @@ where
 #[cfg(feature = "lapack")]
 pub fn eigvals<T>(a: &Array<T>) -> Result<Array<Complex<T>>>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
-    Complex<T>: ndarray_linalg::Scalar,
+    T: Float + Clone + Debug,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -174,40 +249,50 @@ where
 
     // Get 2D view of the array
     let a_view: ArrayView2<T> = a.view_2d()?;
+    let n = a_view.nrows();
 
-    // Compute eigenvalues only
-    let vals = a_view.eigvals().map_err(|e| {
-        NumRs2Error::ComputationError(format!("Eigenvalue computation failed: {}", e))
+    // Convert to f64 for OxiBLAS
+    let mut a_f64 = scirs2_core::ndarray::Array2::<f64>::zeros((n, n));
+    for i in 0..n {
+        for j in 0..n {
+            a_f64[[i, j]] = a_view[[i, j]].to_f64().ok_or_else(|| {
+                NumRs2Error::ComputationError("Cannot convert to f64".to_string())
+            })?;
+        }
+    }
+
+    // Compute eigenvalues using OxiBLAS
+    let result = eigvals_ndarray(&a_f64).map_err(|e| {
+        NumRs2Error::ComputationError(format!("Eigenvalue computation failed: {:?}", e))
     })?;
 
-    // Convert eigenvalues to our Array type with complex values
-    let vals_vec: Vec<Complex<T>> = vals
+    // Convert eigenvalues from Vec<Eigenvalue<f64>> to Array<Complex<T>>
+    let vals_vec: Vec<Complex<T>> = result
         .iter()
-        .map(|&c| {
-            let re = <T as NumCast>::from(c.re()).unwrap_or_else(|| T::zero());
-            let im = <T as NumCast>::from(c.im()).unwrap_or_else(|| T::zero());
-            Complex::new(re, im)
+        .map(|e| {
+            let re = T::from(e.real)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?;
+            let im = T::from(e.imag)
+                .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?;
+            Ok(Complex::new(re, im))
         })
-        .collect();
+        .collect::<Result<Vec<Complex<T>>>>()?;
 
-    let eigenvalues_converted = Array::from_vec(vals_vec);
-
-    Ok(eigenvalues_converted)
+    Ok(Array::from_vec(vals_vec))
 }
 
 /// Check if a matrix is positive definite (all eigenvalues > 0)
 #[cfg(feature = "lapack")]
 pub fn is_positive_definite<T>(a: &Array<T>) -> Result<bool>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
-    <T as ndarray_linalg::Scalar>::Real: PartialOrd + Zero + Clone,
+    T: Float + Clone + Debug + PartialOrd + Zero + 'static,
 {
     // Compute eigenvalues of the symmetric matrix
     let eigenvalues = eigvalsh(a, "lower")?;
     let eigenvalues_vec = eigenvalues.to_vec();
 
     // Check if all eigenvalues are positive
-    let zero = <T as ndarray_linalg::Scalar>::Real::zero();
+    let zero = T::zero();
     Ok(eigenvalues_vec.iter().all(|&x| x > zero))
 }
 
@@ -215,42 +300,32 @@ where
 #[cfg(feature = "lapack")]
 impl<T> Array<T>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack + From<<T as ndarray_linalg::Scalar>::Real>,
-    <T as ndarray_linalg::Scalar>::Real: Clone,
+    T: Float + Clone + Debug + 'static,
 {
     /// Compute eigenvalues and eigenvectors of a symmetric/Hermitian matrix
-    pub fn eigh(
-        &self,
-        uplo: &str,
-    ) -> Result<(Array<<T as ndarray_linalg::Scalar>::Real>, Array<T>)> {
+    pub fn eigh(&self, uplo: &str) -> Result<(Array<T>, Array<T>)> {
         eigh(self, uplo)
     }
 
     /// Compute only eigenvalues of a symmetric/Hermitian matrix
-    pub fn eigvalsh(&self, uplo: &str) -> Result<Array<<T as ndarray_linalg::Scalar>::Real>> {
+    pub fn eigvalsh(&self, uplo: &str) -> Result<Array<T>> {
         eigvalsh(self, uplo)
     }
 
     /// Compute eigenvalues and eigenvectors of a general square matrix (potentially complex)
-    pub fn eig_general(&self) -> Result<EigResult<T>>
-    where
-        Complex<T>: ndarray_linalg::Scalar,
-    {
+    pub fn eig_general(&self) -> Result<EigResult<T>> {
         eig(self)
     }
 
     /// Compute only eigenvalues of a general square matrix (potentially complex)
-    pub fn eigvals(&self) -> Result<Array<Complex<T>>>
-    where
-        Complex<T>: ndarray_linalg::Scalar,
-    {
+    pub fn eigvals(&self) -> Result<Array<Complex<T>>> {
         eigvals(self)
     }
 
     /// Check if the matrix is positive definite
     pub fn is_positive_definite(&self) -> Result<bool>
     where
-        T: PartialOrd,
+        T: PartialOrd + Zero,
     {
         is_positive_definite(self)
     }
@@ -383,5 +458,3 @@ mod tests {
         assert!(!is_pd);
     }
 }
-
-// Add tests to verify the implementation

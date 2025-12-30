@@ -203,8 +203,8 @@ fn test_choice_and_shuffle() {
 
     let rng = RandomState::with_seed(42);
 
-    // Create a test array
-    let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+    // Create a test array (using 10 elements to make probability of same order negligible: 1/10! ≈ 0.000028%)
+    let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
 
     // Test shuffle
     let mut arr_copy = arr.clone();
@@ -225,7 +225,7 @@ fn test_choice_and_shuffle() {
         "Sum should be preserved after shuffle"
     );
 
-    // Very unlikely that shuffling would give the same arrangement
+    // With 10 elements, probability of same order after shuffle is negligible (1/10! ≈ 0.000028%)
     assert_ne!(arr.to_vec(), arr_copy.to_vec(), "Array should be shuffled");
 
     // Test choice with replacement
@@ -251,7 +251,7 @@ fn test_choice_and_shuffle() {
     }
 
     // Test choice without replacement
-    let choice_result = rng.choice(&arr, Some(5), Some(false));
+    let choice_result = rng.choice(&arr, Some(10), Some(false));
     assert!(
         choice_result.is_ok(),
         "Choice without replacement should succeed"
@@ -260,11 +260,11 @@ fn test_choice_and_shuffle() {
     let choices = choice_result.unwrap();
     assert_eq!(
         choices.shape(),
-        vec![5],
+        vec![10],
         "Choice shape should be as requested"
     );
 
-    // Should have all 5 elements from original array
+    // Should have all 10 elements from original array
     let mut choices_vec = choices.to_vec();
     choices_vec.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
@@ -277,7 +277,7 @@ fn test_choice_and_shuffle() {
     );
 
     // Test choice without replacement with size > array size
-    let choice_result = rng.choice(&arr, Some(10), Some(false));
+    let choice_result = rng.choice(&arr, Some(11), Some(false));
     assert!(
         choice_result.is_err(),
         "Choice without replacement with size > array size should error"

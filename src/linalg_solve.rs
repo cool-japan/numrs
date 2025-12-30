@@ -30,7 +30,16 @@ use std::fmt::Debug;
 ///
 /// Returns an error if the matrix is singular or if the dimensions do not match.
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn solve<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
+pub fn solve<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
     a: &Array<T>,
     b: &Array<T>,
 ) -> Result<Array<T>> {
@@ -56,7 +65,18 @@ pub fn solve<
 
 /// Compute the inverse of a matrix
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn inv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(a: &Array<T>) -> Result<Array<T>> {
+pub fn inv<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
+    a: &Array<T>,
+) -> Result<Array<T>> {
     a.inv()
 }
 
@@ -93,7 +113,16 @@ pub fn inv<
 ///
 /// The pseudoinverse of the input matrix
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
-pub fn pinv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
+pub fn pinv<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+>(
     a: &Array<T>,
     rcond: Option<T>,
 ) -> Result<Array<T>> {
@@ -109,7 +138,8 @@ pub fn pinv<T: Float + Clone + Debug + ndarray_linalg::Lapack>(
     let (u, s, vt) = crate::linalg::decomposition::svd(a)?;
 
     // Get the cutoff value for singular values
-    let rcond_val = rcond.unwrap_or_else(|| T::from(1e-15).unwrap());
+    let rcond_val =
+        rcond.unwrap_or_else(|| T::from(1e-15).expect("Failed to convert default rcond value"));
 
     // Find the maximum singular value to determine cutoff
     let max_singular_val = s

@@ -16,7 +16,14 @@ use std::fmt::Debug;
 /// 3. Convergence checks and iteration limits
 pub fn schur<T>(a: &Array<T>) -> Result<(Array<T>, Array<T>)>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
 {
     // Check if the matrix is square
     let shape = a.shape();

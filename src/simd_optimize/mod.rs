@@ -54,10 +54,7 @@ pub use unified_dispatcher::{global_dispatcher, optimized, UnifiedSimdDispatcher
 /// # Returns
 ///
 /// The selected SIMD implementation based on detected CPU features
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::PlatformCapabilities::detect() instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::PlatformCapabilities::detect() instead")]
 pub fn detect_and_select() -> SimdImplementation {
     let features = detect_cpu_features();
     select_simd_implementation(&features)
@@ -66,10 +63,7 @@ pub fn detect_and_select() -> SimdImplementation {
 /// AVX2-optimized array addition for f32
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_add` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
     if a.shape() != b.shape() {
@@ -103,10 +97,7 @@ pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
 /// Fallback for non-x86_64 systems
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_add` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
     if a.shape() != b.shape() {
@@ -128,10 +119,7 @@ pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
 /// AVX2-optimized array addition for f64
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_add` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
     if a.shape() != b.shape() {
@@ -164,10 +152,7 @@ pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
 /// AVX2-optimized array multiplication for f32
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_mul` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
     if a.shape() != b.shape() {
@@ -200,10 +185,7 @@ pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
 /// AVX2-optimized array multiplication for f64
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_mul` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
     if a.shape() != b.shape() {
@@ -236,10 +218,7 @@ pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
 /// AVX2-optimized square root for f32
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
     let a_data = a.to_vec();
@@ -264,10 +243,7 @@ pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
 /// AVX2-optimized square root for f64
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
     let a_data = a.to_vec();
@@ -292,10 +268,7 @@ pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
 /// AVX2-optimized sum for f32
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sum` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_sum_f32(a: &Array<f32>) -> f32 {
     let a_data = a.to_vec();
@@ -315,10 +288,7 @@ pub fn avx2_optimized_sum_f32(a: &Array<f32>) -> f32 {
 /// AVX2-optimized sum for f64
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sum` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead")]
 #[cfg(target_arch = "x86_64")]
 pub fn avx2_optimized_sum_f64(a: &Array<f64>) -> f64 {
     let a_data = a.to_vec();
@@ -328,10 +298,7 @@ pub fn avx2_optimized_sum_f64(a: &Array<f64>) -> f64 {
 /// Fallback implementations for non-x86_64 systems
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_add` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_add instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
     if a.shape() != b.shape() {
@@ -351,10 +318,7 @@ pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_mul` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
     if a.shape() != b.shape() {
@@ -374,10 +338,7 @@ pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_mul` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_mul instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
     if a.shape() != b.shape() {
@@ -397,10 +358,7 @@ pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
     let a_data = a.to_vec();
@@ -409,10 +367,7 @@ pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
     let a_data = a.to_vec();
@@ -421,10 +376,7 @@ pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sum` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_sum_f32(a: &Array<f32>) -> f32 {
     let a_data = a.to_vec();
@@ -432,10 +384,7 @@ pub fn avx2_optimized_sum_f32(a: &Array<f32>) -> f32 {
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sum` instead.
-#[deprecated(
-    since = "0.1.0-rc.2",
-    note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead"
-)]
+#[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sum instead")]
 #[cfg(not(target_arch = "x86_64"))]
 pub fn avx2_optimized_sum_f64(a: &Array<f64>) -> f64 {
     let a_data = a.to_vec();

@@ -94,12 +94,12 @@ Before beginning a release, ensure you have:
 
 ## Current Release Status
 
-### Version 0.1.0-beta.2 (Released: September 20, 2025)
+### Version 0.1.1 (Released: September 20, 2025)
 
 This is the **first beta release** of NumRS2, focusing on dependency modernization and stability improvements:
 
 **Key Updates:**
-- Updated scirs2-* dependencies from 0.1.0-beta.1 to 0.1.0-beta.2
+- Updated scirs2-* dependencies from 0.1.1 to 0.1.1
 - Major dependency upgrades: nalgebra (0.32.3 → 0.34.0), criterion (0.5.1 → 0.7.0), zip (0.6.6 → 5.1.1)
 - Updated rand ecosystem: rand (0.9.0 → 0.9.2), rand_distr (0.5.0 → 0.5.1)
 - Updated 100+ transitive dependencies for improved security and performance
@@ -110,12 +110,12 @@ This is the **first beta release** of NumRS2, focusing on dependency modernizati
 - Fixed SIMD verification test type annotation error
 
 **Quality Assurance:**
-- All 586 tests pass successfully (0 failed, 1 ignored)
+- All tests pass successfully
 - Zero regressions detected from dependency updates
 - Maintained full API compatibility and feature set
-- Verified scirs2 integration compatibility with beta.2 versions
+- Verified SciRS2 integration compatibility
 
-This beta release maintains 100% backward compatibility while providing updated dependencies and enhanced stability.
+This release maintains 100% backward compatibility while providing updated dependencies and enhanced stability.
 
 
 ## Release Cadence
@@ -137,7 +137,7 @@ NumRS2 aims for a regular release schedule:
 
 For pre-releases (alpha/beta/rc):
 
-1. Follow the same process but use appropriate suffixes (e.g., `1.0.0-alpha.1`)
+1. Follow the same process but use appropriate semantic versioning suffixes
 2. Clearly mark these as non-production ready in release notes
 
 ### Emergency Fixes

@@ -18,6 +18,10 @@ Cargo.lock
 *.swo
 **/CLAUDE.local.md
 
+# macOS files
+.DS_Store
+**/.DS_Store
+
 # Cargo config (local settings)
 .cargo/
 

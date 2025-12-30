@@ -355,16 +355,16 @@ fn test_eigendecomposition_properties() {
             "Eigenvectors of symmetric matrix should be orthogonal"
         );
 
-        // Property 3: A = V^T * Λ * V (reconstruction property)
-        // Note: eigh returns eigenvectors as rows, so we use V^T * Λ * V
+        // Property 3: A = V * Λ * V^T (reconstruction property)
+        // eigenvectors are columns, so we use V * Λ * V^T
         let lambda_diag = Array::<f64>::create_diagonal_matrix(&eigenvalues, 0);
+        let v_lambda = eigenvectors.matmul(&lambda_diag).unwrap();
         let v_t = eigenvectors.transpose();
-        let vt_lambda = v_t.matmul(&lambda_diag).unwrap();
-        let a_reconstructed = vt_lambda.matmul(&eigenvectors).unwrap();
+        let a_reconstructed = v_lambda.matmul(&v_t).unwrap();
 
         assert!(
             matrices_approx_equal(&a, &a_reconstructed),
-            "A should equal V^T * Λ * V"
+            "A should equal V * Λ * V^T"
         );
     }
 }
@@ -435,9 +435,28 @@ fn test_qr_decomposition_properties() {
             let q_t_q = q_t.matmul(&q).unwrap();
 
             let identity = Array::<f64>::eye(cols, cols, 0);
+
+            // Debug: print shapes and max deviation if not orthogonal
+            let mut max_dev = 0.0;
+            let mut max_i = 0;
+            let mut max_j = 0;
+            for i in 0..cols {
+                for j in 0..cols {
+                    let expected = if i == j { 1.0 } else { 0.0 };
+                    let actual = q_t_q.get(&[i, j]).unwrap();
+                    let dev = (actual - expected).abs();
+                    if dev > max_dev {
+                        max_dev = dev;
+                        max_i = i;
+                        max_j = j;
+                    }
+                }
+            }
+
             assert!(
                 matrices_approx_equal(&q_t_q, &identity),
-                "Q from QR decomposition should be orthogonal"
+                "Q from QR decomposition should be orthogonal (rows={}, cols={}, max_dev={:.2e} at ({},{}), tolerance={})",
+                rows, cols, max_dev, max_i, max_j, TOLERANCE
             );
 
             // Property 2: R is upper triangular

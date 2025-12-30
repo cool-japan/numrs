@@ -159,9 +159,9 @@ impl<T: Clone + Serialize> Array<T> {
                 })?;
             }
             SerializeFormat::Binary => {
-                // bincode v2 API uses encode_to_std_write with a configuration.
-                let config = bincode::config::standard();
-                bincode::serde::encode_into_std_write(&serialized, &mut writer, config).map_err(
+                // oxicode API uses encode_to_std_write with a configuration.
+                let config = oxicode::config::standard();
+                oxicode::serde::encode_into_std_write(&serialized, &mut writer, config).map_err(
                     |e| {
                         NumRs2Error::SerializationError(format!(
                             "Binary serialization error: {}",
@@ -402,10 +402,10 @@ where
                 Ok(Array::from_vec(data).reshape(&[rows_count, row_length]))
             }
             SerializeFormat::Binary => {
-                let config = bincode::config::standard();
+                let config = oxicode::config::standard();
                 let mut reader = reader; // make mutable for API
                 let (serialized, _len): (SerializedArray<T>, usize) =
-                    bincode::serde::decode_from_std_read(&mut reader, config).map_err(|e| {
+                    oxicode::serde::decode_from_std_read(&mut reader, config).map_err(|e| {
                         NumRs2Error::DeserializationError(format!(
                             "Binary deserialization error: {}",
                             e

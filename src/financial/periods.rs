@@ -84,7 +84,8 @@ where
     let pmt_pv_term = adjusted_pmt + pv * rate;
 
     // Check for division by zero
-    if pmt_pv_term.abs() < T::from(1e-15).unwrap() {
+    let epsilon = T::from(1e-15).expect("Failed to convert epsilon value");
+    if pmt_pv_term.abs() < epsilon {
         return Err(NumRs2Error::ComputationError(
             "Division by zero in number of periods calculation".to_string(),
         ));

@@ -8,17 +8,17 @@ Add NumRS2 to your Rust project by adding this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.1.0-rc.3"
+numrs2 = "0.1.1"
 ```
 
-For BLAS/LAPACK support, ensure you have the necessary system libraries:
+For BLAS/LAPACK support, NumRS2 uses OxiBLAS (pure Rust, no system dependencies required):
 
+**Note:** No system libraries needed! OxiBLAS is a pure Rust BLAS/LAPACK implementation with SIMD optimizations.
+
+To use LAPACK functionality:
 ```bash
-# Ubuntu/Debian
-sudo apt-get install libopenblas-dev liblapack-dev
-
-# macOS
-brew install openblas lapack
+cargo build --features lapack
+cargo test --features lapack
 ```
 
 ## Importing NumRS2

@@ -16,7 +16,7 @@ use std::fmt::Debug;
 /// 6. Optional verification of decomposition accuracy
 pub fn lu<T>(a: &Array<T>) -> Result<(Array<T>, Array<T>, Array<usize>)>
 where
-    T: Float + Clone + Debug + ndarray_linalg::Lapack,
+    T: Float + Clone + Debug + std::fmt::Display,
 {
     // Check if the matrix is 2D
     let shape = a.shape();
