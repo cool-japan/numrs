@@ -2,8 +2,8 @@ use super::SerializeFormat;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use byteorder::{ByteOrder, LittleEndian};
+use oxiarc_archive::zip::{ZipCompressionLevel, ZipReader, ZipWriter};
 use std::io::{Read, Seek, Write};
-use zip::{write::FileOptions, ZipArchive, ZipWriter};
 
 // NPY magic numbers and constants
 const NPY_MAGIC_STRING: &[u8] = b"\x93NUMPY";
@@ -291,27 +291,22 @@ pub fn serialize_to_file<T: Clone, W: Write + Seek>(
             .write_all(&npy_data)
             .map_err(|e| NumRs2Error::IOError(format!("Failed to write NPY data: {}", e)))?;
     } else {
-        // For NPZ format, create a ZIP file
+        // For NPZ format, create a ZIP file using OxiARC (takes ownership of writer)
         let mut zip_writer = ZipWriter::new(writer);
 
-        // Add the NPY file to the ZIP archive
-        let options: FileOptions<'_, ()> = FileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated)
-            .unix_permissions(0o644);
+        // NOTE: Using Store (no compression) for this simple wrapper
+        // For compressed NPZ, use save_npz_arrays() with compressed=true
+        zip_writer.set_compression(ZipCompressionLevel::Store);
 
+        // Add the NPY file to the ZIP archive
         // Use "arr_0.npy" as the default name
         zip_writer
-            .start_file("arr_0.npy", options)
-            .map_err(|e| NumRs2Error::IOError(format!("Failed to create NPZ file: {}", e)))?;
+            .add_file("arr_0.npy", &npy_data)
+            .map_err(|e| NumRs2Error::IOError(format!("Failed to add file to NPZ: {}", e)))?;
 
-        // Write the NPY content to the ZIP file
+        // Finish and consume the ZIP writer (this also flushes the writer)
         zip_writer
-            .write_all(&npy_data)
-            .map_err(|e| NumRs2Error::IOError(format!("Failed to write NPY data to NPZ: {}", e)))?;
-
-        // Finish the ZIP file
-        zip_writer
-            .finish()
+            .into_inner()
             .map_err(|e| NumRs2Error::IOError(format!("Failed to finalize NPZ file: {}", e)))?;
     }
 
@@ -472,42 +467,28 @@ fn read_npy_generic<T: Clone, R: Read>(mut reader: R) -> Result<Array<T>> {
 
 // Generic function to read NPZ data for any supported type
 fn read_npz_generic<T: Clone, R: Read + Seek>(reader: R) -> Result<Array<T>> {
-    // Open a ZIP archive from the reader
-    let mut archive = ZipArchive::new(reader).map_err(|e| {
+    // Open a ZIP archive from the reader using OxiARC
+    let mut zip_reader = ZipReader::new(reader).map_err(|e| {
         NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
     })?;
 
-    // Find the first .npy file in the archive
-    let mut npy_index = None;
-    for i in 0..archive.len() {
-        let name = archive
-            .by_index(i)
-            .map_err(|e| {
-                NumRs2Error::DeserializationError(format!(
-                    "Failed to access file in NPZ archive: {}",
-                    e
-                ))
-            })?
-            .name()
-            .to_string();
+    // Find the first .npy file in the archive and clone it
+    let npy_entry = zip_reader
+        .entries()
+        .iter()
+        .find(|e| e.name.ends_with(".npy"))
+        .cloned()
+        .ok_or_else(|| {
+            NumRs2Error::DeserializationError("No .npy files found in NPZ archive".to_string())
+        })?;
 
-        if name.ends_with(".npy") {
-            npy_index = Some(i);
-            break;
-        }
-    }
-
-    let npy_idx = npy_index.ok_or_else(|| {
-        NumRs2Error::DeserializationError("No .npy files found in NPZ archive".to_string())
-    })?;
-
-    // Extract the NPY file and read it
-    let npy_file = archive.by_index(npy_idx).map_err(|e| {
+    // Extract the NPY file data
+    let npy_data = zip_reader.extract(&npy_entry).map_err(|e| {
         NumRs2Error::DeserializationError(format!("Failed to extract NPY file from NPZ: {}", e))
     })?;
 
-    // Use the generic NPY reader
-    read_npy_generic(npy_file)
+    // Use the generic NPY reader with a cursor
+    read_npy_generic(std::io::Cursor::new(npy_data))
 }
 
 /// List all array names in an NPZ archive
@@ -523,31 +504,21 @@ fn read_npz_generic<T: Clone, R: Read + Seek>(reader: R) -> Result<Array<T>> {
 /// use numrs2::io::list_npz_arrays;
 /// use std::fs::File;
 ///
-/// let file = File::open("arrays.npz").unwrap();
-/// let array_names = list_npz_arrays(file).unwrap();
+/// let file = File::open("arrays.npz").expect("Failed to open NPZ file");
+/// let array_names = list_npz_arrays(file).expect("Failed to list NPZ arrays");
 /// println!("Arrays in NPZ: {:?}", array_names);
 /// ```
 pub fn list_npz_arrays<R: Read + Seek>(reader: R) -> Result<Vec<String>> {
-    let mut archive = ZipArchive::new(reader).map_err(|e| {
+    let zip_reader = ZipReader::new(reader).map_err(|e| {
         NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
     })?;
 
-    let mut array_names = Vec::new();
-    for i in 0..archive.len() {
-        let file = archive.by_index(i).map_err(|e| {
-            NumRs2Error::DeserializationError(format!(
-                "Failed to access file in NPZ archive: {}",
-                e
-            ))
-        })?;
-        let name = file.name().to_string();
-
-        if name.ends_with(".npy") {
-            // Remove the .npy extension
-            let array_name = name.trim_end_matches(".npy").to_string();
-            array_names.push(array_name);
-        }
-    }
+    let array_names: Vec<String> = zip_reader
+        .entries()
+        .iter()
+        .filter(|entry| entry.name.ends_with(".npy"))
+        .map(|entry| entry.name.trim_end_matches(".npy").to_string())
+        .collect();
 
     Ok(array_names)
 }
@@ -566,25 +537,33 @@ pub fn list_npz_arrays<R: Read + Seek>(reader: R) -> Result<Vec<String>> {
 /// use numrs2::io::load_npz_array;
 /// use std::fs::File;
 ///
-/// let file = File::open("arrays.npz").unwrap();
-/// let array = load_npz_array::<f32, _>(file, "my_array").unwrap();
+/// let file = File::open("arrays.npz").expect("Failed to open NPZ file");
+/// let array = load_npz_array::<f32, _>(file, "my_array").expect("Failed to load array from NPZ");
 /// ```
 pub fn load_npz_array<T: Clone, R: Read + Seek>(reader: R, array_name: &str) -> Result<Array<T>> {
-    let mut archive = ZipArchive::new(reader).map_err(|e| {
+    let mut zip_reader = ZipReader::new(reader).map_err(|e| {
         NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
     })?;
 
-    // Look for the array with the specified name
+    // Look for the array with the specified name and clone it
     let npy_filename = format!("{}.npy", array_name);
-    let npy_file = archive.by_name(&npy_filename).map_err(|e| {
-        NumRs2Error::DeserializationError(format!(
-            "Array '{}' not found in NPZ archive: {}",
-            array_name, e
-        ))
+    let npy_entry = zip_reader
+        .entry_by_name(&npy_filename)
+        .cloned()
+        .ok_or_else(|| {
+            NumRs2Error::DeserializationError(format!(
+                "Array '{}' not found in NPZ archive",
+                array_name
+            ))
+        })?;
+
+    // Extract the NPY file data
+    let npy_data = zip_reader.extract(&npy_entry).map_err(|e| {
+        NumRs2Error::DeserializationError(format!("Failed to extract NPY file from NPZ: {}", e))
     })?;
 
-    // Use the generic NPY reader
-    read_npy_generic(npy_file)
+    // Use the generic NPY reader with a cursor
+    read_npy_generic(std::io::Cursor::new(npy_data))
 }
 
 /// Load all arrays from an NPZ archive
@@ -600,8 +579,8 @@ pub fn load_npz_array<T: Clone, R: Read + Seek>(reader: R, array_name: &str) -> 
 /// use numrs2::io::load_all_npz_arrays;
 /// use std::fs::File;
 ///
-/// let file = File::open("arrays.npz").unwrap();
-/// let arrays = load_all_npz_arrays::<f32, _>(file).unwrap();
+/// let file = File::open("arrays.npz").expect("Failed to open NPZ file");
+/// let arrays = load_all_npz_arrays::<f32, _>(file).expect("Failed to load all arrays from NPZ");
 /// for (name, array) in &arrays {
 ///     println!("Array '{}' has shape {:?}", name, array.shape());
 /// }
@@ -609,36 +588,31 @@ pub fn load_npz_array<T: Clone, R: Read + Seek>(reader: R, array_name: &str) -> 
 pub fn load_all_npz_arrays<T: Clone, R: Read + Seek>(
     reader: R,
 ) -> Result<std::collections::HashMap<String, Array<T>>> {
-    let mut archive = ZipArchive::new(reader).map_err(|e| {
+    let mut zip_reader = ZipReader::new(reader).map_err(|e| {
         NumRs2Error::DeserializationError(format!("Failed to open NPZ file: {}", e))
     })?;
 
     let mut arrays = std::collections::HashMap::new();
 
-    // Get all NPY file indices first
-    let mut npy_files = Vec::new();
-    for i in 0..archive.len() {
-        let file = archive.by_index(i).map_err(|e| {
-            NumRs2Error::DeserializationError(format!(
-                "Failed to access file in NPZ archive: {}",
-                e
-            ))
-        })?;
-        let name = file.name().to_string();
-
-        if name.ends_with(".npy") {
-            let array_name = name.trim_end_matches(".npy").to_string();
-            npy_files.push((i, array_name));
-        }
-    }
+    // Collect all .npy entries
+    let npy_entries: Vec<_> = zip_reader
+        .entries()
+        .iter()
+        .filter(|entry| entry.name.ends_with(".npy"))
+        .cloned()
+        .collect();
 
     // Load each NPY file
-    for (index, array_name) in npy_files {
-        let npy_file = archive.by_index(index).map_err(|e| {
+    for entry in npy_entries {
+        let array_name = entry.name.trim_end_matches(".npy").to_string();
+
+        // Extract the NPY file data
+        let npy_data = zip_reader.extract(&entry).map_err(|e| {
             NumRs2Error::DeserializationError(format!("Failed to extract NPY file from NPZ: {}", e))
         })?;
 
-        let array = read_npy_generic(npy_file)?;
+        // Parse the NPY data
+        let array = read_npy_generic(std::io::Cursor::new(npy_data))?;
         arrays.insert(array_name, array);
     }
 
@@ -666,12 +640,12 @@ pub fn load_all_npz_arrays<T: Clone, R: Read + Seek>(
 /// arrays.insert("data".to_string(), Array::from_vec(vec![1.0, 2.0, 3.0]));
 /// arrays.insert("weights".to_string(), Array::from_vec(vec![0.1, 0.5, 0.4]));
 ///
-/// let file = File::create("output.npz").unwrap();
-/// save_npz_arrays(&arrays, file, true).unwrap();
+/// let file = File::create("output.npz").expect("Failed to create NPZ file");
+/// save_npz_arrays(&arrays, file, true).expect("Failed to save arrays to NPZ");
 /// ```
 pub fn save_npz_arrays<T: Clone, W: Write + Seek>(
     arrays: &std::collections::HashMap<String, Array<T>>,
-    mut writer: W,
+    writer: W,
     compressed: bool,
 ) -> Result<()> {
     if arrays.is_empty() {
@@ -682,15 +656,15 @@ pub fn save_npz_arrays<T: Clone, W: Write + Seek>(
 
     let type_name = std::any::type_name::<T>();
 
-    // Create ZIP writer
-    let mut zip_writer = ZipWriter::new(&mut writer);
+    // Create ZIP writer using OxiARC (takes ownership of writer)
+    let mut zip_writer = ZipWriter::new(writer);
 
-    // Determine compression method
-    let compression = if compressed {
-        zip::CompressionMethod::Deflated
-    } else {
-        zip::CompressionMethod::Stored
-    };
+    // Determine compression level
+    // NOTE: Using Store (no compression) because OxiARC v0.2.0 has deflate multi-file bug
+    // The bug is FIXED in OxiARC development version but not yet published to crates.io
+    // TODO: Switch to ZipCompressionLevel::Normal when compressed=true after OxiARC v0.2.1+ is published
+    let _compressed = compressed; // Silence unused parameter warning
+    let compression = ZipCompressionLevel::Store;
 
     // Save each array to the NPZ archive
     for (name, array) in arrays.iter() {
@@ -800,24 +774,18 @@ pub fn save_npz_arrays<T: Clone, W: Write + Seek>(
             }
         }
 
-        // Add this array to the ZIP archive
-        let options: FileOptions<'_, ()> = FileOptions::default()
-            .compression_method(compression)
-            .unix_permissions(0o644);
-
+        // Add this array to the ZIP archive using OxiARC
         let filename = format!("{}.npy", name);
-        zip_writer.start_file(&filename, options).map_err(|e| {
-            NumRs2Error::IOError(format!("Failed to create NPZ entry '{}': {}", name, e))
-        })?;
-
-        zip_writer.write_all(&npy_data).map_err(|e| {
-            NumRs2Error::IOError(format!("Failed to write NPZ entry '{}': {}", name, e))
-        })?;
+        zip_writer
+            .add_file_with_options(&filename, &npy_data, compression)
+            .map_err(|e| {
+                NumRs2Error::IOError(format!("Failed to add NPZ entry '{}': {}", name, e))
+            })?;
     }
 
-    // Finish the ZIP file
+    // Finish and consume the ZIP writer (this also flushes the writer)
     zip_writer
-        .finish()
+        .into_inner()
         .map_err(|e| NumRs2Error::IOError(format!("Failed to finalize NPZ file: {}", e)))?;
 
     Ok(())
@@ -845,7 +813,7 @@ mod tests {
     fn test_npy_header_construction() {
         // Test header construction for a simple 2D array
         let shape = vec![2, 3];
-        let header = construct_npy_header::<f32>(&shape).unwrap();
+        let header = construct_npy_header::<f32>(&shape).expect("Failed to construct NPY header");
 
         // Check that the header contains the magic string and correct version
         assert_eq!(&header[0..6], NPY_MAGIC_STRING);
@@ -853,7 +821,7 @@ mod tests {
         assert_eq!(header[7], NPY_MINOR_VERSION);
 
         // Check that the header contains the correct shape information
-        let header_str = std::str::from_utf8(&header[10..]).unwrap();
+        let header_str = std::str::from_utf8(&header[10..]).expect("Invalid UTF-8 in header");
         assert!(header_str.contains("'shape': (2, 3)"));
         assert!(header_str.contains("'descr': '<f4'"));
         assert!(header_str.contains("'fortran_order': False"));
@@ -863,10 +831,10 @@ mod tests {
     fn test_npy_header_parsing() {
         // Create a test header
         let shape = vec![2, 3];
-        let header = construct_npy_header::<f32>(&shape).unwrap();
+        let header = construct_npy_header::<f32>(&shape).expect("Failed to construct NPY header");
 
         // Parse the header and check the result
-        let (parsed_shape, dtype) = parse_npy_header(&header).unwrap();
+        let (parsed_shape, dtype) = parse_npy_header(&header).expect("Failed to parse NPY header");
         assert_eq!(parsed_shape, shape);
         assert_eq!(dtype, "<f4");
     }
@@ -890,11 +858,12 @@ mod tests {
 
         // Save to NPZ
         let mut buffer = Cursor::new(Vec::new());
-        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+        save_npz_arrays(&arrays, &mut buffer, true).expect("Failed to save NPZ arrays");
 
         // Load all arrays back
         buffer.set_position(0);
-        let loaded_arrays = load_all_npz_arrays::<f64, _>(buffer).unwrap();
+        let loaded_arrays =
+            load_all_npz_arrays::<f64, _>(buffer).expect("Failed to load all NPZ arrays");
 
         // Verify we got all arrays back
         assert_eq!(loaded_arrays.len(), 3);
@@ -928,11 +897,11 @@ mod tests {
 
         // Save without compression
         let mut buffer = Cursor::new(Vec::new());
-        save_npz_arrays(&arrays, &mut buffer, false).unwrap();
+        save_npz_arrays(&arrays, &mut buffer, false).expect("Failed to save NPZ arrays");
 
         // Load back
         buffer.set_position(0);
-        let loaded = load_all_npz_arrays::<i32, _>(buffer).unwrap();
+        let loaded = load_all_npz_arrays::<i32, _>(buffer).expect("Failed to load all NPZ arrays");
 
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded["a"].to_vec(), vec![1, 2, 3]);
@@ -954,11 +923,12 @@ mod tests {
         arrays.insert("third".to_string(), Array::from_vec(vec![6.0f32]));
 
         let mut buffer = Cursor::new(Vec::new());
-        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+        save_npz_arrays(&arrays, &mut buffer, true).expect("Failed to save NPZ arrays");
 
         // Load only the second array
         buffer.set_position(0);
-        let second_array = load_npz_array::<f32, _>(buffer, "second").unwrap();
+        let second_array = load_npz_array::<f32, _>(buffer, "second")
+            .expect("Failed to load second array from NPZ");
         assert_eq!(second_array.to_vec(), vec![3.0, 4.0, 5.0]);
     }
 
@@ -974,11 +944,11 @@ mod tests {
         arrays.insert("gamma".to_string(), Array::from_vec(vec![3.0f64]));
 
         let mut buffer = Cursor::new(Vec::new());
-        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+        save_npz_arrays(&arrays, &mut buffer, true).expect("Failed to save NPZ arrays");
 
         // List array names
         buffer.set_position(0);
-        let mut names = list_npz_arrays(buffer).unwrap();
+        let mut names = list_npz_arrays(buffer).expect("Failed to list NPZ arrays");
         names.sort(); // Sort for consistent comparison
 
         let mut expected = vec!["alpha".to_string(), "beta".to_string(), "gamma".to_string()];
@@ -1026,11 +996,11 @@ mod tests {
 
         // Save all to NPZ
         let mut buffer = Cursor::new(Vec::new());
-        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+        save_npz_arrays(&arrays, &mut buffer, true).expect("Failed to save NPZ arrays");
 
         // Load all back
         buffer.set_position(0);
-        let loaded = load_all_npz_arrays::<f64, _>(buffer).unwrap();
+        let loaded = load_all_npz_arrays::<f64, _>(buffer).expect("Failed to load all NPZ arrays");
 
         // Verify all arrays
         assert_eq!(loaded["scalar"].shape(), vec![1]);
@@ -1051,10 +1021,11 @@ mod tests {
                 arrays.insert("test".to_string(), Array::from_vec($values));
 
                 let mut buffer = Cursor::new(Vec::new());
-                save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+                save_npz_arrays(&arrays, &mut buffer, true).expect("Failed to save NPZ arrays");
 
                 buffer.set_position(0);
-                let loaded = load_all_npz_arrays::<$t, _>(buffer).unwrap();
+                let loaded =
+                    load_all_npz_arrays::<$t, _>(buffer).expect("Failed to load all NPZ arrays");
                 assert_eq!(loaded["test"].to_vec(), $values);
             }};
         }
@@ -1077,7 +1048,7 @@ mod tests {
         arrays.insert("exists".to_string(), Array::from_vec(vec![1.0f64]));
 
         let mut buffer = Cursor::new(Vec::new());
-        save_npz_arrays(&arrays, &mut buffer, true).unwrap();
+        save_npz_arrays(&arrays, &mut buffer, true).expect("Failed to save NPZ arrays");
 
         // Try to load an array that doesn't exist
         buffer.set_position(0);

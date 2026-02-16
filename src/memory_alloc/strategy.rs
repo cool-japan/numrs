@@ -191,9 +191,10 @@ impl MemoryAllocator for AutoAllocator {
         }
 
         // For SIMD operations, we typically want aligned memory
+        // But only for small to medium sizes - large allocations use standard
         // This is a simplification - in a real implementation, we would detect
         // if the allocation is for SIMD usage
-        if size.is_multiple_of(16) && size >= 16 {
+        if size.is_multiple_of(16) && (16..=65536).contains(&size) {
             return self.aligned.allocate(size);
         }
 
@@ -211,12 +212,14 @@ impl MemoryAllocator for AutoAllocator {
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         // Select the same allocator that would have been used for the allocation
-        if layout.align() >= 16 {
-            self.aligned.deallocate(ptr, layout.size());
+        // Match the routing criteria from allocate() method: size-based routing
+        let size = layout.size();
+        if size.is_multiple_of(16) && (16..=65536).contains(&size) {
+            self.aligned.deallocate(ptr, size);
             return;
         }
 
-        self.select_allocator(layout.size()).deallocate(ptr, layout);
+        self.select_allocator(size).deallocate(ptr, layout);
     }
 }
 
@@ -318,7 +321,7 @@ mod tests {
         let allocator = StandardAllocator;
 
         // Allocate some memory
-        let layout = Layout::from_size_align(100, 8).unwrap();
+        let layout = Layout::from_size_align(100, 8).expect("Layout should succeed");
         let ptr = allocator
             .allocate_layout(layout)
             .expect("Allocation should succeed");
@@ -360,7 +363,7 @@ mod tests {
             .expect("Large allocation should succeed");
 
         // Test aligned allocation (should use aligned)
-        let layout = Layout::from_size_align(64, 64).unwrap();
+        let layout = Layout::from_size_align(64, 64).expect("Layout should succeed");
         let aligned_ptr = allocator
             .allocate_layout(layout)
             .expect("Aligned allocation should succeed");
@@ -372,9 +375,18 @@ mod tests {
 
         // Deallocate all
         unsafe {
-            allocator.deallocate(small_ptr, Layout::from_size_align(100, 8).unwrap());
-            allocator.deallocate(medium_ptr, Layout::from_size_align(10_000, 8).unwrap());
-            allocator.deallocate(large_ptr, Layout::from_size_align(100_000, 8).unwrap());
+            allocator.deallocate(
+                small_ptr,
+                Layout::from_size_align(100, 8).expect("Layout should succeed"),
+            );
+            allocator.deallocate(
+                medium_ptr,
+                Layout::from_size_align(10_000, 8).expect("Layout should succeed"),
+            );
+            allocator.deallocate(
+                large_ptr,
+                Layout::from_size_align(100_000, 8).expect("Layout should succeed"),
+            );
             allocator.deallocate(aligned_ptr, layout);
         }
     }
@@ -388,7 +400,10 @@ mod tests {
         let allocator = get_default_allocator();
         let ptr = allocator.allocate(100).expect("Allocation should succeed");
         unsafe {
-            allocator.deallocate(ptr, Layout::from_size_align(100, 8).unwrap());
+            allocator.deallocate(
+                ptr,
+                Layout::from_size_align(100, 8).expect("Layout should succeed"),
+            );
         }
 
         // Pool
@@ -396,7 +411,10 @@ mod tests {
         let allocator = get_default_allocator();
         let ptr = allocator.allocate(100).expect("Allocation should succeed");
         unsafe {
-            allocator.deallocate(ptr, Layout::from_size_align(100, 8).unwrap());
+            allocator.deallocate(
+                ptr,
+                Layout::from_size_align(100, 8).expect("Layout should succeed"),
+            );
         }
 
         // Reset to standard

@@ -118,7 +118,10 @@ impl WorkerState {
     }
 
     fn queue_length(&self) -> usize {
-        self.queue.lock().unwrap().len()
+        self.queue
+            .lock()
+            .expect("lock should not be poisoned")
+            .len()
     }
 
     fn is_idle(&self) -> bool {
@@ -131,7 +134,10 @@ impl WorkerState {
 
     #[allow(dead_code)]
     fn throughput(&self) -> f64 {
-        let total_time = self.total_execution_time.lock().unwrap();
+        let total_time = self
+            .total_execution_time
+            .lock()
+            .expect("lock should not be poisoned");
         if total_time.is_zero() {
             0.0
         } else {
@@ -162,9 +168,7 @@ pub struct WorkStealingConfig {
 impl Default for WorkStealingConfig {
     fn default() -> Self {
         Self {
-            num_threads: std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(4),
+            num_threads: std::thread::available_parallelism().map_or(4, |n| n.get()),
             max_steal_attempts: 3,
             steal_interval: Duration::from_millis(1),
             idle_timeout: Duration::from_millis(10),
@@ -279,7 +283,7 @@ impl WorkStealingPool {
 
         if let Some(worker_id) = target_worker {
             let worker = &self.workers[worker_id];
-            let mut queue = worker.queue.lock().unwrap();
+            let mut queue = worker.queue.lock().expect("lock should not be poisoned");
 
             if queue.len() < self.config.max_queue_size {
                 queue.push_back(boxed_task);
@@ -292,7 +296,7 @@ impl WorkStealingPool {
 
                 // Update stats
                 {
-                    let mut stats = self.stats.lock().unwrap();
+                    let mut stats = self.stats.lock().expect("lock should not be poisoned");
                     stats.tasks_submitted += 1;
                 }
 
@@ -302,14 +306,17 @@ impl WorkStealingPool {
 
         // Fallback to global queue
         {
-            let mut global = self.global_queue.lock().unwrap();
+            let mut global = self
+                .global_queue
+                .lock()
+                .expect("lock should not be poisoned");
             if global.len() < self.config.max_queue_size * 2 {
                 global.push_back(boxed_task);
 
                 // Notify any idle worker
                 self.notify_idle_workers();
 
-                let mut stats = self.stats.lock().unwrap();
+                let mut stats = self.stats.lock().expect("lock should not be poisoned");
                 stats.tasks_submitted += 1;
 
                 Ok(())
@@ -334,12 +341,15 @@ impl WorkStealingPool {
 
         // Add to global queue at front for urgent tasks
         {
-            let mut global = self.global_queue.lock().unwrap();
+            let mut global = self
+                .global_queue
+                .lock()
+                .expect("lock should not be poisoned");
             global.push_front(boxed_task);
 
             self.notify_idle_workers();
 
-            let mut stats = self.stats.lock().unwrap();
+            let mut stats = self.stats.lock().expect("lock should not be poisoned");
             stats.tasks_submitted += 1;
         }
 
@@ -348,7 +358,7 @@ impl WorkStealingPool {
 
     /// Get current pool statistics
     pub fn statistics(&self) -> PoolStats {
-        let mut stats = self.stats.lock().unwrap();
+        let mut stats = self.stats.lock().expect("lock should not be poisoned");
 
         // Update worker utilization
         stats.worker_utilization = self
@@ -373,7 +383,11 @@ impl WorkStealingPool {
 
     /// Get total number of pending tasks
     pub fn pending_tasks(&self) -> usize {
-        let global_count = self.global_queue.lock().unwrap().len();
+        let global_count = self
+            .global_queue
+            .lock()
+            .expect("lock should not be poisoned")
+            .len();
         let worker_count: usize = self
             .workers
             .iter()
@@ -389,7 +403,7 @@ impl WorkStealingPool {
 
         // Wake up all workers
         let (idle_lock, condvar) = &*self.idle_workers;
-        let _idle = idle_lock.lock().unwrap();
+        let _idle = idle_lock.lock().expect("lock should not be poisoned");
         condvar.notify_all();
 
         // Note: In a real implementation, we'd need to join the threads
@@ -410,7 +424,7 @@ impl WorkStealingPool {
 
     fn notify_worker(&self, worker_id: usize) {
         let (idle_lock, condvar) = &*self.idle_workers;
-        let mut idle = idle_lock.lock().unwrap();
+        let mut idle = idle_lock.lock().expect("lock should not be poisoned");
 
         if let Some(pos) = idle.iter().position(|&id| id == worker_id) {
             idle.remove(pos);
@@ -492,7 +506,7 @@ impl WorkStealingPool {
                 worker.set_idle(true);
 
                 let (idle_lock, condvar) = &*idle_workers;
-                let mut idle = idle_lock.lock().unwrap();
+                let mut idle = idle_lock.lock().expect("lock should not be poisoned");
                 idle.push(worker_id);
 
                 // Wait for work or timeout
@@ -513,13 +527,16 @@ impl WorkStealingPool {
         // Update worker stats
         worker.tasks_executed.fetch_add(1, Ordering::Relaxed);
         {
-            let mut total_time = worker.total_execution_time.lock().unwrap();
+            let mut total_time = worker
+                .total_execution_time
+                .lock()
+                .expect("lock should not be poisoned");
             *total_time += execution_time;
         }
 
         // Update global stats
         {
-            let mut global_stats = stats.lock().unwrap();
+            let mut global_stats = stats.lock().expect("lock should not be poisoned");
             match result {
                 TaskResult::Success(_) => global_stats.tasks_completed += 1,
                 TaskResult::Error(_) | TaskResult::Cancelled => {
@@ -543,7 +560,10 @@ impl WorkStealingPool {
         config: &WorkStealingConfig,
     ) -> Option<BoxedTask> {
         let now = Instant::now();
-        let mut last_steal = worker.last_steal_attempt.lock().unwrap();
+        let mut last_steal = worker
+            .last_steal_attempt
+            .lock()
+            .expect("lock should not be poisoned");
 
         // Check if enough time has passed since last steal attempt
         if now.duration_since(*last_steal) < config.steal_interval {
@@ -627,7 +647,8 @@ mod tests {
 
     #[test]
     fn test_work_stealing_pool_creation() {
-        let pool = WorkStealingPool::new(2).unwrap();
+        let pool =
+            WorkStealingPool::new(2).expect("work-stealing pool creation with 2 threads succeeds");
         assert_eq!(pool.config.num_threads, 2);
         assert_eq!(pool.active_workers(), 0); // No tasks running yet
         assert_eq!(pool.pending_tasks(), 0);
@@ -635,7 +656,8 @@ mod tests {
 
     #[test]
     fn test_task_submission() {
-        let pool = WorkStealingPool::new(2).unwrap();
+        let pool =
+            WorkStealingPool::new(2).expect("work-stealing pool creation with 2 threads succeeds");
         let counter = Arc::new(AtomicU32::new(0));
 
         for _ in 0..5 {
@@ -644,7 +666,7 @@ mod tests {
                 counter_clone.fetch_add(1, Ordering::SeqCst);
             });
 
-            pool.submit(task).unwrap();
+            pool.submit(task).expect("task submission should succeed");
         }
 
         // Wait for tasks to complete
@@ -659,7 +681,8 @@ mod tests {
 
     #[test]
     fn test_urgent_task_submission() {
-        let pool = WorkStealingPool::new(1).unwrap();
+        let pool =
+            WorkStealingPool::new(1).expect("work-stealing pool creation with 1 thread succeeds");
         let execution_order = Arc::new(Mutex::new(Vec::new()));
 
         // Submit normal task
@@ -667,37 +690,45 @@ mod tests {
             let order_clone = Arc::clone(&execution_order);
             let task = task(move || {
                 std::thread::sleep(Duration::from_millis(50)); // Slow task
-                order_clone.lock().unwrap().push(1);
+                order_clone
+                    .lock()
+                    .expect("lock should not be poisoned")
+                    .push(1);
             });
-            pool.submit(task).unwrap();
+            pool.submit(task).expect("task submission should succeed");
         }
 
         // Submit urgent task (should execute first)
         {
             let order_clone = Arc::clone(&execution_order);
             let urgent_task = task(move || {
-                order_clone.lock().unwrap().push(2);
+                order_clone
+                    .lock()
+                    .expect("lock should not be poisoned")
+                    .push(2);
             });
-            pool.submit_urgent(urgent_task).unwrap();
+            pool.submit_urgent(urgent_task)
+                .expect("urgent task submission should succeed");
         }
 
         std::thread::sleep(Duration::from_millis(200));
 
-        let order = execution_order.lock().unwrap();
+        let order = execution_order.lock().expect("lock should not be poisoned");
         assert!(!order.is_empty());
         // Note: In this simple test, the exact order depends on timing
     }
 
     #[test]
     fn test_pool_statistics() {
-        let pool = WorkStealingPool::new(2).unwrap();
+        let pool =
+            WorkStealingPool::new(2).expect("work-stealing pool creation with 2 threads succeeds");
 
         // Submit some tasks
         for i in 0..3 {
             let task = task(move || {
                 std::thread::sleep(Duration::from_millis(10 * i as u64));
             });
-            pool.submit(task).unwrap();
+            pool.submit(task).expect("task submission should succeed");
         }
 
         std::thread::sleep(Duration::from_millis(100));
@@ -710,14 +741,15 @@ mod tests {
 
     #[test]
     fn test_queue_imbalance_calculation() {
-        let pool = WorkStealingPool::new(3).unwrap();
+        let pool =
+            WorkStealingPool::new(3).expect("work-stealing pool creation with 3 threads succeeds");
 
         // Add tasks to create imbalance
         for _ in 0..10 {
             let task = task(|| {
                 std::thread::sleep(Duration::from_millis(100)); // Long-running task
             });
-            pool.submit(task).unwrap();
+            pool.submit(task).expect("task submission should succeed");
         }
 
         let imbalance = pool.calculate_queue_imbalance();
@@ -752,13 +784,14 @@ mod tests {
 
     #[test]
     fn test_pool_shutdown() {
-        let pool = WorkStealingPool::new(2).unwrap();
+        let pool =
+            WorkStealingPool::new(2).expect("work-stealing pool creation with 2 threads succeeds");
 
         // Submit a task
         let task = task(|| {
             std::thread::sleep(Duration::from_millis(10));
         });
-        pool.submit(task).unwrap();
+        pool.submit(task).expect("task submission should succeed");
 
         // Shutdown should succeed
         assert!(pool.shutdown().is_ok());

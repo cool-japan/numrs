@@ -941,7 +941,9 @@ mod tests {
         assert_eq!(tiles[0].col_end, 4);
 
         // Last tile
-        let last = tiles.last().unwrap();
+        let last = tiles
+            .last()
+            .expect("tiles should have at least one element");
         assert_eq!(last.row_start, 8);
         assert_eq!(last.row_end, 10);
         assert_eq!(last.col_start, 8);

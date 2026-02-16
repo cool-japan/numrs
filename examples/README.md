@@ -1,23 +1,117 @@
-# NumRS Examples
+# NumRS2 Examples
 
-This directory contains example code demonstrating various features of the NumRS library. These examples showcase how to use NumRS for different numerical computing tasks.
+This directory contains comprehensive example code demonstrating the features of NumRS2. These examples showcase how to use NumRS2 for various numerical computing, machine learning, and scientific computing tasks.
 
-## Running Examples
+## Quick Start
 
 You can run any example using Cargo:
 
 ```bash
+# Basic examples
 cargo run --example basic_usage
-cargo run --example linalg_example
-cargo run --example simd_example
-cargo run --example memory_optimize_example
-cargo run --example parallel_optimize_example
-cargo run --example autodiff_example
-cargo run --example randomized_linalg_example
+cargo run --example array_creation_example
+cargo run --example matrix_example
 
-# For Arrow example, enable the arrow feature:
+# Advanced examples
+cargo run --example advanced_optimization
+cargo run --example statistical_analysis
+cargo run --example signal_processing
+cargo run --example time_series_basics
+cargo run --example ml_pipeline
+
+# Feature-specific examples (requires features)
+cargo run --example distributed_computing --features distributed
+cargo run --example gpu_acceleration --features gpu
 cargo run --example arrow_example --features arrow
 ```
+
+## Example Categories
+
+### 🎯 New Comprehensive Examples (Recommended Starting Point)
+
+These examples provide in-depth coverage of NumRS2's advanced features:
+
+#### Distributed Computing (`distributed_computing.rs`)
+**Run:** `cargo run --example distributed_computing --features distributed`
+
+Comprehensive distributed computing patterns:
+- Distributed array operations (scatter, gather, allreduce)
+- Collective communications
+- Distributed linear algebra
+- Error handling and fault tolerance
+- Process synchronization and coordination
+
+**Key Topics:** MPI-like operations, data distribution strategies, parallel matrix operations
+
+#### Advanced Optimization (`advanced_optimization.rs`)
+**Run:** `cargo run --example advanced_optimization`
+
+Complete guide to all optimization algorithms:
+- **Gradient-based:** BFGS, L-BFGS, Conjugate Gradient (FR, PR, HS)
+- **Derivative-free:** Nelder-Mead
+- **Global optimization:** PSO, Simulated Annealing, Differential Evolution, Genetic Algorithm
+- **Constrained:** Projected Gradient, Penalty Method, Interior Point, SQP
+- **Least-squares:** Levenberg-Marquardt, Trust Region
+- Real-world applications: portfolio optimization, parameter tuning
+- Performance comparisons
+
+**Key Topics:** Optimization methods, constraint handling, algorithm selection
+
+#### Statistical Analysis (`statistical_analysis.rs`)
+**Run:** `cargo run --example statistical_analysis`
+
+Comprehensive statistical analysis toolkit:
+- Distribution fitting and parameter estimation
+- Hypothesis testing (t-tests, chi-square, ANOVA)
+- Confidence intervals
+- Bootstrapping and resampling
+- Correlation and covariance analysis
+- Regression analysis and residuals
+- Statistical inference
+
+**Key Topics:** Inferential statistics, distribution theory, hypothesis testing
+
+#### Time Series Basics (`time_series_basics.rs`)
+**Run:** `cargo run --example time_series_basics`
+
+Complete time series analysis workflow:
+- Moving averages (SMA, WMA)
+- Exponential smoothing (SES, Holt's method)
+- Autocorrelation and partial autocorrelation
+- Trend analysis and decomposition
+- Seasonal decomposition
+- Differencing for stationarity
+- Basic forecasting methods
+
+**Key Topics:** Time series decomposition, forecasting, stationarity
+
+#### Signal Processing (`signal_processing.rs`)
+**Run:** `cargo run --example signal_processing`
+
+Advanced signal processing techniques:
+- FFT and spectral analysis
+- Window functions (Hann, Hamming, Blackman, Bartlett)
+- Filtering (lowpass, highpass, bandpass)
+- Convolution and correlation
+- Signal generation (sine, square, sawtooth, chirp)
+- Frequency domain operations
+- SNR improvement
+
+**Key Topics:** Fourier analysis, digital filtering, spectral estimation
+
+#### Machine Learning Pipeline (`ml_pipeline.rs`)
+**Run:** `cargo run --example ml_pipeline`
+
+Complete ML workflow from data to deployment:
+- Data preprocessing (normalization, standardization)
+- Train/test split and stratification
+- K-fold cross-validation
+- Feature engineering (polynomial, interactions, binning)
+- Model training and optimization
+- Evaluation metrics (accuracy, precision, recall, F1)
+- Classification and regression pipelines
+
+**Key Topics:** ML workflow, preprocessing, model evaluation
 
 ## Example Descriptions
 
@@ -206,12 +300,131 @@ Illustrates randomized linear algebra algorithms:
 - Performance comparisons with full algorithms
 - Memory-efficient processing of large matrices
 
+## All Examples Summary
+
+### Complete Example List
+
+| Category | Example | Description | Features Required |
+|----------|---------|-------------|-------------------|
+| **Getting Started** | `basic_usage.rs` | Fundamental array operations | None |
+| **Distributed Computing** | `distributed_computing.rs` | Comprehensive distributed computing patterns | `distributed` |
+| | `distributed_basics.rs` | Basic distributed array operations | `distributed` |
+| **Optimization** | `advanced_optimization.rs` | All 15+ optimization algorithms | None |
+| | `scirs2_optimization.rs` | SciRS2 SIMD/parallel optimizations | `scirs` |
+| **Statistics** | `statistical_analysis.rs` | Complete statistical analysis toolkit | None |
+| | `statistics_example.rs` | Basic statistical functions | None |
+| **Time Series** | `time_series_basics.rs` | Time series analysis and forecasting | None |
+| **Signal Processing** | `signal_processing.rs` | Advanced signal processing | None |
+| | `fft_example.rs` | Basic FFT operations | None |
+| **Machine Learning** | `ml_pipeline.rs` | Complete ML pipeline | None |
+| | `machine_learning_example.rs` | ML algorithms from scratch | None |
+| | `neural_network_basics.rs` | Neural network operations | None |
+| **GPU Computing** | `gpu_acceleration.rs` | GPU-accelerated operations | `gpu` |
+| | `gpu_example.rs` | Basic GPU operations | `gpu` |
+| | `gpu_benchmark.rs` | GPU performance benchmarks | `gpu` |
+| **Visualization** | `visualization.rs` | Plotting and visualization | `visualization` |
+| **Symbolic Math** | `symbolic_math.rs` | Symbolic computation | None |
+| **Linear Algebra** | `matrix_example.rs` | Matrix operations | None |
+| | `matrix_decomp_example.rs` | Matrix decompositions | None |
+| | `randomized_linalg_example.rs` | Randomized linear algebra | None |
+| **Array Operations** | `array_creation_example.rs` | Array creation methods | None |
+| | `array_manipulation_example.rs` | Array manipulation | None |
+| | `broadcasting_example.rs` | Broadcasting rules | None |
+| | `indexing_example.rs` | Array indexing | None |
+| | `views_example.rs` | Array views and slicing | None |
+| **Performance** | `simd_example.rs` | SIMD operations | None |
+| | `parallel_optimize_example.rs` | Parallel processing | None |
+| | `memory_optimize_example.rs` | Memory optimization | None |
+| | `performance_benchmark.rs` | Performance benchmarks | None |
+| **I/O** | `arrow_example.rs` | Apache Arrow integration | `arrow` |
+| | `npy_npz_example.rs` | NumPy file format | None |
+| | `mmap_example.rs` | Memory-mapped I/O | None |
+| **Advanced** | `autodiff_example.rs` | Automatic differentiation | None |
+| | `sparse_example.rs` | Sparse arrays | None |
+| | `masked_array_example.rs` | Masked arrays | None |
+| | `polynomial_example.rs` | Polynomial operations | None |
+| | `special_functions_example.rs` | Special functions | None |
+
+## Building and Running
+
+### Build All Examples
+
+```bash
+# Build all examples (default features)
+cargo build --examples
+
+# Build with all features
+cargo build --examples --all-features
+
+# Build specific feature sets
+cargo build --examples --features distributed
+cargo build --examples --features gpu
+cargo build --examples --features visualization
+```
+
+### Run Examples
+
+```bash
+# Run without features
+cargo run --example <example_name>
+
+# Run with features
+cargo run --example distributed_computing --features distributed
+cargo run --example gpu_acceleration --features gpu
+cargo run --example visualization --features visualization
+```
+
+### Verify All Examples Compile
+
+```bash
+# Check that all examples compile
+cargo check --examples
+
+# Check with all features
+cargo check --examples --all-features
+```
+
+## Learning Paths
+
+### For Beginners
+1. `basic_usage.rs` - Start here
+2. `array_creation_example.rs` - Learn array creation
+3. `array_manipulation_example.rs` - Array operations
+4. `statistics_example.rs` - Basic statistics
+
+### For Data Scientists
+1. `statistical_analysis.rs` - Statistical methods
+2. `time_series_basics.rs` - Time series analysis
+3. `ml_pipeline.rs` - Machine learning workflow
+4. `visualization.rs` - Data visualization
+
+### For ML Engineers
+1. `ml_pipeline.rs` - Complete ML pipeline
+2. `neural_network_basics.rs` - Neural networks
+3. `advanced_optimization.rs` - Optimization algorithms
+4. `gpu_acceleration.rs` - GPU acceleration
+
+### For Signal Processing
+1. `signal_processing.rs` - Comprehensive signal processing
+2. `fft_example.rs` - Fourier transforms
+3. `time_series_basics.rs` - Time series methods
+
+### For High-Performance Computing
+1. `distributed_computing.rs` - Distributed computing
+2. `parallel_optimize_example.rs` - Parallel processing
+3. `simd_example.rs` - SIMD optimization
+4. `gpu_acceleration.rs` - GPU computing
+
 ## Contributing Examples
 
-We welcome contributions of new examples! If you have created an example that demonstrates NumRS capabilities, please consider submitting a pull request.
+We welcome contributions of new examples! If you have created an example that demonstrates NumRS2 capabilities, please consider submitting a pull request.
 
 Guidelines for contributed examples:
 - Include comprehensive comments explaining the code
 - Begin with a concise description of the example's purpose
-- Ensure the example runs with the current version of NumRS
-- Keep the example focused on demonstrating specific features
+- Ensure the example runs with the current version of NumRS2
+- Keep examples under 500 lines when possible
+- Follow SciRS2 ecosystem policies (use scirs2-core abstractions)
+- Add proper error handling (no unwrap in production code)
+- Include expected output in comments
+- Add feature gates where needed (e.g., `#[cfg(feature = "distributed")]`)

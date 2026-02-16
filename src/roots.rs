@@ -26,7 +26,7 @@
 //!
 //! // Find root of f(x) = x^2 - 2 (i.e., sqrt(2))
 //! let f = |x: f64| x * x - 2.0;
-//! let result = brentq(f, 0.0, 2.0, 1e-10, 100).unwrap();
+//! let result = brentq(f, 0.0, 2.0, 1e-10, 100).expect("brentq should converge");
 //! assert!((result.root - 1.414213562).abs() < 1e-8);
 //! ```
 
@@ -67,7 +67,7 @@ pub struct RootResult<T: Float> {
 /// use numrs2::roots::*;
 ///
 /// let f = |x: f64| x * x - 2.0;
-/// let result = bisect(f, 0.0, 2.0, 1e-10, 100).unwrap();
+/// let result = bisect(f, 0.0, 2.0, 1e-10, 100).expect("bisect should converge");
 /// assert!((result.root - 1.414213562).abs() < 1e-8);
 /// ```
 pub fn bisect<T, F>(f: F, mut a: T, mut b: T, tol: T, max_iter: usize) -> Result<RootResult<T>>
@@ -108,7 +108,7 @@ where
 
     // Bisection iteration
     for iter in 0..max_iter {
-        let c = (a + b) / T::from(2.0).unwrap();
+        let c = (a + b) / T::from(2.0).expect("2.0 is representable as Float");
         let fc = f(c);
         nfev += 1;
 
@@ -131,7 +131,7 @@ where
         }
     }
 
-    let c = (a + b) / T::from(2.0).unwrap();
+    let c = (a + b) / T::from(2.0).expect("2.0 is representable as Float");
     Ok(RootResult {
         root: c,
         nfev,
@@ -152,7 +152,7 @@ where
 /// use numrs2::roots::*;
 ///
 /// let f = |x: f64| x.powi(3) - 2.0 * x - 5.0;
-/// let result = brentq(f, 2.0, 3.0, 1e-10, 100).unwrap();
+/// let result = brentq(f, 2.0, 3.0, 1e-10, 100).expect("brentq should converge");
 /// assert!(f(result.root).abs() < 1e-9);
 /// ```
 pub fn brentq<T, F>(f: F, mut a: T, mut b: T, tol: T, max_iter: usize) -> Result<RootResult<T>>
@@ -200,15 +200,22 @@ where
             let mut s = l0 + l1 + l2;
 
             // Check conditions for acceptance
-            let delta = T::from(1e-14).unwrap();
-            let cond1 = s < (T::from(3.0).unwrap() * a + b) / T::from(4.0).unwrap() || s > b;
-            let cond2 = mflag && (s - b).abs() >= (b - c).abs() / T::from(2.0).unwrap();
-            let cond3 = !mflag && (s - b).abs() >= (c - d).abs() / T::from(2.0).unwrap();
+            let delta = T::from(1e-14).expect("1e-14 is representable as Float");
+            let cond1 = s
+                < (T::from(3.0).expect("3.0 is representable as Float") * a + b)
+                    / T::from(4.0).expect("4.0 is representable as Float")
+                || s > b;
+            let cond2 = mflag
+                && (s - b).abs()
+                    >= (b - c).abs() / T::from(2.0).expect("2.0 is representable as Float");
+            let cond3 = !mflag
+                && (s - b).abs()
+                    >= (c - d).abs() / T::from(2.0).expect("2.0 is representable as Float");
             let cond4 = mflag && (b - c).abs() < delta;
             let cond5 = !mflag && (c - d).abs() < delta;
 
             if cond1 || cond2 || cond3 || cond4 || cond5 {
-                s = (a + b) / T::from(2.0).unwrap();
+                s = (a + b) / T::from(2.0).expect("2.0 is representable as Float");
                 mflag = true;
             } else {
                 mflag = false;
@@ -273,7 +280,7 @@ where
 ///
 /// let f = |x: f64| x * x - 2.0;
 /// let df = |x: f64| 2.0 * x;
-/// let result = newton(f, df, 1.0, 1e-10, 100).unwrap();
+/// let result = newton(f, df, 1.0, 1e-10, 100).expect("newton should converge");
 /// assert!((result.root - 1.414213562).abs() < 1e-8);
 /// ```
 pub fn newton<T, F, DF>(f: F, df: DF, mut x: T, tol: T, max_iter: usize) -> Result<RootResult<T>>
@@ -299,7 +306,7 @@ where
         }
 
         let dfx = df(x);
-        if dfx.abs() < T::from(1e-14).unwrap() {
+        if dfx.abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
             return Err(NumRs2Error::ComputationError(
                 "Derivative too small, Newton iteration failed".to_string(),
             ));
@@ -329,7 +336,7 @@ where
 /// use numrs2::roots::*;
 ///
 /// let f = |x: f64| x * x - 2.0;
-/// let result = secant(f, 1.0, 2.0, 1e-10, 100).unwrap();
+/// let result = secant(f, 1.0, 2.0, 1e-10, 100).expect("secant should converge");
 /// assert!((result.root - 1.414213562).abs() < 1e-8);
 /// ```
 pub fn secant<T, F>(f: F, mut x0: T, mut x1: T, tol: T, max_iter: usize) -> Result<RootResult<T>>
@@ -352,7 +359,7 @@ where
             });
         }
 
-        if (f1 - f0).abs() < T::from(1e-14).unwrap() {
+        if (f1 - f0).abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
             return Err(NumRs2Error::ComputationError(
                 "Secant method: function values too close".to_string(),
             ));
@@ -390,7 +397,7 @@ where
 /// let f = |x: f64| x * x - 2.0;
 /// let df = |x: f64| 2.0 * x;
 /// let ddf = |_x: f64| 2.0;
-/// let result = halley(f, df, ddf, 1.0, 1e-10, 100).unwrap();
+/// let result = halley(f, df, ddf, 1.0, 1e-10, 100).expect("halley should converge");
 /// assert!((result.root - 1.414213562).abs() < 1e-8);
 /// ```
 pub fn halley<T, F, DF, DDF>(
@@ -426,14 +433,15 @@ where
         let dfx = df(x);
         let ddfx = ddf(x);
 
-        let denominator = T::from(2.0).unwrap() * dfx * dfx - fx * ddfx;
-        if denominator.abs() < T::from(1e-14).unwrap() {
+        let denominator =
+            T::from(2.0).expect("2.0 is representable as Float") * dfx * dfx - fx * ddfx;
+        if denominator.abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
             return Err(NumRs2Error::ComputationError(
                 "Halley method: denominator too small".to_string(),
             ));
         }
 
-        x = x - (T::from(2.0).unwrap() * fx * dfx) / denominator;
+        x = x - (T::from(2.0).expect("2.0 is representable as Float") * fx * dfx) / denominator;
     }
 
     let fx = f(x);
@@ -457,7 +465,7 @@ where
 /// use numrs2::roots::*;
 ///
 /// let f = |x: f64| x.powi(3) - 2.0 * x - 5.0;
-/// let result = ridder(f, 2.0, 3.0, 1e-10, 100).unwrap();
+/// let result = ridder(f, 2.0, 3.0, 1e-10, 100).expect("ridder should converge");
 /// assert!(f(result.root).abs() < 1e-9);
 /// ```
 pub fn ridder<T, F>(f: F, mut a: T, mut b: T, tol: T, max_iter: usize) -> Result<RootResult<T>>
@@ -477,7 +485,7 @@ where
     }
 
     for iter in 0..max_iter {
-        let c = (a + b) / T::from(2.0).unwrap();
+        let c = (a + b) / T::from(2.0).expect("2.0 is representable as Float");
         let fc = f(c);
         nfev += 1;
 
@@ -517,7 +525,7 @@ where
         }
 
         let s = discriminant.sqrt();
-        if s.abs() < T::from(1e-14).unwrap() {
+        if s.abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
             return Ok(RootResult {
                 root: c,
                 nfev,
@@ -568,7 +576,7 @@ where
         }
     }
 
-    let root = (a + b) / T::from(2.0).unwrap();
+    let root = (a + b) / T::from(2.0).expect("2.0 is representable as Float");
     Ok(RootResult {
         root,
         nfev,
@@ -618,14 +626,14 @@ where
             b = c;
             fb = fc;
             if side == -1 {
-                fa = fa / T::from(2.0).unwrap();
+                fa = fa / T::from(2.0).expect("2.0 is representable as Float");
             }
             side = -1;
         } else {
             a = c;
             fa = fc;
             if side == 1 {
-                fb = fb / T::from(2.0).unwrap();
+                fb = fb / T::from(2.0).expect("2.0 is representable as Float");
             }
             side = 1;
         }
@@ -652,7 +660,7 @@ where
 ///
 /// // Find fixed point of g(x) = cos(x), i.e., solve x = cos(x)
 /// let g = |x: f64| x.cos();
-/// let result = fixed_point(g, 0.5, 1e-10, 100).unwrap();
+/// let result = fixed_point(g, 0.5, 1e-10, 100).expect("fixed_point should converge");
 /// assert!((result - result.cos()).abs() < 1e-9);
 /// ```
 pub fn fixed_point<T, G>(g: G, mut x: T, tol: T, max_iter: usize) -> Result<T>
@@ -685,7 +693,7 @@ mod tests {
     #[test]
     fn test_bisect_sqrt2() {
         let f = |x: f64| x * x - 2.0;
-        let result = bisect(f, 0.0, 2.0, 1e-10, 100).unwrap();
+        let result = bisect(f, 0.0, 2.0, 1e-10, 100).expect("bisect should converge for x^2 - 2");
         assert!(result.converged);
         assert_relative_eq!(result.root, 1.414213562373095, epsilon = 1e-9);
     }
@@ -693,7 +701,7 @@ mod tests {
     #[test]
     fn test_bisect_cubic() {
         let f = |x: f64| x.powi(3) - 2.0 * x - 5.0;
-        let result = bisect(f, 2.0, 3.0, 1e-10, 100).unwrap();
+        let result = bisect(f, 2.0, 3.0, 1e-10, 100).expect("bisect should converge for cubic");
         assert!(result.converged);
         assert!(f(result.root).abs() < 1e-9);
     }
@@ -701,7 +709,7 @@ mod tests {
     #[test]
     fn test_brentq_sqrt2() {
         let f = |x: f64| x * x - 2.0;
-        let result = brentq(f, 0.0, 2.0, 1e-10, 100).unwrap();
+        let result = brentq(f, 0.0, 2.0, 1e-10, 100).expect("brentq should converge for x^2 - 2");
         assert!(result.converged);
         assert_relative_eq!(result.root, 1.414213562373095, epsilon = 1e-9);
     }
@@ -709,7 +717,7 @@ mod tests {
     #[test]
     fn test_brentq_cubic() {
         let f = |x: f64| x.powi(3) - 2.0 * x - 5.0;
-        let result = brentq(f, 2.0, 3.0, 1e-10, 100).unwrap();
+        let result = brentq(f, 2.0, 3.0, 1e-10, 100).expect("brentq should converge for cubic");
         assert!(result.converged);
         assert!(f(result.root).abs() < 1e-9);
     }
@@ -718,8 +726,8 @@ mod tests {
     fn test_brentq_faster_than_bisection() {
         let f = |x: f64| x.powi(3) - x - 1.0;
 
-        let bisect_result = bisect(f, 1.0, 2.0, 1e-10, 100).unwrap();
-        let brent_result = brentq(f, 1.0, 2.0, 1e-10, 100).unwrap();
+        let bisect_result = bisect(f, 1.0, 2.0, 1e-10, 100).expect("bisect should converge");
+        let brent_result = brentq(f, 1.0, 2.0, 1e-10, 100).expect("brentq should converge");
 
         // Brent should converge in fewer iterations
         assert!(brent_result.nit <= bisect_result.nit);
@@ -730,7 +738,7 @@ mod tests {
         let f = |x: f64| x * x - 2.0;
         let df = |x: f64| 2.0 * x;
 
-        let result = newton(f, df, 1.0, 1e-10, 100).unwrap();
+        let result = newton(f, df, 1.0, 1e-10, 100).expect("newton should converge for x^2 - 2");
         assert!(result.converged);
         assert_relative_eq!(result.root, 1.414213562373095, epsilon = 1e-9);
     }
@@ -740,7 +748,7 @@ mod tests {
         let f = |x: f64| x.powi(3) - 2.0 * x - 5.0;
         let df = |x: f64| 3.0 * x.powi(2) - 2.0;
 
-        let result = newton(f, df, 2.5, 1e-10, 100).unwrap();
+        let result = newton(f, df, 2.5, 1e-10, 100).expect("newton should converge for cubic");
         assert!(result.converged);
         assert!(f(result.root).abs() < 1e-9);
     }
@@ -748,7 +756,7 @@ mod tests {
     #[test]
     fn test_secant_sqrt2() {
         let f = |x: f64| x * x - 2.0;
-        let result = secant(f, 1.0, 2.0, 1e-10, 100).unwrap();
+        let result = secant(f, 1.0, 2.0, 1e-10, 100).expect("secant should converge for x^2 - 2");
         assert!(result.converged);
         assert_relative_eq!(result.root, 1.414213562373095, epsilon = 1e-9);
     }
@@ -757,7 +765,8 @@ mod tests {
     fn test_secant_transcendental() {
         // Solve x = cos(x)
         let f = |x: f64| x - x.cos();
-        let result = secant(f, 0.0, 1.0, 1e-10, 100).unwrap();
+        let result =
+            secant(f, 0.0, 1.0, 1e-10, 100).expect("secant should converge for x - cos(x)");
         assert!(result.converged);
         assert_relative_eq!(result.root, 0.7390851332151607, epsilon = 1e-9);
     }
@@ -768,7 +777,8 @@ mod tests {
         let df = |x: f64| 2.0 * x;
         let ddf = |_x: f64| 2.0;
 
-        let result = halley(f, df, ddf, 1.0, 1e-10, 100).unwrap();
+        let result =
+            halley(f, df, ddf, 1.0, 1e-10, 100).expect("halley should converge for x^2 - 2");
         assert!(result.converged);
         assert_relative_eq!(result.root, 1.414213562373095, epsilon = 1e-9);
         // Halley should converge very fast (cubic convergence)
@@ -778,7 +788,7 @@ mod tests {
     #[test]
     fn test_ridder_sqrt2() {
         let f = |x: f64| x * x - 2.0;
-        let result = ridder(f, 0.0, 2.0, 1e-10, 100).unwrap();
+        let result = ridder(f, 0.0, 2.0, 1e-10, 100).expect("ridder should converge for x^2 - 2");
         assert!(result.converged);
         assert_relative_eq!(result.root, 1.414213562373095, epsilon = 1e-9);
     }
@@ -787,7 +797,7 @@ mod tests {
     fn test_ridder_exponential() {
         // Solve e^x = 3
         let f = |x: f64| x.exp() - 3.0;
-        let result = ridder(f, 0.0, 2.0, 1e-8, 200).unwrap();
+        let result = ridder(f, 0.0, 2.0, 1e-8, 200).expect("ridder should converge for e^x - 3");
         assert!(result.converged, "Ridder should converge for exponential");
         assert_relative_eq!(result.root, 1.0986122886681098, epsilon = 1e-7); // ln(3)
     }
@@ -795,7 +805,8 @@ mod tests {
     #[test]
     fn test_illinois_sqrt2() {
         let f = |x: f64| x * x - 2.0;
-        let result = illinois(f, 0.0, 2.0, 1e-10, 100).unwrap();
+        let result =
+            illinois(f, 0.0, 2.0, 1e-10, 100).expect("illinois should converge for x^2 - 2");
         assert!(result.converged);
         assert_relative_eq!(result.root, 1.414213562373095, epsilon = 1e-9);
     }
@@ -804,7 +815,7 @@ mod tests {
     fn test_fixed_point_cosine() {
         // Find x such that x = cos(x)
         let g = |x: f64| x.cos();
-        let root = fixed_point(g, 0.5, 1e-10, 100).unwrap();
+        let root = fixed_point(g, 0.5, 1e-10, 100).expect("fixed_point should converge for cos");
         assert_relative_eq!(root, 0.7390851332151607, epsilon = 1e-9);
         assert_relative_eq!(root, root.cos(), epsilon = 1e-9);
     }
@@ -813,7 +824,8 @@ mod tests {
     fn test_fixed_point_sqrt() {
         // Find sqrt(2) using fixed point iteration: x = (x + 2/x)/2
         let g = |x: f64| (x + 2.0 / x) / 2.0;
-        let root = fixed_point(g, 1.0, 1e-10, 100).unwrap();
+        let root = fixed_point(g, 1.0, 1e-10, 100)
+            .expect("fixed_point should converge for sqrt iteration");
         assert_relative_eq!(root, 1.414213562373095, epsilon = 1e-9);
     }
 
@@ -822,8 +834,10 @@ mod tests {
         let f = |x: f64| x.powi(5) - x - 1.0;
         let df = |x: f64| 5.0 * x.powi(4) - 1.0;
 
-        let newton_result = newton(f, df, 1.5, 1e-10, 100).unwrap();
-        let secant_result = secant(f, 1.0, 2.0, 1e-10, 100).unwrap();
+        let newton_result =
+            newton(f, df, 1.5, 1e-10, 100).expect("newton should converge for quintic");
+        let secant_result =
+            secant(f, 1.0, 2.0, 1e-10, 100).expect("secant should converge for quintic");
 
         // Newton should converge faster
         assert!(newton_result.nit <= secant_result.nit);
@@ -835,8 +849,10 @@ mod tests {
         let df = |x: f64| 3.0 * x.powi(2);
         let ddf = |x: f64| 6.0 * x;
 
-        let newton_result = newton(f, df, 2.0, 1e-10, 100).unwrap();
-        let halley_result = halley(f, df, ddf, 2.0, 1e-10, 100).unwrap();
+        let newton_result =
+            newton(f, df, 2.0, 1e-10, 100).expect("newton should converge for x^3 - 10");
+        let halley_result =
+            halley(f, df, ddf, 2.0, 1e-10, 100).expect("halley should converge for x^3 - 10");
 
         // Halley should converge faster (cubic vs quadratic convergence)
         assert!(halley_result.nit <= newton_result.nit);
@@ -856,7 +872,7 @@ mod tests {
         ) {
             // For f(x) = x, bisection should always converge to 0
             let f = |x: f64| x;
-            let result = bisect(f, a, b, 1e-10, 100).unwrap();
+            let result = bisect(f, a, b, 1e-10, 100).expect("bisect should converge for f(x) = x");
             prop_assert!(result.converged);
             prop_assert!(result.root.abs() < 1e-9);
         }
@@ -872,7 +888,7 @@ mod tests {
 
             // Skip if starting exactly at target
             if (x0 - target).abs() > 0.01 {
-                let result = newton(f, df, x0, 1e-10, 100).unwrap();
+                let result = newton(f, df, x0, 1e-10, 100).expect("newton should converge for linear function");
                 prop_assert!(result.converged, "Newton should converge for linear function");
                 prop_assert!((result.root - target).abs() < 1e-8);
             }
@@ -886,7 +902,7 @@ mod tests {
         ) {
             // For f(x) = coeff * x, root is always at 0
             let f = |x: f64| coeff * x;
-            let result = brentq(f, a, b, 1e-10, 100).unwrap();
+            let result = brentq(f, a, b, 1e-10, 100).expect("brentq should converge for linear function");
             prop_assert!(result.converged);
             prop_assert!(result.root.abs() < 1e-9);
         }
@@ -900,7 +916,7 @@ mod tests {
             let x0 = target - 1.0;
             let x1 = target + 1.0;
 
-            let result = secant(f, x0, x1, 1e-10, 100).unwrap();
+            let result = secant(f, x0, x1, 1e-10, 100).expect("secant should converge for linear function");
             prop_assert!(result.converged);
             prop_assert!((result.root - target).abs() < 1e-8);
         }

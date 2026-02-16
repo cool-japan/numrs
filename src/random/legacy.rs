@@ -64,7 +64,8 @@ impl Generator {
 
         for _ in 0..size {
             // Use SciRS2 uniform distribution for [0, 1) and convert to T
-            let uniform_dist = scirs2_stats::distributions::Uniform::new(0.0f64, 1.0f64).unwrap();
+            let uniform_dist = scirs2_stats::distributions::Uniform::new(0.0f64, 1.0f64)
+                .expect("random: uniform distribution [0, 1) should always be valid");
             let val_f64 = uniform_dist.rvs(1).expect("uniform sampling failed")[0];
             let val = NumCast::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(

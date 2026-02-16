@@ -5,6 +5,7 @@
 
 #![allow(clippy::needless_range_loop)]
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 #[macro_use]
 extern crate criterion;

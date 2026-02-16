@@ -191,8 +191,13 @@ impl SimdFft {
             });
 
         // Apply twiddle factors using SIMD multiplication
-        let twiddle_times_odd =
-            SimdComplexOps::complex_multiply(&twiddle_factors.view(), &odd.view()).unwrap();
+        let twiddle_times_odd = SimdComplexOps::complex_multiply(
+            &twiddle_factors.view(),
+            &odd.view(),
+        )
+        .expect(
+            "complex multiplication of equal-length twiddle factors and odd array should succeed",
+        );
 
         // Combine results
         for k in 0..n / 2 {
@@ -305,7 +310,8 @@ mod tests {
         let a = Array1::from_vec(vec![Complex::new(1.0, 2.0), Complex::new(3.0, 4.0)]);
         let b = Array1::from_vec(vec![Complex::new(5.0, 6.0), Complex::new(7.0, 8.0)]);
 
-        let result = SimdComplexOps::complex_multiply(&a.view(), &b.view()).unwrap();
+        let result = SimdComplexOps::complex_multiply(&a.view(), &b.view())
+            .expect("complex_multiply should succeed for equal length arrays");
 
         // (1 + 2i)(5 + 6i) = 5 + 6i + 10i + 12i² = 5 + 16i - 12 = -7 + 16i
         assert_relative_eq!(result[0].re, -7.0, epsilon = 1e-10);
@@ -335,7 +341,8 @@ mod tests {
             Complex::new(1.0, 0.0),
         ]);
 
-        let result = SimdFft::fft(&input.view()).unwrap();
+        let result =
+            SimdFft::fft(&input.view()).expect("FFT should succeed for power-of-2 length input");
 
         // DC component should be 4
         assert_relative_eq!(result[0].re, 4.0, epsilon = 1e-10);
@@ -356,8 +363,10 @@ mod tests {
             Complex::new(7.0, 8.0),
         ]);
 
-        let fft_result = SimdFft::fft(&input.view()).unwrap();
-        let ifft_result = SimdFft::ifft(&fft_result.view()).unwrap();
+        let fft_result =
+            SimdFft::fft(&input.view()).expect("FFT should succeed for power-of-2 length input");
+        let ifft_result =
+            SimdFft::ifft(&fft_result.view()).expect("IFFT should succeed for valid FFT output");
 
         // Should recover original signal
         for i in 0..4 {

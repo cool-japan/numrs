@@ -549,7 +549,7 @@ impl SparseOpsAdvanced {
                 h[j + 1][j] = Self::dot_product(&w, &w)?.sqrt();
 
                 // Check for lucky breakdown
-                if h[j + 1][j].abs() < T::from(1e-14).unwrap() {
+                if h[j + 1][j].abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
                     k = j + 1;
                     break;
                 }
@@ -568,7 +568,7 @@ impl SparseOpsAdvanced {
 
                 // Compute new Givens rotation
                 let r_val = (h[j][j].powi(2) + h[j + 1][j].powi(2)).sqrt();
-                if r_val < T::from(1e-14).unwrap() {
+                if r_val < T::from(1e-14).expect("1e-14 is representable as Float") {
                     k = j + 1;
                     break;
                 }
@@ -808,50 +808,51 @@ mod tests {
     #[test]
     fn test_sparse_matrix_vector_multiplication() {
         // Create a sparse matrix
-        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
-        a.set(0, 0, 2.0).unwrap();
-        a.set(0, 1, 1.0).unwrap();
-        a.set(1, 1, 3.0).unwrap();
-        a.set(2, 2, 4.0).unwrap();
+        let mut a = SparseMatrix::new(&[3, 3]).expect("3x3 sparse matrix creation");
+        a.set(0, 0, 2.0).expect("set matrix element");
+        a.set(0, 1, 1.0).expect("set matrix element");
+        a.set(1, 1, 3.0).expect("set matrix element");
+        a.set(2, 2, 4.0).expect("set matrix element");
 
         // Create input vector
         let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
         let mut y = Array::zeros(&[3]);
 
         // Test sparse matrix-vector multiplication
-        SparseOpsAdvanced::spmv_dense(&a, &x, &mut y, 1.0, 0.0).unwrap();
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut y, 1.0, 0.0).expect("spmv_dense");
 
         // Expected: [2*1 + 1*2, 3*2, 4*3] = [4, 6, 12]
-        assert_relative_eq!(y.get(&[0]).unwrap(), 4.0, epsilon = 1e-10);
-        assert_relative_eq!(y.get(&[1]).unwrap(), 6.0, epsilon = 1e-10);
-        assert_relative_eq!(y.get(&[2]).unwrap(), 12.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[0]).expect("get y[0]"), 4.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[1]).expect("get y[1]"), 6.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[2]).expect("get y[2]"), 12.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_conjugate_gradient_solver() {
         // Create a symmetric positive definite matrix
-        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
-        a.set(0, 0, 4.0).unwrap();
-        a.set(0, 1, 1.0).unwrap();
-        a.set(1, 0, 1.0).unwrap();
-        a.set(1, 1, 3.0).unwrap();
-        a.set(1, 2, 1.0).unwrap();
-        a.set(2, 1, 1.0).unwrap();
-        a.set(2, 2, 2.0).unwrap();
+        let mut a = SparseMatrix::new(&[3, 3]).expect("3x3 sparse matrix creation");
+        a.set(0, 0, 4.0).expect("set matrix element");
+        a.set(0, 1, 1.0).expect("set matrix element");
+        a.set(1, 0, 1.0).expect("set matrix element");
+        a.set(1, 1, 3.0).expect("set matrix element");
+        a.set(1, 2, 1.0).expect("set matrix element");
+        a.set(2, 1, 1.0).expect("set matrix element");
+        a.set(2, 2, 2.0).expect("set matrix element");
 
         // Right-hand side
         let b = Array::from_vec(vec![6.0, 8.0, 4.0]);
 
         // Solve using CG
-        let (x, iter, residual) = SparseOpsAdvanced::solve_cg(&a, &b, None, 1e-10, 100).unwrap();
+        let (x, iter, residual) =
+            SparseOpsAdvanced::solve_cg(&a, &b, None, 1e-10, 100).expect("CG solver");
 
         // Check that the solution satisfies A*x = b (approximately)
         let mut ax = Array::zeros(&[3]);
-        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).expect("spmv_dense");
 
         for i in 0..3 {
-            let b_val = b.get(&[i]).unwrap();
-            let ax_val = ax.get(&[i]).unwrap();
+            let b_val = b.get(&[i]).expect("get b[i]");
+            let ax_val = ax.get(&[i]).expect("get ax[i]");
             assert_relative_eq!(ax_val, b_val, epsilon = 1e-8);
         }
 
@@ -862,29 +863,29 @@ mod tests {
     #[test]
     fn test_bicgstab_solver() {
         // Create a general matrix
-        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
-        a.set(0, 0, 3.0).unwrap();
-        a.set(0, 1, 1.0).unwrap();
-        a.set(1, 0, 1.0).unwrap();
-        a.set(1, 1, 2.0).unwrap();
-        a.set(1, 2, 1.0).unwrap();
-        a.set(2, 1, 1.0).unwrap();
-        a.set(2, 2, 3.0).unwrap();
+        let mut a = SparseMatrix::new(&[3, 3]).expect("3x3 sparse matrix creation");
+        a.set(0, 0, 3.0).expect("set matrix element");
+        a.set(0, 1, 1.0).expect("set matrix element");
+        a.set(1, 0, 1.0).expect("set matrix element");
+        a.set(1, 1, 2.0).expect("set matrix element");
+        a.set(1, 2, 1.0).expect("set matrix element");
+        a.set(2, 1, 1.0).expect("set matrix element");
+        a.set(2, 2, 3.0).expect("set matrix element");
 
         // Right-hand side
         let b = Array::from_vec(vec![5.0, 6.0, 7.0]);
 
         // Solve using BiCGSTAB
         let (x, iter, residual) =
-            SparseOpsAdvanced::solve_bicgstab(&a, &b, None, 1e-10, 100).unwrap();
+            SparseOpsAdvanced::solve_bicgstab(&a, &b, None, 1e-10, 100).expect("BiCGSTAB solver");
 
         // Check that the solution satisfies A*x = b (approximately)
         let mut ax = Array::zeros(&[3]);
-        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).expect("spmv_dense");
 
         for i in 0..3 {
-            let b_val = b.get(&[i]).unwrap();
-            let ax_val = ax.get(&[i]).unwrap();
+            let b_val = b.get(&[i]).expect("get b[i]");
+            let ax_val = ax.get(&[i]).expect("get ax[i]");
             assert_relative_eq!(ax_val, b_val, epsilon = 1e-8);
         }
 
@@ -895,31 +896,31 @@ mod tests {
     #[test]
     fn test_gmres_solver() {
         // Create a general matrix (non-symmetric)
-        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
-        a.set(0, 0, 3.0).unwrap();
-        a.set(0, 1, 1.0).unwrap();
-        a.set(0, 2, 0.5).unwrap();
-        a.set(1, 0, 1.0).unwrap();
-        a.set(1, 1, 4.0).unwrap();
-        a.set(1, 2, 1.0).unwrap();
-        a.set(2, 0, 0.0).unwrap();
-        a.set(2, 1, 2.0).unwrap();
-        a.set(2, 2, 5.0).unwrap();
+        let mut a = SparseMatrix::new(&[3, 3]).expect("3x3 sparse matrix creation");
+        a.set(0, 0, 3.0).expect("set matrix element");
+        a.set(0, 1, 1.0).expect("set matrix element");
+        a.set(0, 2, 0.5).expect("set matrix element");
+        a.set(1, 0, 1.0).expect("set matrix element");
+        a.set(1, 1, 4.0).expect("set matrix element");
+        a.set(1, 2, 1.0).expect("set matrix element");
+        a.set(2, 0, 0.0).expect("set matrix element");
+        a.set(2, 1, 2.0).expect("set matrix element");
+        a.set(2, 2, 5.0).expect("set matrix element");
 
         // Right-hand side
         let b = Array::from_vec(vec![5.5, 9.0, 17.0]);
 
         // Solve using GMRES
         let (x, iter, residual) =
-            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).unwrap();
+            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).expect("GMRES solver");
 
         // Check that the solution satisfies A*x = b (approximately)
         let mut ax = Array::zeros(&[3]);
-        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).expect("spmv_dense");
 
         for i in 0..3 {
-            let b_val = b.get(&[i]).unwrap();
-            let ax_val = ax.get(&[i]).unwrap();
+            let b_val = b.get(&[i]).expect("get b[i]");
+            let ax_val = ax.get(&[i]).expect("get ax[i]");
             assert_relative_eq!(ax_val, b_val, epsilon = 1e-8);
         }
 
@@ -931,16 +932,16 @@ mod tests {
     fn test_gmres_solver_larger_system() {
         // Create a larger sparse matrix (5x5 diagonally dominant)
         let n = 5;
-        let mut a = SparseMatrix::new(&[n, n]).unwrap();
+        let mut a = SparseMatrix::new(&[n, n]).expect("nxn sparse matrix creation");
 
         // Tridiagonal matrix with strong diagonal dominance
         for i in 0..n {
-            a.set(i, i, 4.0).unwrap(); // Main diagonal
+            a.set(i, i, 4.0).expect("set diagonal element"); // Main diagonal
             if i > 0 {
-                a.set(i, i - 1, -1.0).unwrap(); // Lower diagonal
+                a.set(i, i - 1, -1.0).expect("set lower diagonal"); // Lower diagonal
             }
             if i < n - 1 {
-                a.set(i, i + 1, -1.0).unwrap(); // Upper diagonal
+                a.set(i, i + 1, -1.0).expect("set upper diagonal"); // Upper diagonal
             }
         }
 
@@ -949,15 +950,15 @@ mod tests {
 
         // Solve using GMRES
         let (x, iter, residual) =
-            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).unwrap();
+            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).expect("GMRES solver");
 
         // Check that the solution satisfies A*x = b
         let mut ax = Array::zeros(&[n]);
-        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).expect("spmv_dense");
 
         for i in 0..n {
-            let b_val = b.get(&[i]).unwrap();
-            let ax_val = ax.get(&[i]).unwrap();
+            let b_val = b.get(&[i]).expect("get b[i]");
+            let ax_val = ax.get(&[i]).expect("get ax[i]");
             assert_relative_eq!(ax_val, b_val, epsilon = 1e-8);
         }
 
@@ -969,14 +970,14 @@ mod tests {
     fn test_gmres_with_restart() {
         // Create a matrix that might need restart
         let n = 4;
-        let mut a = SparseMatrix::new(&[n, n]).unwrap();
+        let mut a = SparseMatrix::new(&[n, n]).expect("nxn sparse matrix creation");
 
         // Create a diagonally dominant matrix
         for i in 0..n {
-            a.set(i, i, 5.0).unwrap();
+            a.set(i, i, 5.0).expect("set diagonal element");
             for j in 0..n {
                 if i != j {
-                    a.set(i, j, 0.5).unwrap();
+                    a.set(i, j, 0.5).expect("set off-diagonal element");
                 }
             }
         }
@@ -984,16 +985,16 @@ mod tests {
         let b = Array::from_vec(vec![7.5, 7.5, 7.5, 7.5]);
 
         // Solve with small restart parameter to force restarts
-        let (x, _iter, residual) =
-            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 2).unwrap();
+        let (x, _iter, residual) = SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 2)
+            .expect("GMRES solver with restart");
 
         // Verify solution
         let mut ax = Array::zeros(&[n]);
-        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).unwrap();
+        SparseOpsAdvanced::spmv_dense(&a, &x, &mut ax, 1.0, 0.0).expect("spmv_dense");
 
         for i in 0..n {
-            let b_val = b.get(&[i]).unwrap();
-            let ax_val = ax.get(&[i]).unwrap();
+            let b_val = b.get(&[i]).expect("get b[i]");
+            let ax_val = ax.get(&[i]).expect("get ax[i]");
             assert_relative_eq!(ax_val, b_val, epsilon = 1e-6);
         }
 
@@ -1003,24 +1004,24 @@ mod tests {
     #[test]
     fn test_gmres_vs_bicgstab() {
         // Compare GMRES and BiCGSTAB on the same problem
-        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
-        a.set(0, 0, 4.0).unwrap();
-        a.set(0, 1, 1.0).unwrap();
-        a.set(1, 0, 2.0).unwrap();
-        a.set(1, 1, 3.0).unwrap();
-        a.set(1, 2, 1.0).unwrap();
-        a.set(2, 1, 1.0).unwrap();
-        a.set(2, 2, 4.0).unwrap();
+        let mut a = SparseMatrix::new(&[3, 3]).expect("3x3 sparse matrix creation");
+        a.set(0, 0, 4.0).expect("set matrix element");
+        a.set(0, 1, 1.0).expect("set matrix element");
+        a.set(1, 0, 2.0).expect("set matrix element");
+        a.set(1, 1, 3.0).expect("set matrix element");
+        a.set(1, 2, 1.0).expect("set matrix element");
+        a.set(2, 1, 1.0).expect("set matrix element");
+        a.set(2, 2, 4.0).expect("set matrix element");
 
         let b = Array::from_vec(vec![6.0, 9.0, 5.0]);
 
         // Solve with GMRES
         let (x_gmres, _, residual_gmres) =
-            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).unwrap();
+            SparseOpsAdvanced::solve_gmres(&a, &b, None, 1e-10, 100, 30).expect("GMRES solver");
 
         // Solve with BiCGSTAB
         let (x_bicgstab, _, residual_bicgstab) =
-            SparseOpsAdvanced::solve_bicgstab(&a, &b, None, 1e-10, 100).unwrap();
+            SparseOpsAdvanced::solve_bicgstab(&a, &b, None, 1e-10, 100).expect("BiCGSTAB solver");
 
         // Both should converge
         assert!(residual_gmres < 1e-8);
@@ -1028,8 +1029,8 @@ mod tests {
 
         // Solutions should be similar
         for i in 0..3 {
-            let g_val = x_gmres.get(&[i]).unwrap();
-            let b_val = x_bicgstab.get(&[i]).unwrap();
+            let g_val = x_gmres.get(&[i]).expect("get x_gmres[i]");
+            let b_val = x_bicgstab.get(&[i]).expect("get b[i]");
             assert_relative_eq!(g_val, b_val, epsilon = 1e-6);
         }
     }
@@ -1037,28 +1038,28 @@ mod tests {
     #[test]
     fn test_incomplete_lu_decomposition() {
         // Create a test matrix
-        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
-        a.set(0, 0, 4.0).unwrap();
-        a.set(0, 1, 1.0).unwrap();
-        a.set(1, 0, 1.0).unwrap();
-        a.set(1, 1, 3.0).unwrap();
-        a.set(1, 2, 1.0).unwrap();
-        a.set(2, 1, 1.0).unwrap();
-        a.set(2, 2, 2.0).unwrap();
+        let mut a = SparseMatrix::new(&[3, 3]).expect("3x3 sparse matrix creation");
+        a.set(0, 0, 4.0).expect("set matrix element");
+        a.set(0, 1, 1.0).expect("set matrix element");
+        a.set(1, 0, 1.0).expect("set matrix element");
+        a.set(1, 1, 3.0).expect("set matrix element");
+        a.set(1, 2, 1.0).expect("set matrix element");
+        a.set(2, 1, 1.0).expect("set matrix element");
+        a.set(2, 2, 2.0).expect("set matrix element");
 
         // Compute ILU decomposition
-        let (l, u) = SparseOpsAdvanced::incomplete_lu(&a, 1.0).unwrap();
+        let (l, u) = SparseOpsAdvanced::incomplete_lu(&a, 1.0).expect("ILU decomposition");
 
         // Verify that L is lower triangular with 1s on diagonal
-        assert_relative_eq!(l.get(0, 0).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(1, 1).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(2, 2).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(0, 1).unwrap(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(0, 2).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(0, 0).expect("get L[0,0]"), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(1, 1).expect("get L[1,1]"), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(2, 2).expect("get L[2,2]"), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(0, 1).expect("get L[0,1]"), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(0, 2).expect("get L[0,2]"), 0.0, epsilon = 1e-10);
 
         // Verify U is upper triangular
-        assert_relative_eq!(u.get(1, 0).unwrap(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(u.get(2, 0).unwrap(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(u.get(2, 1).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(u.get(1, 0).expect("get U[1,0]"), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(u.get(2, 0).expect("get U[2,0]"), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(u.get(2, 1).expect("get U[2,1]"), 0.0, epsilon = 1e-10);
     }
 }

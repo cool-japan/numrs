@@ -158,7 +158,10 @@ impl ArenaAllocator {
             return None;
         }
 
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &mut *state_mutex.get() };
 
         // Try to allocate from existing chunks
@@ -194,7 +197,10 @@ impl ArenaAllocator {
 
     /// Reset the arena, reclaiming all allocated memory for reuse
     pub fn reset(&self) {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &mut *state_mutex.get() };
 
         // Reset all chunks
@@ -205,14 +211,20 @@ impl ArenaAllocator {
 
     /// Get the total amount of memory allocated by the arena
     pub fn total_size(&self) -> usize {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &*state_mutex.get() };
         state.total_allocated
     }
 
     /// Get the amount of memory currently available in the arena
     pub fn available_size(&self) -> usize {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &*state_mutex.get() };
         state
             .chunks
@@ -223,7 +235,10 @@ impl ArenaAllocator {
 
     /// Get the default alignment used by this arena
     pub fn get_alignment(&self) -> usize {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &*state_mutex.get() };
         state.config.alignment
     }
@@ -325,7 +340,7 @@ impl<'a, T> ArenaVec<'a, T> {
             };
         }
 
-        let ptr = ptr_opt.unwrap();
+        let ptr = ptr_opt.expect("allocation should succeed since we checked above");
 
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr.as_ptr() as *mut T) },

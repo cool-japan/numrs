@@ -11,6 +11,13 @@ use wgpu::util::DeviceExt;
 pub type GpuContextRef = Arc<GpuContext>;
 
 /// Manages GPU device, queue, and other resources
+///
+/// CACHE ALIGNMENT: Aligned to 64-byte cache lines for optimal GPU command submission.
+/// The device and queue are accessed on every GPU operation, and cache alignment
+/// ensures these hot fields are efficiently cached, reducing latency for GPU kernel
+/// launches and data transfers. This is especially important for high-frequency
+/// GPU operations where submission overhead can become a bottleneck.
+#[repr(align(64))]
 pub struct GpuContext {
     device: wgpu::Device,
     queue: wgpu::Queue,

@@ -1,6 +1,7 @@
 //! Simple benchmark for NumRS2 core operations
 
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::array::Array;

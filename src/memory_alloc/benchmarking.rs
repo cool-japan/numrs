@@ -521,7 +521,7 @@ impl AllocatorBenchmark {
         if let Some(highest_throughput) = results.iter().max_by(|a, b| {
             a.allocation_throughput
                 .partial_cmp(&b.allocation_throughput)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         }) {
             report.push_str(&format!(
                 "Highest Throughput: {} ({:.0} ops/sec)\n",
@@ -532,7 +532,7 @@ impl AllocatorBenchmark {
         if let Some(most_efficient) = results.iter().max_by(|a, b| {
             a.allocation_efficiency
                 .partial_cmp(&b.allocation_efficiency)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         }) {
             report.push_str(&format!(
                 "Most Efficient: {} ({:.3})\n",
@@ -543,7 +543,7 @@ impl AllocatorBenchmark {
         if let Some(least_fragmented) = results.iter().min_by(|a, b| {
             a.fragmentation_level
                 .partial_cmp(&b.fragmentation_level)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         }) {
             report.push_str(&format!(
                 "Least Fragmentation: {} ({:.3})\n",
@@ -667,7 +667,7 @@ mod tests {
         let allocator = NumericalArrayAllocator::new();
         let results = benchmark
             .benchmark_allocator(&allocator, "NumericalArrayAllocator")
-            .unwrap();
+            .expect("benchmark_allocator should succeed");
 
         assert_eq!(results.allocator_name, "NumericalArrayAllocator");
         assert!(results.successful_allocations > 0);

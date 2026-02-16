@@ -57,7 +57,8 @@ where
     // Compute a size-dependent tolerance threshold for detecting small pivots
     // This is based on machine epsilon, matrix size, and norm estimation
     let eps = T::epsilon();
-    let matrix_size = <T as num_traits::NumCast>::from(std::cmp::max(m, n)).unwrap();
+    let matrix_size = <T as num_traits::NumCast>::from(std::cmp::max(m, n))
+        .expect("matrix dimension should convert to float type");
     let tolerance = eps * matrix_size;
 
     // Estimate matrix norm for setting thresholds (using max absolute element as approximation)

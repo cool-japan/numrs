@@ -98,7 +98,8 @@ impl<T: Clone> MaskedArray<T> {
     /// let data = Array::from_vec(vec![1.0, 2.0, -999.0, 4.0, -999.0]);
     ///
     /// // Create masked array with -999.0 values masked
-    /// let masked = MaskedArray::masked_values(data, -999.0, Some(0.0)).unwrap();
+    /// let masked = MaskedArray::masked_values(data, -999.0, Some(0.0))
+    ///     .expect("masked_values should succeed");
     /// ```
     pub fn masked_values(data: Array<T>, value: T, fill_value: Option<T>) -> Result<Self>
     where
@@ -180,7 +181,8 @@ impl<T: Clone> MaskedArray<T> {
     /// let condition = data.map(|x| x > 3.0);
     ///
     /// // Create masked array with elements > 3.0 masked
-    /// let masked = MaskedArray::masked_where(data, condition, Some(0.0)).unwrap();
+    /// let masked = MaskedArray::masked_where(data, condition, Some(0.0))
+    ///     .expect("masked_where should succeed with matching shapes");
     /// ```
     pub fn masked_where(
         data: Array<T>,

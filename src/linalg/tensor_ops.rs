@@ -27,15 +27,15 @@ use std::fmt::Debug;
 /// // Matrix multiplication: C_ik = A_ij * B_jk
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-/// let result = einsum("ij,jk->ik", &[&a, &b]).unwrap();
+/// let result = einsum("ij,jk->ik", &[&a, &b]).expect("einsum should succeed for valid matrix multiplication");
 ///
 /// // Trace: sum_i A_ii
-/// let trace = einsum("ii->", &[&a]).unwrap();
+/// let trace = einsum("ii->", &[&a]).expect("einsum should succeed for trace computation");
 ///
 /// // Dot product: sum_i a_i * b_i
 /// let v1 = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let v2 = Array::from_vec(vec![4.0, 5.0, 6.0]);
-/// let dot = einsum("i,i->", &[&v1, &v2]).unwrap();
+/// let dot = einsum("i,i->", &[&v1, &v2]).expect("einsum should succeed for dot product");
 /// ```
 pub fn einsum<T: Float + Clone + Debug + std::ops::AddAssign + 'static>(
     subscripts: &str,
@@ -132,7 +132,8 @@ pub fn einsum<T: Float + Clone + Debug + std::ops::AddAssign + 'static>(
     // Sum over axis: "ij->i" (sum over j) or "ij->j" (sum over i)
     if operand_specs.len() == 1 && operand_specs[0].len() == 2 && output_spec.len() == 1 {
         let input_chars: Vec<char> = operand_specs[0].chars().collect();
-        let output_char = output_spec.chars().next().unwrap();
+        // output_spec is guaranteed to have exactly 1 character (checked on line 133)
+        let output_char = output_spec.chars().next().unwrap_or_default();
 
         if input_chars.contains(&output_char) {
             // Find which axis to sum over
@@ -346,7 +347,7 @@ fn einsum_general<T: Float + Clone + Debug + std::ops::AddAssign>(
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-/// let result = kron(&a, &b).unwrap();
+/// let result = kron(&a, &b).expect("kron should succeed for valid 2D arrays");
 /// // Result is a 4×4 matrix
 /// ```
 pub fn kron<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>> {
@@ -367,7 +368,9 @@ pub fn kron<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arra
     // Extract the data
     let a_data = a.to_vec();
     let b_data = b.to_vec();
-    let result_data = result.array_mut().as_slice_mut().unwrap();
+    let result_data = result.array_mut().as_slice_mut().ok_or_else(|| {
+        NumRs2Error::ComputationError("array should have contiguous memory layout".to_string())
+    })?;
 
     // Compute Kronecker product
     for i in 0..a_shape[0] {
@@ -420,7 +423,7 @@ pub fn kron<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arra
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-/// let result = tensordot(&a, &b, &[1, 0]).unwrap(); // Contract axis 1 of a with axis 0 of b
+/// let result = tensordot(&a, &b, &[1, 0]).expect("tensordot should succeed"); // Contract axis 1 of a with axis 0 of b
 /// ```
 pub fn tensordot<T: Float + Clone + Debug>(
     a: &Array<T>,

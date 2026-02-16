@@ -370,7 +370,8 @@ mod tests {
 
         let mut c = Array::zeros(&[2, 2]);
 
-        Avx2EnhancedOps::avx2_matmul_f32(&a, &b, &mut c, 32).unwrap();
+        Avx2EnhancedOps::avx2_matmul_f32(&a, &b, &mut c, 32)
+            .expect("avx2_matmul_f32 should succeed with valid matrix dimensions");
 
         // Expected result: [[58, 64], [139, 154]]
         let c_data = c.to_vec();
@@ -389,7 +390,8 @@ mod tests {
         let b_data = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let b = Array::from_vec(b_data).reshape(&[3, 3]);
 
-        let result = Avx2EnhancedOps::avx2_add_f32(&a, &b).unwrap();
+        let result = Avx2EnhancedOps::avx2_add_f32(&a, &b)
+            .expect("avx2_add_f32 should succeed with equal-sized arrays");
         let result_data = result.to_vec();
 
         for val in result_data {
@@ -406,7 +408,8 @@ mod tests {
         let b_data = vec![5.0, 6.0, 7.0, 8.0];
         let b = Array::from_vec(b_data).reshape(&[4]);
 
-        let result = Avx2EnhancedOps::avx2_dot_f32(&a, &b).unwrap();
+        let result = Avx2EnhancedOps::avx2_dot_f32(&a, &b)
+            .expect("avx2_dot_f32 should succeed with equal-length vectors");
 
         // Expected: 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
         assert_relative_eq!(result, 70.0, epsilon = 1e-5);
@@ -421,7 +424,8 @@ mod tests {
         let kernel_data = vec![0.5, 0.5];
         let kernel = Array::from_vec(kernel_data).reshape(&[2]);
 
-        let result = Avx2EnhancedOps::avx2_convolution_f32(&signal, &kernel).unwrap();
+        let result = Avx2EnhancedOps::avx2_convolution_f32(&signal, &kernel)
+            .expect("avx2_convolution_f32 should succeed with valid signal and kernel");
         let result_data = result.to_vec();
 
         // Expected: [1.5, 2.5, 3.5, 4.5]

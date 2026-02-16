@@ -27,10 +27,11 @@ use std::fmt::Debug;
 /// use numrs2::interop::ndarray_compat::from_ndarray;
 ///
 /// // Create a 2D ndarray
-/// let nd_arr = NdArray::from_shape_vec(IxDyn(&[2, 3]), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+/// let nd_arr = NdArray::from_shape_vec(IxDyn(&[2, 3]), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+///     .expect("Failed to create ndarray from shape and vec");
 ///
 /// // Convert to NumRS Array
-/// let num_arr = from_ndarray(&nd_arr).unwrap();
+/// let num_arr = from_ndarray(&nd_arr).expect("Failed to convert from ndarray");
 ///
 /// assert_eq!(num_arr.shape(), vec![2, 3]);
 /// assert_eq!(num_arr.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
@@ -72,10 +73,10 @@ where
 /// let num_arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 ///
 /// // Convert to ndarray
-/// let nd_arr = to_ndarray(&num_arr).unwrap();
+/// let nd_arr = to_ndarray(&num_arr).expect("Failed to convert to ndarray");
 ///
 /// assert_eq!(nd_arr.shape(), &[2, 3]);
-/// assert_eq!(nd_arr.as_slice().unwrap(), &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+/// assert_eq!(nd_arr.as_slice().expect("Failed to get slice from ndarray"), &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
 /// ```
 pub fn to_ndarray<T>(arr: &Array<T>) -> Result<ArrayD<T>>
 where
@@ -100,10 +101,11 @@ mod tests {
     #[test]
     fn test_from_ndarray_2d() {
         // Create a 2D ndarray
-        let nd_arr = Array2::from_shape_vec((2, 3), vec![1, 2, 3, 4, 5, 6]).unwrap();
+        let nd_arr = Array2::from_shape_vec((2, 3), vec![1, 2, 3, 4, 5, 6])
+            .expect("Failed to create ndarray from shape and vec");
 
         // Convert to NumRS Array
-        let num_arr = from_ndarray(&nd_arr).unwrap();
+        let num_arr = from_ndarray(&nd_arr).expect("Failed to convert from ndarray");
 
         assert_eq!(num_arr.shape(), vec![2, 3]);
         assert_eq!(num_arr.to_vec(), vec![1, 2, 3, 4, 5, 6]);
@@ -115,10 +117,13 @@ mod tests {
         let num_arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 
         // Convert to ndarray
-        let nd_arr = to_ndarray(&num_arr).unwrap();
+        let nd_arr = to_ndarray(&num_arr).expect("Failed to convert to ndarray");
 
         assert_eq!(nd_arr.shape(), &[2, 3]);
-        assert_eq!(nd_arr.as_slice().unwrap(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(
+            nd_arr.as_slice().expect("Failed to get slice from ndarray"),
+            &[1, 2, 3, 4, 5, 6]
+        );
     }
 
     #[test]
@@ -127,8 +132,8 @@ mod tests {
         let original = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
         // Convert to ndarray and back
-        let nd_arr = to_ndarray(&original).unwrap();
-        let round_trip = from_ndarray(&nd_arr).unwrap();
+        let nd_arr = to_ndarray(&original).expect("Failed to convert to ndarray");
+        let round_trip = from_ndarray(&nd_arr).expect("Failed to convert from ndarray");
 
         assert_eq!(original.shape(), round_trip.shape());
         assert_eq!(original.to_vec(), round_trip.to_vec());

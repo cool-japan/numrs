@@ -973,7 +973,7 @@ mod tests {
 
         let view = view_system
             .create_optimized_view(&data, &shape, &operations)
-            .unwrap();
+            .expect("test: operation should succeed");
         assert_eq!(view.shape().dims, vec![2, 3]);
     }
 
@@ -982,9 +982,11 @@ mod tests {
         let engine = ShapeEngine::new();
         let data = vec![1, 2, 3, 4];
         let shape = Shape::new(vec![1, 2, 1, 2]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let squeezed = engine.squeeze_view(&view, None).unwrap();
+        let squeezed = engine
+            .squeeze_view(&view, None)
+            .expect("test: operation should succeed");
         assert_eq!(squeezed.shape().dims, vec![2, 2]);
     }
 
@@ -993,9 +995,11 @@ mod tests {
         let engine = ShapeEngine::new();
         let data = vec![1, 2, 3, 4];
         let shape = Shape::new(vec![2, 2]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let expanded = engine.expand_dims_view(&view, vec![1]).unwrap();
+        let expanded = engine
+            .expand_dims_view(&view, vec![1])
+            .expect("test: operation should succeed");
         assert_eq!(expanded.shape().dims, vec![2, 1, 2]);
     }
 }

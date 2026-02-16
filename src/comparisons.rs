@@ -35,7 +35,12 @@ pub fn allclose<T>(a: &Array<T>, b: &Array<T>) -> bool
 where
     T: Clone + Float + Debug,
 {
-    allclose_with_tol(a, b, T::from(1e-7).unwrap(), T::zero())
+    allclose_with_tol(
+        a,
+        b,
+        T::from(1e-7).expect("Failed to convert 1e-7 to type T"),
+        T::zero(),
+    )
 }
 
 /// Determine if two arrays are element-wise equal within specified tolerances
@@ -500,12 +505,16 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::error::Result;
 ///
-/// let a = Array::from_vec(vec![1, 2, 3]);
-/// let b = Array::from_vec(vec![0, 2, 4]);
+/// fn main() -> Result<()> {
+///     let a = Array::from_vec(vec![1, 2, 3]);
+///     let b = Array::from_vec(vec![0, 2, 4]);
 ///
-/// let result = greater(&a, &b).unwrap();
-/// assert_eq!(result.to_vec(), vec![true, false, false]);
+///     let result = greater(&a, &b)?;
+///     assert_eq!(result.to_vec(), vec![true, false, false]);
+///     Ok(())
+/// }
 /// ```
 pub fn greater<T>(a: &Array<T>, b: &Array<T>) -> Result<Array<bool>>
 where
@@ -864,11 +873,15 @@ where
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::error::Result;
 ///
-/// let a = Array::from_vec(vec![true, true, false, false]);
-/// let b = Array::from_vec(vec![true, false, true, false]);
-/// let result = logical_and(&a, &b).unwrap();
-/// assert_eq!(result.to_vec(), vec![true, false, false, false]);
+/// fn main() -> Result<()> {
+///     let a = Array::from_vec(vec![true, true, false, false]);
+///     let b = Array::from_vec(vec![true, false, true, false]);
+///     let result = logical_and(&a, &b)?;
+///     assert_eq!(result.to_vec(), vec![true, false, false, false]);
+///     Ok(())
+/// }
 /// ```
 pub fn logical_and(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
     // Broadcast arrays to common shape
@@ -902,11 +915,15 @@ pub fn logical_and(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::error::Result;
 ///
-/// let a = Array::from_vec(vec![true, true, false, false]);
-/// let b = Array::from_vec(vec![true, false, true, false]);
-/// let result = logical_or(&a, &b).unwrap();
-/// assert_eq!(result.to_vec(), vec![true, true, true, false]);
+/// fn main() -> Result<()> {
+///     let a = Array::from_vec(vec![true, true, false, false]);
+///     let b = Array::from_vec(vec![true, false, true, false]);
+///     let result = logical_or(&a, &b)?;
+///     assert_eq!(result.to_vec(), vec![true, true, true, false]);
+///     Ok(())
+/// }
 /// ```
 pub fn logical_or(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
     // Broadcast arrays to common shape
@@ -939,10 +956,14 @@ pub fn logical_or(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::error::Result;
 ///
-/// let a = Array::from_vec(vec![true, false, true, false]);
-/// let result = logical_not(&a).unwrap();
-/// assert_eq!(result.to_vec(), vec![false, true, false, true]);
+/// fn main() -> Result<()> {
+///     let a = Array::from_vec(vec![true, false, true, false]);
+///     let result = logical_not(&a)?;
+///     assert_eq!(result.to_vec(), vec![false, true, false, true]);
+///     Ok(())
+/// }
 /// ```
 pub fn logical_not(x: &Array<bool>) -> Result<Array<bool>> {
     // Apply logical NOT element-wise
@@ -966,11 +987,15 @@ pub fn logical_not(x: &Array<bool>) -> Result<Array<bool>> {
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::error::Result;
 ///
-/// let a = Array::from_vec(vec![true, true, false, false]);
-/// let b = Array::from_vec(vec![true, false, true, false]);
-/// let result = logical_xor(&a, &b).unwrap();
-/// assert_eq!(result.to_vec(), vec![false, true, true, false]);
+/// fn main() -> Result<()> {
+///     let a = Array::from_vec(vec![true, true, false, false]);
+///     let b = Array::from_vec(vec![true, false, true, false]);
+///     let result = logical_xor(&a, &b)?;
+///     assert_eq!(result.to_vec(), vec![false, true, true, false]);
+///     Ok(())
+/// }
 /// ```
 pub fn logical_xor(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
     // Broadcast arrays to common shape
@@ -1005,21 +1030,25 @@ pub fn logical_xor(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::comparisons::count_nonzero;
+/// use numrs2::error::Result;
 ///
-/// let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
-/// assert_eq!(count_nonzero(&a, None).unwrap().to_vec()[0], 3);
+/// fn main() -> Result<()> {
+///     let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
+///     assert_eq!(count_nonzero(&a, None)?.to_vec()[0], 3);
 ///
-/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
-/// // Count over all elements
-/// assert_eq!(count_nonzero(&b, None).unwrap().to_vec()[0], 3);
+///     let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
+///     // Count over all elements
+///     assert_eq!(count_nonzero(&b, None)?.to_vec()[0], 3);
 ///
-/// // Count along axis 0 (columns)
-/// let c = count_nonzero(&b, Some(0)).unwrap();
-/// assert_eq!(c.to_vec(), vec![1, 1, 1]);
+///     // Count along axis 0 (columns)
+///     let c = count_nonzero(&b, Some(0))?;
+///     assert_eq!(c.to_vec(), vec![1, 1, 1]);
 ///
-/// // Count along axis 1 (rows)  
-/// let d = count_nonzero(&b, Some(1)).unwrap();
-/// assert_eq!(d.to_vec(), vec![1, 2]);
+///     // Count along axis 1 (rows)
+///     let d = count_nonzero(&b, Some(1))?;
+///     assert_eq!(d.to_vec(), vec![1, 2]);
+///     Ok(())
+/// }
 /// ```
 pub fn count_nonzero<T>(a: &Array<T>, axis: Option<usize>) -> Result<Array<usize>>
 where
@@ -1089,14 +1118,18 @@ where
 /// ```
 /// use numrs2::prelude::*;
 /// use numrs2::comparisons::flatnonzero;
+/// use numrs2::error::Result;
 ///
-/// let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
-/// let indices = flatnonzero(&a).unwrap();
-/// assert_eq!(indices.to_vec(), vec![1, 3, 5]);
+/// fn main() -> Result<()> {
+///     let a = Array::from_vec(vec![0, 1, 0, 3, 0, 5]);
+///     let indices = flatnonzero(&a)?;
+///     assert_eq!(indices.to_vec(), vec![1, 3, 5]);
 ///
-/// let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
-/// let indices = flatnonzero(&b).unwrap();
-/// assert_eq!(indices.to_vec(), vec![1, 3, 5]);
+///     let b = Array::from_vec(vec![0.0, 1.0, 0.0, 3.0, 0.0, 5.0]).reshape(&[2, 3]);
+///     let indices = flatnonzero(&b)?;
+///     assert_eq!(indices.to_vec(), vec![1, 3, 5]);
+///     Ok(())
+/// }
 /// ```
 pub fn flatnonzero<T>(a: &Array<T>) -> Result<Array<usize>>
 where
@@ -1178,27 +1211,27 @@ mod tests {
         let b = Array::from_vec(vec![0, 2, 4]);
 
         // Test greater
-        let result = greater(&a, &b).unwrap();
+        let result = greater(&a, &b).expect("greater comparison should succeed");
         assert_eq!(result.to_vec(), vec![true, false, false]);
 
         // Test greater_equal
-        let result = greater_equal(&a, &b).unwrap();
+        let result = greater_equal(&a, &b).expect("greater_equal comparison should succeed");
         assert_eq!(result.to_vec(), vec![true, true, false]);
 
         // Test less
-        let result = less(&a, &b).unwrap();
+        let result = less(&a, &b).expect("less comparison should succeed");
         assert_eq!(result.to_vec(), vec![false, false, true]);
 
         // Test less_equal
-        let result = less_equal(&a, &b).unwrap();
+        let result = less_equal(&a, &b).expect("less_equal comparison should succeed");
         assert_eq!(result.to_vec(), vec![false, true, true]);
 
         // Test equal
-        let result = equal(&a, &b).unwrap();
+        let result = equal(&a, &b).expect("equal comparison should succeed");
         assert_eq!(result.to_vec(), vec![false, true, false]);
 
         // Test not_equal
-        let result = not_equal(&a, &b).unwrap();
+        let result = not_equal(&a, &b).expect("not_equal comparison should succeed");
         assert_eq!(result.to_vec(), vec![true, false, true]);
     }
 
@@ -1208,14 +1241,14 @@ mod tests {
         let b = Array::from_vec(vec![1]).reshape(&[1]);
 
         // Test broadcasting
-        let result = equal(&a, &b).unwrap();
+        let result = equal(&a, &b).expect("broadcast equal should succeed");
         assert_eq!(result.to_vec(), vec![true, false, false]);
 
         // Test with 2D arrays
         let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
         let d = Array::from_vec(vec![1, 2]).reshape(&[1, 2]);
 
-        let result = equal(&c, &d).unwrap();
+        let result = equal(&c, &d).expect("2D broadcast equal should succeed");
         assert_eq!(result.shape(), vec![2, 2]);
         assert_eq!(result.to_vec(), vec![true, true, false, false]);
     }
@@ -1226,11 +1259,12 @@ mod tests {
         let b = Array::from_vec(vec![1.0000001, 2.0000002, 3.0000003]);
 
         // Default tolerances
-        let result = isclose_array(&a, &b, 1e-7, 0.0).unwrap();
+        let result = isclose_array(&a, &b, 1e-7, 0.0).expect("isclose_array should succeed");
         assert_eq!(result.to_vec(), vec![true, true, true]);
 
         // Stricter tolerances
-        let result = isclose_array(&a, &b, 1e-10, 0.0).unwrap();
+        let result = isclose_array(&a, &b, 1e-10, 0.0)
+            .expect("isclose_array with strict tol should succeed");
         assert_eq!(result.to_vec(), vec![false, false, false]);
     }
 }

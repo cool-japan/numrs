@@ -50,7 +50,7 @@ where
 
     // Compute scaling factors for balancing
     let max_iterations = 5; // Usually 5-10 iterations is enough
-    let tol = num_traits::NumCast::from(0.95).unwrap(); // Convergence tolerance
+    let tol = num_traits::NumCast::from(0.95).expect("0.95 should convert to float type"); // Convergence tolerance
 
     for _ in 0..max_iterations {
         let mut converged = true;
@@ -168,7 +168,10 @@ where
                             h.set(
                                 &[i + k + 1, l + k + 1],
                                 h_val
-                                    - <T as num_traits::NumCast>::from(2.0).unwrap() * v[i] * w[l],
+                                    - <T as num_traits::NumCast>::from(2.0)
+                                        .expect("2.0 should convert to float type")
+                                        * v[i]
+                                        * w[l],
                             )?;
                         }
                     }
@@ -186,7 +189,8 @@ where
                         q.set(
                             &[i, j],
                             q_val
-                                - <T as num_traits::NumCast>::from(2.0).unwrap()
+                                - <T as num_traits::NumCast>::from(2.0)
+                                    .expect("2.0 should convert to float type")
                                     * q_row_dot_v
                                     * v[j - k - 1],
                         )?;
@@ -201,7 +205,8 @@ where
     // A full implementation would use double shifts and deflation
     let max_iterations = 50 * n; // Set a reasonable limit
     let mut iterations = 0;
-    let tol = T::epsilon() * num_traits::NumCast::from(n * 10).unwrap();
+    let tol = T::epsilon()
+        * num_traits::NumCast::from(n * 10).expect("n * 10 should convert to float type");
 
     while iterations < max_iterations {
         // Check if we're done (H is already in Schur form)

@@ -35,7 +35,7 @@ use std::fmt::Debug;
 /// use numrs2::prelude::*;
 ///
 /// // Calculate future value of $1000 invested for 10 periods at 5% interest
-/// let result = fv(0.05, 10.0, 0.0, -1000.0, 0).unwrap();
+/// let result = fv(0.05, 10.0, 0.0, -1000.0, 0).expect("fv calculation failed");
 /// assert!((result - 1628.895_f64).abs() < 0.001);
 /// ```
 pub fn fv<T>(rate: T, nper: T, pmt: T, pv: T, when: i32) -> Result<T>
@@ -84,7 +84,7 @@ where
 /// let pmts = Array::from_vec(vec![0.0, 0.0, 0.0]);
 /// let pvs = Array::from_vec(vec![-1000.0, -2000.0, -3000.0]);
 ///
-/// let result = fv_array(&rates, &npers, &pmts, &pvs, 0).unwrap();
+/// let result = fv_array(&rates, &npers, &pmts, &pvs, 0).expect("fv_array calculation failed");
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
 pub fn fv_array<T>(
@@ -127,35 +127,35 @@ mod tests {
     #[test]
     fn test_fv_basic_lump_sum() {
         // Test basic future value calculation for lump sum
-        let result = fv(0.05, 10.0, 0.0, -1000.0, 0).unwrap();
+        let result = fv(0.05, 10.0, 0.0, -1000.0, 0).expect("fv calculation should succeed");
         assert_relative_eq!(result, 1628.8946, epsilon = 1e-4);
     }
 
     #[test]
     fn test_fv_annuity() {
         // Test future value of annuity
-        let result = fv(0.05, 10.0, -100.0, 0.0, 0).unwrap();
+        let result = fv(0.05, 10.0, -100.0, 0.0, 0).expect("fv calculation should succeed");
         assert_relative_eq!(result, 1257.7893, epsilon = 1e-4);
     }
 
     #[test]
     fn test_fv_combined() {
         // Test future value with both present value and payments
-        let result = fv(0.05, 10.0, -100.0, -1000.0, 0).unwrap();
+        let result = fv(0.05, 10.0, -100.0, -1000.0, 0).expect("fv calculation should succeed");
         assert_relative_eq!(result, 2886.6839, epsilon = 1e-4);
     }
 
     #[test]
     fn test_fv_beginning_of_period() {
         // Test future value with payments at beginning of period
-        let result = fv(0.05, 10.0, -100.0, 0.0, 1).unwrap();
+        let result = fv(0.05, 10.0, -100.0, 0.0, 1).expect("fv calculation should succeed");
         assert_relative_eq!(result, 1320.6787, epsilon = 1e-4);
     }
 
     #[test]
     fn test_fv_zero_rate() {
         // Test future value with zero interest rate
-        let result = fv(0.0, 10.0, -100.0, -1000.0, 0).unwrap();
+        let result = fv(0.0, 10.0, -100.0, -1000.0, 0).expect("fv calculation should succeed");
         assert_relative_eq!(result, 2000.0, epsilon = 1e-9);
     }
 
@@ -166,7 +166,8 @@ mod tests {
         let pmts = Array::from_vec(vec![0.0, 0.0]);
         let pvs = Array::from_vec(vec![-1000.0, -2000.0]);
 
-        let result = fv_array(&rates, &npers, &pmts, &pvs, 0).unwrap();
+        let result =
+            fv_array(&rates, &npers, &pmts, &pvs, 0).expect("fv_array calculation should succeed");
         assert_eq!(result.shape(), vec![2]);
 
         let values = result.to_vec();

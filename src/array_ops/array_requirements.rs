@@ -22,11 +22,11 @@ use crate::error::Result;
 /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 ///
 /// // Require a C-contiguous array (row-major order)
-/// let b = require(&a, Some(ArrayRequirements::CONTIGUOUS | ArrayRequirements::C_LAYOUT)).unwrap();
+/// let b = require(&a, Some(ArrayRequirements::CONTIGUOUS | ArrayRequirements::C_LAYOUT)).expect("operation should succeed");
 /// assert!(b.is_c_contiguous());
 ///
 /// // Require a Fortran-contiguous array (column-major order)
-/// let c = require(&a, Some(ArrayRequirements::CONTIGUOUS | ArrayRequirements::F_LAYOUT)).unwrap();
+/// let c = require(&a, Some(ArrayRequirements::CONTIGUOUS | ArrayRequirements::F_LAYOUT)).expect("operation should succeed");
 /// assert!(c.is_f_contiguous());
 /// ```
 pub fn require<T: Clone>(

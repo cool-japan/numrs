@@ -219,7 +219,7 @@ where
 {
     // Process data in chunks using parallel iterators
     data.as_slice()
-        .unwrap()
+        .expect("ArrayView1 should be contiguous")
         .par_chunks(chunk_size)
         .map(processor)
         .collect()
@@ -647,12 +647,13 @@ mod tests {
         let a = array![[1.0f32, 2.0], [3.0, 4.0]];
         let b = array![[5.0f32, 6.0], [7.0, 8.0]];
 
-        let result = simd_matmul(&a.view(), &b.view()).unwrap();
+        let result = simd_matmul(&a.view(), &b.view())
+            .expect("simd_matmul should succeed for compatible matrices");
 
         // Expected: [[1*5+2*7, 1*6+2*8], [3*5+4*7, 3*6+4*8]]
         //         = [[19, 22], [43, 50]]
         assert_eq!(result.shape(), &[2, 2]);
-        let result_2d = result.view_2d().unwrap();
+        let result_2d = result.view_2d().expect("result should be 2D array");
         assert_eq!(result_2d[[0, 0]], 19.0);
         assert_eq!(result_2d[[0, 1]], 22.0);
         assert_eq!(result_2d[[1, 0]], 43.0);
@@ -664,7 +665,8 @@ mod tests {
         let a = array![1.0, 2.0, 3.0, 4.0];
         let b = array![5.0, 6.0, 7.0, 8.0];
 
-        let result = simd_elementwise_ops(&a.view(), &b.view()).unwrap();
+        let result = simd_elementwise_ops(&a.view(), &b.view())
+            .expect("simd_elementwise_ops should succeed for equal length arrays");
 
         let add_vec = result.add.to_vec();
         let sub_vec = result.sub.to_vec();
@@ -810,8 +812,8 @@ mod tests {
     fn test_process_large_array() {
         let large_data = Array1::from_vec((0..1000).map(|x| x as f64).collect());
 
-        let result =
-            process_large_array(&large_data.view(), 100, |chunk| chunk.map(|&x| x * 2.0)).unwrap();
+        let result = process_large_array(&large_data.view(), 100, |chunk| chunk.map(|&x| x * 2.0))
+            .expect("process_large_array should succeed");
 
         assert_eq!(result.len(), 1000);
         assert_eq!(result[0], 0.0);

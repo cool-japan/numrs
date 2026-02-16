@@ -18,11 +18,15 @@ where
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-    /// let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
-    /// let result = a.less_than(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![true, false, false]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+    ///     let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
+    ///     let result = a.less_than(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![true, false, false]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn less_than(&self, other: &Array<T>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -39,11 +43,15 @@ where
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-    /// let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
-    /// let result = a.less_equal(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![true, true, false]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+    ///     let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
+    ///     let result = a.less_equal(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![true, true, false]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn less_equal(&self, other: &Array<T>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -64,11 +72,15 @@ where
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-    /// let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
-    /// let result = a.greater_than(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![false, false, true]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+    ///     let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
+    ///     let result = a.greater_than(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![false, false, true]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn greater_than(&self, other: &Array<T>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -85,11 +97,15 @@ where
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-    /// let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
-    /// let result = a.greater_equal(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![false, true, true]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+    ///     let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
+    ///     let result = a.greater_equal(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![false, true, true]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn greater_equal(&self, other: &Array<T>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -115,11 +131,15 @@ where
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-    /// let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
-    /// let result = a.equal(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![false, true, false]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+    ///     let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
+    ///     let result = a.equal(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![false, true, false]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn equal(&self, other: &Array<T>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -140,11 +160,15 @@ where
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-    /// let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
-    /// let result = a.not_equal(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![true, false, true]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+    ///     let b = Array::from_vec(vec![2.0, 2.0, 2.0]);
+    ///     let result = a.not_equal(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![true, false, true]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn not_equal(&self, other: &Array<T>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -168,11 +192,15 @@ impl Array<bool> {
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![true, true, false, false]);
-    /// let b = Array::from_vec(vec![true, false, true, false]);
-    /// let result = a.logical_and(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![true, false, false, false]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![true, true, false, false]);
+    ///     let b = Array::from_vec(vec![true, false, true, false]);
+    ///     let result = a.logical_and(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![true, false, false, false]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn logical_and(&self, other: &Array<bool>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -193,11 +221,15 @@ impl Array<bool> {
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![true, true, false, false]);
-    /// let b = Array::from_vec(vec![true, false, true, false]);
-    /// let result = a.logical_or(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![true, true, true, false]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![true, true, false, false]);
+    ///     let b = Array::from_vec(vec![true, false, true, false]);
+    ///     let result = a.logical_or(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![true, true, true, false]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn logical_or(&self, other: &Array<bool>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -218,11 +250,15 @@ impl Array<bool> {
     ///
     /// ```
     /// use numrs2::prelude::*;
+    /// use numrs2::error::Result;
     ///
-    /// let a = Array::from_vec(vec![true, true, false, false]);
-    /// let b = Array::from_vec(vec![true, false, true, false]);
-    /// let result = a.logical_xor(&b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![false, true, true, false]);
+    /// fn main() -> Result<()> {
+    ///     let a = Array::from_vec(vec![true, true, false, false]);
+    ///     let b = Array::from_vec(vec![true, false, true, false]);
+    ///     let result = a.logical_xor(&b)?;
+    ///     assert_eq!(result.to_vec(), vec![false, true, true, false]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn logical_xor(&self, other: &Array<bool>) -> Result<Array<bool>> {
         self.broadcast_op(other, |a, b| {
@@ -261,7 +297,7 @@ mod tests {
     fn test_less_than_broadcast() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0]).reshape(&[1, 3]);
         let b = Array::from_vec(vec![2.0, 2.0, 2.0]).reshape(&[3, 1]);
-        let result = a.less_than(&b).unwrap();
+        let result = a.less_than(&b).expect("less_than broadcast should succeed");
         assert_eq!(result.shape(), vec![3, 3]);
     }
 
@@ -269,7 +305,7 @@ mod tests {
     fn test_equal_broadcast() {
         let a = Array::from_vec(vec![1, 2, 3]);
         let b = Array::from_vec(vec![2, 2, 2]);
-        let result = a.equal(&b).unwrap();
+        let result = a.equal(&b).expect("equal comparison should succeed");
         assert_eq!(result.to_vec(), vec![false, true, false]);
     }
 
@@ -277,7 +313,7 @@ mod tests {
     fn test_logical_and() {
         let a = Array::from_vec(vec![true, true, false, false]);
         let b = Array::from_vec(vec![true, false, true, false]);
-        let result = a.logical_and(&b).unwrap();
+        let result = a.logical_and(&b).expect("logical_and should succeed");
         assert_eq!(result.to_vec(), vec![true, false, false, false]);
     }
 

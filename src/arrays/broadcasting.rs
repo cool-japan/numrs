@@ -44,6 +44,12 @@ pub enum MemoryOptimization {
 }
 
 /// Broadcasting engine for efficient array operations
+///
+/// CACHE ALIGNMENT: Aligned to 64-byte cache lines for optimal performance.
+/// The engine is frequently accessed in parallel broadcasting operations,
+/// and cache alignment ensures efficient memory access patterns and reduces
+/// cache misses when processing large arrays.
+#[repr(align(64))]
 pub struct BroadcastEngine {
     config: BroadcastConfig,
 }
@@ -696,11 +702,13 @@ mod tests {
         // Test with simple arrays
         let data_a = vec![1.0, 2.0, 3.0];
         let shape_a = Shape::from_1d(3);
-        let view_a = ArrayView::from_data(&data_a, shape_a).unwrap();
+        let view_a =
+            ArrayView::from_data(&data_a, shape_a).expect("test: operation should succeed");
 
         let data_b = vec![10.0];
         let shape_b = Shape::from_1d(1);
-        let view_b = ArrayView::from_data(&data_b, shape_b).unwrap();
+        let view_b =
+            ArrayView::from_data(&data_b, shape_b).expect("test: operation should succeed");
 
         assert!(engine.can_broadcast(view_a.shape(), view_b.shape()));
     }
@@ -711,13 +719,17 @@ mod tests {
 
         let data_a = vec![1.0, 2.0, 3.0];
         let shape_a = Shape::from_1d(3);
-        let view_a = ArrayView::from_data(&data_a, shape_a).unwrap();
+        let view_a =
+            ArrayView::from_data(&data_a, shape_a).expect("test: operation should succeed");
 
         let data_b = vec![10.0];
         let shape_b = Shape::from_1d(1);
-        let view_b = ArrayView::from_data(&data_b, shape_b).unwrap();
+        let view_b =
+            ArrayView::from_data(&data_b, shape_b).expect("test: operation should succeed");
 
-        let result = engine.add(&view_a, &view_b).unwrap();
+        let result = engine
+            .add(&view_a, &view_b)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![11.0, 12.0, 13.0]);
     }
 
@@ -727,13 +739,17 @@ mod tests {
 
         let data_a = vec![1.0, 2.0, 3.0, 4.0];
         let shape_a = Shape::from_2d(2, 2);
-        let view_a = ArrayView::from_data(&data_a, shape_a).unwrap();
+        let view_a =
+            ArrayView::from_data(&data_a, shape_a).expect("test: operation should succeed");
 
         let data_b = vec![2.0, 3.0];
         let shape_b = Shape::from_1d(2);
-        let view_b = ArrayView::from_data(&data_b, shape_b).unwrap();
+        let view_b =
+            ArrayView::from_data(&data_b, shape_b).expect("test: operation should succeed");
 
-        let result = engine.multiply(&view_a, &view_b).unwrap();
+        let result = engine
+            .multiply(&view_a, &view_b)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![2.0, 6.0, 6.0, 12.0]);
     }
 
@@ -743,12 +759,16 @@ mod tests {
 
         let data = vec![1.0, 2.0, 3.0, 4.0];
         let shape = Shape::from_2d(2, 2);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let result = engine.add_scalar(&view, 5.0).unwrap();
+        let result = engine
+            .add_scalar(&view, 5.0)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![6.0, 7.0, 8.0, 9.0]);
 
-        let result = engine.multiply_scalar(&view, 2.0).unwrap();
+        let result = engine
+            .multiply_scalar(&view, 2.0)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![2.0, 4.0, 6.0, 8.0]);
     }
 
@@ -758,16 +778,22 @@ mod tests {
 
         let data_a = vec![1.0, 2.0, 3.0, 4.0];
         let shape_a = Shape::from_1d(4);
-        let view_a = ArrayView::from_data(&data_a, shape_a).unwrap();
+        let view_a =
+            ArrayView::from_data(&data_a, shape_a).expect("test: operation should succeed");
 
         let data_b = vec![2.5];
         let shape_b = Shape::from_1d(1);
-        let view_b = ArrayView::from_data(&data_b, shape_b).unwrap();
+        let view_b =
+            ArrayView::from_data(&data_b, shape_b).expect("test: operation should succeed");
 
-        let result = engine.greater(&view_a, &view_b).unwrap();
+        let result = engine
+            .greater(&view_a, &view_b)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![false, false, true, true]);
 
-        let result = engine.less(&view_a, &view_b).unwrap();
+        let result = engine
+            .less(&view_a, &view_b)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![true, true, false, false]);
     }
 
@@ -778,16 +804,22 @@ mod tests {
         // Test with compatible shapes for broadcasting
         let data_a = vec![true, false, true, false];
         let shape_a = Shape::from_2d(2, 2);
-        let view_a = ArrayView::from_data(&data_a, shape_a).unwrap();
+        let view_a =
+            ArrayView::from_data(&data_a, shape_a).expect("test: operation should succeed");
 
         let data_b = vec![true, false];
         let shape_b = Shape::from_2d(1, 2); // Shape [1, 2] can broadcast to [2, 2]
-        let view_b = ArrayView::from_data(&data_b, shape_b).unwrap();
+        let view_b =
+            ArrayView::from_data(&data_b, shape_b).expect("test: operation should succeed");
 
-        let result = engine.logical_and(&view_a, &view_b).unwrap();
+        let result = engine
+            .logical_and(&view_a, &view_b)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![true, false, true, false]);
 
-        let result = engine.logical_or(&view_a, &view_b).unwrap();
+        let result = engine
+            .logical_or(&view_a, &view_b)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![true, false, true, false]);
     }
 
@@ -798,22 +830,30 @@ mod tests {
 
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let shape = Shape::from_2d(2, 3);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         // Sum all elements
-        let result = reduction.sum(&view, None).unwrap();
+        let result = reduction
+            .sum(&view, None)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![21.0]);
 
         // Mean of all elements
-        let result = reduction.mean(&view, None).unwrap();
+        let result = reduction
+            .mean(&view, None)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![3.5]);
 
         // Max of all elements
-        let result = reduction.max(&view, None).unwrap();
+        let result = reduction
+            .max(&view, None)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![6.0]);
 
         // Min of all elements
-        let result = reduction.min(&view, None).unwrap();
+        let result = reduction
+            .min(&view, None)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![1.0]);
     }
 
@@ -826,7 +866,9 @@ mod tests {
 
         assert!(engine.can_broadcast(&shape1, &shape2));
 
-        let result_shape = engine.broadcast_shape(&shape1, &shape2).unwrap();
+        let result_shape = engine
+            .broadcast_shape(&shape1, &shape2)
+            .expect("test: operation should succeed");
         assert_eq!(result_shape.dims, vec![3, 2, 4]);
     }
 }

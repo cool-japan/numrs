@@ -188,7 +188,7 @@ where
         for j in 0..n {
             let val = p.get(&[i, j])?;
             // P matrix has a 1 in each row indicating the permuted position
-            if val.to_f64().unwrap() > 0.5 {
+            if val.to_f64().unwrap_or(0.0) > 0.5 {
                 perm.set(&[i], j)?;
                 break;
             }
@@ -272,13 +272,13 @@ mod tests {
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
         let mut c = Array::zeros(&[2, 2]);
 
-        OptimizedBlas::gemm(&a, &b, &mut c, 1.0, 0.0, false, false).unwrap();
+        OptimizedBlas::gemm(&a, &b, &mut c, 1.0, 0.0, false, false).expect("gemm should succeed");
 
         // Expected result: [[19, 22], [43, 50]]
-        assert_relative_eq!(c.get(&[0, 0]).unwrap(), 19.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[0, 1]).unwrap(), 22.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 0]).unwrap(), 43.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 1]).unwrap(), 50.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 0]).expect("valid index"), 19.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 1]).expect("valid index"), 22.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 0]).expect("valid index"), 43.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 1]).expect("valid index"), 50.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -287,11 +287,11 @@ mod tests {
         let x = Array::from_vec(vec![1.0f64, 2.0]);
         let mut y = Array::zeros(&[2]);
 
-        OptimizedBlas::gemv(&a, &x, &mut y, 1.0, 0.0, false).unwrap();
+        OptimizedBlas::gemv(&a, &x, &mut y, 1.0, 0.0, false).expect("gemv should succeed");
 
         // Expected result: [5, 11]
-        assert_relative_eq!(y.get(&[0]).unwrap(), 5.0, epsilon = 1e-10);
-        assert_relative_eq!(y.get(&[1]).unwrap(), 11.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[0]).expect("valid index"), 5.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[1]).expect("valid index"), 11.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -299,7 +299,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0f64, 2.0, 3.0]);
         let y = Array::from_vec(vec![4.0f64, 5.0, 6.0]);
 
-        let result = OptimizedBlas::dot(&x, &y).unwrap();
+        let result = OptimizedBlas::dot(&x, &y).expect("dot product should succeed");
 
         // Expected result: 1*4 + 2*5 + 3*6 = 32
         assert_relative_eq!(result, 32.0, epsilon = 1e-10);
@@ -309,27 +309,43 @@ mod tests {
     fn test_lu_optimized() {
         let a = Array::from_vec(vec![2.0f64, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
 
-        let (l, u, _p) = lu_optimized(&a).unwrap();
+        let (l, u, _p) = lu_optimized(&a).expect("LU decomposition should succeed");
 
         // Verify L is lower triangular with 1s on diagonal
-        assert_relative_eq!(l.get(&[0, 0]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(&[1, 1]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(&[0, 1]).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(&[0, 0]).expect("valid index"), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(&[1, 1]).expect("valid index"), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(&[0, 1]).expect("valid index"), 0.0, epsilon = 1e-10);
 
         // Verify U is upper triangular
-        assert_relative_eq!(u.get(&[1, 0]).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(u.get(&[1, 0]).expect("valid index"), 0.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_transpose_optimized() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
-        let result = transpose_optimized(&a).unwrap();
+        let result = transpose_optimized(&a).expect("transpose should succeed");
 
-        assert_relative_eq!(result.get(&[0, 0]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(result.get(&[0, 1]).unwrap(), 3.0, epsilon = 1e-10);
-        assert_relative_eq!(result.get(&[1, 0]).unwrap(), 2.0, epsilon = 1e-10);
-        assert_relative_eq!(result.get(&[1, 1]).unwrap(), 4.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            result.get(&[0, 0]).expect("valid index"),
+            1.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            result.get(&[0, 1]).expect("valid index"),
+            3.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            result.get(&[1, 0]).expect("valid index"),
+            2.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            result.get(&[1, 1]).expect("valid index"),
+            4.0,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
@@ -337,12 +353,12 @@ mod tests {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 
-        let c = matmul_optimized(&a, &b).unwrap();
+        let c = matmul_optimized(&a, &b).expect("matmul should succeed");
 
-        assert_relative_eq!(c.get(&[0, 0]).unwrap(), 19.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[0, 1]).unwrap(), 22.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 0]).unwrap(), 43.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 1]).unwrap(), 50.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 0]).expect("valid index"), 19.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 1]).expect("valid index"), 22.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 0]).expect("valid index"), 43.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 1]).expect("valid index"), 50.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -350,9 +366,9 @@ mod tests {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let x = Array::from_vec(vec![1.0f64, 2.0]);
 
-        let y = matvec_optimized(&a, &x).unwrap();
+        let y = matvec_optimized(&a, &x).expect("matvec should succeed");
 
-        assert_relative_eq!(y.get(&[0]).unwrap(), 5.0, epsilon = 1e-10);
-        assert_relative_eq!(y.get(&[1]).unwrap(), 11.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[0]).expect("valid index"), 5.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[1]).expect("valid index"), 11.0, epsilon = 1e-10);
     }
 }

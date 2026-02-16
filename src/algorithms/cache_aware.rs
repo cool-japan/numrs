@@ -357,7 +357,8 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
 
         // Scale by 1/n for inverse transform
         let scale = scirs2_core::Complex::new(
-            <T as NumericElement>::one() / T::from_f64(n as f64).unwrap(),
+            <T as NumericElement>::one()
+                / T::from_f64(n as f64).expect("Failed to convert FFT length to numeric type"),
             <T as NumericElement>::zero(),
         );
         for sample in data.iter_mut() {
@@ -393,12 +394,15 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
         self.fft_recursive(&mut odd, inverse)?;
 
         // Combine results with twiddle factors
-        let two_pi = T::from_f64(2.0 * std::f64::consts::PI).unwrap();
+        let two_pi = T::from_f64(2.0 * std::f64::consts::PI)
+            .expect("Failed to convert 2*PI to numeric type");
         for i in 0..n / 2 {
             let angle = if inverse {
-                two_pi * T::from_f64(i as f64).unwrap() / T::from_f64(n as f64).unwrap()
+                two_pi * T::from_f64(i as f64).expect("Failed to convert index to numeric type")
+                    / T::from_f64(n as f64).expect("Failed to convert length to numeric type")
             } else {
-                -two_pi * T::from_f64(i as f64).unwrap() / T::from_f64(n as f64).unwrap()
+                -two_pi * T::from_f64(i as f64).expect("Failed to convert index to numeric type")
+                    / T::from_f64(n as f64).expect("Failed to convert length to numeric type")
             };
 
             let cos_angle = angle.cos();
@@ -435,11 +439,14 @@ impl<T: FloatingPoint> CacheAwareFFT<T> {
         // Iterative FFT
         let mut length = 2;
         while length <= n {
-            let two_pi = T::from_f64(2.0 * std::f64::consts::PI).unwrap();
+            let two_pi = T::from_f64(2.0 * std::f64::consts::PI)
+                .expect("Failed to convert 2*PI to numeric type");
             let angle = if inverse {
-                two_pi / T::from_f64(length as f64).unwrap()
+                two_pi
+                    / T::from_f64(length as f64).expect("Failed to convert length to numeric type")
             } else {
-                -two_pi / T::from_f64(length as f64).unwrap()
+                -two_pi
+                    / T::from_f64(length as f64).expect("Failed to convert length to numeric type")
             };
 
             let cos_angle = angle.cos();
@@ -758,7 +765,8 @@ mod tests {
         let src = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let mut dst = vec![0.0; 6];
 
-        ops.transpose_blocked(&src, &mut dst, 2, 3).unwrap();
+        ops.transpose_blocked(&src, &mut dst, 2, 3)
+            .expect("Transpose should succeed");
 
         // Expected: [1, 4, 2, 5, 3, 6] (transpose of 2x3 -> 3x2)
         assert_eq!(dst, vec![1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
@@ -785,7 +793,7 @@ mod tests {
         let mut result = vec![0.0; 2];
 
         ops.matvec_blocked(&matrix, &vector, &mut result, 2, 2)
-            .unwrap();
+            .expect("Matrix-vector multiplication should succeed");
 
         // Expected: [3.0, 7.0] (matrix * vector)
         assert_eq!(result, vec![3.0, 7.0]);
@@ -797,7 +805,8 @@ mod tests {
         let ops = CacheAwareArrayOps::<i32>::new(config);
 
         let mut data = vec![5, 2, 8, 1, 9, 3];
-        ops.merge_sort_cache_oblivious(&mut data).unwrap();
+        ops.merge_sort_cache_oblivious(&mut data)
+            .expect("Cache-oblivious merge sort should succeed");
 
         assert_eq!(data, vec![1, 2, 3, 5, 8, 9]);
     }
@@ -814,7 +823,8 @@ mod tests {
             Complex::new(0.0, 0.0),
         ];
 
-        fft.fft_cache_oblivious(&mut data).unwrap();
+        fft.fft_cache_oblivious(&mut data)
+            .expect("Cache-oblivious FFT should succeed");
 
         // Should have non-zero values after FFT
         assert!(data.iter().any(|&x| x.norm() > 0.1));
@@ -830,7 +840,7 @@ mod tests {
         let mut output = vec![0.0; 4]; // 2x2 output
 
         conv.conv2d_blocked(&input, &kernel, &mut output, 2, 2, 1, 1)
-            .unwrap();
+            .expect("2D blocked convolution should succeed");
 
         // Identity convolution should preserve input
         assert_eq!(output, input);
@@ -874,7 +884,7 @@ mod tests {
         let mut output = vec![0.0; 4];
 
         conv.separable_conv2d(&input, &h_kernel, &v_kernel, &mut output, 2, 2)
-            .unwrap();
+            .expect("Separable 2D convolution should succeed");
 
         // Identity separable convolution
         assert_eq!(output, input);
@@ -890,7 +900,7 @@ mod tests {
         ops.optimize_stride_access(&mut data, 3, 3, |element, i, j| {
             *element = (i * 3 + j) as f32;
         })
-        .unwrap();
+        .expect("Stride optimization should succeed");
 
         // Check that elements were set correctly
         for i in 0..3 {

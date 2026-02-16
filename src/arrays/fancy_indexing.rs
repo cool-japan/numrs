@@ -32,6 +32,11 @@ impl Default for FancyIndexConfig {
 }
 
 /// Fancy indexing engine for advanced array access
+///
+/// CACHE ALIGNMENT: Aligned to 64-byte cache lines to optimize memory access.
+/// The config field is accessed on every indexing operation, and cache alignment
+/// ensures the structure fits within a single cache line for minimal memory latency.
+#[repr(align(64))]
 pub struct FancyIndexEngine {
     config: FancyIndexConfig,
 }
@@ -740,7 +745,7 @@ mod tests {
 
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_2d(2, 3);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         assert_eq!(view.shape().size(), 6);
     }
@@ -751,14 +756,14 @@ mod tests {
 
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let shape = Shape::new(vec![3, 3]);
-        let _view = ArrayView::from_data(&data, shape).unwrap();
+        let _view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let _row_indices = vec![0, 2, 1];
         let _col_indices = vec![1, 0, 2];
         let _indices = [_row_indices, _col_indices];
 
         // Skip the actual test for now due to implementation complexity
-        // let result = engine.index_with_arrays(&view, &indices).unwrap();
+        // let result = engine.index_with_arrays(&view, &indices).expect("test: operation should succeed");
         // assert_eq!(result, vec![2, 7, 6]); // elements at (0,1), (2,0), (1,2)
     }
 
@@ -768,10 +773,12 @@ mod tests {
 
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_1d(6);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let mask = vec![true, false, true, false, true, false];
-        let result = engine.index_with_boolean(&view, &mask).unwrap();
+        let result = engine
+            .index_with_boolean(&view, &mask)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![1, 3, 5]);
     }
 
@@ -781,9 +788,11 @@ mod tests {
 
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_1d(6);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let mask = engine.where_condition(&view, |x| x > 3).unwrap();
+        let mask = engine
+            .where_condition(&view, |x| x > 3)
+            .expect("test: operation should succeed");
         assert_eq!(mask, vec![false, false, false, true, true, true]);
     }
 
@@ -793,9 +802,11 @@ mod tests {
 
         let data = vec![0, 1, 0, 2, 0, 3];
         let shape = Shape::from_2d(2, 3);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let indices = engine.nonzero(&view, |x| x != 0).unwrap();
+        let indices = engine
+            .nonzero(&view, |x| x != 0)
+            .expect("test: operation should succeed");
         assert_eq!(indices[0], vec![0, 1, 1]); // row indices
         assert_eq!(indices[1], vec![1, 0, 2]); // col indices
     }
@@ -806,10 +817,12 @@ mod tests {
 
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_2d(2, 3);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let indices = vec![2, 0, 1]; // Take columns 2, 0, 1
-        let result = engine.take(&view, &indices, 1).unwrap();
+        let result = engine
+            .take(&view, &indices, 1)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![3, 1, 2, 6, 4, 5]);
     }
 
@@ -822,14 +835,18 @@ mod tests {
         let data3 = vec![100, 200, 300];
 
         let shape = Shape::from_1d(3);
-        let view1 = ArrayView::from_data(&data1, shape.clone()).unwrap();
-        let view2 = ArrayView::from_data(&data2, shape.clone()).unwrap();
-        let view3 = ArrayView::from_data(&data3, shape).unwrap();
+        let view1 =
+            ArrayView::from_data(&data1, shape.clone()).expect("test: operation should succeed");
+        let view2 =
+            ArrayView::from_data(&data2, shape.clone()).expect("test: operation should succeed");
+        let view3 = ArrayView::from_data(&data3, shape).expect("test: operation should succeed");
 
         let choices = vec![&view1, &view2, &view3];
         let index_array = vec![0, 2, 1]; // Choose from first, third, second arrays
 
-        let result = engine.choose(&choices, &index_array).unwrap();
+        let result = engine
+            .choose(&choices, &index_array)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![1, 200, 30]);
     }
 
@@ -839,14 +856,16 @@ mod tests {
 
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
         let shape = Shape::new(vec![3, 4]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let indices = vec![
             IndexSpec::Int(1),                           // Select row 1
             IndexSpec::Slice(Some(1), Some(3), Some(1)), // Select columns 1-2
         ];
 
-        let result = engine.advanced_index(&view, &indices).unwrap();
+        let result = engine
+            .advanced_index(&view, &indices)
+            .expect("test: operation should succeed");
         assert_eq!(result.data, vec![6, 7]); // elements at (1,1) and (1,2)
         assert_eq!(result.shape.dims, vec![2]); // 1D result
     }
@@ -855,10 +874,11 @@ mod tests {
     fn test_coordinate_indexing() {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let shape = Shape::new(vec![3, 3]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let coordinates = vec![vec![0, 2], vec![1, 0]];
-        let result = SpecializedIndexing::index_with_coordinates(&view, &coordinates).unwrap();
+        let result = SpecializedIndexing::index_with_coordinates(&view, &coordinates)
+            .expect("test: operation should succeed");
         assert_eq!(result, vec![2, 1, 8, 7]); // combinations of (0,1), (0,0), (2,1), (2,0)
     }
 
@@ -866,7 +886,7 @@ mod tests {
     fn test_multi_boolean_indexing() {
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_1d(6);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let condition1 = vec![true, true, false, true, false, true];
         let condition2 = vec![false, true, true, true, true, false];
@@ -874,7 +894,7 @@ mod tests {
 
         let result =
             SpecializedIndexing::multi_boolean_index(&view, &conditions, BooleanCombineOp::And)
-                .unwrap();
+                .expect("test: operation should succeed");
         assert_eq!(result, vec![2, 4]); // elements where both conditions are true
     }
 }

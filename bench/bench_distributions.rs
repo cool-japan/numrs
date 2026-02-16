@@ -8,6 +8,7 @@
 //! To include SciRS2: `cargo bench --bench bench_distributions --features scirs`
 
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 #[macro_use]
 extern crate criterion;

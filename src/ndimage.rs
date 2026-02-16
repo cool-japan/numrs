@@ -27,13 +27,13 @@
 //!
 //! // Apply Gaussian filter
 //! let sigma = 1.0;
-//! let filtered = ndimage::filters::gaussian_filter(&image, sigma, None, None).unwrap();
+//! let filtered = ndimage::filters::gaussian_filter(&image, sigma, None, None).expect("gaussian_filter should succeed");
 //!
 //! // Create binary image and apply binary dilation
 //! let binary_image: Array2<bool> = Array2::from_shape_fn((10, 10), |(i, j)| {
 //!     i > 3 && i < 7 && j > 3 && j < 7
 //! });
-//! let dilated = ndimage::morphology::binary_dilation(&binary_image, None, None, None, None, None, None).unwrap();
+//! let dilated = ndimage::morphology::binary_dilation(&binary_image, None, None, None, None, None, None).expect("binary_dilation should succeed");
 //! ```
 //!
 //! # Filters
@@ -106,7 +106,8 @@ mod tests {
 
         // Apply Gaussian filter
         let sigma = 1.0;
-        let result = filters::gaussian_filter(&image, sigma, None, None).unwrap();
+        let result = filters::gaussian_filter(&image, sigma, None, None)
+            .expect("gaussian_filter should succeed");
 
         // Center should still be brightest
         assert!(result[[2, 2]] > result[[0, 0]]);
@@ -125,7 +126,7 @@ mod tests {
         // Apply dilation (7 parameters: input, structure, iterations, mask, border_value, origin, brute_force)
         let result =
             morphology::binary_dilation(&image, Some(&struct_elem), None, None, None, None, None)
-                .unwrap();
+                .expect("binary_dilation should succeed");
 
         // Check that the center pixel and its neighbors are true
         assert!(result[[2, 2]]);
@@ -145,7 +146,8 @@ mod tests {
         image[[3, 4]] = true;
 
         // Label connected components (4 parameters: input, structure, connectivity, background)
-        let (labeled, num_features) = morphology::label(&image, None, None, None).unwrap();
+        let (labeled, num_features) =
+            morphology::label(&image, None, None, None).expect("label should succeed");
 
         // Should find at least some labeled components
         assert!(num_features > 0);
@@ -162,7 +164,7 @@ mod tests {
         image[[2, 2]] = 1.0;
 
         // Center of mass should be at (2, 2)
-        let com = measurements::center_of_mass(&image).unwrap();
+        let com = measurements::center_of_mass(&image).expect("center_of_mass should succeed");
 
         assert!((com[0] - 2.0).abs() < 1e-10);
         assert!((com[1] - 2.0).abs() < 1e-10);
@@ -176,7 +178,8 @@ mod tests {
         image[[4, 4]] = 1.0; // Pepper
 
         // Apply median filter with size as slice
-        let result = filters::median_filter(&image, &[3, 3], None).unwrap();
+        let result =
+            filters::median_filter(&image, &[3, 3], None).expect("median_filter should succeed");
 
         // The corners should be smoothed out
         assert!((result[[0, 0]] - 0.5).abs() < 0.2);
@@ -189,7 +192,7 @@ mod tests {
         let image = Array2::<f64>::from_shape_fn((5, 5), |(_, j)| if j < 2 { 0.0 } else { 1.0 });
 
         // Apply Sobel filter (axis 1 for detecting vertical edges)
-        let result = filters::sobel(&image, 1, None).unwrap();
+        let result = filters::sobel(&image, 1, None).expect("sobel should succeed");
 
         // Middle column should have high gradient values
         assert!(result[[2, 2]].abs() > 0.1);
@@ -211,7 +214,7 @@ mod tests {
         // Apply erosion (7 parameters: input, structure, iterations, mask, border_value, origin, brute_force)
         let result =
             morphology::binary_erosion(&image, Some(&struct_elem), None, None, None, None, None)
-                .unwrap();
+                .expect("binary_erosion should succeed");
 
         // Only the center pixel should remain
         assert!(result[[2, 2]]);
@@ -222,7 +225,7 @@ mod tests {
     #[test]
     fn test_disk_structuring_element() {
         // Generate a disk-shaped structuring element
-        let disk = morphology::disk_structure(2.0, Some(2)).unwrap();
+        let disk = morphology::disk_structure(2.0, Some(2)).expect("disk_structure should succeed");
 
         // Check that it exists and has reasonable size
         assert!(disk.ndim() == 2);

@@ -688,11 +688,19 @@ where
         let mut result = SparseMatrix::new(&[n_rows, n_cols])?;
 
         // Get CSR and CSC data
-        let self_indptr = self_matrix.indptr.as_ref().unwrap();
-        let self_indices = self_matrix.indices.as_ref().unwrap();
+        let self_indptr = self_matrix.indptr.as_ref().ok_or_else(|| {
+            NumRs2Error::ComputationError("CSR format should have indptr".to_string())
+        })?;
+        let self_indices = self_matrix.indices.as_ref().ok_or_else(|| {
+            NumRs2Error::ComputationError("CSR format should have indices".to_string())
+        })?;
 
-        let other_indptr = other_matrix.indptr.as_ref().unwrap();
-        let other_indices = other_matrix.indices.as_ref().unwrap();
+        let other_indptr = other_matrix.indptr.as_ref().ok_or_else(|| {
+            NumRs2Error::ComputationError("CSC format should have indptr".to_string())
+        })?;
+        let other_indices = other_matrix.indices.as_ref().ok_or_else(|| {
+            NumRs2Error::ComputationError("CSC format should have indices".to_string())
+        })?;
 
         // Perform sparse matrix multiplication
         for i in 0..n_rows {
@@ -767,14 +775,14 @@ mod tests {
     use approx::assert_relative_eq;
 
     #[test]
-    fn test_sparse_array_creation() {
+    fn test_sparse_array_creation() -> Result<()> {
         // Create a sparse array
         let mut sparse = SparseArray::new(&[3, 3]);
 
         // Set some values
-        sparse.set(&[0, 0], 1.0).unwrap();
-        sparse.set(&[1, 1], 2.0).unwrap();
-        sparse.set(&[2, 2], 3.0).unwrap();
+        sparse.set(&[0, 0], 1.0)?;
+        sparse.set(&[1, 1], 2.0)?;
+        sparse.set(&[2, 2], 3.0)?;
 
         // Check non-zero count
         assert_eq!(sparse.nnz(), 3);
@@ -783,14 +791,16 @@ mod tests {
         assert_relative_eq!(sparse.density(), 3.0 / 9.0);
 
         // Check retrieval
-        assert_relative_eq!(sparse.get(&[0, 0]).unwrap(), 1.0);
-        assert_relative_eq!(sparse.get(&[1, 1]).unwrap(), 2.0);
-        assert_relative_eq!(sparse.get(&[2, 2]).unwrap(), 3.0);
-        assert_relative_eq!(sparse.get(&[0, 1]).unwrap(), 0.0);
+        assert_relative_eq!(sparse.get(&[0, 0])?, 1.0);
+        assert_relative_eq!(sparse.get(&[1, 1])?, 2.0);
+        assert_relative_eq!(sparse.get(&[2, 2])?, 3.0);
+        assert_relative_eq!(sparse.get(&[0, 1])?, 0.0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_sparse_array_from_dense() {
+    fn test_sparse_array_from_dense() -> Result<()> {
         // Create a dense array
         let dense =
             Array::from_vec(vec![1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0]).reshape(&[3, 3]);
@@ -802,20 +812,22 @@ mod tests {
         assert_eq!(sparse.nnz(), 3);
 
         // Check retrieval
-        assert_relative_eq!(sparse.get(&[0, 0]).unwrap(), 1.0);
-        assert_relative_eq!(sparse.get(&[1, 1]).unwrap(), 2.0);
-        assert_relative_eq!(sparse.get(&[2, 2]).unwrap(), 3.0);
+        assert_relative_eq!(sparse.get(&[0, 0])?, 1.0);
+        assert_relative_eq!(sparse.get(&[1, 1])?, 2.0);
+        assert_relative_eq!(sparse.get(&[2, 2])?, 3.0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_sparse_array_to_dense() {
+    fn test_sparse_array_to_dense() -> Result<()> {
         // Create a sparse array
         let mut sparse = SparseArray::new(&[3, 3]);
 
         // Set some values
-        sparse.set(&[0, 0], 1.0).unwrap();
-        sparse.set(&[1, 1], 2.0).unwrap();
-        sparse.set(&[2, 2], 3.0).unwrap();
+        sparse.set(&[0, 0], 1.0)?;
+        sparse.set(&[1, 1], 2.0)?;
+        sparse.set(&[2, 2], 3.0)?;
 
         // Convert to dense
         let dense = sparse.to_array();
@@ -830,112 +842,120 @@ mod tests {
         for i in [1, 2, 3, 5, 6, 7] {
             assert_relative_eq!(dense_data[i], 0.0);
         }
+
+        Ok(())
     }
 
     #[test]
-    fn test_sparse_array_arithmetic() {
+    fn test_sparse_array_arithmetic() -> Result<()> {
         // Create two sparse arrays
         let mut a = SparseArray::new(&[3, 3]);
         let mut b = SparseArray::new(&[3, 3]);
 
         // Set values in a
-        a.set(&[0, 0], 1.0).unwrap();
-        a.set(&[1, 1], 2.0).unwrap();
-        a.set(&[2, 2], 3.0).unwrap();
+        a.set(&[0, 0], 1.0)?;
+        a.set(&[1, 1], 2.0)?;
+        a.set(&[2, 2], 3.0)?;
 
         // Set values in b
-        b.set(&[0, 0], 2.0).unwrap();
-        b.set(&[1, 1], 1.0).unwrap();
-        b.set(&[0, 2], 4.0).unwrap();
+        b.set(&[0, 0], 2.0)?;
+        b.set(&[1, 1], 1.0)?;
+        b.set(&[0, 2], 4.0)?;
 
         // Test addition
-        let sum = a.add(&b).unwrap();
-        assert_relative_eq!(sum.get(&[0, 0]).unwrap(), 3.0);
-        assert_relative_eq!(sum.get(&[1, 1]).unwrap(), 3.0);
-        assert_relative_eq!(sum.get(&[2, 2]).unwrap(), 3.0);
-        assert_relative_eq!(sum.get(&[0, 2]).unwrap(), 4.0);
+        let sum = a.add(&b)?;
+        assert_relative_eq!(sum.get(&[0, 0])?, 3.0);
+        assert_relative_eq!(sum.get(&[1, 1])?, 3.0);
+        assert_relative_eq!(sum.get(&[2, 2])?, 3.0);
+        assert_relative_eq!(sum.get(&[0, 2])?, 4.0);
 
         // Test subtraction
-        let diff = a.subtract(&b).unwrap();
-        assert_relative_eq!(diff.get(&[0, 0]).unwrap(), -1.0);
-        assert_relative_eq!(diff.get(&[1, 1]).unwrap(), 1.0);
-        assert_relative_eq!(diff.get(&[2, 2]).unwrap(), 3.0);
-        assert_relative_eq!(diff.get(&[0, 2]).unwrap(), -4.0);
+        let diff = a.subtract(&b)?;
+        assert_relative_eq!(diff.get(&[0, 0])?, -1.0);
+        assert_relative_eq!(diff.get(&[1, 1])?, 1.0);
+        assert_relative_eq!(diff.get(&[2, 2])?, 3.0);
+        assert_relative_eq!(diff.get(&[0, 2])?, -4.0);
 
         // Test multiplication
-        let prod = a.multiply(&b).unwrap();
-        assert_relative_eq!(prod.get(&[0, 0]).unwrap(), 2.0);
-        assert_relative_eq!(prod.get(&[1, 1]).unwrap(), 2.0);
-        assert_relative_eq!(prod.get(&[2, 2]).unwrap(), 0.0);
-        assert_relative_eq!(prod.get(&[0, 2]).unwrap(), 0.0);
+        let prod = a.multiply(&b)?;
+        assert_relative_eq!(prod.get(&[0, 0])?, 2.0);
+        assert_relative_eq!(prod.get(&[1, 1])?, 2.0);
+        assert_relative_eq!(prod.get(&[2, 2])?, 0.0);
+        assert_relative_eq!(prod.get(&[0, 2])?, 0.0);
 
         // Test scalar multiplication
         let scaled = a.multiply_scalar(2.0);
-        assert_relative_eq!(scaled.get(&[0, 0]).unwrap(), 2.0);
-        assert_relative_eq!(scaled.get(&[1, 1]).unwrap(), 4.0);
-        assert_relative_eq!(scaled.get(&[2, 2]).unwrap(), 6.0);
+        assert_relative_eq!(scaled.get(&[0, 0])?, 2.0);
+        assert_relative_eq!(scaled.get(&[1, 1])?, 4.0);
+        assert_relative_eq!(scaled.get(&[2, 2])?, 6.0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_sparse_matrix_creation() {
+    fn test_sparse_matrix_creation() -> Result<()> {
         // Create a sparse matrix
-        let mut sparse = SparseMatrix::new(&[3, 3]).unwrap();
+        let mut sparse = SparseMatrix::new(&[3, 3])?;
 
         // Set some values
-        sparse.set(0, 0, 1.0).unwrap();
-        sparse.set(1, 1, 2.0).unwrap();
-        sparse.set(2, 2, 3.0).unwrap();
+        sparse.set(0, 0, 1.0)?;
+        sparse.set(1, 1, 2.0)?;
+        sparse.set(2, 2, 3.0)?;
 
         // Check non-zero count
         assert_eq!(sparse.nnz(), 3);
 
         // Check retrieval
-        assert_relative_eq!(sparse.get(0, 0).unwrap(), 1.0);
-        assert_relative_eq!(sparse.get(1, 1).unwrap(), 2.0);
-        assert_relative_eq!(sparse.get(2, 2).unwrap(), 3.0);
-        assert_relative_eq!(sparse.get(0, 1).unwrap(), 0.0);
+        assert_relative_eq!(sparse.get(0, 0)?, 1.0);
+        assert_relative_eq!(sparse.get(1, 1)?, 2.0);
+        assert_relative_eq!(sparse.get(2, 2)?, 3.0);
+        assert_relative_eq!(sparse.get(0, 1)?, 0.0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_sparse_matrix_special_constructors() {
+    fn test_sparse_matrix_special_constructors() -> Result<()> {
         // Create an identity matrix with explicit type
-        let eye: SparseMatrix<f64> = SparseMatrix::eye(3).unwrap();
+        let eye: SparseMatrix<f64> = SparseMatrix::eye(3)?;
 
         // Check diagonal elements
-        assert_relative_eq!(eye.get(0, 0).unwrap(), 1.0);
-        assert_relative_eq!(eye.get(1, 1).unwrap(), 1.0);
-        assert_relative_eq!(eye.get(2, 2).unwrap(), 1.0);
+        assert_relative_eq!(eye.get(0, 0)?, 1.0);
+        assert_relative_eq!(eye.get(1, 1)?, 1.0);
+        assert_relative_eq!(eye.get(2, 2)?, 1.0);
 
         // Check off-diagonal elements
-        assert_relative_eq!(eye.get(0, 1).unwrap(), 0.0);
-        assert_relative_eq!(eye.get(1, 2).unwrap(), 0.0);
+        assert_relative_eq!(eye.get(0, 1)?, 0.0);
+        assert_relative_eq!(eye.get(1, 2)?, 0.0);
 
         // Create a diagonal matrix
-        let diag = SparseMatrix::diag(&[1.0, 2.0, 3.0]).unwrap();
+        let diag = SparseMatrix::diag(&[1.0, 2.0, 3.0])?;
 
         // Check diagonal elements
-        assert_relative_eq!(diag.get(0, 0).unwrap(), 1.0);
-        assert_relative_eq!(diag.get(1, 1).unwrap(), 2.0);
-        assert_relative_eq!(diag.get(2, 2).unwrap(), 3.0);
+        assert_relative_eq!(diag.get(0, 0)?, 1.0);
+        assert_relative_eq!(diag.get(1, 1)?, 2.0);
+        assert_relative_eq!(diag.get(2, 2)?, 3.0);
 
         // Check off-diagonal elements
-        assert_relative_eq!(diag.get(0, 1).unwrap(), 0.0);
-        assert_relative_eq!(diag.get(1, 2).unwrap(), 0.0);
+        assert_relative_eq!(diag.get(0, 1)?, 0.0);
+        assert_relative_eq!(diag.get(1, 2)?, 0.0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_sparse_matrix_format_conversion() {
+    fn test_sparse_matrix_format_conversion() -> Result<()> {
         // Create a sparse matrix
-        let mut sparse = SparseMatrix::new(&[3, 3]).unwrap();
+        let mut sparse = SparseMatrix::new(&[3, 3])?;
 
         // Set some values
-        sparse.set(0, 0, 1.0).unwrap();
-        sparse.set(0, 2, 2.0).unwrap();
-        sparse.set(1, 1, 3.0).unwrap();
-        sparse.set(2, 0, 4.0).unwrap();
+        sparse.set(0, 0, 1.0)?;
+        sparse.set(0, 2, 2.0)?;
+        sparse.set(1, 1, 3.0)?;
+        sparse.set(2, 0, 4.0)?;
 
         // Convert to CSR format
-        sparse.to_csr().unwrap();
+        sparse.to_csr()?;
 
         // Check that format is updated
         if let SparseMatrixFormat::CSR = sparse.format {
@@ -945,13 +965,13 @@ mod tests {
         }
 
         // Check that data is still accessible
-        assert_relative_eq!(sparse.get(0, 0).unwrap(), 1.0);
-        assert_relative_eq!(sparse.get(0, 2).unwrap(), 2.0);
-        assert_relative_eq!(sparse.get(1, 1).unwrap(), 3.0);
-        assert_relative_eq!(sparse.get(2, 0).unwrap(), 4.0);
+        assert_relative_eq!(sparse.get(0, 0)?, 1.0);
+        assert_relative_eq!(sparse.get(0, 2)?, 2.0);
+        assert_relative_eq!(sparse.get(1, 1)?, 3.0);
+        assert_relative_eq!(sparse.get(2, 0)?, 4.0);
 
         // Convert to CSC format
-        sparse.to_csc().unwrap();
+        sparse.to_csc()?;
 
         // Check that format is updated
         if let SparseMatrixFormat::CSC = sparse.format {
@@ -961,51 +981,55 @@ mod tests {
         }
 
         // Check that data is still accessible
-        assert_relative_eq!(sparse.get(0, 0).unwrap(), 1.0);
-        assert_relative_eq!(sparse.get(0, 2).unwrap(), 2.0);
-        assert_relative_eq!(sparse.get(1, 1).unwrap(), 3.0);
-        assert_relative_eq!(sparse.get(2, 0).unwrap(), 4.0);
+        assert_relative_eq!(sparse.get(0, 0)?, 1.0);
+        assert_relative_eq!(sparse.get(0, 2)?, 2.0);
+        assert_relative_eq!(sparse.get(1, 1)?, 3.0);
+        assert_relative_eq!(sparse.get(2, 0)?, 4.0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_sparse_matrix_operations() {
+    fn test_sparse_matrix_operations() -> Result<()> {
         // Create two sparse matrices
-        let mut a = SparseMatrix::new(&[3, 3]).unwrap();
-        let mut b = SparseMatrix::new(&[3, 2]).unwrap();
+        let mut a = SparseMatrix::new(&[3, 3])?;
+        let mut b = SparseMatrix::new(&[3, 2])?;
 
         // Set values in a
-        a.set(0, 0, 1.0).unwrap();
-        a.set(0, 1, 2.0).unwrap();
-        a.set(1, 0, 3.0).unwrap();
-        a.set(1, 1, 4.0).unwrap();
-        a.set(2, 0, 5.0).unwrap();
-        a.set(2, 1, 6.0).unwrap();
+        a.set(0, 0, 1.0)?;
+        a.set(0, 1, 2.0)?;
+        a.set(1, 0, 3.0)?;
+        a.set(1, 1, 4.0)?;
+        a.set(2, 0, 5.0)?;
+        a.set(2, 1, 6.0)?;
 
         // Set values in b
-        b.set(0, 0, 7.0).unwrap();
-        b.set(0, 1, 8.0).unwrap();
-        b.set(1, 0, 9.0).unwrap();
-        b.set(1, 1, 10.0).unwrap();
+        b.set(0, 0, 7.0)?;
+        b.set(0, 1, 8.0)?;
+        b.set(1, 0, 9.0)?;
+        b.set(1, 1, 10.0)?;
 
         // Test matrix multiplication
-        let c = a.matmul(&b).unwrap();
+        let c = a.matmul(&b)?;
 
         // Expected result: c = a * b
-        assert_relative_eq!(c.get(0, 0).unwrap(), 1.0 * 7.0 + 2.0 * 9.0);
-        assert_relative_eq!(c.get(0, 1).unwrap(), 1.0 * 8.0 + 2.0 * 10.0);
-        assert_relative_eq!(c.get(1, 0).unwrap(), 3.0 * 7.0 + 4.0 * 9.0);
-        assert_relative_eq!(c.get(1, 1).unwrap(), 3.0 * 8.0 + 4.0 * 10.0);
-        assert_relative_eq!(c.get(2, 0).unwrap(), 5.0 * 7.0 + 6.0 * 9.0);
-        assert_relative_eq!(c.get(2, 1).unwrap(), 5.0 * 8.0 + 6.0 * 10.0);
+        assert_relative_eq!(c.get(0, 0)?, 1.0 * 7.0 + 2.0 * 9.0);
+        assert_relative_eq!(c.get(0, 1)?, 1.0 * 8.0 + 2.0 * 10.0);
+        assert_relative_eq!(c.get(1, 0)?, 3.0 * 7.0 + 4.0 * 9.0);
+        assert_relative_eq!(c.get(1, 1)?, 3.0 * 8.0 + 4.0 * 10.0);
+        assert_relative_eq!(c.get(2, 0)?, 5.0 * 7.0 + 6.0 * 9.0);
+        assert_relative_eq!(c.get(2, 1)?, 5.0 * 8.0 + 6.0 * 10.0);
 
         // Test transpose
-        let at = a.transpose().unwrap();
+        let at = a.transpose()?;
 
-        assert_relative_eq!(at.get(0, 0).unwrap(), 1.0);
-        assert_relative_eq!(at.get(0, 1).unwrap(), 3.0);
-        assert_relative_eq!(at.get(0, 2).unwrap(), 5.0);
-        assert_relative_eq!(at.get(1, 0).unwrap(), 2.0);
-        assert_relative_eq!(at.get(1, 1).unwrap(), 4.0);
-        assert_relative_eq!(at.get(1, 2).unwrap(), 6.0);
+        assert_relative_eq!(at.get(0, 0)?, 1.0);
+        assert_relative_eq!(at.get(0, 1)?, 3.0);
+        assert_relative_eq!(at.get(0, 2)?, 5.0);
+        assert_relative_eq!(at.get(1, 0)?, 2.0);
+        assert_relative_eq!(at.get(1, 1)?, 4.0);
+        assert_relative_eq!(at.get(1, 2)?, 6.0);
+
+        Ok(())
     }
 }

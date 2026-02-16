@@ -54,8 +54,8 @@ pub struct QuadConfig<T> {
 impl<T: Float> Default for QuadConfig<T> {
     fn default() -> Self {
         QuadConfig {
-            atol: T::from(1.49e-8).unwrap(),
-            rtol: T::from(1.49e-8).unwrap(),
+            atol: T::from(1.49e-8).expect("1.49e-8 is representable as Float"),
+            rtol: T::from(1.49e-8).expect("1.49e-8 is representable as Float"),
             max_subdivisions: 50,
             max_depth: 50,
         }
@@ -67,52 +67,52 @@ impl<T: Float> Default for QuadConfig<T> {
 fn gauss_kronrod_15<T: Float>() -> (Vec<T>, Vec<T>, Vec<T>) {
     // Kronrod nodes (15 points)
     let nodes = vec![
-        T::from(-0.991455371120813).unwrap(),
-        T::from(-0.949107912342759).unwrap(),
-        T::from(-0.864864423359769).unwrap(),
-        T::from(-0.741531185599394).unwrap(),
-        T::from(-0.586087235467691).unwrap(),
-        T::from(-0.405845151377397).unwrap(),
-        T::from(-0.207784955007898).unwrap(),
-        T::from(0.0).unwrap(),
-        T::from(0.207784955007898).unwrap(),
-        T::from(0.405845151377397).unwrap(),
-        T::from(0.586087235467691).unwrap(),
-        T::from(0.741531185599394).unwrap(),
-        T::from(0.864864423359769).unwrap(),
-        T::from(0.949107912342759).unwrap(),
-        T::from(0.991455371120813).unwrap(),
+        T::from(-0.991455371120813).expect("quadrature node is representable as Float"),
+        T::from(-0.949107912342759).expect("quadrature node is representable as Float"),
+        T::from(-0.864864423359769).expect("quadrature node is representable as Float"),
+        T::from(-0.741531185599394).expect("quadrature node is representable as Float"),
+        T::from(-0.586087235467691).expect("quadrature node is representable as Float"),
+        T::from(-0.405845151377397).expect("quadrature node is representable as Float"),
+        T::from(-0.207784955007898).expect("quadrature node is representable as Float"),
+        T::from(0.0).expect("quadrature node is representable as Float"),
+        T::from(0.207784955007898).expect("quadrature node is representable as Float"),
+        T::from(0.405845151377397).expect("quadrature node is representable as Float"),
+        T::from(0.586087235467691).expect("quadrature node is representable as Float"),
+        T::from(0.741531185599394).expect("quadrature node is representable as Float"),
+        T::from(0.864864423359769).expect("quadrature node is representable as Float"),
+        T::from(0.949107912342759).expect("quadrature node is representable as Float"),
+        T::from(0.991455371120813).expect("quadrature node is representable as Float"),
     ];
 
     // Kronrod weights (for all 15 points)
     let kronrod_weights = vec![
-        T::from(0.022935322010529).unwrap(),
-        T::from(0.063092092629979).unwrap(),
-        T::from(0.104790010322250).unwrap(),
-        T::from(0.140653259715525).unwrap(),
-        T::from(0.169004726639267).unwrap(),
-        T::from(0.190350578064785).unwrap(),
-        T::from(0.204432940075298).unwrap(),
-        T::from(0.209482141084728).unwrap(),
-        T::from(0.204432940075298).unwrap(),
-        T::from(0.190350578064785).unwrap(),
-        T::from(0.169004726639267).unwrap(),
-        T::from(0.140653259715525).unwrap(),
-        T::from(0.104790010322250).unwrap(),
-        T::from(0.063092092629979).unwrap(),
-        T::from(0.022935322010529).unwrap(),
+        T::from(0.022935322010529).expect("quadrature weight is representable as Float"),
+        T::from(0.063092092629979).expect("quadrature weight is representable as Float"),
+        T::from(0.104790010322250).expect("quadrature weight is representable as Float"),
+        T::from(0.140653259715525).expect("quadrature weight is representable as Float"),
+        T::from(0.169004726639267).expect("quadrature weight is representable as Float"),
+        T::from(0.190350578064785).expect("quadrature weight is representable as Float"),
+        T::from(0.204432940075298).expect("quadrature weight is representable as Float"),
+        T::from(0.209482141084728).expect("quadrature weight is representable as Float"),
+        T::from(0.204432940075298).expect("quadrature weight is representable as Float"),
+        T::from(0.190350578064785).expect("quadrature weight is representable as Float"),
+        T::from(0.169004726639267).expect("quadrature weight is representable as Float"),
+        T::from(0.140653259715525).expect("quadrature weight is representable as Float"),
+        T::from(0.104790010322250).expect("quadrature weight is representable as Float"),
+        T::from(0.063092092629979).expect("quadrature weight is representable as Float"),
+        T::from(0.022935322010529).expect("quadrature weight is representable as Float"),
     ];
 
     // Gauss weights (for the 7 Gauss points among the 15)
     // Indices: 1, 3, 5, 7, 9, 11, 13 (0-indexed)
     let gauss_weights = vec![
-        T::from(0.129484966168870).unwrap(),
-        T::from(0.279705391489277).unwrap(),
-        T::from(0.381830050505119).unwrap(),
-        T::from(0.417959183673469).unwrap(),
-        T::from(0.381830050505119).unwrap(),
-        T::from(0.279705391489277).unwrap(),
-        T::from(0.129484966168870).unwrap(),
+        T::from(0.129484966168870).expect("quadrature weight is representable as Float"),
+        T::from(0.279705391489277).expect("quadrature weight is representable as Float"),
+        T::from(0.381830050505119).expect("quadrature weight is representable as Float"),
+        T::from(0.417959183673469).expect("quadrature weight is representable as Float"),
+        T::from(0.381830050505119).expect("quadrature weight is representable as Float"),
+        T::from(0.279705391489277).expect("quadrature weight is representable as Float"),
+        T::from(0.129484966168870).expect("quadrature weight is representable as Float"),
     ];
 
     (nodes, kronrod_weights, gauss_weights)
@@ -202,8 +202,8 @@ where
     let (nodes, kronrod_w, gauss_w) = gauss_kronrod_15::<T>();
 
     // Transform from [-1, 1] to [a, b]
-    let half_length = (b - a) / T::from(2.0).unwrap();
-    let center = (a + b) / T::from(2.0).unwrap();
+    let half_length = (b - a) / T::from(2.0).expect("2.0 is representable as Float");
+    let center = (a + b) / T::from(2.0).expect("2.0 is representable as Float");
 
     // Evaluate function at all Kronrod points
     let mut f_vals = Vec::with_capacity(15);
@@ -245,7 +245,7 @@ where
         f,
         a,
         mid,
-        atol / T::from(2.0).unwrap(),
+        atol / T::from(2.0).expect("2.0 is representable as Float"),
         rtol,
         max_depth - 1,
         neval,
@@ -254,7 +254,7 @@ where
         f,
         mid,
         b,
-        atol / T::from(2.0).unwrap(),
+        atol / T::from(2.0).expect("2.0 is representable as Float"),
         rtol,
         max_depth - 1,
         neval,
@@ -284,21 +284,21 @@ where
     let n = if n % 2 == 1 { n + 1 } else { n };
     let n = n.max(2);
 
-    let h = (b - a) / T::from(n).unwrap();
+    let h = (b - a) / T::from(n).expect("n is representable as Float");
 
     let mut sum = f(a) + f(b);
 
     for i in 1..n {
-        let x = a + T::from(i).unwrap() * h;
+        let x = a + T::from(i).expect("i is representable as Float") * h;
         let coef = if i % 2 == 0 {
-            T::from(2.0).unwrap()
+            T::from(2.0).expect("2.0 is representable as Float")
         } else {
-            T::from(4.0).unwrap()
+            T::from(4.0).expect("4.0 is representable as Float")
         };
         sum = sum + coef * f(x);
     }
 
-    sum * h / T::from(3.0).unwrap()
+    sum * h / T::from(3.0).expect("3.0 is representable as Float")
 }
 
 /// Trapezoidal rule composite integration
@@ -317,12 +317,12 @@ where
     F: Fn(T) -> T,
 {
     let n = n.max(1);
-    let h = (b - a) / T::from(n).unwrap();
+    let h = (b - a) / T::from(n).expect("n is representable as Float");
 
-    let mut sum = (f(a) + f(b)) / T::from(2.0).unwrap();
+    let mut sum = (f(a) + f(b)) / T::from(2.0).expect("2.0 is representable as Float");
 
     for i in 1..n {
-        let x = a + T::from(i).unwrap() * h;
+        let x = a + T::from(i).expect("i is representable as Float") * h;
         sum = sum + f(x);
     }
 
@@ -356,7 +356,7 @@ where
     let mut sum = T::zero();
     for i in 0..x.len() - 1 {
         let h = x[i + 1] - x[i];
-        sum = sum + h * (y[i] + y[i + 1]) / T::from(2.0).unwrap();
+        sum = sum + h * (y[i] + y[i + 1]) / T::from(2.0).expect("2.0 is representable as Float");
     }
 
     Ok(sum)
@@ -393,7 +393,7 @@ where
     // Richardson extrapolation
     for k in 1..=max_order {
         for j in k..=max_order {
-            let factor = T::from(4u64.pow(k as u32)).unwrap();
+            let factor = T::from(4u64.pow(k as u32)).expect("4^k is representable as Float");
             r[j][k] = (factor * r[j][k - 1] - r[j - 1][k - 1]) / (factor - T::one());
         }
     }
@@ -430,14 +430,15 @@ where
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         // Use full 64-bit state and scale to [0, 1)
-        let u = T::from((state as f64) / (u64::MAX as f64)).unwrap();
+        let u = T::from((state as f64) / (u64::MAX as f64))
+            .expect("normalized random value is representable as Float");
         let x = a + u * domain_size;
         let fx = f(x);
         sum = sum + fx;
         sum_sq = sum_sq + fx * fx;
     }
 
-    let n_float = T::from(n).unwrap();
+    let n_float = T::from(n).expect("n is representable as Float");
     let mean = sum / n_float;
     let variance = (sum_sq / n_float) - mean * mean;
     let std_error = if variance > T::zero() {
@@ -505,7 +506,8 @@ where
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             // Use full 64-bit state
-            let u = T::from((states[d] as f64) / (u64::MAX as f64)).unwrap();
+            let u = T::from((states[d] as f64) / (u64::MAX as f64))
+                .expect("normalized random value is representable as Float");
             let (a, b) = bounds[d];
             point[d] = a + u * (b - a);
         }
@@ -515,7 +517,7 @@ where
         sum_sq = sum_sq + fx * fx;
     }
 
-    let n_float = T::from(n).unwrap();
+    let n_float = T::from(n).expect("n is representable as Float");
     let mean = sum / n_float;
     let variance = (sum_sq / n_float) - mean * mean;
     let std_error = if variance > T::zero() {
@@ -550,8 +552,8 @@ where
 {
     let (nodes, weights) = gauss_legendre_nodes_weights::<T>(n);
 
-    let half_length = (b - a) / T::from(2.0).unwrap();
-    let center = (a + b) / T::from(2.0).unwrap();
+    let half_length = (b - a) / T::from(2.0).expect("2.0 is representable as Float");
+    let center = (a + b) / T::from(2.0).expect("2.0 is representable as Float");
 
     let sum: T = nodes
         .iter()
@@ -568,54 +570,60 @@ where
 /// Get Gauss-Legendre nodes and weights
 fn gauss_legendre_nodes_weights<T: Float>(n: usize) -> (Vec<T>, Vec<T>) {
     match n {
-        1 => (vec![T::from(0.0).unwrap()], vec![T::from(2.0).unwrap()]),
+        1 => (
+            vec![T::from(0.0).expect("GL node is representable as Float")],
+            vec![T::from(2.0).expect("GL weight is representable as Float")],
+        ),
         2 => (
             vec![
-                T::from(-0.5773502691896257).unwrap(),
-                T::from(0.5773502691896257).unwrap(),
+                T::from(-0.5773502691896257).expect("GL node is representable as Float"),
+                T::from(0.5773502691896257).expect("GL node is representable as Float"),
             ],
-            vec![T::from(1.0).unwrap(), T::from(1.0).unwrap()],
+            vec![
+                T::from(1.0).expect("GL weight is representable as Float"),
+                T::from(1.0).expect("GL weight is representable as Float"),
+            ],
         ),
         3 => (
             vec![
-                T::from(-0.7745966692414834).unwrap(),
-                T::from(0.0).unwrap(),
-                T::from(0.7745966692414834).unwrap(),
+                T::from(-0.7745966692414834).expect("GL node is representable as Float"),
+                T::from(0.0).expect("GL node is representable as Float"),
+                T::from(0.7745966692414834).expect("GL node is representable as Float"),
             ],
             vec![
-                T::from(0.5555555555555556).unwrap(),
-                T::from(0.8888888888888888).unwrap(),
-                T::from(0.5555555555555556).unwrap(),
+                T::from(0.5555555555555556).expect("GL weight is representable as Float"),
+                T::from(0.8888888888888888).expect("GL weight is representable as Float"),
+                T::from(0.5555555555555556).expect("GL weight is representable as Float"),
             ],
         ),
         4 => (
             vec![
-                T::from(-0.8611363115940526).unwrap(),
-                T::from(-0.3399810435848563).unwrap(),
-                T::from(0.3399810435848563).unwrap(),
-                T::from(0.8611363115940526).unwrap(),
+                T::from(-0.8611363115940526).expect("GL node is representable as Float"),
+                T::from(-0.3399810435848563).expect("GL node is representable as Float"),
+                T::from(0.3399810435848563).expect("GL node is representable as Float"),
+                T::from(0.8611363115940526).expect("GL node is representable as Float"),
             ],
             vec![
-                T::from(0.3478548451374538).unwrap(),
-                T::from(0.6521451548625461).unwrap(),
-                T::from(0.6521451548625461).unwrap(),
-                T::from(0.3478548451374538).unwrap(),
+                T::from(0.3478548451374538).expect("GL weight is representable as Float"),
+                T::from(0.6521451548625461).expect("GL weight is representable as Float"),
+                T::from(0.6521451548625461).expect("GL weight is representable as Float"),
+                T::from(0.3478548451374538).expect("GL weight is representable as Float"),
             ],
         ),
         5 => (
             vec![
-                T::from(-0.9061798459386640).unwrap(),
-                T::from(-0.5384693101056831).unwrap(),
-                T::from(0.0).unwrap(),
-                T::from(0.5384693101056831).unwrap(),
-                T::from(0.9061798459386640).unwrap(),
+                T::from(-0.9061798459386640).expect("GL node is representable as Float"),
+                T::from(-0.5384693101056831).expect("GL node is representable as Float"),
+                T::from(0.0).expect("GL node is representable as Float"),
+                T::from(0.5384693101056831).expect("GL node is representable as Float"),
+                T::from(0.9061798459386640).expect("GL node is representable as Float"),
             ],
             vec![
-                T::from(0.2369268850561891).unwrap(),
-                T::from(0.4786286704993665).unwrap(),
-                T::from(0.5688888888888889).unwrap(),
-                T::from(0.4786286704993665).unwrap(),
-                T::from(0.2369268850561891).unwrap(),
+                T::from(0.2369268850561891).expect("GL weight is representable as Float"),
+                T::from(0.4786286704993665).expect("GL weight is representable as Float"),
+                T::from(0.5688888888888889).expect("GL weight is representable as Float"),
+                T::from(0.4786286704993665).expect("GL weight is representable as Float"),
+                T::from(0.2369268850561891).expect("GL weight is representable as Float"),
             ],
         ),
         _ => {
@@ -644,36 +652,36 @@ where
     F: Fn(T, T) -> T,
 {
     // Use composite Simpson's rule in both dimensions
-    let hx = (xb - xa) / T::from(nx).unwrap();
-    let hy = (yb - ya) / T::from(ny).unwrap();
+    let hx = (xb - xa) / T::from(nx).expect("nx is representable as Float");
+    let hy = (yb - ya) / T::from(ny).expect("ny is representable as Float");
 
     let mut sum = T::zero();
 
     for i in 0..=nx {
-        let x = xa + T::from(i).unwrap() * hx;
+        let x = xa + T::from(i).expect("i is representable as Float") * hx;
         let wx = if i == 0 || i == nx {
             T::one()
         } else if i % 2 == 0 {
-            T::from(2.0).unwrap()
+            T::from(2.0).expect("2.0 is representable as Float")
         } else {
-            T::from(4.0).unwrap()
+            T::from(4.0).expect("4.0 is representable as Float")
         };
 
         for j in 0..=ny {
-            let y = ya + T::from(j).unwrap() * hy;
+            let y = ya + T::from(j).expect("j is representable as Float") * hy;
             let wy = if j == 0 || j == ny {
                 T::one()
             } else if j % 2 == 0 {
-                T::from(2.0).unwrap()
+                T::from(2.0).expect("2.0 is representable as Float")
             } else {
-                T::from(4.0).unwrap()
+                T::from(4.0).expect("4.0 is representable as Float")
             };
 
             sum = sum + wx * wy * f(x, y);
         }
     }
 
-    sum * hx * hy / T::from(9.0).unwrap()
+    sum * hx * hy / T::from(9.0).expect("9.0 is representable as Float")
 }
 
 /// Fixed-point iteration for solving integral equations
@@ -734,7 +742,8 @@ where
     let mut result = vec![T::zero(); y.len()];
 
     for i in 1..y.len() {
-        result[i] = result[i - 1] + dx * (y[i - 1] + y[i]) / T::from(2.0).unwrap();
+        result[i] = result[i - 1]
+            + dx * (y[i - 1] + y[i]) / T::from(2.0).expect("2.0 is representable as Float");
     }
 
     result
@@ -747,21 +756,22 @@ mod tests {
     #[test]
     fn test_quad_polynomial() {
         // Integral of x^2 from 0 to 1 = 1/3
-        let result = quad(|x: f64| x * x, 0.0, 1.0).unwrap();
+        let result = quad(|x: f64| x * x, 0.0, 1.0).expect("quad should succeed");
         assert!((result - 1.0 / 3.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_quad_sin() {
         // Integral of sin(x) from 0 to pi = 2
-        let result = quad(|x: f64| x.sin(), 0.0, std::f64::consts::PI).unwrap();
+        let result =
+            quad(|x: f64| x.sin(), 0.0, std::f64::consts::PI).expect("quad should succeed");
         assert!((result - 2.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_quad_exp() {
         // Integral of e^x from 0 to 1 = e - 1
-        let result = quad(|x: f64| x.exp(), 0.0, 1.0).unwrap();
+        let result = quad(|x: f64| x.exp(), 0.0, 1.0).expect("quad should succeed");
         let expected = std::f64::consts::E - 1.0;
         assert!((result - expected).abs() < 1e-10);
     }
@@ -784,7 +794,7 @@ mod tests {
     fn test_trapz_array() {
         let x = vec![0.0, 0.5, 1.0];
         let y = vec![0.0, 0.25, 1.0];
-        let result = trapz_array(&x, &y).unwrap();
+        let result = trapz_array(&x, &y).expect("trapz_array should succeed");
         // Trapezoidal approximation of x^2
         assert!((result - 0.375).abs() < 1e-10);
     }
@@ -870,7 +880,7 @@ mod tests {
             std::f64::consts::PI,
             &QuadConfig::default(),
         )
-        .unwrap();
+        .expect("quad_adaptive should succeed");
 
         assert!((result.value - 2.0).abs() < 1e-10);
         assert!(result.error < 1e-10);

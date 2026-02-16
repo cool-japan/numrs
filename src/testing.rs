@@ -177,7 +177,8 @@ where
 
         // Compute absolute and relative differences
         let abs_diff = (a_val - d_val).abs();
-        let tolerance = T::from(config.atol).unwrap() + T::from(config.rtol).unwrap() * d_val.abs();
+        let tolerance = T::from(config.atol).expect("Failed to convert atol to type T")
+            + T::from(config.rtol).expect("Failed to convert rtol to type T") * d_val.abs();
 
         max_abs_diff = max_abs_diff.max(abs_diff.to_f64().unwrap_or(f64::INFINITY));
 
@@ -424,7 +425,8 @@ where
 
     // Compute tolerance
     let abs_diff = (actual - desired).abs();
-    let tolerance = T::from(config.atol).unwrap() + T::from(config.rtol).unwrap() * desired.abs();
+    let tolerance = T::from(config.atol).expect("Failed to convert atol to type T")
+        + T::from(config.rtol).expect("Failed to convert rtol to type T") * desired.abs();
 
     if abs_diff <= tolerance {
         Ok(TestResult::success("Values are equal within tolerance"))

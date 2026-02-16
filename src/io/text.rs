@@ -173,24 +173,24 @@ impl Default for GenFromTxtOptions {
 /// use tempfile::NamedTempFile;
 ///
 /// // Create a temporary test file
-/// let mut temp_file = NamedTempFile::new().unwrap();
-/// writeln!(temp_file, "1.0 2.0 3.0").unwrap();
-/// writeln!(temp_file, "4.0 5.0 6.0").unwrap();
+/// let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+/// writeln!(temp_file, "1.0 2.0 3.0").expect("Failed to write to temp file");
+/// writeln!(temp_file, "4.0 5.0 6.0").expect("Failed to write to temp file");
 ///
 /// // Load with default options
-/// let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default()).unwrap();
+/// let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default()).expect("Failed to load text file");
 /// assert_eq!(array.shape(), &[2, 3]);
 ///
 /// // Load with custom delimiter and skip first row
-/// let mut temp_file2 = NamedTempFile::new().unwrap();
-/// writeln!(temp_file2, "header,line").unwrap();
-/// writeln!(temp_file2, "1.0,2.0").unwrap();
-/// writeln!(temp_file2, "3.0,4.0").unwrap();
+/// let mut temp_file2 = NamedTempFile::new().expect("Failed to create temp file");
+/// writeln!(temp_file2, "header,line").expect("Failed to write to temp file");
+/// writeln!(temp_file2, "1.0,2.0").expect("Failed to write to temp file");
+/// writeln!(temp_file2, "3.0,4.0").expect("Failed to write to temp file");
 ///
 /// let mut options = LoadTxtOptions::default();
 /// options.delimiter = Some(",".to_string());
 /// options.skiprows = 1;
-/// let array = loadtxt::<f64>(temp_file2.path(), options).unwrap();
+/// let array = loadtxt::<f64>(temp_file2.path(), options).expect("Failed to load text file");
 /// assert_eq!(array.shape(), &[2, 2]);
 /// ```
 pub fn loadtxt<T>(fname: &Path, options: LoadTxtOptions) -> Result<Array<T>>
@@ -348,14 +348,14 @@ where
 /// let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 ///
 /// // Save with default options
-/// savetxt(Path::new("output.txt"), &array, SaveTxtOptions::default()).unwrap();
+/// savetxt(Path::new("output.txt"), &array, SaveTxtOptions::default()).expect("Failed to save text file");
 ///
 /// // Save with custom format and delimiter
 /// let mut options = SaveTxtOptions::default();
 /// options.fmt = "%.6f".to_string();
 /// options.delimiter = ",".to_string();
 /// options.header = Some("x,y".to_string());
-/// savetxt(Path::new("output.csv"), &array, options).unwrap();
+/// savetxt(Path::new("output.csv"), &array, options).expect("Failed to save text file");
 /// ```
 #[allow(non_snake_case)]
 pub fn savetxt<T>(fname: &Path, X: &Array<T>, options: SaveTxtOptions) -> Result<()>
@@ -449,23 +449,23 @@ where
 /// use tempfile::NamedTempFile;
 ///
 /// // Create a temporary test file with missing values
-/// let mut temp_file = NamedTempFile::new().unwrap();
-/// writeln!(temp_file, "1.0 2.0 3.0").unwrap();
-/// writeln!(temp_file, "4.0 nan 6.0").unwrap();
-/// writeln!(temp_file, "7.0 8.0 N/A").unwrap();
+/// let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+/// writeln!(temp_file, "1.0 2.0 3.0").expect("Failed to write to temp file");
+/// writeln!(temp_file, "4.0 nan 6.0").expect("Failed to write to temp file");
+/// writeln!(temp_file, "7.0 8.0 N/A").expect("Failed to write to temp file");
 ///
 /// // Load with default missing value handling
-/// let array = genfromtxt::<f64>(temp_file.path(), GenFromTxtOptions::default()).unwrap();
+/// let array = genfromtxt::<f64>(temp_file.path(), GenFromTxtOptions::default()).expect("Failed to load with genfromtxt");
 /// assert_eq!(array.shape(), &[3, 3]);
 ///
 /// // Load with custom missing value markers
-/// let mut temp_file2 = NamedTempFile::new().unwrap();
-/// writeln!(temp_file2, "1.0 2.0").unwrap();
-/// writeln!(temp_file2, "NULL 4.0").unwrap();
+/// let mut temp_file2 = NamedTempFile::new().expect("Failed to create temp file");
+/// writeln!(temp_file2, "1.0 2.0").expect("Failed to write to temp file");
+/// writeln!(temp_file2, "NULL 4.0").expect("Failed to write to temp file");
 ///
 /// let mut options = GenFromTxtOptions::default();
 /// options.default_missing.push("NULL".to_string());
-/// let array = genfromtxt::<f64>(temp_file2.path(), options).unwrap();
+/// let array = genfromtxt::<f64>(temp_file2.path(), options).expect("Failed to load with genfromtxt");
 /// assert_eq!(array.shape(), &[2, 2]);
 /// ```
 pub fn genfromtxt<T>(fname: &Path, options: GenFromTxtOptions) -> Result<Array<T>>
@@ -734,14 +734,14 @@ pub fn detect_delimiter(fname: &Path, sample_lines: Option<usize>) -> Result<Str
 /// use tempfile::NamedTempFile;
 ///
 /// // Create a temporary test file with structured data
-/// let mut temp_file = NamedTempFile::new().unwrap();
-/// writeln!(temp_file, "Value: 1.5, Count: 10").unwrap();
-/// writeln!(temp_file, "Value: 2.3, Count: 20").unwrap();
-/// writeln!(temp_file, "Value: 4.7, Count: 15").unwrap();
+/// let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+/// writeln!(temp_file, "Value: 1.5, Count: 10").expect("Failed to write to temp file");
+/// writeln!(temp_file, "Value: 2.3, Count: 20").expect("Failed to write to temp file");
+/// writeln!(temp_file, "Value: 4.7, Count: 15").expect("Failed to write to temp file");
 ///
 /// // Extract values using regex with capture groups
 /// let pattern = r"Value: ([0-9.]+), Count: ([0-9]+)";
-/// let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None).unwrap();
+/// let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None).expect("Failed to parse with regex");
 /// assert_eq!(array.shape(), &[3, 2]);
 /// ```
 pub fn fromregex<T>(
@@ -873,7 +873,7 @@ where
 /// arrays.insert("arr_0".to_string(), Array::from_vec(vec![1.0, 2.0, 3.0]));
 /// arrays.insert("arr_1".to_string(), Array::from_vec(vec![4.0, 5.0, 6.0]));
 ///
-/// // savez_compressed(Path::new("data.npz"), &arrays).unwrap();
+/// // savez_compressed(Path::new("data.npz"), &arrays).expect("Failed to save compressed NPZ");
 /// ```
 pub fn savez_compressed<T: Clone + serde::Serialize>(
     fname: &Path,
@@ -904,40 +904,42 @@ mod tests {
     #[test]
     fn test_loadtxt_basic() {
         // Create a temporary file with test data
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "1.0 2.0 3.0").unwrap();
-        writeln!(temp_file, "4.0 5.0 6.0").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "1.0 2.0 3.0").expect("Failed to write to temp file");
+        writeln!(temp_file, "4.0 5.0 6.0").expect("Failed to write to temp file");
 
-        let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default()).unwrap();
+        let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default())
+            .expect("Failed to load text file");
         assert_eq!(array.shape(), &[2, 3]);
         assert_eq!(array.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     }
 
     #[test]
     fn test_loadtxt_with_comments() {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "# This is a comment").unwrap();
-        writeln!(temp_file, "1.0 2.0").unwrap();
-        writeln!(temp_file, "# Another comment").unwrap();
-        writeln!(temp_file, "3.0 4.0").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "# This is a comment").expect("Failed to write to temp file");
+        writeln!(temp_file, "1.0 2.0").expect("Failed to write to temp file");
+        writeln!(temp_file, "# Another comment").expect("Failed to write to temp file");
+        writeln!(temp_file, "3.0 4.0").expect("Failed to write to temp file");
 
-        let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default()).unwrap();
+        let array = loadtxt::<f64>(temp_file.path(), LoadTxtOptions::default())
+            .expect("Failed to load text file");
         assert_eq!(array.shape(), &[2, 2]);
         assert_eq!(array.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
     }
 
     #[test]
     fn test_loadtxt_with_delimiter() {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "1.0,2.0,3.0").unwrap();
-        writeln!(temp_file, "4.0,5.0,6.0").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "1.0,2.0,3.0").expect("Failed to write to temp file");
+        writeln!(temp_file, "4.0,5.0,6.0").expect("Failed to write to temp file");
 
         let options = LoadTxtOptions {
             delimiter: Some(",".to_string()),
             ..Default::default()
         };
 
-        let array = loadtxt::<f64>(temp_file.path(), options).unwrap();
+        let array = loadtxt::<f64>(temp_file.path(), options).expect("Failed to load text file");
         assert_eq!(array.shape(), &[2, 3]);
         assert_eq!(array.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     }
@@ -945,11 +947,12 @@ mod tests {
     #[test]
     fn test_savetxt_basic() {
         let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-        let temp_file = NamedTempFile::new().unwrap();
+        let temp_file = NamedTempFile::new().expect("Failed to create temp file");
 
-        savetxt(temp_file.path(), &array, SaveTxtOptions::default()).unwrap();
+        savetxt(temp_file.path(), &array, SaveTxtOptions::default())
+            .expect("Failed to save text file");
 
-        let content = fs::read_to_string(temp_file.path()).unwrap();
+        let content = fs::read_to_string(temp_file.path()).expect("Failed to read saved file");
         let lines: Vec<&str> = content.trim().split('\n').collect();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("1") && lines[0].contains("2"));
@@ -958,12 +961,13 @@ mod tests {
 
     #[test]
     fn test_genfromtxt_with_missing() {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "1.0 2.0 3.0").unwrap();
-        writeln!(temp_file, "4.0 nan 6.0").unwrap();
-        writeln!(temp_file, "7.0 8.0 N/A").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "1.0 2.0 3.0").expect("Failed to write to temp file");
+        writeln!(temp_file, "4.0 nan 6.0").expect("Failed to write to temp file");
+        writeln!(temp_file, "7.0 8.0 N/A").expect("Failed to write to temp file");
 
-        let array = genfromtxt::<f64>(temp_file.path(), GenFromTxtOptions::default()).unwrap();
+        let array = genfromtxt::<f64>(temp_file.path(), GenFromTxtOptions::default())
+            .expect("Failed to load with genfromtxt");
         assert_eq!(array.shape(), &[3, 3]);
         // Missing values should be replaced with 0.0
         let expected = vec![1.0, 2.0, 3.0, 4.0, 0.0, 6.0, 7.0, 8.0, 0.0];
@@ -972,24 +976,26 @@ mod tests {
 
     #[test]
     fn test_detect_delimiter() {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "1,2,3").unwrap();
-        writeln!(temp_file, "4,5,6").unwrap();
-        writeln!(temp_file, "7,8,9").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "1,2,3").expect("Failed to write to temp file");
+        writeln!(temp_file, "4,5,6").expect("Failed to write to temp file");
+        writeln!(temp_file, "7,8,9").expect("Failed to write to temp file");
 
-        let delimiter = detect_delimiter(temp_file.path(), Some(3)).unwrap();
+        let delimiter =
+            detect_delimiter(temp_file.path(), Some(3)).expect("Failed to detect delimiter");
         assert_eq!(delimiter, ",");
     }
 
     #[test]
     fn test_fromregex() {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "Value: 1.5, Count: 10").unwrap();
-        writeln!(temp_file, "Value: 2.3, Count: 20").unwrap();
-        writeln!(temp_file, "Value: 4.7, Count: 15").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "Value: 1.5, Count: 10").expect("Failed to write to temp file");
+        writeln!(temp_file, "Value: 2.3, Count: 20").expect("Failed to write to temp file");
+        writeln!(temp_file, "Value: 4.7, Count: 15").expect("Failed to write to temp file");
 
         let pattern = r"Value: ([0-9.]+), Count: ([0-9]+)";
-        let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None).unwrap();
+        let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None)
+            .expect("Failed to parse with regex");
 
         assert_eq!(array.shape(), &[3, 2]);
         let expected = vec![1.5, 10.0, 2.3, 20.0, 4.7, 15.0];
@@ -998,13 +1004,14 @@ mod tests {
 
     #[test]
     fn test_fromregex_single_column() {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "Temperature: 23.5°C").unwrap();
-        writeln!(temp_file, "Temperature: 25.1°C").unwrap();
-        writeln!(temp_file, "Temperature: 22.8°C").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "Temperature: 23.5°C").expect("Failed to write to temp file");
+        writeln!(temp_file, "Temperature: 25.1°C").expect("Failed to write to temp file");
+        writeln!(temp_file, "Temperature: 22.8°C").expect("Failed to write to temp file");
 
         let pattern = r"Temperature: ([0-9.]+)°C";
-        let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None).unwrap();
+        let array = fromregex::<f64>(temp_file.path(), pattern, "f64", None)
+            .expect("Failed to parse with regex");
 
         assert_eq!(array.shape(), &[3]);
         let expected = vec![23.5, 25.1, 22.8];

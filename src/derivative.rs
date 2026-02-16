@@ -64,7 +64,7 @@ where
     T: Float,
     F: Fn(T) -> T,
 {
-    let h = T::from(1e-8).unwrap();
+    let h = T::from(1e-8).expect("1e-8 is representable as Float");
 
     match method {
         DerivativeMethod::Forward => {
@@ -80,7 +80,7 @@ where
         DerivativeMethod::Central => {
             let fxh = f(x + h);
             let fxmh = f(x - h);
-            (fxh - fxmh) / (T::from(2.0).unwrap() * h)
+            (fxh - fxmh) / (T::from(2.0).expect("2.0 is representable as Float") * h)
         }
         DerivativeMethod::Richardson => richardson_derivative(f, x),
     }
@@ -95,8 +95,8 @@ where
     T: Float,
     F: Fn(T) -> T,
 {
-    let h0 = T::from(0.1).unwrap();
-    let con = T::from(2.0).unwrap();
+    let h0 = T::from(0.1).expect("0.1 is representable as Float");
+    let con = T::from(2.0).expect("2.0 is representable as Float");
     let con2 = con * con;
     let ntab = 10;
 
@@ -104,15 +104,16 @@ where
 
     // Initial estimate with h = h0
     let mut hh = h0;
-    a[0][0] = (f(x + hh) - f(x - hh)) / (T::from(2.0).unwrap() * hh);
+    a[0][0] = (f(x + hh) - f(x - hh)) / (T::from(2.0).expect("2.0 is representable as Float") * hh);
 
-    let mut err = T::from(1e10).unwrap();
+    let mut err = T::from(1e10).expect("1e10 is representable as Float");
     let mut ans = a[0][0];
 
     for i in 1..ntab {
         // Decrease step size
         hh = hh / con;
-        a[0][i] = (f(x + hh) - f(x - hh)) / (T::from(2.0).unwrap() * hh);
+        a[0][i] =
+            (f(x + hh) - f(x - hh)) / (T::from(2.0).expect("2.0 is representable as Float") * hh);
 
         let mut fac = con2;
         for j in 1..=i {
@@ -129,7 +130,9 @@ where
         }
 
         // Converged if error is small enough
-        if (a[i][i] - a[i - 1][i - 1]).abs() >= err * T::from(2.0).unwrap() {
+        if (a[i][i] - a[i - 1][i - 1]).abs()
+            >= err * T::from(2.0).expect("2.0 is representable as Float")
+        {
             break;
         }
     }
@@ -157,7 +160,7 @@ where
     F: Fn(&[T]) -> T,
 {
     let n = x.len();
-    let h = T::from(1e-8).unwrap();
+    let h = T::from(1e-8).expect("1e-8 is representable as Float");
     let mut grad = vec![T::zero(); n];
 
     match method {
@@ -175,7 +178,8 @@ where
                 let mut x_minus = x.to_vec();
                 x_plus[i] = x_plus[i] + h;
                 x_minus[i] = x_minus[i] - h;
-                grad[i] = (f(&x_plus) - f(&x_minus)) / (T::from(2.0).unwrap() * h);
+                grad[i] = (f(&x_plus) - f(&x_minus))
+                    / (T::from(2.0).expect("2.0 is representable as Float") * h);
             }
         }
         _ => {
@@ -185,7 +189,8 @@ where
                 let mut x_minus = x.to_vec();
                 x_plus[i] = x_plus[i] + h;
                 x_minus[i] = x_minus[i] - h;
-                grad[i] = (f(&x_plus) - f(&x_minus)) / (T::from(2.0).unwrap() * h);
+                grad[i] = (f(&x_plus) - f(&x_minus))
+                    / (T::from(2.0).expect("2.0 is representable as Float") * h);
             }
         }
     }
@@ -215,7 +220,7 @@ where
     let n = x.len();
     let f0 = f(x);
     let m = f0.len();
-    let h = T::from(1e-8).unwrap();
+    let h = T::from(1e-8).expect("1e-8 is representable as Float");
 
     let mut jac = vec![vec![T::zero(); n]; m];
 
@@ -231,7 +236,8 @@ where
                 let f_minus = f(&x_minus);
 
                 for i in 0..m {
-                    jac[i][j] = (f_plus[i] - f_minus[i]) / (T::from(2.0).unwrap() * h);
+                    jac[i][j] = (f_plus[i] - f_minus[i])
+                        / (T::from(2.0).expect("2.0 is representable as Float") * h);
                 }
             }
         }
@@ -272,7 +278,7 @@ where
     F: Fn(&[T]) -> T,
 {
     let n = x.len();
-    let h = T::from(1e-5).unwrap();
+    let h = T::from(1e-5).expect("1e-5 is representable as Float");
     let mut hess = vec![vec![T::zero(); n]; n];
 
     for i in 0..n {
@@ -300,7 +306,8 @@ where
             let f_mp = f(&x_mp);
             let f_mm = f(&x_mm);
 
-            hess[i][j] = (f_pp - f_pm - f_mp + f_mm) / (T::from(4.0).unwrap() * h * h);
+            hess[i][j] = (f_pp - f_pm - f_mp + f_mm)
+                / (T::from(4.0).expect("4.0 is representable as Float") * h * h);
             hess[j][i] = hess[i][j]; // Hessian is symmetric
         }
     }

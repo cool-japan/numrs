@@ -1,10 +1,10 @@
 [package]
 name = "numrs2"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["COOLJAPAN OU (Team KitaSan)"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 repository = "https://github.com/cool-japan/numrs"
 homepage = "https://github.com/cool-japan/numrs"
 documentation = "https://docs.rs/numrs2"
@@ -14,7 +14,8 @@ categories = ["science"]
 
 [lib]
 name = "numrs2"
-crate-type = ["cdylib", "rlib"]
+# Note: For Python extension, use maturin to build. cdylib is not needed in Cargo.toml
+# as maturin handles this automatically. Only rlib is needed for Rust library usage.
 
 [lints]
 workspace = true
@@ -29,45 +30,54 @@ scirs = []  # MANDATORY: Always enabled by default per SCIRS2 POLICY - DO NOT DI
 # SciRS2 integration is mandatory - this feature exists only for backward compatibility
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
 lapack = []  # Enable LAPACK-dependent linear algebra operations (through scirs2-linalg which uses OxiBLAS)
-python = ["dep:pyo3", "dep:numpy"]  # Python bindings via PyO3
+python = ["dep:pyo3", "dep:scirs2-numpy"]  # Python bindings via PyO3
 arrow = ["dep:arrow", "dep:arrow-array", "dep:arrow-buffer", "dep:arrow-cast", "dep:arrow-schema"]  # Apache Arrow integration
+parquet = ["dep:parquet"]  # Apache Parquet format support (pure Rust)
+netcdf = ["dep:netcdf3"]  # NetCDF-3 format support (pure Rust)
+matlab = ["dep:matfile"]  # MATLAB .mat file I/O (pure Rust)
+messagepack = ["dep:rmp-serde"]  # MessagePack serialization (pure Rust)
+bson = ["dep:bson"]  # BSON format support (pure Rust)
+io-all = ["arrow", "parquet", "netcdf", "matlab", "messagepack", "bson"]  # Enable all I/O formats
+wasm = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:wee_alloc"]  # WebAssembly support
+distributed = ["dep:tokio", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread", "tokio/macros", "tokio/time"]  # Distributed computing support (Pure Rust, no MPI)
+visualization = ["dep:plotters", "dep:plotters-backend", "dep:plotters-svg", "dep:resvg", "dep:usvg", "dep:tiny-skia", "dep:rgb"]  # Advanced visualization tools (pure Rust)
 ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without external dependencies
 
 [dependencies]
 # ===================================================================
-# SCIRS2 ECOSYSTEM DEPENDENCIES (MANDATORY) - MUST USE WORKSPACE
+# SCIRS2 ECOSYSTEM DEPENDENCIES (MANDATORY) - Using crates.io v0.2.0
 # ===================================================================
 # ALL external functionality (ndarray, rand, rayon, BLAS) goes through scirs2-core
-scirs2-core = { workspace = true, features = ["random", "array", "simd", "parallel", "linalg"] }
-scirs2-stats = { workspace = true }
-scirs2-linalg = { workspace = true }
-scirs2-ndimage = { workspace = true }
-scirs2-spatial = { workspace = true }
-scirs2-special = { workspace = true }
-scirs2-fft = { workspace = true }
-scirs2-signal = { workspace = true }
+# Using crates.io versions for stable 0.2.0 release
+scirs2-core = { version = "0.2.0", features = ["random", "array", "simd", "parallel", "linalg"] }
+scirs2-stats = { version = "0.2.0" }
+scirs2-linalg = { version = "0.2.0" }
+scirs2-ndimage = { version = "0.2.0" }
+scirs2-spatial = { version = "0.2.0", features = ["parallel"] }
+scirs2-special = { version = "0.2.0" }
+scirs2-fft = { version = "0.2.0" }
 
 # ===================================================================
 # ALLOWED DEPENDENCIES (Non-conflicting)
 # ===================================================================
 num-traits = "0.2.19"  # Numeric traits for generic math (compatible with SciRS2)
 paste = "1.0.15"       # For macro development
-thiserror = "2.0.17"   # Error handling
+thiserror = "2.0.18"   # Error handling
 lazy_static = "1.5.0"  # For static initialization patterns
 
 # Serialization/IO support
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.148"
+serde_json = "1.0.149"
 csv = "1.4.0"
 oxicode = { version = "0.1.1", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
-zip = { version = "6", default-features = false, features = ["deflate", "bzip2"] }
-# NPZ format support with pure Rust compression (deflate, bzip2)
-# Note: zstd compression disabled to avoid C dependencies (Pure Rust policy)
+oxiarc-archive = { version = "0.2.1" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
+# NPZ format support with pure Rust compression (DEFLATE via OxiARC)
 serde-pickle = "1.2.0" # Python pickle format support
-memmap2 = "0.9.9"      # Memory-mapped file I/O
+memmap2 = "0.9.10"      # Memory-mapped file I/O
 num_cpus = "1.17.0"
-regex = "1.12.2"
+regex = "1.12.3"
+chrono = { version = "0.4.43", default-features = false, features = ["std", "clock"] }  # Date and time for model metadata
 
 # Note: BLAS/LAPACK operations go through scirs2-linalg (which uses OxiBLAS internally)
 # No direct BLAS/LAPACK dependencies needed - pure Rust via SciRS2 ecosystem
@@ -89,13 +99,13 @@ regex = "1.12.2"
 
 # Optional GPU acceleration dependencies
 wgpu = { version = "28.0.0", optional = true }
-bytemuck = { version = "1.24.0", features = ["derive"], optional = true }
+bytemuck = { version = "1.25.0", features = ["derive"], optional = true }
 futures-intrusive = { version = "0.5.0", optional = true }
-tokio = { version = "1.48.0", features = ["sync", "rt"], optional = true }
+tokio = { version = "1.49.0", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
 
 # Optional Python bindings dependencies
 pyo3 = { version = "0.27.2", features = ["extension-module"], optional = true }
-numpy = { version = "0.27.1", optional = true }
+scirs2-numpy = { workspace = true, optional = true }
 
 # Optional Apache Arrow dependencies (via SciRS2 workspace)
 arrow = { workspace = true, optional = true }
@@ -104,17 +114,55 @@ arrow-buffer = { workspace = true, optional = true }
 arrow-cast = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 
+# Optional I/O format dependencies (Pure Rust - COOLJAPAN Policy)
+parquet = { workspace = true, optional = true }  # Apache Parquet (pure Rust)
+netcdf3 = { version = "0.6.0", optional = true }  # NetCDF-3 (pure Rust)
+matfile = { version = "0.5.0", optional = true, features = ["ndarray"] }  # MATLAB .mat files (pure Rust)
+rmp-serde = { version = "1.3.1", optional = true }  # MessagePack (pure Rust)
+bson = { version = "3.1.0", optional = true, features = ["serde"] }  # BSON (pure Rust)
+
+# Optional WebAssembly dependencies (Pure Rust - COOLJAPAN Policy)
+wasm-bindgen = { version = "0.2.108", optional = true, features = ["serde-serialize"] }  # WebAssembly bindings
+wasm-bindgen-futures = { version = "0.4.58", optional = true }  # Async/await support for WASM
+js-sys = { version = "0.3.85", optional = true }  # JavaScript standard library bindings
+web-sys = { version = "0.3.85", optional = true, features = ["console", "Window", "Performance"] }  # Web API bindings
+console_error_panic_hook = { version = "0.1.7", optional = true }  # Better panic messages in WASM
+wee_alloc = { version = "0.4.5", optional = true }  # Small allocator for WASM
+
+# Optional Visualization dependencies (Pure Rust - COOLJAPAN Policy)
+plotters = { version = "0.3.7", optional = true }  # High-performance plotting library
+plotters-backend = { version = "0.3.7", optional = true }  # Plotters backend API
+plotters-svg = { version = "0.3.7", optional = true }  # SVG backend for plotters
+resvg = { version = "0.46.0", optional = true }  # SVG rendering library
+usvg = { version = "0.46.0", optional = true }  # SVG simplification library
+tiny-skia = { version = "0.12.0", optional = true }  # Tiny Skia subset for rendering
+rgb = { version = "0.8.52", optional = true }  # RGB color types
+
 # Note: polars dependency has been removed to improve build speed
 
+# WebAssembly target-specific dependencies
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Enable getrandom for wasm32 (works for both 0.2 and 0.3)
+# We need to add a build dependency that forces the correct features
+# For now, we add getrandom to regular deps with wasm features
+
+# Force getrandom v0.3 with WASM support enabled
+getrandom = { version = "0.3", default-features = false, features = ["wasm_js"] }
+# Also add v0.2 with renamed package for transitive deps using older rand
+getrandom_02 = { package = "getrandom", version = "=0.2.17", default-features = false, features = ["js"] }
+# uuid also needs WASM support enabled
+uuid = { version = "1.21", features = ["js"] }  # Enable JS random for WASM
+
 [dev-dependencies]
-criterion = "0.8.1"  # Benchmarking library
+criterion = "0.8.2"  # Benchmarking library
 approx = "0.5.1"     # Approximate floating-point comparisons for tests
-tempfile = "3.24.0"   # Temporary files for testing I/O functionality
-proptest = "1.9.0"   # Property-based testing for mathematical invariants
-serial_test = "3.2.0"  # For tests that require serial execution (global state)
+tempfile = "3.25.0"   # Temporary files for testing I/O functionality
+proptest = "1.10.0"   # Property-based testing for mathematical invariants
+serial_test = "3.3.1"  # For tests that require serial execution (global state)
+wasm-bindgen-test = "0.3.58"  # Testing framework for WebAssembly
 # For performance benchmarks in bench.rs
-serde_json = "1.0.148"  # For loading NumPy benchmark results
-tokio = { version = "1.48.0", features = ["rt", "macros"] }  # For GPU tests
+serde_json = "1.0.149"  # For loading NumPy benchmark results
+tokio = { version = "1.49.0", features = ["rt", "macros"] }  # For GPU tests
 
 [workspace.lints.rust]
 unused_variables = "allow"
@@ -123,6 +171,37 @@ mismatched_lifetime_syntaxes = "allow"
 dead_code = "allow"
 unpredictable_function_pointer_comparisons = "allow"
 unknown_lints = "allow"
+
+# ===================================================================
+# PERFORMANCE OPTIMIZATION PROFILES
+# ===================================================================
+# Optimized release profile for maximum performance
+[profile.release]
+opt-level = 3              # Maximum optimization level
+lto = "fat"                # Full Link-Time Optimization for cross-crate inlining
+codegen-units = 1          # Single codegen unit for better optimization (slower compile)
+strip = true               # Strip symbols from binary (smaller size, no debug info)
+panic = "abort"            # Abort on panic (smaller binary, faster code)
+overflow-checks = false    # Disable overflow checks in release (use with caution)
+debug = false              # No debug information in release builds
+
+# Benchmark profile with debug info for profiling
+[profile.bench]
+inherits = "release"
+debug = true               # Keep debug info for flamegraph/profiling tools
+strip = false              # Keep symbols for profiling
+
+# Development profile optimized for compilation speed
+[profile.dev]
+opt-level = 0              # No optimization for fast compilation
+debug = true               # Full debug information
+overflow-checks = true     # Enable overflow checks in debug
+
+# Test profile with optimizations for faster test execution
+[profile.test]
+opt-level = 2              # Some optimization for faster tests
+debug = true               # Keep debug info for debugging test failures
+overflow-checks = true     # Keep safety checks in tests
 
 [[bench]]
 name = "numpy_comparison"
@@ -155,23 +234,105 @@ path = "bench/expression_templates_benchmark.rs"
 harness = false
 
 # ===================================================================
+# COMPREHENSIVE BENCHMARK SUITE (v1.0.0 / 0.2.0)
+# ===================================================================
+
+[[bench]]
+name = "linalg_benchmarks"
+path = "bench/linalg_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "stats_benchmarks"
+path = "bench/stats_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "fft_benchmarks"
+path = "bench/fft_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "array_ops_benchmarks"
+path = "bench/array_ops_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "optimization_benchmarks"
+path = "bench/optimization_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "simd_comparison_benchmark"
+path = "bench/simd_comparison_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "parallel_benchmarks"
+path = "bench/parallel_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "memory_benchmarks"
+path = "bench/memory_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "nn_benchmarks"
+path = "bench/nn_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "distributed_benchmarks"
+path = "bench/distributed_benchmarks.rs"
+harness = false
+required-features = ["distributed"]
+
+# ===================================================================
+# v0.2.0 ENHANCED BENCHMARKS (benches/ directory)
+# ===================================================================
+
+[[bench]]
+name = "multi_objective_benchmark"
+path = "benches/multi_objective_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "memory_optimization_benchmark"
+path = "benches/memory_optimization_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "parallel_algorithms_benchmark"
+path = "benches/parallel_algorithms_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "cache_alignment_benchmark"
+path = "benches/cache_alignment_benchmark.rs"
+harness = false
+
+# ===================================================================
 # WORKSPACE CONFIGURATION (SCIRS2 POLICY)
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.1.1" }
-scirs2-stats = { version = "0.1.1" }
-scirs2-linalg = { version = "0.1.1" }
-scirs2-ndimage = { version = "0.1.1" }
-scirs2-spatial = { version = "0.1.1" }
-scirs2-special = { version = "0.1.1" }
-scirs2-fft = { version = "0.1.1" }
-scirs2-signal = { version = "0.1.1" }
+scirs2-core = { version = "0.2.0" }
+scirs2-stats = { version = "0.2.0" }
+scirs2-linalg = { version = "0.2.0" }
+scirs2-ndimage = { version = "0.2.0" }
+scirs2-spatial = { version = "0.2.0" }
+scirs2-special = { version = "0.2.0" }
+scirs2-fft = { version = "0.2.0" }
+scirs2-numpy = { version = "0.2.0" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
-arrow = "57.1.0"
-arrow-array = "57.1.0"
-arrow-buffer = "57.1.0"
-arrow-cast = "57.1.0"
-arrow-schema = "57.1.0"
+arrow = "57.3.0"
+arrow-array = "57.3.0"
+arrow-buffer = "57.3.0"
+arrow-cast = "57.3.0"
+arrow-schema = "57.3.0"
+parquet = "57.3.0"  # Apache Parquet (pure Rust)
 
+
+# ===================================================================

@@ -137,8 +137,9 @@ pub fn create_aligned_vec<T: Copy>(data: &[T], alignment: usize) -> Vec<T> {
 /// a Vec that owns the aligned memory.
 pub fn create_aligned_buffer<T: Copy + Default>(size: usize, alignment: usize) -> Vec<T> {
     let byte_size = size * mem::size_of::<T>();
-    let layout = Layout::from_size_align(byte_size, alignment)
-        .unwrap_or_else(|_| Layout::array::<T>(size).unwrap());
+    let layout = Layout::from_size_align(byte_size, alignment).unwrap_or_else(|_| {
+        Layout::array::<T>(size).expect("Layout::array should succeed for valid size")
+    });
 
     unsafe {
         let ptr = alloc::alloc_zeroed(layout) as *mut T;

@@ -12,13 +12,18 @@ static DEFAULT_CONTEXT: OnceLock<Mutex<Option<GpuContextRef>>> = OnceLock::new()
 /// Gets the default GPU context, creating it if it doesn't exist
 pub fn get_default_context() -> Result<GpuContextRef> {
     let context_mutex = DEFAULT_CONTEXT.get_or_init(|| Mutex::new(None));
-    let mut context_guard = context_mutex.lock().unwrap();
+    let mut context_guard = context_mutex
+        .lock()
+        .expect("GPU context mutex poisoned - another thread panicked while holding the lock");
 
     if context_guard.is_none() {
         *context_guard = Some(crate::gpu::context::new_context()?);
     }
 
-    Ok(context_guard.as_ref().unwrap().clone())
+    Ok(context_guard
+        .as_ref()
+        .expect("GPU context should be initialized at this point")
+        .clone())
 }
 
 /// Checks if the hardware supports GPU acceleration
@@ -29,11 +34,10 @@ pub fn is_gpu_available() -> bool {
         .enable_all()
         .build();
 
-    if rt.is_err() {
-        return false;
-    }
-
-    let rt = rt.unwrap();
+    let rt = match rt {
+        Ok(runtime) => runtime,
+        Err(_) => return false,
+    };
     let context_result = rt.block_on(GpuContext::new());
 
     context_result.is_ok()

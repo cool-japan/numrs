@@ -547,49 +547,86 @@ mod tests {
     #[test]
     fn test_char_module_functions() {
         let strings = vec!["hello", "world", "test"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr =
+            array_from_strings(&strings, "U", None).expect("array_from_strings should succeed");
 
         // Test length function
-        let lengths = str_len(&arr).unwrap();
+        let lengths = str_len(&arr).expect("str_len should succeed");
         assert_eq!(lengths.to_vec(), vec![5, 5, 4]);
 
         // Test expandtabs
         let tab_strings = vec!["hello\tworld", "test\ttab"];
-        let tab_arr = array_from_strings(&tab_strings, "U", None).unwrap();
-        let expanded = expandtabs(&tab_arr, Some(4)).unwrap();
+        let tab_arr =
+            array_from_strings(&tab_strings, "U", None).expect("array_from_strings should succeed");
+        let expanded = expandtabs(&tab_arr, Some(4)).expect("expandtabs should succeed");
         assert_eq!(
-            expanded.get(&[0]).unwrap().to_string().unwrap(),
+            expanded
+                .get(&[0])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
             "hello   world"
         );
 
         // Test zfill
         let numbers = vec!["42", "-17", "123"];
-        let num_arr = array_from_strings(&numbers, "U", None).unwrap();
-        let filled = zfill(&num_arr, 5).unwrap();
-        assert_eq!(filled.get(&[0]).unwrap().to_string().unwrap(), "00042");
-        assert_eq!(filled.get(&[1]).unwrap().to_string().unwrap(), "-0017");
+        let num_arr =
+            array_from_strings(&numbers, "U", None).expect("array_from_strings should succeed");
+        let filled = zfill(&num_arr, 5).expect("zfill should succeed");
+        assert_eq!(
+            filled
+                .get(&[0])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "00042"
+        );
+        assert_eq!(
+            filled
+                .get(&[1])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "-0017"
+        );
     }
 
     #[test]
     fn test_translation() {
         let strings = vec!["hello", "world"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr =
+            array_from_strings(&strings, "U", None).expect("array_from_strings should succeed");
 
         let mut table = HashMap::new();
         table.insert('l', 'L');
         table.insert('o', 'O');
 
-        let translated = translate(&arr, &table, None).unwrap();
-        assert_eq!(translated.get(&[0]).unwrap().to_string().unwrap(), "heLLO");
-        assert_eq!(translated.get(&[1]).unwrap().to_string().unwrap(), "wOrLd");
+        let translated = translate(&arr, &table, None).expect("translate should succeed");
+        assert_eq!(
+            translated
+                .get(&[0])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "heLLO"
+        );
+        assert_eq!(
+            translated
+                .get(&[1])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "wOrLd"
+        );
     }
 
     #[test]
     fn test_partition_operations() {
         let strings = vec!["hello-world-test", "one-two-three"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr =
+            array_from_strings(&strings, "U", None).expect("array_from_strings should succeed");
 
-        let partitions = partition(&arr, "-").unwrap();
+        let partitions = partition(&arr, "-").expect("partition should succeed");
         assert_eq!(
             partitions[0],
             (
@@ -599,7 +636,7 @@ mod tests {
             )
         );
 
-        let rpartitions = rpartition(&arr, "-").unwrap();
+        let rpartitions = rpartition(&arr, "-").expect("rpartition should succeed");
         assert_eq!(
             rpartitions[0],
             (
@@ -613,22 +650,28 @@ mod tests {
     #[test]
     fn test_regex_operations() {
         let strings = vec!["hello123world", "test456example"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr =
+            array_from_strings(&strings, "U", None).expect("array_from_strings should succeed");
 
         // Test findall
-        let matches = regex_ops::findall(&arr, r"\d+").unwrap();
+        let matches = regex_ops::findall(&arr, r"\d+").expect("findall should succeed");
         assert_eq!(matches[0], vec!["123"]);
         assert_eq!(matches[1], vec!["456"]);
 
         // Test substitution
-        let substituted = regex_ops::sub(&arr, r"\d+", "XXX", None).unwrap();
+        let substituted = regex_ops::sub(&arr, r"\d+", "XXX", None).expect("sub should succeed");
         assert_eq!(
-            substituted.get(&[0]).unwrap().to_string().unwrap(),
+            substituted
+                .get(&[0])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
             "helloXXXworld"
         );
 
         // Test pattern matching
-        let matches_bool = regex_ops::match_pattern(&arr, r".*\d+.*").unwrap();
+        let matches_bool =
+            regex_ops::match_pattern(&arr, r".*\d+.*").expect("match_pattern should succeed");
         assert_eq!(matches_bool.to_vec(), vec![true, true]);
     }
 
@@ -636,23 +679,61 @@ mod tests {
     fn test_utility_functions() {
         // Test array_with_prefix
         let suffixes = vec!["1", "2", "3"];
-        let prefixed = array_with_prefix("test_", &suffixes, "U").unwrap();
-        assert_eq!(prefixed.get(&[0]).unwrap().to_string().unwrap(), "test_1");
+        let prefixed =
+            array_with_prefix("test_", &suffixes, "U").expect("array_with_prefix should succeed");
+        assert_eq!(
+            prefixed
+                .get(&[0])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "test_1"
+        );
 
         // Test array_with_suffix
         let prefixes = vec!["file", "data", "image"];
-        let suffixed = array_with_suffix(&prefixes, ".txt", "U").unwrap();
-        assert_eq!(suffixed.get(&[0]).unwrap().to_string().unwrap(), "file.txt");
+        let suffixed =
+            array_with_suffix(&prefixes, ".txt", "U").expect("array_with_suffix should succeed");
+        assert_eq!(
+            suffixed
+                .get(&[0])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "file.txt"
+        );
     }
 
     #[test]
     fn test_swapcase() {
         let strings = vec!["Hello", "WORLD", "tEsT"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr =
+            array_from_strings(&strings, "U", None).expect("array_from_strings should succeed");
 
-        let swapped = swapcase(&arr).unwrap();
-        assert_eq!(swapped.get(&[0]).unwrap().to_string().unwrap(), "hELLO");
-        assert_eq!(swapped.get(&[1]).unwrap().to_string().unwrap(), "world");
-        assert_eq!(swapped.get(&[2]).unwrap().to_string().unwrap(), "TeSt");
+        let swapped = swapcase(&arr).expect("swapcase should succeed");
+        assert_eq!(
+            swapped
+                .get(&[0])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "hELLO"
+        );
+        assert_eq!(
+            swapped
+                .get(&[1])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "world"
+        );
+        assert_eq!(
+            swapped
+                .get(&[2])
+                .expect("get element should succeed")
+                .to_string()
+                .expect("to_string should succeed"),
+            "TeSt"
+        );
     }
 }

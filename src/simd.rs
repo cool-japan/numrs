@@ -141,12 +141,12 @@ impl SimdOps<f32> for Array<f32> {
     }
 
     fn simd_sum(&self) -> f32 {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         f32::simd_sum(&a.view())
     }
 
     fn simd_mean(&self) -> f32 {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         f32::simd_mean(&a.view())
     }
 
@@ -171,13 +171,13 @@ impl SimdOps<f32> for Array<f32> {
     }
 
     fn simd_add_scalar(&self, scalar: f32) -> Array<f32> {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         let result = f32::simd_add(&a.view(), &ArrayView1::from(&vec![scalar; a.len()]));
         Array::from_vec(result.to_vec()).reshape(&self.shape())
     }
 
     fn simd_mul_scalar(&self, scalar: f32) -> Array<f32> {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         let result = f32::simd_scalar_mul(&a.view(), scalar);
         Array::from_vec(result.to_vec()).reshape(&self.shape())
     }
@@ -274,12 +274,12 @@ impl SimdOps<f64> for Array<f64> {
     }
 
     fn simd_sum(&self) -> f64 {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         f64::simd_sum(&a.view())
     }
 
     fn simd_mean(&self) -> f64 {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         f64::simd_mean(&a.view())
     }
 
@@ -304,13 +304,13 @@ impl SimdOps<f64> for Array<f64> {
     }
 
     fn simd_add_scalar(&self, scalar: f64) -> Array<f64> {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         let result = f64::simd_add(&a.view(), &ArrayView1::from(&vec![scalar; a.len()]));
         Array::from_vec(result.to_vec()).reshape(&self.shape())
     }
 
     fn simd_mul_scalar(&self, scalar: f64) -> Array<f64> {
-        let a = to_ndarray_1d(self).unwrap();
+        let a = to_ndarray_1d(self).expect("Array conversion to ndarray should succeed");
         let result = f64::simd_scalar_mul(&a.view(), scalar);
         Array::from_vec(result.to_vec()).reshape(&self.shape())
     }
@@ -386,19 +386,31 @@ pub fn simd_exp<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     // Use SimdUnifiedOps for f64
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
         let data = a.to_vec();
-        let data_f64: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+        let data_f64: Vec<f64> = data
+            .iter()
+            .map(|&x| x.to_f64().expect("f64 conversion should succeed"))
+            .collect();
         let nd_arr = Array1::from_vec(data_f64);
         let result = f64::simd_exp(&nd_arr.view());
-        let result_vec: Vec<T> = result.iter().map(|&x| T::from(x).unwrap()).collect();
+        let result_vec: Vec<T> = result
+            .iter()
+            .map(|&x| T::from(x).expect("conversion from f64 should succeed"))
+            .collect();
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Use SimdUnifiedOps for f32
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
         let data = a.to_vec();
-        let data_f32: Vec<f32> = data.iter().map(|&x| x.to_f32().unwrap()).collect();
+        let data_f32: Vec<f32> = data
+            .iter()
+            .map(|&x| x.to_f32().expect("f32 conversion should succeed"))
+            .collect();
         let nd_arr = Array1::from_vec(data_f32);
         let result = f32::simd_exp(&nd_arr.view());
-        let result_vec: Vec<T> = result.iter().map(|&x| T::from(x).unwrap()).collect();
+        let result_vec: Vec<T> = result
+            .iter()
+            .map(|&x| T::from(x).expect("conversion from f32 should succeed"))
+            .collect();
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Fallback for other types
@@ -413,19 +425,31 @@ pub fn simd_log<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     // Use SimdUnifiedOps for f64
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
         let data = a.to_vec();
-        let data_f64: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+        let data_f64: Vec<f64> = data
+            .iter()
+            .map(|&x| x.to_f64().expect("f64 conversion should succeed"))
+            .collect();
         let nd_arr = Array1::from_vec(data_f64);
         let result = f64::simd_ln(&nd_arr.view());
-        let result_vec: Vec<T> = result.iter().map(|&x| T::from(x).unwrap()).collect();
+        let result_vec: Vec<T> = result
+            .iter()
+            .map(|&x| T::from(x).expect("conversion from f64 should succeed"))
+            .collect();
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Use SimdUnifiedOps for f32
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
         let data = a.to_vec();
-        let data_f32: Vec<f32> = data.iter().map(|&x| x.to_f32().unwrap()).collect();
+        let data_f32: Vec<f32> = data
+            .iter()
+            .map(|&x| x.to_f32().expect("f32 conversion should succeed"))
+            .collect();
         let nd_arr = Array1::from_vec(data_f32);
         let result = f32::simd_ln(&nd_arr.view());
-        let result_vec: Vec<T> = result.iter().map(|&x| T::from(x).unwrap()).collect();
+        let result_vec: Vec<T> = result
+            .iter()
+            .map(|&x| T::from(x).expect("conversion from f32 should succeed"))
+            .collect();
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Fallback for other types
@@ -440,19 +464,31 @@ pub fn simd_sqrt<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     // Use SimdUnifiedOps for f64
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
         let data = a.to_vec();
-        let data_f64: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+        let data_f64: Vec<f64> = data
+            .iter()
+            .map(|&x| x.to_f64().expect("f64 conversion should succeed"))
+            .collect();
         let nd_arr = Array1::from_vec(data_f64);
         let result = f64::simd_sqrt(&nd_arr.view());
-        let result_vec: Vec<T> = result.iter().map(|&x| T::from(x).unwrap()).collect();
+        let result_vec: Vec<T> = result
+            .iter()
+            .map(|&x| T::from(x).expect("conversion from f64 should succeed"))
+            .collect();
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Use SimdUnifiedOps for f32
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
         let data = a.to_vec();
-        let data_f32: Vec<f32> = data.iter().map(|&x| x.to_f32().unwrap()).collect();
+        let data_f32: Vec<f32> = data
+            .iter()
+            .map(|&x| x.to_f32().expect("f32 conversion should succeed"))
+            .collect();
         let nd_arr = Array1::from_vec(data_f32);
         let result = f32::simd_sqrt(&nd_arr.view());
-        let result_vec: Vec<T> = result.iter().map(|&x| T::from(x).unwrap()).collect();
+        let result_vec: Vec<T> = result
+            .iter()
+            .map(|&x| T::from(x).expect("conversion from f32 should succeed"))
+            .collect();
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Fallback for other types
@@ -479,7 +515,7 @@ mod tests {
     fn test_simd_add() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]);
-        let c = simd_add(&a, &b).unwrap();
+        let c = simd_add(&a, &b).expect("simd_add should succeed");
         assert_eq!(c.to_vec(), vec![6.0, 8.0, 10.0, 12.0]);
     }
 
@@ -487,7 +523,7 @@ mod tests {
     fn test_simd_mul() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]);
-        let c = simd_mul(&a, &b).unwrap();
+        let c = simd_mul(&a, &b).expect("simd_mul should succeed");
         assert_eq!(c.to_vec(), vec![5.0, 12.0, 21.0, 32.0]);
     }
 
@@ -495,7 +531,7 @@ mod tests {
     fn test_simd_div() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]);
-        let c = simd_div(&a, &b).unwrap();
+        let c = simd_div(&a, &b).expect("simd_div should succeed");
         assert_relative_eq!(c.to_vec()[0], 0.2, epsilon = 1e-10);
         assert_relative_eq!(c.to_vec()[1], 2.0 / 6.0, epsilon = 1e-10);
         assert_relative_eq!(c.to_vec()[2], 3.0 / 7.0, epsilon = 1e-10);
@@ -557,7 +593,9 @@ mod tests {
     #[test]
     fn test_simd_div_scalar() {
         let a = Array::from_vec(vec![10.0f64, 20.0, 30.0, 40.0]);
-        let result = a.simd_div_scalar(2.0).unwrap();
+        let result = a
+            .simd_div_scalar(2.0)
+            .expect("simd_div_scalar should succeed");
         assert_eq!(result.to_vec(), vec![5.0, 10.0, 15.0, 20.0]);
     }
 
@@ -573,7 +611,7 @@ mod tests {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0]);
         let b = Array::from_vec(vec![2.0f64, 3.0, 4.0]);
         let c = Array::from_vec(vec![1.0f64, 1.0, 1.0]);
-        let result = a.simd_fma(&b, &c).unwrap();
+        let result = a.simd_fma(&b, &c).expect("simd_fma should succeed");
         // a * b + c = [1*2+1, 2*3+1, 3*4+1] = [3, 7, 13]
         assert_eq!(result.to_vec(), vec![3.0, 7.0, 13.0]);
     }
@@ -592,9 +630,21 @@ mod tests {
         let a = Array::from_vec(data.clone());
         let b = Array::from_vec(data);
 
-        let result = simd_add(&a, &b).unwrap();
-        assert_relative_eq!(result.get(&[0]).unwrap(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(result.get(&[512]).unwrap(), 1024.0, epsilon = 1e-10);
-        assert_relative_eq!(result.get(&[1023]).unwrap(), 2046.0, epsilon = 1e-10);
+        let result = simd_add(&a, &b).expect("simd_add should succeed");
+        assert_relative_eq!(
+            result.get(&[0]).expect("get element should succeed"),
+            0.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            result.get(&[512]).expect("get element should succeed"),
+            1024.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            result.get(&[1023]).expect("get element should succeed"),
+            2046.0,
+            epsilon = 1e-10
+        );
     }
 }

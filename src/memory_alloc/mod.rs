@@ -4,6 +4,7 @@
 //! numerical computing workloads.
 
 pub mod aligned;
+pub mod aligned_helpers;
 pub mod arena;
 pub mod benchmarking;
 pub mod cache_optimization;
@@ -17,6 +18,10 @@ pub mod strategy;
 
 // Re-export the main types and functions for convenience
 pub use aligned::{AlignedAllocator, AlignmentConfig};
+pub use aligned_helpers::{
+    aligned_alloc, aligned_alloc_zeroed, aligned_dealloc, cache_line_size, is_aligned,
+    optimal_simd_alignment, AlignedBox, AlignedVec,
+};
 pub use arena::{ArenaAllocator, ArenaConfig};
 pub use benchmarking::{benchmark_configs, AllocatorBenchmark, BenchmarkConfig, BenchmarkResults};
 pub use cache_optimization::{

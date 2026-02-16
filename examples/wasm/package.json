@@ -1,0 +1,41 @@
+{
+  "name": "numrs2-wasm-demo",
+  "version": "0.2.0",
+  "description": "NumRS2 WebAssembly Demo Application",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "wasm-pack build ../.. --target web --features wasm --out-dir examples/wasm/pkg",
+    "build:release": "wasm-pack build ../.. --target web --features wasm --release --out-dir examples/wasm/pkg",
+    "build:nodejs": "wasm-pack build ../.. --target nodejs --features wasm --out-dir examples/wasm/pkg-nodejs",
+    "build:bundler": "wasm-pack build ../.. --target bundler --features wasm --out-dir examples/wasm/pkg-bundler",
+    "dev": "vite",
+    "preview": "vite preview",
+    "serve": "python3 -m http.server 8080",
+    "clean": "rm -rf pkg pkg-nodejs pkg-bundler dist node_modules"
+  },
+  "devDependencies": {
+    "vite": "^6.0.9",
+    "vite-plugin-wasm": "^3.4.1",
+    "vite-plugin-top-level-await": "^1.4.6"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cool-japan/numrs.git"
+  },
+  "keywords": [
+    "webassembly",
+    "wasm",
+    "numerical-computing",
+    "linear-algebra",
+    "scientific-computing",
+    "rust",
+    "numrs2"
+  ],
+  "author": "COOLJAPAN OU (Team KitaSan)",
+  "license": "Apache-2.0"
+}

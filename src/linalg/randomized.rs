@@ -269,7 +269,9 @@ where
     let projected = a.matmul(&proj_matrix)?;
 
     // Scale by sqrt(n / target_dim) for variance preservation
-    let scale = T::from((n as f64) / (target_dim as f64)).unwrap().sqrt();
+    let scale = T::from((n as f64) / (target_dim as f64))
+        .expect("ratio of positive integers is a valid f64")
+        .sqrt();
     let scaled = projected.multiply_scalar(scale);
 
     Ok(scaled)
@@ -331,7 +333,7 @@ where
     let data: Vec<T> = (0..rows * cols)
         .map(|_| {
             let sample: f64 = dist.sample(&mut rng);
-            T::from(sample).unwrap()
+            T::from(sample).expect("standard normal sample is a valid f64")
         })
         .collect();
 
@@ -344,7 +346,7 @@ where
     T: Float + Clone + Default + Zero + One,
 {
     let mut rng = seeded_rng(42);
-    let dist = Uniform::new(0.0, 1.0).unwrap();
+    let dist = Uniform::new(0.0, 1.0).expect("uniform distribution with valid range");
 
     let data: Vec<T> = (0..rows * cols)
         .map(|_| {
@@ -368,13 +370,13 @@ where
     T: Float + Clone + Default + One,
 {
     let mut rng = seeded_rng(42);
-    let dist = Uniform::new(0.0, 1.0).unwrap();
+    let dist = Uniform::new(0.0, 1.0).expect("uniform distribution with valid range");
 
     let data: Vec<T> = (0..rows * cols)
         .map(|_| {
             let p: f64 = dist.sample(&mut rng);
-            let threshold = T::from(0.5).unwrap();
-            let p_t = T::from(p).unwrap();
+            let threshold = T::from(0.5).expect("0.5 is a valid f64 constant");
+            let p_t = T::from(p).expect("uniform sample is a valid f64");
             if p_t < threshold {
                 T::one()
             } else {
@@ -409,7 +411,9 @@ where
     // Modified Gram-Schmidt process
     for j in 0..n {
         // Start with column j of A
-        let mut v: Vec<T> = (0..m).map(|i| a.get(&[i, j]).unwrap()).collect();
+        let mut v: Vec<T> = (0..m)
+            .map(|i| a.get(&[i, j]).expect("array indices are valid"))
+            .collect();
 
         // Orthogonalize against previous columns
         for i in 0..j {
@@ -549,7 +553,8 @@ mod tests {
 
     #[test]
     fn test_generate_gaussian_matrix() {
-        let mat: Array<f64> = generate_random_gaussian_matrix(10, 5).unwrap();
+        let mat: Array<f64> =
+            generate_random_gaussian_matrix(10, 5).expect("matrix generation should succeed");
         assert_eq!(mat.shape(), vec![10, 5]);
         // Check that values are reasonable (not all zeros)
         let sum: f64 = mat.to_vec().iter().map(|&x| x.abs()).sum();
@@ -558,7 +563,8 @@ mod tests {
 
     #[test]
     fn test_generate_sparse_matrix() {
-        let mat: Array<f64> = generate_sparse_random_matrix(100, 50).unwrap();
+        let mat: Array<f64> =
+            generate_sparse_random_matrix(100, 50).expect("matrix generation should succeed");
         assert_eq!(mat.shape(), vec![100, 50]);
 
         // Check sparsity (approximately 2/3 should be zero)
@@ -573,7 +579,8 @@ mod tests {
 
     #[test]
     fn test_generate_rademacher_matrix() {
-        let mat: Array<f64> = generate_rademacher_matrix(10, 5).unwrap();
+        let mat: Array<f64> =
+            generate_rademacher_matrix(10, 5).expect("matrix generation should succeed");
         assert_eq!(mat.shape(), vec![10, 5]);
 
         // All values should be +1 or -1
@@ -588,17 +595,17 @@ mod tests {
         // Create a simple 3x2 matrix
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
 
-        let (q, r) = qr_decomposition(&a).unwrap();
+        let (q, r) = qr_decomposition(&a).expect("QR decomposition should succeed");
 
         // Check shapes
         assert_eq!(q.shape(), vec![3, 2]);
         assert_eq!(r.shape(), vec![2, 2]);
 
         // Check Q is orthonormal: Q.T @ Q should be approximately I
-        let qtq = q.transpose().matmul(&q).unwrap();
+        let qtq = q.transpose().matmul(&q).expect("matmul should succeed");
         for i in 0..2 {
             for j in 0..2 {
-                let val = qtq.get(&[i, j]).unwrap();
+                let val = qtq.get(&[i, j]).expect("valid index");
                 if i == j {
                     assert_relative_eq!(val, 1.0, epsilon = 1e-6);
                 } else {
@@ -608,49 +615,49 @@ mod tests {
         }
 
         // Check R is upper triangular
-        assert!(r.get(&[1, 0]).unwrap().abs() < 1e-6);
+        assert!(r.get(&[1, 0]).expect("valid index").abs() < 1e-6);
     }
 
     #[test]
     fn test_extract_columns() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
-        let extracted = extract_columns(&a, 2).unwrap();
+        let extracted = extract_columns(&a, 2).expect("extract columns should succeed");
         assert_eq!(extracted.shape(), vec![2, 2]);
-        assert_relative_eq!(extracted.get(&[0, 0]).unwrap(), 1.0);
-        assert_relative_eq!(extracted.get(&[0, 1]).unwrap(), 2.0);
-        assert_relative_eq!(extracted.get(&[1, 0]).unwrap(), 4.0);
-        assert_relative_eq!(extracted.get(&[1, 1]).unwrap(), 5.0);
+        assert_relative_eq!(extracted.get(&[0, 0]).expect("valid index"), 1.0);
+        assert_relative_eq!(extracted.get(&[0, 1]).expect("valid index"), 2.0);
+        assert_relative_eq!(extracted.get(&[1, 0]).expect("valid index"), 4.0);
+        assert_relative_eq!(extracted.get(&[1, 1]).expect("valid index"), 5.0);
     }
 
     #[test]
     fn test_extract_rows() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
 
-        let extracted = extract_rows(&a, 2).unwrap();
+        let extracted = extract_rows(&a, 2).expect("extract rows should succeed");
         assert_eq!(extracted.shape(), vec![2, 2]);
-        assert_relative_eq!(extracted.get(&[0, 0]).unwrap(), 1.0);
-        assert_relative_eq!(extracted.get(&[0, 1]).unwrap(), 2.0);
-        assert_relative_eq!(extracted.get(&[1, 0]).unwrap(), 3.0);
-        assert_relative_eq!(extracted.get(&[1, 1]).unwrap(), 4.0);
+        assert_relative_eq!(extracted.get(&[0, 0]).expect("valid index"), 1.0);
+        assert_relative_eq!(extracted.get(&[0, 1]).expect("valid index"), 2.0);
+        assert_relative_eq!(extracted.get(&[1, 0]).expect("valid index"), 3.0);
+        assert_relative_eq!(extracted.get(&[1, 1]).expect("valid index"), 4.0);
     }
 
     #[test]
     fn test_extract_elements() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        let extracted = extract_elements(&a, 3).unwrap();
+        let extracted = extract_elements(&a, 3).expect("extract elements should succeed");
         assert_eq!(extracted.shape(), vec![3]);
-        assert_relative_eq!(extracted.get(&[0]).unwrap(), 1.0);
-        assert_relative_eq!(extracted.get(&[1]).unwrap(), 2.0);
-        assert_relative_eq!(extracted.get(&[2]).unwrap(), 3.0);
+        assert_relative_eq!(extracted.get(&[0]).expect("valid index"), 1.0);
+        assert_relative_eq!(extracted.get(&[1]).expect("valid index"), 2.0);
+        assert_relative_eq!(extracted.get(&[2]).expect("valid index"), 3.0);
     }
 
     #[test]
     fn test_randomized_range_finder_shape() {
         let a = Array::from_vec((0..100).map(|x| x as f64).collect()).reshape(&[10, 10]);
 
-        let q = randomized_range_finder(&a, 5, 0).unwrap();
+        let q = randomized_range_finder(&a, 5, 0).expect("range finder should succeed");
         assert_eq!(q.shape(), vec![10, 5]);
     }
 
@@ -658,7 +665,8 @@ mod tests {
     fn test_random_projection_gaussian() {
         let a = Array::from_vec((0..100).map(|x| x as f64).collect()).reshape(&[10, 10]);
 
-        let projected = random_projection(&a, 5, ProjectionType::Gaussian).unwrap();
+        let projected =
+            random_projection(&a, 5, ProjectionType::Gaussian).expect("projection should succeed");
         assert_eq!(projected.shape(), vec![10, 5]);
     }
 
@@ -666,7 +674,8 @@ mod tests {
     fn test_random_projection_sparse() {
         let a = Array::from_vec((0..100).map(|x| x as f64).collect()).reshape(&[10, 10]);
 
-        let projected = random_projection(&a, 5, ProjectionType::Sparse).unwrap();
+        let projected =
+            random_projection(&a, 5, ProjectionType::Sparse).expect("projection should succeed");
         assert_eq!(projected.shape(), vec![10, 5]);
     }
 
@@ -674,7 +683,8 @@ mod tests {
     fn test_random_projection_rademacher() {
         let a = Array::from_vec((0..100).map(|x| x as f64).collect()).reshape(&[10, 10]);
 
-        let projected = random_projection(&a, 5, ProjectionType::Rademacher).unwrap();
+        let projected = random_projection(&a, 5, ProjectionType::Rademacher)
+            .expect("projection should succeed");
         assert_eq!(projected.shape(), vec![10, 5]);
     }
 }

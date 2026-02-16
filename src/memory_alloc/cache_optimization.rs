@@ -136,7 +136,10 @@ impl CacheOptimizedAllocator {
 
     /// Get current cache performance metrics
     pub fn get_cache_metrics(&self) -> CacheMetrics {
-        self.metrics.lock().unwrap().clone()
+        self.metrics
+            .lock()
+            .expect("metrics mutex should not be poisoned")
+            .clone()
     }
 
     /// Calculate optimal block size for cache-blocking algorithms
@@ -712,14 +715,18 @@ mod tests {
         let config = CacheConfig::default();
         let allocator = CacheOptimizedAllocator::new(config);
 
-        let layout = Layout::from_size_align(1024, 8).unwrap();
-        let ptr = allocator.allocate(layout).unwrap();
+        let layout = Layout::from_size_align(1024, 8).expect("Layout should succeed");
+        let ptr = allocator
+            .allocate(layout)
+            .expect("allocation should succeed");
 
         // Check that allocation is cache-line aligned
         assert_eq!(ptr.as_ptr() as usize % cache_constants::CACHE_LINE_SIZE, 0);
 
         unsafe {
-            allocator.deallocate(ptr, layout).unwrap();
+            allocator
+                .deallocate(ptr, layout)
+                .expect("deallocation should succeed");
         }
     }
 
@@ -815,7 +822,9 @@ mod tests {
         b.set(0, 0, 2.0);
         b.set(1, 1, 2.0);
 
-        let result = a.multiply_blocked(&b).unwrap();
+        let result = a
+            .multiply_blocked(&b)
+            .expect("matrix multiplication should succeed");
         assert_eq!(result.get(0, 0), Some(&2.0));
         assert_eq!(result.get(1, 1), Some(&2.0));
         assert_eq!(result.get(0, 1), Some(&0.0));
@@ -829,8 +838,10 @@ mod tests {
 
         // Simulate some allocations to generate metrics
         for _ in 0..100 {
-            let layout = Layout::from_size_align(64, 8).unwrap();
-            let _ptr = allocator.allocate(layout).unwrap();
+            let layout = Layout::from_size_align(64, 8).expect("Layout should succeed");
+            let _ptr = allocator
+                .allocate(layout)
+                .expect("allocation should succeed");
         }
 
         let recommendations = allocator.analyze_cache_performance();

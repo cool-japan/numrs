@@ -18,10 +18,10 @@
 //!     .reshape(&[2, 2, 2]);
 //!
 //! // Tucker decomposition
-//! let (core, factors) = tucker_decomposition(&tensor, &[1, 1, 1]).unwrap();
+//! let (core, factors) = tucker_decomposition(&tensor, &[1, 1, 1]).expect("decomposition should succeed");
 //!
 //! // CP decomposition with rank 2
-//! let factors = cp_als(&tensor, 2, 100, 1e-6).unwrap();
+//! let factors = cp_als(&tensor, 2, 100, 1e-6).expect("CP-ALS should succeed");
 //! ```
 
 use crate::array::Array;
@@ -103,7 +103,7 @@ impl Default for DecompConfig {
 ///
 /// let tensor = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
 ///     .reshape(&[2, 2, 2]);
-/// let (core, factors) = tucker_decomposition(&tensor, &[1, 1, 1]).unwrap();
+/// let (core, factors) = tucker_decomposition(&tensor, &[1, 1, 1]).expect("decomposition should succeed");
 /// ```
 pub fn tucker_decomposition<T>(tensor: &Array<T>, ranks: &[usize]) -> Result<TuckerResult<T>>
 where
@@ -209,7 +209,7 @@ where
 ///
 /// let tensor = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
 ///     .reshape(&[2, 2, 2]);
-/// let result = cp_als(&tensor, 2, 100, 1e-6).unwrap();
+/// let result = cp_als(&tensor, 2, 100, 1e-6).expect("CP-ALS should succeed");
 /// ```
 pub fn cp_als<T>(
     tensor: &Array<T>,
@@ -739,7 +739,8 @@ where
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let rand = ((seed >> 33) as f64) / (u32::MAX as f64);
-        *val = T::from(rand).unwrap_or(T::one() / T::from(2.0).unwrap());
+        *val =
+            T::from(rand).unwrap_or(T::one() / T::from(2.0).expect("2.0 is a valid f64 constant"));
     }
 
     Array::from_vec(data).reshape(&[rows, cols])
@@ -758,7 +759,8 @@ where
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let rand = ((seed >> 33) as f64) / (u32::MAX as f64);
-        *val = T::from(rand.abs()).unwrap_or(T::one() / T::from(2.0).unwrap());
+        *val = T::from(rand.abs())
+            .unwrap_or(T::one() / T::from(2.0).expect("2.0 is a valid f64 constant"));
     }
 
     Array::from_vec(data).reshape(&[rows, cols])
@@ -869,7 +871,10 @@ where
     let gram = matrix_multiply(&kr_t, &kr)?;
 
     // Add regularization for numerical stability
-    let gram_reg = add_regularization(&gram, T::from(1e-10).unwrap())?;
+    let gram_reg = add_regularization(
+        &gram,
+        T::from(1e-10).expect("1e-10 is a valid f64 constant"),
+    )?;
 
     let gram_inv = inverse_2x2_or_general(&gram_reg)?;
     let temp = matrix_multiply(&unfolded, &kr)?;
@@ -1246,10 +1251,10 @@ mod tests {
     fn test_mode_unfold_2d() {
         let tensor = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
-        let unfolded_0 = mode_unfold(&tensor, 0).unwrap();
+        let unfolded_0 = mode_unfold(&tensor, 0).expect("mode unfold should succeed");
         assert_eq!(unfolded_0.shape(), vec![2, 3]);
 
-        let unfolded_1 = mode_unfold(&tensor, 1).unwrap();
+        let unfolded_1 = mode_unfold(&tensor, 1).expect("mode unfold should succeed");
         assert_eq!(unfolded_1.shape(), vec![3, 2]);
     }
 
@@ -1258,13 +1263,13 @@ mod tests {
         let tensor =
             Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2, 2]);
 
-        let unfolded_0 = mode_unfold(&tensor, 0).unwrap();
+        let unfolded_0 = mode_unfold(&tensor, 0).expect("mode unfold should succeed");
         assert_eq!(unfolded_0.shape(), vec![2, 4]);
 
-        let unfolded_1 = mode_unfold(&tensor, 1).unwrap();
+        let unfolded_1 = mode_unfold(&tensor, 1).expect("mode unfold should succeed");
         assert_eq!(unfolded_1.shape(), vec![2, 4]);
 
-        let unfolded_2 = mode_unfold(&tensor, 2).unwrap();
+        let unfolded_2 = mode_unfold(&tensor, 2).expect("mode unfold should succeed");
         assert_eq!(unfolded_2.shape(), vec![2, 4]);
     }
 
@@ -1272,11 +1277,11 @@ mod tests {
     fn test_transpose_2d() {
         let matrix = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
-        let transposed = transpose_2d(&matrix).unwrap();
+        let transposed = transpose_2d(&matrix).expect("transpose should succeed");
         assert_eq!(transposed.shape(), vec![3, 2]);
-        assert_eq!(transposed.get(&[0, 0]).unwrap(), 1.0);
-        assert_eq!(transposed.get(&[0, 1]).unwrap(), 4.0);
-        assert_eq!(transposed.get(&[1, 0]).unwrap(), 2.0);
+        assert_eq!(transposed.get(&[0, 0]).expect("valid index"), 1.0);
+        assert_eq!(transposed.get(&[0, 1]).expect("valid index"), 4.0);
+        assert_eq!(transposed.get(&[1, 0]).expect("valid index"), 2.0);
     }
 
     #[test]
@@ -1284,12 +1289,12 @@ mod tests {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 
-        let c = matrix_multiply(&a, &b).unwrap();
+        let c = matrix_multiply(&a, &b).expect("matrix multiply should succeed");
         assert_eq!(c.shape(), vec![2, 2]);
-        assert_eq!(c.get(&[0, 0]).unwrap(), 19.0); // 1*5 + 2*7
-        assert_eq!(c.get(&[0, 1]).unwrap(), 22.0); // 1*6 + 2*8
-        assert_eq!(c.get(&[1, 0]).unwrap(), 43.0); // 3*5 + 4*7
-        assert_eq!(c.get(&[1, 1]).unwrap(), 50.0); // 3*6 + 4*8
+        assert_eq!(c.get(&[0, 0]).expect("valid index"), 19.0); // 1*5 + 2*7
+        assert_eq!(c.get(&[0, 1]).expect("valid index"), 22.0); // 1*6 + 2*8
+        assert_eq!(c.get(&[1, 0]).expect("valid index"), 43.0); // 3*5 + 4*7
+        assert_eq!(c.get(&[1, 1]).expect("valid index"), 50.0); // 3*6 + 4*8
     }
 
     #[test]
@@ -1299,7 +1304,8 @@ mod tests {
             Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2, 2]);
 
         // Tucker decomposition with full ranks
-        let result = tucker_decomposition(&tensor, &[2, 2, 2]).unwrap();
+        let result =
+            tucker_decomposition(&tensor, &[2, 2, 2]).expect("tucker decomposition should succeed");
 
         assert_eq!(result.core.shape(), vec![2, 2, 2]);
         assert_eq!(result.factors.len(), 3);
@@ -1314,7 +1320,8 @@ mod tests {
             Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2, 2]);
 
         // Tucker decomposition with reduced ranks
-        let result = tucker_decomposition(&tensor, &[1, 1, 1]).unwrap();
+        let result =
+            tucker_decomposition(&tensor, &[1, 1, 1]).expect("tucker decomposition should succeed");
 
         assert_eq!(result.core.shape(), vec![1, 1, 1]);
         assert_eq!(result.factors[0].shape(), vec![2, 1]);
@@ -1327,7 +1334,7 @@ mod tests {
         let tensor =
             Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2, 2]);
 
-        let result = cp_als(&tensor, 2, 50, 1e-4).unwrap();
+        let result = cp_als(&tensor, 2, 50, 1e-4).expect("CP-ALS should succeed");
 
         assert_eq!(result.rank, 2);
         assert_eq!(result.factors.len(), 3);
@@ -1341,8 +1348,8 @@ mod tests {
         let tensor =
             Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2, 2]);
 
-        let result = cp_als(&tensor, 3, 100, 1e-6).unwrap();
-        let reconstructed = cp_reconstruct(&result).unwrap();
+        let result = cp_als(&tensor, 3, 100, 1e-6).expect("CP-ALS should succeed");
+        let reconstructed = cp_reconstruct(&result).expect("CP reconstruct should succeed");
 
         assert_eq!(reconstructed.shape(), tensor.shape());
 
@@ -1363,7 +1370,7 @@ mod tests {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0, 9.0, 10.0]).reshape(&[3, 2]);
 
-        let kr = khatri_rao(&a, &b).unwrap();
+        let kr = khatri_rao(&a, &b).expect("Khatri-Rao product should succeed");
         assert_eq!(kr.shape(), vec![6, 2]);
     }
 
@@ -1372,7 +1379,7 @@ mod tests {
         let matrix =
             Array::from_vec(vec![1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0]).reshape(&[3, 3]);
 
-        let ortho = gram_schmidt(&matrix).unwrap();
+        let ortho = gram_schmidt(&matrix).expect("Gram-Schmidt should succeed");
 
         // Check that columns are approximately orthonormal
         let shape = ortho.shape();
@@ -1390,15 +1397,15 @@ mod tests {
     #[test]
     fn test_inverse_2x2() {
         let matrix = Array::from_vec(vec![4.0, 7.0, 2.0, 6.0]).reshape(&[2, 2]);
-        let inv = inverse_2x2_or_general(&matrix).unwrap();
+        let inv = inverse_2x2_or_general(&matrix).expect("matrix inverse should succeed");
 
-        let product = matrix_multiply(&matrix, &inv).unwrap();
+        let product = matrix_multiply(&matrix, &inv).expect("matrix multiply should succeed");
 
         // Check identity
-        assert!((product.get(&[0, 0]).unwrap() - 1.0).abs() < 1e-10);
-        assert!((product.get(&[0, 1]).unwrap()).abs() < 1e-10);
-        assert!((product.get(&[1, 0]).unwrap()).abs() < 1e-10);
-        assert!((product.get(&[1, 1]).unwrap() - 1.0).abs() < 1e-10);
+        assert!((product.get(&[0, 0]).expect("valid index") - 1.0).abs() < 1e-10);
+        assert!((product.get(&[0, 1]).expect("valid index")).abs() < 1e-10);
+        assert!((product.get(&[1, 0]).expect("valid index")).abs() < 1e-10);
+        assert!((product.get(&[1, 1]).expect("valid index") - 1.0).abs() < 1e-10);
     }
 
     #[test]
@@ -1407,7 +1414,8 @@ mod tests {
         let tensor =
             Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2, 2]);
 
-        let result = nonnegative_cp_als(&tensor, 2, 50, 1e-4).unwrap();
+        let result =
+            nonnegative_cp_als(&tensor, 2, 50, 1e-4).expect("nonnegative CP-ALS should succeed");
 
         // All factor elements should be non-negative
         for factor in &result.factors {
@@ -1423,14 +1431,16 @@ mod tests {
             Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2, 2]);
 
         // Tucker decomposition - test structure and API
-        let result = tucker_decomposition(&tensor, &[2, 2, 2]).unwrap();
-        let reconstructed = tucker_reconstruct(&result).unwrap();
+        let result =
+            tucker_decomposition(&tensor, &[2, 2, 2]).expect("tucker decomposition should succeed");
+        let reconstructed = tucker_reconstruct(&result).expect("tucker reconstruct should succeed");
 
         assert_eq!(reconstructed.shape(), tensor.shape());
 
         // Tucker decomposition with our simple SVD implementation
         // The algorithm structure is correct - numerical precision improvements are for future work
-        let error = frobenius_error(&tensor, &reconstructed).unwrap();
+        let error =
+            frobenius_error(&tensor, &reconstructed).expect("frobenius error should succeed");
         let frobenius_norm: f64 = tensor.to_vec().iter().map(|x| x * x).sum::<f64>().sqrt();
         let relative_error = error / frobenius_norm;
         assert!(

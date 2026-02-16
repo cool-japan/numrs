@@ -1,6 +1,7 @@
 //! Simple production readiness benchmarks for NumRS2
 
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::prelude::*;

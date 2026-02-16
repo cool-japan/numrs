@@ -25,12 +25,12 @@ use num_traits::Zero;
 ///
 /// let arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
 /// let condition = Array::from_vec(vec![true, false, true, false, true]);
-/// let compressed = compress(&arr, &condition, None).unwrap();
+/// let compressed = compress(&arr, &condition, None).expect("operation should succeed");
 /// // Returns [1, 3, 5]
 ///
 /// let arr2d = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let cond = Array::from_vec(vec![true, false, true]);
-/// let compressed = compress(&arr2d, &cond, Some(1)).unwrap();
+/// let compressed = compress(&arr2d, &cond, Some(1)).expect("operation should succeed");
 /// // Returns [[1, 3], [4, 6]] (columns 0 and 2)
 /// ```
 pub fn compress<T: Clone + Zero>(
@@ -142,7 +142,7 @@ pub fn compress<T: Clone + Zero>(
 ///
 /// let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let condition = Array::from_vec(vec![true, false, true, false, true, false]).reshape(&[2, 3]);
-/// let extracted = extract(&arr, &condition).unwrap();
+/// let extracted = extract(&arr, &condition).expect("operation should succeed");
 /// // Returns [1, 3, 5]
 /// ```
 pub fn extract<T: Clone>(array: &Array<T>, condition: &Array<bool>) -> Result<Array<T>> {
@@ -182,7 +182,7 @@ pub fn extract<T: Clone>(array: &Array<T>, condition: &Array<bool>) -> Result<Ar
 ///
 /// let mut arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
 /// let mask = Array::from_vec(vec![false, true, false, true, false]);
-/// place(&mut arr, &mask, &[10, 20]).unwrap();
+/// place(&mut arr, &mask, &[10, 20]).expect("operation should succeed");
 /// // arr is now [1, 10, 3, 20, 5]
 /// ```
 pub fn place<T: Clone>(array: &mut Array<T>, mask: &Array<bool>, values: &[T]) -> Result<()> {
@@ -240,7 +240,7 @@ pub fn place<T: Clone>(array: &mut Array<T>, mask: &Array<bool>, values: &[T]) -
 ///
 /// let mut arr = Array::from_vec(vec![0, 0, 0, 0, 0]);
 /// let indices = Array::from_vec(vec![0, 2, 4]);
-/// put(&mut arr, &indices, &[10, 20, 30]).unwrap();
+/// put(&mut arr, &indices, &[10, 20, 30]).expect("operation should succeed");
 /// // arr is now [10, 0, 20, 0, 30]
 /// ```
 pub fn put<T: Clone>(array: &mut Array<T>, indices: &Array<usize>, values: &[T]) -> Result<()> {
@@ -294,7 +294,7 @@ pub fn put<T: Clone>(array: &mut Array<T>, indices: &Array<usize>, values: &[T])
 /// let mut arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
 /// let mask = Array::from_vec(vec![false, true, false, true, false]);
 /// let values = Array::from_vec(vec![10, 20]);
-/// putmask(&mut arr, &mask, &values).unwrap();
+/// putmask(&mut arr, &mask, &values).expect("operation should succeed");
 /// // arr is now [1, 10, 3, 20, 5]
 /// ```
 pub fn putmask<T: Clone>(
@@ -322,7 +322,7 @@ pub fn putmask<T: Clone>(
 ///
 /// let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let indices = Array::from_vec(vec![0, 2, 1, 0]).reshape(&[2, 2]);
-/// let result = take_along_axis(&arr, &indices, 1).unwrap();
+/// let result = take_along_axis(&arr, &indices, 1).expect("operation should succeed");
 /// // For row 0: takes elements at indices [0, 2] -> [1, 3]
 /// // For row 1: takes elements at indices [1, 0] -> [5, 4]
 /// // Result is [[1, 3], [5, 4]]
@@ -425,7 +425,7 @@ pub fn take_along_axis<T: Clone + Zero>(
 ///     |slice: &Array<f64>| -> f64 { slice.sum() },
 ///     &arr,
 ///     1
-/// ).unwrap();
+/// ).expect("operation should succeed");
 /// // Sums each row: [6.0, 15.0]
 /// ```
 pub fn apply_along_axis<T, U, F>(func: F, array: &Array<T>, axis: usize) -> Result<Array<U>>
@@ -523,7 +523,7 @@ where
 ///     |a: &Array<f64>| -> Result<Array<f64>> { a.sum_axis(0) },
 ///     &arr,
 ///     &[1]
-/// ).unwrap();
+/// ).expect("operation should succeed");
 /// // Sums over axis 1, reducing dimension by 1
 /// ```
 pub fn apply_over_axes<T, F>(func: F, array: &Array<T>, axes: &[usize]) -> Result<Array<T>>
@@ -584,13 +584,13 @@ where
 /// // 1-D fancy indexing
 /// let arr = Array::from_vec(vec![10, 20, 30, 40, 50]);
 /// let indices = Array::from_vec(vec![0, 2, 4, 1]);
-/// let result = take(&arr, &indices, None).unwrap();
+/// let result = take(&arr, &indices, None).expect("operation should succeed");
 /// // Returns [10, 30, 50, 20]
 ///
 /// // 2-D fancy indexing along axis
 /// let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
 /// let indices = Array::from_vec(vec![2, 0, 1]);
-/// let result = take(&arr, &indices, Some(1)).unwrap();
+/// let result = take(&arr, &indices, Some(1)).expect("operation should succeed");
 /// // Takes columns [2, 0, 1] from each row
 /// ```
 pub fn take<T: Clone + Zero>(
@@ -706,13 +706,13 @@ pub fn take<T: Clone + Zero>(
 /// // Select elements at (0,0), (1,1), (2,2) - the diagonal
 /// let row_idx = Array::from_vec(vec![0, 1, 2]);
 /// let col_idx = Array::from_vec(vec![0, 1, 2]);
-/// let result = fancy_index(&arr, &[row_idx, col_idx]).unwrap();
+/// let result = fancy_index(&arr, &[row_idx, col_idx]).expect("operation should succeed");
 /// // Returns [1, 5, 9]
 ///
 /// // Select elements at (0,2), (2,0)
 /// let row_idx = Array::from_vec(vec![0, 2]);
 /// let col_idx = Array::from_vec(vec![2, 0]);
-/// let result = fancy_index(&arr, &[row_idx, col_idx]).unwrap();
+/// let result = fancy_index(&arr, &[row_idx, col_idx]).expect("operation should succeed");
 /// // Returns [3, 7]
 /// ```
 pub fn fancy_index<T: Clone + Zero>(
@@ -798,13 +798,13 @@ pub fn fancy_index<T: Clone + Zero>(
 ///
 /// let arr = Array::from_vec(vec![10, 20, 30, 40, 50]);
 /// let mask = Array::from_vec(vec![true, false, true, false, true]);
-/// let result = boolean_index(&arr, &mask).unwrap();
+/// let result = boolean_index(&arr, &mask).expect("operation should succeed");
 /// // Returns [10, 30, 50]
 ///
 /// // Works with comparisons
 /// let arr = Array::from_vec(vec![1, 5, 3, 8, 2]);
 /// let mask = arr.map(|x| x > 3);  // [false, true, false, true, false]
-/// let result = boolean_index(&arr, &mask).unwrap();
+/// let result = boolean_index(&arr, &mask).expect("operation should succeed");
 /// // Returns [5, 8]
 /// ```
 pub fn boolean_index<T: Clone>(array: &Array<T>, mask: &Array<bool>) -> Result<Array<T>> {
@@ -840,7 +840,7 @@ pub fn boolean_index<T: Clone>(array: &Array<T>, mask: &Array<bool>) -> Result<A
 /// let cond2 = arr.map(|x| x >= 3);
 /// let choice2 = arr.map(|x| x * 100);
 ///
-/// let result = select(&[cond1, cond2], &[choice1, choice2], 0).unwrap();
+/// let result = select(&[cond1, cond2], &[choice1, choice2], 0).expect("operation should succeed");
 /// // Returns [10, 20, 300, 400, 500]
 /// ```
 pub fn select<T: Clone>(
@@ -920,7 +920,7 @@ mod tests {
         let arr = Array::from_vec(vec![10, 20, 30, 40, 50]);
         let indices = Array::from_vec(vec![0, 2, 4, 1]);
 
-        let result = take(&arr, &indices, None).unwrap();
+        let result = take(&arr, &indices, None).expect("operation should succeed");
 
         assert_eq!(result.shape(), &[4]);
         assert_eq!(result.to_vec(), vec![10, 30, 50, 20]);
@@ -931,7 +931,7 @@ mod tests {
         let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
         let indices = Array::from_vec(vec![0, 3, 5]);
 
-        let result = take(&arr, &indices, None).unwrap();
+        let result = take(&arr, &indices, None).expect("operation should succeed");
 
         assert_eq!(result.shape(), &[3]);
         assert_eq!(result.to_vec(), vec![1, 4, 6]);
@@ -942,7 +942,7 @@ mod tests {
         let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
         let indices = Array::from_vec(vec![2, 0, 1]);
 
-        let result = take(&arr, &indices, Some(1)).unwrap();
+        let result = take(&arr, &indices, Some(1)).expect("operation should succeed");
 
         assert_eq!(result.shape(), &[2, 3]);
         // Row 0: [1, 2, 3] -> indices [2, 0, 1] -> [3, 1, 2]
@@ -966,7 +966,7 @@ mod tests {
         let row_idx = Array::from_vec(vec![0, 1, 2]);
         let col_idx = Array::from_vec(vec![0, 1, 2]);
 
-        let result = fancy_index(&arr, &[row_idx, col_idx]).unwrap();
+        let result = fancy_index(&arr, &[row_idx, col_idx]).expect("operation should succeed");
 
         assert_eq!(result.shape(), &[3]);
         assert_eq!(result.to_vec(), vec![1, 5, 9]);
@@ -979,7 +979,7 @@ mod tests {
         let row_idx = Array::from_vec(vec![0, 2, 1]);
         let col_idx = Array::from_vec(vec![2, 0, 1]);
 
-        let result = fancy_index(&arr, &[row_idx, col_idx]).unwrap();
+        let result = fancy_index(&arr, &[row_idx, col_idx]).expect("operation should succeed");
 
         assert_eq!(result.shape(), &[3]);
         // (0,2) -> 3, (2,0) -> 7, (1,1) -> 5
@@ -993,7 +993,7 @@ mod tests {
         let row_idx = Array::from_vec(vec![0, 1, 0, 1]).reshape(&[2, 2]);
         let col_idx = Array::from_vec(vec![0, 1, 2, 2]).reshape(&[2, 2]);
 
-        let result = fancy_index(&arr, &[row_idx, col_idx]).unwrap();
+        let result = fancy_index(&arr, &[row_idx, col_idx]).expect("operation should succeed");
 
         assert_eq!(result.shape(), &[2, 2]);
         // (0,0)->10, (1,1)->50, (0,2)->30, (1,2)->60
@@ -1027,7 +1027,7 @@ mod tests {
         let arr = Array::from_vec(vec![10, 20, 30, 40, 50]);
         let mask = Array::from_vec(vec![true, false, true, false, true]);
 
-        let result = boolean_index(&arr, &mask).unwrap();
+        let result = boolean_index(&arr, &mask).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![10, 30, 50]);
     }
@@ -1037,7 +1037,7 @@ mod tests {
         let arr = Array::from_vec(vec![1, 5, 3, 8, 2]);
         let mask = arr.map(|x| x > 3);
 
-        let result = boolean_index(&arr, &mask).unwrap();
+        let result = boolean_index(&arr, &mask).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![5, 8]);
     }
@@ -1047,7 +1047,7 @@ mod tests {
         let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
         let mask = Array::from_vec(vec![true, false, true, false, true, false]).reshape(&[2, 3]);
 
-        let result = boolean_index(&arr, &mask).unwrap();
+        let result = boolean_index(&arr, &mask).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![1, 3, 5]);
     }
@@ -1057,7 +1057,7 @@ mod tests {
         let arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
         let mask = Array::from_vec(vec![false; 5]);
 
-        let result = boolean_index(&arr, &mask).unwrap();
+        let result = boolean_index(&arr, &mask).expect("operation should succeed");
 
         assert_eq!(result.size(), 0);
     }
@@ -1067,7 +1067,7 @@ mod tests {
         let arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
         let mask = Array::from_vec(vec![true; 5]);
 
-        let result = boolean_index(&arr, &mask).unwrap();
+        let result = boolean_index(&arr, &mask).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![1, 2, 3, 4, 5]);
     }
@@ -1082,7 +1082,8 @@ mod tests {
         let cond2 = arr.map(|x| x >= 3);
         let choice2 = arr.map(|x| x * 100);
 
-        let result = select(&[cond1, cond2], &[choice1, choice2], 0).unwrap();
+        let result =
+            select(&[cond1, cond2], &[choice1, choice2], 0).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![10, 20, 300, 400, 500]);
     }
@@ -1095,7 +1096,7 @@ mod tests {
         let cond = arr.map(|x| x > 3);
         let choice = arr.map(|x| x * 10);
 
-        let result = select(&[cond], &[choice], -1).unwrap();
+        let result = select(&[cond], &[choice], -1).expect("operation should succeed");
 
         // Elements > 3 get multiplied by 10, others get -1
         assert_eq!(result.to_vec(), vec![-1, -1, -1, 40, 50]);
@@ -1114,7 +1115,8 @@ mod tests {
         let cond3 = arr.map(|x| x == 5);
         let choice3 = Array::from_vec(vec![500, 500, 500, 500, 500]);
 
-        let result = select(&[cond1, cond2, cond3], &[choice1, choice2, choice3], 0).unwrap();
+        let result = select(&[cond1, cond2, cond3], &[choice1, choice2, choice3], 0)
+            .expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![100, 0, 300, 0, 500]);
     }
@@ -1129,7 +1131,8 @@ mod tests {
         let cond2 = arr.map(|x| x >= 3);
         let choice2 = arr.map(|x| x * 100);
 
-        let result = select(&[cond1, cond2], &[choice1, choice2], 0).unwrap();
+        let result =
+            select(&[cond1, cond2], &[choice1, choice2], 0).expect("operation should succeed");
 
         assert_eq!(result.shape(), &[2, 2]);
         assert_eq!(result.to_vec(), vec![10, 20, 300, 400]);
@@ -1172,10 +1175,10 @@ mod tests {
         let arr = Array::from_vec(vec![5, 2, 8, 1, 9, 3]);
         let indices = Array::from_vec(vec![0, 2, 4]); // [5, 8, 9]
 
-        let reordered = take(&arr, &indices, None).unwrap();
+        let reordered = take(&arr, &indices, None).expect("operation should succeed");
         let mask = reordered.map(|x| x > 7); // [false, true, true]
 
-        let result = boolean_index(&reordered, &mask).unwrap();
+        let result = boolean_index(&reordered, &mask).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![8, 9]);
     }
@@ -1185,7 +1188,7 @@ mod tests {
         let arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
         let indices: Array<usize> = Array::from_vec(vec![]);
 
-        let result = take(&arr, &indices, None).unwrap();
+        let result = take(&arr, &indices, None).expect("operation should succeed");
 
         assert_eq!(result.size(), 0);
     }
@@ -1195,7 +1198,7 @@ mod tests {
         let arr = Array::from_vec(vec![10, 20, 30]);
         let indices = Array::from_vec(vec![0, 0, 1, 1, 2, 2]);
 
-        let result = take(&arr, &indices, None).unwrap();
+        let result = take(&arr, &indices, None).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![10, 10, 20, 20, 30, 30]);
     }

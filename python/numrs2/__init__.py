@@ -29,28 +29,58 @@ Example:
 
 from ._numrs2 import (
     __version__,
+    # Array class and creation functions
     Array,
     array,
     zeros,
     ones,
     eye,
+    identity,
     linspace,
     arange,
+    full,
+    zeros_like,
+    ones_like,
+    concatenate,
+    # Top-level linear algebra
     matmul,
     dot,
+    # Submodules
+    linalg,
+    stats,
+    random,
+    optimize,
+    nn,
+    symbolic,
+    io,
 )
 
 __all__ = [
     "__version__",
+    # Array class and creation
     "Array",
     "array",
     "zeros",
     "ones",
     "eye",
+    "identity",
     "linspace",
     "arange",
+    "full",
+    "zeros_like",
+    "ones_like",
+    "concatenate",
+    # Top-level functions
     "matmul",
     "dot",
+    # Submodules
+    "linalg",
+    "stats",
+    "random",
+    "optimize",
+    "nn",
+    "symbolic",
+    "io",
 ]
 
 

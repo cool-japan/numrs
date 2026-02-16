@@ -103,7 +103,8 @@ impl PoolAllocator {
         // Pre-allocate the initial blocks
         let layout = Layout::from_size_align(config.block_size, 8).unwrap_or_else(|_| {
             // Fallback to a safe default layout if the provided parameters are invalid
-            Layout::from_size_align(1024, 8).unwrap()
+            Layout::from_size_align(1024, 8)
+                .expect("Layout::from_size_align(1024, 8) should succeed")
         });
 
         for _ in 0..config.initial_blocks {
@@ -123,7 +124,10 @@ impl PoolAllocator {
     ///
     /// Returns a pointer to the allocated memory, or None if allocation fails
     pub fn allocate(&self) -> Option<NonNull<u8>> {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &mut *state_mutex.get() };
 
         // Try to get a block from the free list
@@ -150,8 +154,11 @@ impl PoolAllocator {
                 };
 
                 // Allocate new blocks
-                let layout = Layout::from_size_align(state.config.block_size, 8)
-                    .unwrap_or_else(|_| Layout::from_size_align(1024, 8).unwrap());
+                let layout =
+                    Layout::from_size_align(state.config.block_size, 8).unwrap_or_else(|_| {
+                        Layout::from_size_align(1024, 8)
+                            .expect("Layout::from_size_align(1024, 8) should succeed")
+                    });
 
                 for _ in 0..max_new {
                     if let Some(block) = MemoryBlock::new(layout) {
@@ -179,7 +186,10 @@ impl PoolAllocator {
     ///
     /// The pointer must have been previously returned by `allocate` and not already freed.
     pub unsafe fn deallocate(&self, ptr: NonNull<u8>) {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = &mut *state_mutex.get();
 
         // Find the block index
@@ -197,35 +207,50 @@ impl PoolAllocator {
 
     /// Get the number of available blocks in the pool
     pub fn available_blocks(&self) -> usize {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &*state_mutex.get() };
         state.free_list.len()
     }
 
     /// Get the total number of blocks in the pool
     pub fn total_blocks(&self) -> usize {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &*state_mutex.get() };
         state.total_blocks
     }
 
     /// Get the number of blocks currently in use
     pub fn used_blocks(&self) -> usize {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &*state_mutex.get() };
         state.used_blocks
     }
 
     /// Get the block size in bytes
     pub fn block_size(&self) -> usize {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &*state_mutex.get() };
         state.config.block_size
     }
 
     /// Reset the pool, returning all blocks to the free list
     pub fn reset(&self) {
-        let state_mutex = self.state.lock().unwrap();
+        let state_mutex = self
+            .state
+            .lock()
+            .expect("state mutex should not be poisoned");
         let state = unsafe { &mut *state_mutex.get() };
 
         // Clear the free list and rebuild it

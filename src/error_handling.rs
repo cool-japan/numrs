@@ -150,7 +150,9 @@ pub fn seterr(
     under: Option<ErrorAction>,
     invalid: Option<ErrorAction>,
 ) -> ErrorState {
-    let mut state = GLOBAL_ERROR_STATE.lock().unwrap();
+    let mut state = GLOBAL_ERROR_STATE
+        .lock()
+        .expect("global error state lock should not be poisoned");
     let old_state = state.clone();
 
     if let Some(action) = all {
@@ -191,7 +193,10 @@ pub fn seterr(
 /// println!("Invalid: {}", current_state.invalid);
 /// ```
 pub fn geterr() -> ErrorState {
-    GLOBAL_ERROR_STATE.lock().unwrap().clone()
+    GLOBAL_ERROR_STATE
+        .lock()
+        .expect("global error state lock should not be poisoned")
+        .clone()
 }
 
 /// Set the callback function for error handling
@@ -215,7 +220,9 @@ pub fn geterr() -> ErrorState {
 /// seterr(None, Some(ErrorAction::Call), None, None, None);
 /// ```
 pub fn seterrcall(callback: Option<ErrorCallback>) {
-    let mut cb = GLOBAL_ERROR_CALLBACK.lock().unwrap();
+    let mut cb = GLOBAL_ERROR_CALLBACK
+        .lock()
+        .expect("global error callback lock should not be poisoned");
     *cb = callback;
 }
 
@@ -225,7 +232,10 @@ pub fn seterrcall(callback: Option<ErrorCallback>) {
 ///
 /// The current error callback (if any)
 pub fn geterrcall() -> Option<ErrorCallback> {
-    GLOBAL_ERROR_CALLBACK.lock().unwrap().clone()
+    GLOBAL_ERROR_CALLBACK
+        .lock()
+        .expect("global error callback lock should not be poisoned")
+        .clone()
 }
 
 /// Error types that can occur in floating-point operations
@@ -316,7 +326,9 @@ pub struct ErrorStateGuard {
 impl Drop for ErrorStateGuard {
     fn drop(&mut self) {
         // Restore the old error state
-        let mut state = GLOBAL_ERROR_STATE.lock().unwrap();
+        let mut state = GLOBAL_ERROR_STATE
+            .lock()
+            .expect("global error state lock should not be poisoned");
         *state = self.old_state.clone();
     }
 }
@@ -464,12 +476,29 @@ mod tests {
     #[test]
     fn test_error_action_from_str() {
         assert_eq!(
-            "ignore".parse::<ErrorAction>().unwrap(),
+            "ignore"
+                .parse::<ErrorAction>()
+                .expect("'ignore' should parse to ErrorAction::Ignore"),
             ErrorAction::Ignore
         );
-        assert_eq!("warn".parse::<ErrorAction>().unwrap(), ErrorAction::Warn);
-        assert_eq!("raise".parse::<ErrorAction>().unwrap(), ErrorAction::Raise);
-        assert_eq!("call".parse::<ErrorAction>().unwrap(), ErrorAction::Call);
+        assert_eq!(
+            "warn"
+                .parse::<ErrorAction>()
+                .expect("'warn' should parse to ErrorAction::Warn"),
+            ErrorAction::Warn
+        );
+        assert_eq!(
+            "raise"
+                .parse::<ErrorAction>()
+                .expect("'raise' should parse to ErrorAction::Raise"),
+            ErrorAction::Raise
+        );
+        assert_eq!(
+            "call"
+                .parse::<ErrorAction>()
+                .expect("'call' should parse to ErrorAction::Call"),
+            ErrorAction::Call
+        );
 
         assert!("invalid".parse::<ErrorAction>().is_err());
     }

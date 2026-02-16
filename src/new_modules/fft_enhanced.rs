@@ -257,7 +257,7 @@ impl FFTEnhanced {
             if power_spectrum.len() > 3 {
                 sidelobe_level = *power_spectrum[3..]
                     .iter()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(&T::zero());
             }
 
@@ -827,8 +827,8 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0]);
 
         // FFT should match standard FFT for powers of 2
-        let fft1 = crate::new_modules::fft::FFT::fft(&x).unwrap();
-        let fft2 = FFTEnhanced::fft_any_size(&x).unwrap();
+        let fft1 = crate::new_modules::fft::FFT::fft(&x).expect("Standard FFT should succeed");
+        let fft2 = FFTEnhanced::fft_any_size(&x).expect("Any-size FFT should succeed");
 
         assert_eq!(fft1.shape(), fft2.shape());
 
@@ -847,7 +847,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
 
         // FFT should be calculated correctly
-        let fft_result = FFTEnhanced::fft_any_size(&x).unwrap();
+        let fft_result = FFTEnhanced::fft_any_size(&x).expect("Non-power-of-2 FFT should succeed");
         let fft_data = fft_result.to_vec();
 
         // Validate against known FFT result for [1,2,3]
@@ -879,10 +879,11 @@ mod tests {
             let x = Array::from_vec(signal.clone());
 
             // Forward FFT
-            let fft_result = FFTEnhanced::fft_any_size(&x).unwrap();
+            let fft_result = FFTEnhanced::fft_any_size(&x).expect("Forward FFT should succeed");
 
             // Inverse FFT
-            let ifft_result = FFTEnhanced::ifft_any_size(&fft_result).unwrap();
+            let ifft_result =
+                FFTEnhanced::ifft_any_size(&fft_result).expect("Inverse FFT should succeed");
             let ifft_data = ifft_result.to_vec();
 
             // Original signal should be recovered
@@ -899,14 +900,16 @@ mod tests {
         let n = 64;
 
         // Rectangular window should be all ones
-        let rect_window = FFTEnhanced::window::<f64>("rectangular", n).unwrap();
+        let rect_window = FFTEnhanced::window::<f64>("rectangular", n)
+            .expect("Rectangular window generation should succeed");
         let rect_data = rect_window.to_vec();
         for val in rect_data {
             assert_relative_eq!(val, 1.0, epsilon = 1e-10);
         }
 
         // Hann window should be 0 at endpoints and symmetric
-        let hann_window = FFTEnhanced::window::<f64>("hann", n).unwrap();
+        let hann_window =
+            FFTEnhanced::window::<f64>("hann", n).expect("Hann window generation should succeed");
         let hann_data = hann_window.to_vec();
         assert_relative_eq!(hann_data[0], 0.0, epsilon = 1e-10);
         assert_relative_eq!(hann_data[n - 1], 0.0, epsilon = 1e-10);
@@ -918,7 +921,8 @@ mod tests {
         // Compare window energy concentration properties
         let window_types = ["blackman_harris", "hamming"];
         let energy_concentration =
-            FFTEnhanced::window_energy_concentration::<f64>(&window_types, n).unwrap();
+            FFTEnhanced::window_energy_concentration::<f64>(&window_types, n)
+                .expect("Window energy concentration should succeed");
 
         // Both window types should produce valid energy concentration values
         assert!(energy_concentration[0].1.is_finite());
@@ -940,8 +944,8 @@ mod tests {
         let x = Array::from_vec(signal);
 
         // Compare standard FFT with optimized real FFT
-        let fft1 = crate::new_modules::fft::FFT::fft(&x).unwrap();
-        let fft2 = FFTEnhanced::real_fft_optimized(&x).unwrap();
+        let fft1 = crate::new_modules::fft::FFT::fft(&x).expect("Standard FFT should succeed");
+        let fft2 = FFTEnhanced::real_fft_optimized(&x).expect("Real FFT optimized should succeed");
 
         assert_eq!(fft1.shape(), fft2.shape());
 
@@ -979,7 +983,8 @@ mod tests {
         let x = Array::from_vec(signal);
 
         // Compute S-transform
-        let st_result = FFTEnhanced::stockwell_transform(&x, None, None).unwrap();
+        let st_result = FFTEnhanced::stockwell_transform(&x, None, None)
+            .expect("Stockwell transform should succeed");
         let st_shape = st_result.shape();
 
         // S-transform should be a 2D array with shape [n/2+1, n]

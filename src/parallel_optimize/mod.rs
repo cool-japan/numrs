@@ -44,6 +44,14 @@ pub fn optimize_parallel_computation(
 }
 
 /// Configuration for parallel processing
+///
+/// CACHE ALIGNMENT: This struct is aligned to 64 bytes (cache line size) to prevent
+/// false sharing when ParallelConfig instances are accessed by different threads.
+/// False sharing occurs when threads on different cores modify variables that reside
+/// on the same cache line, causing the cache line to bounce between cores and
+/// significantly degrading performance. By aligning to cache line boundaries, we ensure
+/// each ParallelConfig instance occupies its own cache line.
+#[repr(align(64))]
 #[derive(Debug, Clone, Copy)]
 pub struct ParallelConfig {
     /// Whether to use parallel processing

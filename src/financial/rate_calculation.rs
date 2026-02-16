@@ -40,7 +40,7 @@ use std::fmt::Debug;
 /// use numrs2::prelude::*;
 ///
 /// // Calculate interest rate for a loan
-/// let result = rate(60.0, -188.71, 10000.0, 0.0, 0, Some(0.1), Some(1e-6), Some(100)).unwrap();
+/// let result = rate(60.0, -188.71, 10000.0, 0.0, 0, Some(0.1), Some(1e-6), Some(100)).expect("rate calculation failed");
 /// assert!((result - (0.05_f64/12.0)).abs() < 0.001);
 /// ```
 pub fn rate<T>(
@@ -58,8 +58,8 @@ where
 {
     validate_financial_params(T::zero(), nper, pmt, pv, fv)?;
 
-    let guess = guess.unwrap_or_else(|| T::from(0.1).unwrap());
-    let tol = tol.unwrap_or_else(|| T::from(1e-6).unwrap());
+    let guess = guess.unwrap_or_else(|| T::from(0.1).expect("Failed to convert 0.1 to type T"));
+    let tol = tol.unwrap_or_else(|| T::from(1e-6).expect("Failed to convert 1e-6 to type T"));
     let maxiter = maxiter.unwrap_or(100);
 
     let when_factor = if when == 1 { T::one() } else { T::zero() };
@@ -70,7 +70,7 @@ where
     for _ in 0..maxiter {
         let (f_val, f_prime) = rate_function_and_derivative(rate, nper, pmt, pv, fv, when_factor);
 
-        if f_prime.abs() < T::from(1e-15).unwrap() {
+        if f_prime.abs() < T::from(1e-15).expect("Failed to convert 1e-15 to type T") {
             return Err(NumRs2Error::ComputationError(
                 "Rate calculation failed: derivative too small".to_string(),
             ));
@@ -85,8 +85,8 @@ where
         rate = new_rate;
 
         // Prevent negative rates in some contexts
-        if rate < T::from(-0.99).unwrap() {
-            rate = T::from(-0.99).unwrap();
+        if rate < T::from(-0.99).expect("Failed to convert -0.99 to type T") {
+            rate = T::from(-0.99).expect("Failed to convert -0.99 to type T");
         }
     }
 
@@ -100,7 +100,7 @@ fn rate_function_and_derivative<T>(rate: T, nper: T, pmt: T, pv: T, fv: T, when_
 where
     T: Float + Debug + Clone,
 {
-    if rate.abs() < T::from(1e-12).unwrap() {
+    if rate.abs() < T::from(1e-12).expect("Failed to convert 1e-12 to type T") {
         // Linear approximation when rate is very close to zero
         let f_val = pv + pmt * nper * (T::one() + when_factor * rate) + fv;
         let f_prime = pmt * nper * when_factor;
@@ -213,7 +213,7 @@ mod tests {
             Some(1e-6),
             Some(100),
         )
-        .unwrap();
+        .expect("rate calculation should succeed");
         assert_relative_eq!(result, monthly_rate, epsilon = 1e-4);
     }
 
@@ -230,7 +230,7 @@ mod tests {
             Some(1e-6),
             Some(100),
         )
-        .unwrap();
+        .expect("rate calculation should succeed");
         let expected = 2.0_f64.powf(1.0 / 10.0) - 1.0; // ~7.18%
         assert_relative_eq!(result, expected, epsilon = 1e-6);
     }
@@ -248,7 +248,7 @@ mod tests {
             Some(1e-6),
             Some(100),
         )
-        .unwrap();
+        .expect("rate calculation should succeed");
         assert_relative_eq!(result, 0.05, epsilon = 1e-3);
     }
 
@@ -265,7 +265,7 @@ mod tests {
             Some(1e-6),
             Some(100),
         )
-        .unwrap();
+        .expect("rate calculation should succeed");
         assert_relative_eq!(result, 0.05, epsilon = 1e-4);
     }
 
@@ -286,7 +286,7 @@ mod tests {
             Some(1e-6),
             Some(100),
         )
-        .unwrap();
+        .expect("rate calculation should succeed");
         assert_eq!(result.shape(), vec![2]);
 
         let values = result.to_vec();

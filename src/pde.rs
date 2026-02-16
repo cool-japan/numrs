@@ -131,7 +131,7 @@ where
     let r = alpha * dt / (dx * dx);
 
     // Check stability (CFL condition)
-    let half = T::from(0.5).unwrap();
+    let half = T::from(0.5).expect("0.5 is representable as Float");
     if r > half {
         return Err(NumRs2Error::ValueError(format!(
             "Unstable: r = {:?} > 0.5. Reduce dt or increase dx.",
@@ -148,7 +148,9 @@ where
     let mut t = vec![T::zero()];
 
     // Generate x grid
-    let x: Vec<T> = (0..nx).map(|i| T::from(i).unwrap() * dx).collect();
+    let x: Vec<T> = (0..nx)
+        .map(|i| T::from(i).expect("i is representable as Float") * dx)
+        .collect();
 
     // Time stepping
     for n in 0..nt {
@@ -157,7 +159,9 @@ where
 
         // Update interior points using FTCS
         for i in 1..nx - 1 {
-            let d2u = current[i + 1] - T::from(2.0).unwrap() * current[i] + current[i - 1];
+            let d2u = current[i + 1]
+                - T::from(2.0).expect("2.0 is representable as Float") * current[i]
+                + current[i - 1];
             next[i] = current[i] + r * d2u;
         }
 
@@ -167,7 +171,7 @@ where
         // Store and swap
         current = next.clone();
         u.push(current.clone());
-        t.push(T::from(n + 1).unwrap() * dt);
+        t.push(T::from(n + 1).expect("n+1 is representable as Float") * dt);
     }
 
     Ok(PdeResult {
@@ -259,8 +263,8 @@ where
     }
 
     let r = alpha * dt / (dx * dx);
-    let half = T::from(0.5).unwrap();
-    let two = T::from(2.0).unwrap();
+    let half = T::from(0.5).expect("0.5 is representable as Float");
+    let two = T::from(2.0).expect("2.0 is representable as Float");
     let one = T::one();
 
     // Coefficients for tridiagonal system
@@ -280,7 +284,9 @@ where
     let mut u = vec![initial.to_vec()];
     let mut current = initial.to_vec();
     let mut t = vec![T::zero()];
-    let x: Vec<T> = (0..nx).map(|i| T::from(i).unwrap() * dx).collect();
+    let x: Vec<T> = (0..nx)
+        .map(|i| T::from(i).expect("i is representable as Float") * dx)
+        .collect();
 
     for n in 0..nt {
         // Apply boundary conditions
@@ -313,7 +319,7 @@ where
         apply_bc_1d(&mut current, bc_left, bc_right, dx);
 
         u.push(current.clone());
-        t.push(T::from(n + 1).unwrap() * dt);
+        t.push(T::from(n + 1).expect("n+1 is representable as Float") * dt);
     }
 
     Ok(PdeResult {
@@ -422,7 +428,7 @@ where
     }
 
     let courant_sq = courant * courant;
-    let two = T::from(2.0).unwrap();
+    let two = T::from(2.0).expect("2.0 is representable as Float");
 
     // Initialize
     let mut u_curr = initial_u.to_vec();
@@ -438,7 +444,9 @@ where
 
     let mut result_u = vec![u_curr.clone(), u_next.clone()];
     let mut t = vec![T::zero(), dt];
-    let x: Vec<T> = (0..nx).map(|i| T::from(i).unwrap() * dx).collect();
+    let x: Vec<T> = (0..nx)
+        .map(|i| T::from(i).expect("i is representable as Float") * dx)
+        .collect();
 
     u_prev = u_curr;
     u_curr = u_next.clone();
@@ -454,7 +462,7 @@ where
         u_prev = u_curr.clone();
         u_curr = u_next.clone();
         result_u.push(u_curr.clone());
-        t.push(T::from(n + 1).unwrap() * dt);
+        t.push(T::from(n + 1).expect("n+1 is representable as Float") * dt);
     }
 
     Ok(PdeResult {
@@ -516,7 +524,7 @@ where
     let ry = alpha * dt / (dy * dy);
     let r_total = rx + ry;
 
-    let half = T::from(0.5).unwrap();
+    let half = T::from(0.5).expect("0.5 is representable as Float");
     if r_total > half {
         return Err(NumRs2Error::ValueError(format!(
             "Unstable: r = {:?} > 0.5. Reduce dt or increase dx/dy.",
@@ -524,15 +532,19 @@ where
         )));
     }
 
-    let two = T::from(2.0).unwrap();
+    let two = T::from(2.0).expect("2.0 is representable as Float");
 
     let mut u_curr = initial.to_vec();
     let mut u_next = vec![T::zero(); nx * ny];
     let mut result_u = vec![u_curr.clone()];
     let mut t = vec![T::zero()];
 
-    let x: Vec<T> = (0..nx).map(|i| T::from(i).unwrap() * dx).collect();
-    let y: Vec<T> = (0..ny).map(|j| T::from(j).unwrap() * dy).collect();
+    let x: Vec<T> = (0..nx)
+        .map(|i| T::from(i).expect("i is representable as Float") * dx)
+        .collect();
+    let y: Vec<T> = (0..ny)
+        .map(|j| T::from(j).expect("j is representable as Float") * dy)
+        .collect();
 
     for n in 0..nt {
         // Apply boundary conditions
@@ -553,7 +565,7 @@ where
 
         u_curr = u_next.clone();
         result_u.push(u_curr.clone());
-        t.push(T::from(n + 1).unwrap() * dt);
+        t.push(T::from(n + 1).expect("n+1 is representable as Float") * dt);
     }
 
     Ok(Pde2dResult {
@@ -652,7 +664,7 @@ where
 
     let dx2 = dx * dx;
     let dy2 = dy * dy;
-    let two = T::from(2.0).unwrap();
+    let two = T::from(2.0).expect("2.0 is representable as Float");
     let denom = two * (dx2 + dy2);
 
     let mut u = vec![T::zero(); nx * ny];
@@ -713,7 +725,7 @@ where
 
     let dx2 = dx * dx;
     let dy2 = dy * dy;
-    let two = T::from(2.0).unwrap();
+    let two = T::from(2.0).expect("2.0 is representable as Float");
     let denom = two * (dx2 + dy2);
 
     let mut u = vec![T::zero(); nx * ny];
@@ -771,7 +783,7 @@ where
         )));
     }
 
-    if omega <= T::zero() || omega >= T::from(2.0).unwrap() {
+    if omega <= T::zero() || omega >= T::from(2.0).expect("2.0 is representable as Float") {
         return Err(NumRs2Error::ValueError(
             "Omega must be in (0, 2) for SOR convergence".to_string(),
         ));
@@ -779,7 +791,7 @@ where
 
     let dx2 = dx * dx;
     let dy2 = dy * dy;
-    let two = T::from(2.0).unwrap();
+    let two = T::from(2.0).expect("2.0 is representable as Float");
     let denom = two * (dx2 + dy2);
     let one_minus_omega = T::one() - omega;
 
@@ -820,10 +832,11 @@ pub fn optimal_omega<T>(nx: usize, ny: usize) -> T
 where
     T: Float,
 {
-    let pi = T::from(std::f64::consts::PI).unwrap();
-    let n = T::from(nx.min(ny)).unwrap();
+    let pi = T::from(std::f64::consts::PI).expect("PI is representable as Float");
+    let n = T::from(nx.min(ny)).expect("nx.min(ny) is representable as Float");
     let rho = (pi / (n + T::one())).cos();
-    T::from(2.0).unwrap() / (T::one() + (T::one() - rho * rho).sqrt())
+    T::from(2.0).expect("2.0 is representable as Float")
+        / (T::one() + (T::one() - rho * rho).sqrt())
 }
 
 /// Method of Lines: Convert 1D PDE to system of ODEs
@@ -843,7 +856,7 @@ where
     T: Float + Debug,
 {
     let coef = alpha / (dx * dx);
-    let two = T::from(2.0).unwrap();
+    let two = T::from(2.0).expect("2.0 is representable as Float");
 
     move |_t: T, u: &[T]| -> Vec<T> {
         let mut dudt = vec![T::zero(); nx];
@@ -858,7 +871,8 @@ where
             BoundaryCondition::Dirichlet(_) => dudt[0] = T::zero(),
             BoundaryCondition::Neumann(val) => {
                 // Ghost point approach
-                let u_ghost = u[1] - T::from(2.0).unwrap() * dx * val;
+                let u_ghost =
+                    u[1] - T::from(2.0).expect("2.0 is representable as Float") * dx * val;
                 dudt[0] = coef * (u[1] - two * u[0] + u_ghost);
             }
             BoundaryCondition::Periodic => {
@@ -869,7 +883,8 @@ where
         match bc_right {
             BoundaryCondition::Dirichlet(_) => dudt[nx - 1] = T::zero(),
             BoundaryCondition::Neumann(val) => {
-                let u_ghost = u[nx - 2] + T::from(2.0).unwrap() * dx * val;
+                let u_ghost =
+                    u[nx - 2] + T::from(2.0).expect("2.0 is representable as Float") * dx * val;
                 dudt[nx - 1] = coef * (u_ghost - two * u[nx - 1] + u[nx - 2]);
             }
             BoundaryCondition::Periodic => {
@@ -902,7 +917,7 @@ mod tests {
             BoundaryCondition::Dirichlet(0.0),
             BoundaryCondition::Dirichlet(0.0),
         )
-        .unwrap();
+        .expect("solve_heat_1d should succeed with valid parameters");
 
         assert!(result.success);
         assert_eq!(result.u.len(), 101);
@@ -939,7 +954,7 @@ mod tests {
             BoundaryCondition::Dirichlet(0.0),
             BoundaryCondition::Dirichlet(0.0),
         )
-        .unwrap();
+        .expect("Crank-Nicolson should succeed with valid parameters");
 
         assert!(result.success);
     }
@@ -966,7 +981,7 @@ mod tests {
             BoundaryCondition::Dirichlet(0.0),
             BoundaryCondition::Dirichlet(0.0),
         )
-        .unwrap();
+        .expect("solve_wave_1d should succeed with valid parameters");
 
         assert!(result.success);
         assert_eq!(result.u.len(), 101);
@@ -1015,7 +1030,7 @@ mod tests {
             50,
             BoundaryCondition::Dirichlet(0.0),
         )
-        .unwrap();
+        .expect("solve_heat_2d should succeed with valid parameters");
 
         assert!(result.success);
         assert_eq!(result.u.len(), 51);
@@ -1027,7 +1042,7 @@ mod tests {
         let ny = 20;
         let f = vec![0.0f64; nx * ny]; // Laplace equation
 
-        let (solution, iters, error) = solve_poisson_2d(
+        let (solution, _iters, _error) = solve_poisson_2d(
             &f,
             nx,
             ny,
@@ -1037,7 +1052,7 @@ mod tests {
             1000,
             1e-6,
         )
-        .unwrap();
+        .expect("solve_poisson_2d should succeed with valid parameters");
 
         assert_eq!(solution.len(), nx * ny);
         // For Laplace with zero boundary, solution should be zero
@@ -1050,7 +1065,7 @@ mod tests {
         let ny = 20;
         let f = vec![1.0f64; nx * ny]; // Non-zero source
 
-        let (solution, iters, _) = solve_poisson_gauss_seidel(
+        let (solution, _iters, _) = solve_poisson_gauss_seidel(
             &f,
             nx,
             ny,
@@ -1060,7 +1075,7 @@ mod tests {
             500,
             1e-6,
         )
-        .unwrap();
+        .expect("solve_poisson_gauss_seidel should succeed with valid parameters");
 
         assert_eq!(solution.len(), nx * ny);
         // Solution should be non-zero in interior
@@ -1088,7 +1103,7 @@ mod tests {
             500,
             1e-6,
         )
-        .unwrap();
+        .expect("solve_poisson_sor should succeed with valid parameters");
 
         // SOR should converge faster than Jacobi
         // (Just check it completes)
@@ -1105,7 +1120,8 @@ mod tests {
         let c = vec![-1.0f64, -1.0];
         let d = vec![1.0, 0.0, 1.0];
 
-        let x = thomas_algorithm(&a, &b, &c, &d).unwrap();
+        let x = thomas_algorithm(&a, &b, &c, &d)
+            .expect("thomas_algorithm should succeed with valid input");
 
         assert_eq!(x.len(), 3);
         // Verify solution
@@ -1154,7 +1170,7 @@ mod tests {
             BoundaryCondition::Periodic,
             BoundaryCondition::Periodic,
         )
-        .unwrap();
+        .expect("solve_heat_1d with periodic BC should succeed");
 
         assert!(result.success);
     }
@@ -1172,11 +1188,11 @@ mod tests {
             BoundaryCondition::Neumann(0.0),
             BoundaryCondition::Neumann(0.0),
         )
-        .unwrap();
+        .expect("solve_heat_1d with Neumann BC should succeed");
 
         assert!(result.success);
         // With zero Neumann (insulated) and uniform IC, solution should stay uniform
-        let last = result.u.last().unwrap();
+        let last = result.u.last().expect("solution should have elements");
         let mean: f64 = last.iter().sum::<f64>() / last.len() as f64;
         assert!((mean - 1.0).abs() < 0.1);
     }

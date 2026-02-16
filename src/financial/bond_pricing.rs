@@ -26,7 +26,7 @@ use std::fmt::Debug;
 ///
 /// let cash_flows = Array::from_vec(vec![50.0, 50.0, 50.0, 1050.0]); // 5% annual coupon, $1000 face
 /// let periods = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
-/// let price = bond_price(&cash_flows, &periods, 0.06).unwrap();
+/// let price = bond_price(&cash_flows, &periods, 0.06).expect("bond_price calculation failed");
 /// ```
 pub fn bond_price<T>(cash_flows: &Array<T>, periods: &Array<T>, yield_rate: T) -> Result<T>
 where
@@ -176,8 +176,9 @@ where
         });
     }
 
-    let mut yield_guess = initial_guess.unwrap_or_else(|| T::from(0.05).unwrap());
-    let tolerance = T::from(1e-8).unwrap();
+    let mut yield_guess =
+        initial_guess.unwrap_or_else(|| T::from(0.05).expect("Failed to convert 0.05 to type T"));
+    let tolerance = T::from(1e-8).expect("Failed to convert 1e-8 to type T");
     let max_iterations = 100;
 
     for _ in 0..max_iterations {
@@ -197,7 +198,7 @@ where
 
         // Ensure yield stays positive
         if yield_guess < T::zero() {
-            yield_guess = T::from(0.001).unwrap();
+            yield_guess = T::from(0.001).expect("Failed to convert 0.001 to type T");
         }
     }
 
@@ -248,7 +249,7 @@ pub fn bond_equivalent_yield<T>(discount_rate: T, days_to_maturity: T) -> T
 where
     T: Float,
 {
-    let days_per_year = T::from(365.0).unwrap();
+    let days_per_year = T::from(365.0).expect("Failed to convert 365.0 to type T");
     let price = T::one() - discount_rate * (days_to_maturity / days_per_year);
     (discount_rate * days_per_year) / (days_to_maturity * price)
 }
@@ -263,7 +264,8 @@ mod tests {
         // 4-year bond with 5% annual coupon, $1000 face value, 6% yield
         let cash_flows = Array::from_vec(vec![50.0, 50.0, 50.0, 1050.0]);
         let periods = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
-        let price = bond_price(&cash_flows, &periods, 0.06).unwrap();
+        let price =
+            bond_price(&cash_flows, &periods, 0.06).expect("bond_price calculation should succeed");
 
         // Expected price should be less than face value since yield > coupon rate
         assert!(price < 1000.0);
@@ -274,7 +276,8 @@ mod tests {
     fn test_bond_duration() {
         let cash_flows = Array::from_vec(vec![50.0, 50.0, 50.0, 1050.0]);
         let periods = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
-        let duration = bond_duration(&cash_flows, &periods, 0.06).unwrap();
+        let duration = bond_duration(&cash_flows, &periods, 0.06)
+            .expect("bond_duration calculation should succeed");
 
         // Duration should be less than maturity for coupon bonds
         assert!(duration < 4.0);

@@ -407,6 +407,11 @@ mod tests {
 
         let ctx = OperationContext::default().with_memory_info(memory);
         assert!(ctx.memory_info.is_some());
-        assert_eq!(ctx.memory_info.unwrap().total_allocated, 1024);
+        assert_eq!(
+            ctx.memory_info
+                .expect("memory_info was just set and should be Some")
+                .total_allocated,
+            1024
+        );
     }
 }

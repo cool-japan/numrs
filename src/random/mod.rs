@@ -13,14 +13,14 @@
 //! let rng = default_rng();
 //!
 //! // Generate uniform random numbers between 0 and 1
-//! let uniform_array = rng.random::<f64>(&[3, 3]).unwrap();
+//! let uniform_array = rng.random::<f64>(&[3, 3]).expect("random should succeed");
 //!
 //! // Generate random numbers from a normal distribution
-//! let normal_array = rng.normal(0.0, 1.0, &[5]).unwrap();
+//! let normal_array = rng.normal(0.0, 1.0, &[5]).expect("normal should succeed");
 //!
 //! // Create a seeded generator for reproducible results
 //! let seeded_rng = pcg64_seed_rng(42);
-//! let random_array = seeded_rng.random::<f64>(&[3]).unwrap();
+//! let random_array = seeded_rng.random::<f64>(&[3]).expect("seeded random should succeed");
 //! ```
 //!
 //! ## Module Structure
@@ -44,7 +44,7 @@
 //! let rng = default_rng();
 //!
 //! // Generate random numbers
-//! let arr = rng.random::<f64>(&[3, 3]).unwrap();
+//! let arr = rng.random::<f64>(&[3, 3]).expect("random should succeed");
 //! ```
 //!
 //! ### 2. Legacy Interface
@@ -59,11 +59,11 @@
 //! let rng = RandomState::with_seed(42);
 //!
 //! // Generate random numbers with the instance
-//! let arr = rng.random::<f64>(&[3, 3]).unwrap();
+//! let arr = rng.random::<f64>(&[3, 3]).expect("random should succeed");
 //!
 //! // Or use global functions
 //! set_seed(42);
-//! let normal_array = normal(0.0, 1.0, &[5]).unwrap();
+//! let normal_array = normal(0.0, 1.0, &[5]).expect("normal should succeed");
 //! ```
 //!
 //! ## Bit Generators
@@ -86,6 +86,7 @@ pub mod distributions_enhanced;
 pub mod generator;
 pub mod legacy;
 pub mod state;
+pub mod state_distributions;
 
 // Re-export essential items from the modules
 pub use advanced_distributions::{maxwell, noncentral_chisquare, noncentral_f, vonmises, wald};
@@ -121,7 +122,7 @@ pub use distributions_enhanced::{
 /// let rng = numrs2::random::seed_rng(42);
 ///
 /// // Generate random numbers
-/// let arr = rng.random::<f64>(&[3, 3]).unwrap();
+/// let arr = rng.random::<f64>(&[3, 3]).expect("random should succeed");
 /// ```
 pub fn seed_rng(seed: u64) -> RandomState {
     RandomState::with_seed(seed)
@@ -145,8 +146,12 @@ mod tests {
         let rng1 = RandomState::with_seed(42);
         let rng2 = RandomState::with_seed(42);
 
-        let arr1 = rng1.random::<f64>(&[5, 5]).unwrap();
-        let arr2 = rng2.random::<f64>(&[5, 5]).unwrap();
+        let arr1 = rng1
+            .random::<f64>(&[5, 5])
+            .expect("test: random should succeed");
+        let arr2 = rng2
+            .random::<f64>(&[5, 5])
+            .expect("test: random should succeed");
 
         assert_eq!(arr1.to_vec(), arr2.to_vec());
     }
@@ -154,7 +159,9 @@ mod tests {
     #[test]
     fn test_seed_rng() {
         let rng = seed_rng(123);
-        let arr = rng.random::<f64>(&[3, 3]).unwrap();
+        let arr = rng
+            .random::<f64>(&[3, 3])
+            .expect("test: random should succeed");
 
         assert_eq!(arr.shape(), vec![3, 3]);
     }

@@ -37,7 +37,7 @@ use std::fmt::Debug;
 /// // Calculate monthly payment for a $10,000 loan at 5% annual interest for 5 years
 /// let monthly_rate = 0.05 / 12.0;
 /// let months = 5.0 * 12.0;
-/// let result = pmt(monthly_rate, months, 10000.0, 0.0, 0).unwrap();
+/// let result = pmt(monthly_rate, months, 10000.0, 0.0, 0).expect("pmt calculation failed");
 /// assert!((result - (-188.71_f64)).abs() < 0.01);
 /// ```
 pub fn pmt<T>(rate: T, nper: T, pv: T, fv: T, when: i32) -> Result<T>
@@ -87,7 +87,7 @@ where
 /// let pvs = Array::from_vec(vec![10000.0, 15000.0, 20000.0]);
 /// let fvs = Array::from_vec(vec![0.0, 0.0, 0.0]);
 ///
-/// let result = pmt_array(&rates, &npers, &pvs, &fvs, 0).unwrap();
+/// let result = pmt_array(&rates, &npers, &pvs, &fvs, 0).expect("pmt_array calculation failed");
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
 pub fn pmt_array<T>(
@@ -132,14 +132,15 @@ mod tests {
         // Test basic loan payment calculation
         let monthly_rate = 0.05 / 12.0;
         let months = 5.0 * 12.0;
-        let result = pmt(monthly_rate, months, 10000.0, 0.0, 0).unwrap();
+        let result =
+            pmt(monthly_rate, months, 10000.0, 0.0, 0).expect("pmt calculation should succeed");
         assert_relative_eq!(result, -188.7107, epsilon = 1e-2);
     }
 
     #[test]
     fn test_pmt_with_future_value() {
         // Test payment calculation with target future value
-        let result = pmt(0.05, 10.0, 0.0, 10000.0, 0).unwrap();
+        let result = pmt(0.05, 10.0, 0.0, 10000.0, 0).expect("pmt calculation should succeed");
         assert_relative_eq!(result, -795.04, epsilon = 1e-2);
     }
 
@@ -148,21 +149,22 @@ mod tests {
         // Test payment with payments at beginning of period
         let monthly_rate = 0.05 / 12.0;
         let months = 5.0 * 12.0;
-        let result = pmt(monthly_rate, months, 10000.0, 0.0, 1).unwrap();
+        let result =
+            pmt(monthly_rate, months, 10000.0, 0.0, 1).expect("pmt calculation should succeed");
         assert_relative_eq!(result, -187.93, epsilon = 1e-2);
     }
 
     #[test]
     fn test_pmt_zero_rate() {
         // Test payment with zero interest rate
-        let result = pmt(0.0, 10.0, 1000.0, 0.0, 0).unwrap();
+        let result = pmt(0.0, 10.0, 1000.0, 0.0, 0).expect("pmt calculation should succeed");
         assert_relative_eq!(result, -100.0, epsilon = 1e-9);
     }
 
     #[test]
     fn test_pmt_savings() {
         // Test payment for savings goal (negative PV, positive FV)
-        let result = pmt(0.05, 10.0, 0.0, 10000.0, 0).unwrap();
+        let result = pmt(0.05, 10.0, 0.0, 10000.0, 0).expect("pmt calculation should succeed");
         assert_relative_eq!(result, -795.04, epsilon = 1e-2);
     }
 
@@ -173,7 +175,8 @@ mod tests {
         let pvs = Array::from_vec(vec![10000.0, 15000.0]);
         let fvs = Array::from_vec(vec![0.0, 0.0]);
 
-        let result = pmt_array(&rates, &npers, &pvs, &fvs, 0).unwrap();
+        let result =
+            pmt_array(&rates, &npers, &pvs, &fvs, 0).expect("pmt_array calculation should succeed");
         assert_eq!(result.shape(), vec![2]);
 
         let values = result.to_vec();

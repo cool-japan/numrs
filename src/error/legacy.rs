@@ -8,7 +8,7 @@ use std::io;
 use thiserror::Error;
 
 /// NumRS2 error types (legacy structure for backward compatibility)
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum NumRs2Error {
     #[error("Shape mismatch: expected {expected:?}, got {actual:?}")]
     ShapeMismatch {
@@ -24,6 +24,12 @@ pub enum NumRs2Error {
 
     #[error("Value error: {0}")]
     ValueError(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("Numerical error: {0}")]
+    NumericalError(String),
 
     #[error("Index error: {0}")]
     IndexError(String),
@@ -67,6 +73,12 @@ pub enum NumRs2Error {
     #[error("Feature not enabled: {0}")]
     FeatureNotEnabled(String),
 
+    #[error("Distributed computing error: {0}")]
+    DistributedComputing(String),
+
+    #[error("Control systems error: {0}")]
+    ControlError(String),
+
     // New hierarchical variants that integrate with the legacy system
     #[error("{0}")]
     Core(#[from] super::hierarchical::CoreError),
@@ -107,11 +119,14 @@ impl NumRs2Error {
             NumRs2Error::DimensionMismatch(_)
             | NumRs2Error::InvalidOperation(_)
             | NumRs2Error::ValueError(_)
+            | NumRs2Error::InvalidInput(_)
             | NumRs2Error::IndexError(_)
             | NumRs2Error::IndexOutOfBounds(_)
             | NumRs2Error::ConversionError(_)
             | NumRs2Error::TypeCastError(_)
             | NumRs2Error::ShapeMismatch { .. } => ErrorCategory::Core,
+
+            NumRs2Error::NumericalError(_) => ErrorCategory::Computation,
 
             NumRs2Error::ComputationError(_)
             | NumRs2Error::BlasError(_)
@@ -125,7 +140,9 @@ impl NumRs2Error {
 
             NumRs2Error::NotImplemented(_)
             | NumRs2Error::RuntimeError(_)
-            | NumRs2Error::FeatureNotEnabled(_) => ErrorCategory::Core,
+            | NumRs2Error::FeatureNotEnabled(_)
+            | NumRs2Error::DistributedComputing(_)
+            | NumRs2Error::ControlError(_) => ErrorCategory::Core,
         }
     }
 
@@ -143,6 +160,8 @@ impl NumRs2Error {
             NumRs2Error::DimensionMismatch(_) | NumRs2Error::ShapeMismatch { .. } => {
                 ErrorSeverity::High
             }
+            NumRs2Error::NumericalError(_) => ErrorSeverity::High,
+            NumRs2Error::InvalidInput(_) => ErrorSeverity::Medium,
             NumRs2Error::IndexOutOfBounds(_) | NumRs2Error::IndexError(_) => ErrorSeverity::Medium,
             NumRs2Error::NotImplemented(_) | NumRs2Error::FeatureNotEnabled(_) => {
                 ErrorSeverity::Low

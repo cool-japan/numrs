@@ -118,6 +118,8 @@ mod tests {
         assert!(dtype.is_numeric());
 
         let default_value = dtype.default_value();
-        let _: &TestType = default_value.downcast_ref().unwrap();
+        let _: &TestType = default_value
+            .downcast_ref()
+            .expect("default_value should downcast to TestType");
     }
 }

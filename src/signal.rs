@@ -51,10 +51,10 @@ use std::ops::{Add, Mul};
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let b = Array::from_vec(vec![0.0, 1.0, 0.5]);
-/// let c = convolve(&a, &b, "full").unwrap();
+/// let c = convolve(&a, &b, "full").expect("convolve should succeed");
 /// assert_eq!(c.to_vec(), vec![0.0, 1.0, 2.5, 4.0, 1.5]);
 ///
-/// let c_valid = convolve(&a, &b, "valid").unwrap();
+/// let c_valid = convolve(&a, &b, "valid").expect("convolve should succeed");
 /// assert_eq!(c_valid.to_vec(), vec![2.5]);
 /// ```
 pub fn convolve<T>(a: &Array<T>, b: &Array<T>, mode: &str) -> Result<Array<T>>
@@ -172,10 +172,10 @@ where
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let b = Array::from_vec(vec![0.0, 1.0, 0.5]);
-/// let c = correlate(&a, &b, "full").unwrap();
+/// let c = correlate(&a, &b, "full").expect("correlate should succeed");
 /// // Note: correlation is convolution with second array reversed
 ///
-/// let c_valid = correlate(&a, &b, "valid").unwrap();
+/// let c_valid = correlate(&a, &b, "valid").expect("correlate should succeed");
 /// ```
 pub fn correlate<T>(a: &Array<T>, b: &Array<T>, mode: &str) -> Result<Array<T>>
 where
@@ -430,7 +430,7 @@ where
 ///
 /// // Phase with discontinuity
 /// let phase = Array::from_vec(vec![0.0, 0.5, 1.0, -2.5, -2.0, -1.5]);
-/// let unwrapped = unwrap(&phase, None, None, None).unwrap();
+/// let unwrapped = unwrap(&phase, None, None, None).expect("unwrap should succeed");
 /// // Discontinuity at index 3 is unwrapped by adding 2π
 /// ```
 pub fn unwrap<T>(
@@ -442,12 +442,12 @@ pub fn unwrap<T>(
 where
     T: Float + std::fmt::Debug,
 {
-    let pi = T::from(std::f64::consts::PI).unwrap();
+    let pi = T::from(std::f64::consts::PI).expect("PI is representable as Float");
     let two_pi = pi + pi;
 
     let discont = discont.unwrap_or(pi);
     let period = period.unwrap_or(two_pi);
-    let half_period = period / T::from(2.0).unwrap();
+    let half_period = period / T::from(2.0).expect("2.0 is representable as Float");
 
     match axis {
         None => {
@@ -602,11 +602,11 @@ where
 /// use numrs2::prelude::*;
 /// use numrs2::signal::bartlett;
 ///
-/// let window = bartlett::<f64>(12).unwrap();
+/// let window = bartlett::<f64>(12).expect("bartlett should succeed");
 /// assert_eq!(window.len(), 12);
 /// // Bartlett window is symmetric and triangular
-/// assert_eq!(window.get(&[0]).unwrap(), 0.0);
-/// assert_eq!(window.get(&[11]).unwrap(), 0.0);
+/// assert_eq!(window.get(&[0]).expect("index should be valid"), 0.0);
+/// assert_eq!(window.get(&[11]).expect("index should be valid"), 0.0);
 /// ```
 pub fn bartlett<T>(m: usize) -> Result<Array<T>>
 where
@@ -653,7 +653,7 @@ where
 /// use numrs2::prelude::*;
 /// use numrs2::signal::blackman;
 ///
-/// let window = blackman::<f64>(12).unwrap();
+/// let window = blackman::<f64>(12).expect("blackman should succeed");
 /// assert_eq!(window.len(), 12);
 /// // Blackman window has minimum side lobe leakage
 /// ```
@@ -704,11 +704,11 @@ where
 /// use numrs2::prelude::*;
 /// use numrs2::signal::hanning;
 ///
-/// let window = hanning::<f64>(12).unwrap();
+/// let window = hanning::<f64>(12).expect("hanning should succeed");
 /// assert_eq!(window.len(), 12);
 /// // Hanning window is smooth and tapered
-/// assert_eq!(window.get(&[0]).unwrap(), 0.0);
-/// assert_eq!(window.get(&[11]).unwrap(), 0.0);
+/// assert_eq!(window.get(&[0]).expect("index should be valid"), 0.0);
+/// assert_eq!(window.get(&[11]).expect("index should be valid"), 0.0);
 /// ```
 pub fn hanning<T>(m: usize) -> Result<Array<T>>
 where
@@ -754,11 +754,11 @@ where
 /// use numrs2::prelude::*;
 /// use numrs2::signal::hamming;
 ///
-/// let window = hamming::<f64>(12).unwrap();
+/// let window = hamming::<f64>(12).expect("hamming should succeed");
 /// assert_eq!(window.len(), 12);
 /// // Hamming window has non-zero endpoints
-/// assert!(window.get(&[0]).unwrap() > 0.0);
-/// assert!(window.get(&[11]).unwrap() > 0.0);
+/// assert!(window.get(&[0]).expect("index should be valid") > 0.0);
+/// assert!(window.get(&[11]).expect("index should be valid") > 0.0);
 /// ```
 pub fn hamming<T>(m: usize) -> Result<Array<T>>
 where
@@ -810,12 +810,12 @@ where
 /// use numrs2::prelude::*;
 /// use numrs2::signal::kaiser;
 ///
-/// let window = kaiser::<f64>(12, Some(8.6)).unwrap();
+/// let window = kaiser::<f64>(12, Some(8.6)).expect("kaiser should succeed");
 /// assert_eq!(window.len(), 12);
 ///
 /// // Kaiser window with different beta values
-/// let window_narrow = kaiser::<f64>(12, Some(14.0)).unwrap();
-/// let window_wide = kaiser::<f64>(12, Some(2.0)).unwrap();
+/// let window_narrow = kaiser::<f64>(12, Some(14.0)).expect("kaiser should succeed");
+/// let window_wide = kaiser::<f64>(12, Some(2.0)).expect("kaiser should succeed");
 /// ```
 pub fn kaiser<T>(m: usize, beta: Option<T>) -> Result<Array<T>>
 where
@@ -882,7 +882,7 @@ mod window_tests {
 
     #[test]
     fn test_bartlett_window() {
-        let window = bartlett::<f64>(10).unwrap();
+        let window = bartlett::<f64>(10).expect("bartlett(10) should succeed");
         let data = window.to_vec();
 
         assert_eq!(data.len(), 10);
@@ -897,14 +897,14 @@ mod window_tests {
         }
 
         // Peak should be at center (for odd lengths)
-        let window_odd = bartlett::<f64>(9).unwrap();
+        let window_odd = bartlett::<f64>(9).expect("bartlett(9) should succeed");
         let data_odd = window_odd.to_vec();
         assert_relative_eq!(data_odd[4], 1.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_blackman_window() {
-        let window = blackman::<f64>(10).unwrap();
+        let window = blackman::<f64>(10).expect("blackman(10) should succeed");
         let data = window.to_vec();
 
         assert_eq!(data.len(), 10);
@@ -926,7 +926,7 @@ mod window_tests {
 
     #[test]
     fn test_hanning_window() {
-        let window = hanning::<f64>(10).unwrap();
+        let window = hanning::<f64>(10).expect("hanning(10) should succeed");
         let data = window.to_vec();
 
         assert_eq!(data.len(), 10);
@@ -948,7 +948,7 @@ mod window_tests {
 
     #[test]
     fn test_hamming_window() {
-        let window = hamming::<f64>(10).unwrap();
+        let window = hamming::<f64>(10).expect("hamming(10) should succeed");
         let data = window.to_vec();
 
         assert_eq!(data.len(), 10);
@@ -974,7 +974,7 @@ mod window_tests {
 
     #[test]
     fn test_kaiser_window() {
-        let window = kaiser::<f64>(10, Some(8.6)).unwrap();
+        let window = kaiser::<f64>(10, Some(8.6)).expect("kaiser(10, 8.6) should succeed");
         let data = window.to_vec();
 
         assert_eq!(data.len(), 10);
@@ -994,8 +994,8 @@ mod window_tests {
         assert_relative_eq!(max_val, 1.0, epsilon = 1e-1);
 
         // Test with different beta values
-        let window_narrow = kaiser::<f64>(10, Some(14.0)).unwrap();
-        let window_wide = kaiser::<f64>(10, Some(2.0)).unwrap();
+        let window_narrow = kaiser::<f64>(10, Some(14.0)).expect("kaiser(10, 14.0) should succeed");
+        let window_wide = kaiser::<f64>(10, Some(2.0)).expect("kaiser(10, 2.0) should succeed");
 
         assert_eq!(window_narrow.len(), 10);
         assert_eq!(window_wide.len(), 10);
@@ -1004,35 +1004,71 @@ mod window_tests {
     #[test]
     fn test_window_edge_cases() {
         // Test empty windows
-        assert_eq!(bartlett::<f64>(0).unwrap().len(), 0);
-        assert_eq!(blackman::<f64>(0).unwrap().len(), 0);
-        assert_eq!(hanning::<f64>(0).unwrap().len(), 0);
-        assert_eq!(hamming::<f64>(0).unwrap().len(), 0);
-        assert_eq!(kaiser::<f64>(0, Some(8.6)).unwrap().len(), 0);
+        assert_eq!(
+            bartlett::<f64>(0)
+                .expect("bartlett(0) should succeed")
+                .len(),
+            0
+        );
+        assert_eq!(
+            blackman::<f64>(0)
+                .expect("blackman(0) should succeed")
+                .len(),
+            0
+        );
+        assert_eq!(
+            hanning::<f64>(0).expect("hanning(0) should succeed").len(),
+            0
+        );
+        assert_eq!(
+            hamming::<f64>(0).expect("hamming(0) should succeed").len(),
+            0
+        );
+        assert_eq!(
+            kaiser::<f64>(0, Some(8.6))
+                .expect("kaiser(0) should succeed")
+                .len(),
+            0
+        );
 
         // Test single-point windows
         assert_relative_eq!(
-            bartlett::<f64>(1).unwrap().get(&[0]).unwrap(),
+            bartlett::<f64>(1)
+                .expect("bartlett(1) should succeed")
+                .get(&[0])
+                .expect("index 0 should be valid"),
             1.0,
             epsilon = 1e-10
         );
         assert_relative_eq!(
-            blackman::<f64>(1).unwrap().get(&[0]).unwrap(),
+            blackman::<f64>(1)
+                .expect("blackman(1) should succeed")
+                .get(&[0])
+                .expect("index 0 should be valid"),
             1.0,
             epsilon = 1e-10
         );
         assert_relative_eq!(
-            hanning::<f64>(1).unwrap().get(&[0]).unwrap(),
+            hanning::<f64>(1)
+                .expect("hanning(1) should succeed")
+                .get(&[0])
+                .expect("index 0 should be valid"),
             1.0,
             epsilon = 1e-10
         );
         assert_relative_eq!(
-            hamming::<f64>(1).unwrap().get(&[0]).unwrap(),
+            hamming::<f64>(1)
+                .expect("hamming(1) should succeed")
+                .get(&[0])
+                .expect("index 0 should be valid"),
             1.0,
             epsilon = 1e-10
         );
         assert_relative_eq!(
-            kaiser::<f64>(1, Some(8.6)).unwrap().get(&[0]).unwrap(),
+            kaiser::<f64>(1, Some(8.6))
+                .expect("kaiser(1) should succeed")
+                .get(&[0])
+                .expect("index 0 should be valid"),
             1.0,
             epsilon = 1e-10
         );

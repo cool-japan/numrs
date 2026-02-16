@@ -80,29 +80,44 @@ where
     pub fn get_performance_metrics(
         &self,
     ) -> crate::memory_alloc::performance_tuning::PerformanceMetrics {
-        self.tuner.lock().unwrap().get_current_metrics()
+        self.tuner
+            .lock()
+            .expect("tuner mutex should not be poisoned")
+            .get_current_metrics()
     }
 
     /// Generate a performance report
     pub fn generate_performance_report(&self) -> String {
-        self.tuner.lock().unwrap().generate_performance_report()
+        self.tuner
+            .lock()
+            .expect("tuner mutex should not be poisoned")
+            .generate_performance_report()
     }
 
     /// Get optimization recommendations
     pub fn get_optimization_recommendations(
         &self,
     ) -> Vec<crate::memory_alloc::performance_tuning::OptimizationRecommendation> {
-        self.tuner.lock().unwrap().analyze_performance()
+        self.tuner
+            .lock()
+            .expect("tuner mutex should not be poisoned")
+            .analyze_performance()
     }
 
     /// Reset performance metrics
     pub fn reset_metrics(&self) {
-        self.tuner.lock().unwrap().reset();
+        self.tuner
+            .lock()
+            .expect("tuner mutex should not be poisoned")
+            .reset();
     }
 
     /// Take a performance snapshot
     pub fn take_performance_snapshot(&self) {
-        self.tuner.lock().unwrap().take_snapshot();
+        self.tuner
+            .lock()
+            .expect("tuner mutex should not be poisoned")
+            .take_snapshot();
     }
 
     /// Enable or disable automatic optimization
@@ -126,7 +141,10 @@ where
             return;
         }
 
-        let tuner = self.tuner.lock().unwrap();
+        let tuner = self
+            .tuner
+            .lock()
+            .expect("tuner mutex should not be poisoned");
         if success {
             tuner.record_allocation(layout.size(), duration);
         } else {
@@ -160,7 +178,10 @@ where
             return;
         }
 
-        let tuner = self.tuner.lock().unwrap();
+        let tuner = self
+            .tuner
+            .lock()
+            .expect("tuner mutex should not be poisoned");
         tuner.record_deallocation(layout.size(), duration);
     }
 }
@@ -425,15 +446,19 @@ mod tests {
         let base_allocator = NumericalArrayAllocator::new();
         let monitored = MonitoredAllocator::with_defaults(base_allocator);
 
-        let layout = Layout::from_size_align(1024, 16).unwrap();
-        let ptr = monitored.allocate(layout).unwrap();
+        let layout = Layout::from_size_align(1024, 16).expect("Layout should succeed");
+        let ptr = monitored
+            .allocate(layout)
+            .expect("allocation should succeed");
 
         let metrics = monitored.get_performance_metrics();
         assert_eq!(metrics.total_allocations, 1);
         assert_eq!(metrics.total_bytes_allocated, 1024);
 
         unsafe {
-            monitored.deallocate(ptr, layout).unwrap();
+            monitored
+                .deallocate(ptr, layout)
+                .expect("deallocation should succeed");
         }
 
         let metrics = monitored.get_performance_metrics();
@@ -452,8 +477,10 @@ mod tests {
         let monitored = MonitoredAllocator::new(base_allocator, config, TuningConfig::default());
 
         // Small allocation should not be monitored
-        let small_layout = Layout::from_size_align(64, 16).unwrap();
-        let _ptr = monitored.allocate(small_layout).unwrap();
+        let small_layout = Layout::from_size_align(64, 16).expect("Layout should succeed");
+        let _ptr = monitored
+            .allocate(small_layout)
+            .expect("allocation should succeed");
 
         let metrics = monitored.get_performance_metrics();
         assert_eq!(metrics.total_allocations, 0);
@@ -466,8 +493,10 @@ mod tests {
 
         // Perform some allocations
         for _ in 0..10 {
-            let layout = Layout::from_size_align(1024, 16).unwrap();
-            let _ptr = monitored.allocate(layout).unwrap();
+            let layout = Layout::from_size_align(1024, 16).expect("Layout should succeed");
+            let _ptr = monitored
+                .allocate(layout)
+                .expect("allocation should succeed");
         }
 
         let report = monitored.generate_performance_report();
@@ -490,10 +519,12 @@ mod tests {
         assert!(numerical.preferred_alignment() >= 8);
 
         let temp_obj = presets::temporary_object_allocator();
-        assert!(temp_obj.supports_layout(Layout::from_size_align(64, 8).unwrap()));
+        assert!(temp_obj
+            .supports_layout(Layout::from_size_align(64, 8).expect("Layout should succeed")));
 
         let matrix = presets::matrix_allocator(4096);
-        assert!(matrix.supports_layout(Layout::from_size_align(4096, 8).unwrap()));
+        assert!(matrix
+            .supports_layout(Layout::from_size_align(4096, 8).expect("Layout should succeed")));
     }
 
     #[test]
@@ -503,10 +534,14 @@ mod tests {
 
         // Perform many small allocations to trigger recommendations
         for _ in 0..2000 {
-            let layout = Layout::from_size_align(128, 8).unwrap();
-            let ptr = monitored.allocate(layout).unwrap();
+            let layout = Layout::from_size_align(128, 8).expect("Layout should succeed");
+            let ptr = monitored
+                .allocate(layout)
+                .expect("allocation should succeed");
             unsafe {
-                monitored.deallocate(ptr, layout).unwrap();
+                monitored
+                    .deallocate(ptr, layout)
+                    .expect("deallocation should succeed");
             }
         }
 
@@ -520,8 +555,10 @@ mod tests {
         let monitored = MonitoredAllocator::with_defaults(base_allocator);
 
         // Perform allocation
-        let layout = Layout::from_size_align(1024, 8).unwrap();
-        let _ptr = monitored.allocate(layout).unwrap();
+        let layout = Layout::from_size_align(1024, 8).expect("Layout should succeed");
+        let _ptr = monitored
+            .allocate(layout)
+            .expect("allocation should succeed");
 
         let metrics_before = monitored.get_performance_metrics();
         assert_eq!(metrics_before.total_allocations, 1);

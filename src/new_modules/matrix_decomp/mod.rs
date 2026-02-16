@@ -165,7 +165,9 @@ where
 
     // Set very small singular values to zero for numerical stability
     let eps = T::epsilon();
-    let tolerance = eps * T::from(std::cmp::max(m, n)).unwrap() * s_converted.get(&[0])?;
+    let tolerance = eps
+        * T::from(std::cmp::max(m, n)).expect("matrix dimension should convert to float type")
+        * s_converted.get(&[0])?;
 
     for i in 0..s_converted.size() {
         let s_val = s_converted.get(&[i])?;
@@ -268,7 +270,9 @@ where
         }
 
         // Skip if we have a numerically zero column
-        if col_norms[k] < T::epsilon() * num_traits::NumCast::from(m).unwrap() {
+        if col_norms[k]
+            < T::epsilon() * num_traits::NumCast::from(m).expect("m should convert to float type")
+        {
             continue;
         }
 
@@ -309,7 +313,10 @@ where
                         let val = a_copy.get(&[i + k, j])?;
                         a_copy.set(
                             &[i + k, j],
-                            val - <T as num_traits::NumCast>::from(2.0).unwrap() * v[i] * vta,
+                            val - <T as num_traits::NumCast>::from(2.0)
+                                .expect("2.0 should convert to float type")
+                                * v[i]
+                                * vta,
                         )?;
                     }
                 }
@@ -327,7 +334,8 @@ where
                         q1.set(
                             &[i, j],
                             q_val
-                                - <T as num_traits::NumCast>::from(2.0).unwrap()
+                                - <T as num_traits::NumCast>::from(2.0)
+                                    .expect("2.0 should convert to float type")
                                     * q_row_dot_v
                                     * v[j - k],
                         )?;
@@ -362,11 +370,11 @@ where
     // Determine numerical rank by identifying singular values above threshold
     // Use a more robust threshold based on machine precision, matrix dimensions, and condition number
     let s_vec = s.to_vec();
-    let max_sv = s_vec.first().cloned().unwrap_or_else(|| T::zero());
+    let max_sv = s_vec.first().cloned().unwrap_or(T::zero());
 
     // Condition-number-based threshold
     let tol_factor = T::sqrt(T::epsilon());
-    let tol_real = max_sv * tol_factor * T::from(std::cmp::max(m, n)).unwrap_or_else(|| T::one());
+    let tol_real = max_sv * tol_factor * T::from(std::cmp::max(m, n)).unwrap_or(T::one());
 
     let rank = s_vec.iter().filter(|&&sv| sv > tol_real).count();
 
@@ -475,11 +483,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_svd_simple() {
+    fn test_svd_simple() -> Result<()> {
         // Create a simple 3x3 matrix
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]).reshape(&[3, 3]);
 
-        let (u, s, vt) = svd(&a).unwrap();
+        let (u, s, vt) = svd(&a)?;
 
         // Check the dimensions
         assert_eq!(u.shape(), vec![3, 3]);
@@ -488,14 +496,15 @@ mod tests {
 
         // For a complete test, we would also verify U*S*V^T = A
         // But we'll leave that for a more comprehensive test suite
+        Ok(())
     }
 
     #[test]
-    fn test_qr_simple() {
+    fn test_qr_simple() -> Result<()> {
         // Create a simple 3x3 matrix - using a well-conditioned matrix
         let a = Array::from_vec(vec![4.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 6.0]).reshape(&[3, 3]);
 
-        let (q, r) = qr(&a).unwrap();
+        let (q, r) = qr(&a)?;
 
         // Check the dimensions
         assert_eq!(q.shape(), vec![3, 3]);
@@ -503,11 +512,11 @@ mod tests {
 
         // Verify QR decomposition properties:
         // 1. Q*R should equal A
-        let qr_product = q.matmul(&r).unwrap();
+        let qr_product = q.matmul(&r)?;
         for i in 0..3 {
             for j in 0..3 {
-                let expected = a.get(&[i, j]).unwrap();
-                let actual = qr_product.get(&[i, j]).unwrap();
+                let expected = a.get(&[i, j])?;
+                let actual = qr_product.get(&[i, j])?;
                 assert!(
                     num_traits::Float::abs(actual - expected) < 1e-10,
                     "QR: Q*R should equal A - expected {}, got {} at ({},{})",
@@ -521,11 +530,11 @@ mod tests {
 
         // 2. Q should be orthogonal (Q^T * Q = I)
         let qt = q.transpose();
-        let qtq = qt.matmul(&q).unwrap();
+        let qtq = qt.matmul(&q)?;
         for i in 0..3 {
             for j in 0..3 {
                 let expected = if i == j { 1.0 } else { 0.0 };
-                let actual = qtq.get(&[i, j]).unwrap();
+                let actual = qtq.get(&[i, j])?;
                 assert!(
                     num_traits::Float::abs(actual - expected) < 1e-10,
                     "QR: Q should be orthogonal - Q^T*Q expected {}, got {} at ({},{})",
@@ -540,7 +549,7 @@ mod tests {
         // 3. R should be upper triangular
         for i in 1..3 {
             for j in 0..i {
-                let val = r.get(&[i, j]).unwrap();
+                let val = r.get(&[i, j])?;
                 assert!(
                     num_traits::Float::abs(val) < 1e-10,
                     "QR: R should be upper triangular - got {} at ({},{})",
@@ -550,16 +559,17 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_cholesky_simple() {
+    fn test_cholesky_simple() -> Result<()> {
         // Create a simple positive definite matrix (diagonal matrix with positive entries)
         let a =
             Array::from_vec(vec![4.0, 0.0, 0.0, 0.0, 9.0, 0.0, 0.0, 0.0, 16.0]).reshape(&[3, 3]);
 
         // Compute Cholesky decomposition
-        let chol = cholesky(&a).unwrap();
+        let chol = cholesky(&a)?;
 
         // Check dimensions
         assert_eq!(chol.shape(), vec![3, 3]);
@@ -571,7 +581,7 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 let expected = if i == j { expected_diag[i] } else { 0.0 };
-                let actual = chol.get(&[i, j]).unwrap();
+                let actual = chol.get(&[i, j])?;
                 assert!(
                     num_traits::Float::abs(actual - expected) < 1e-10,
                     "Cholesky: incorrect value at ({},{}): expected {}, got {}",
@@ -585,12 +595,12 @@ mod tests {
 
         // Check that L * L^T = A
         let chol_t = chol.transpose();
-        let product = chol.matmul(&chol_t).unwrap();
+        let product = chol.matmul(&chol_t)?;
 
         for i in 0..3 {
             for j in 0..3 {
-                let expected = a.get(&[i, j]).unwrap();
-                let actual = product.get(&[i, j]).unwrap();
+                let expected = a.get(&[i, j])?;
+                let actual = product.get(&[i, j])?;
                 assert!(
                     num_traits::Float::abs(actual - expected) < 1e-10,
                     "Cholesky: L*L^T=A check failed at ({},{}) - expected {}, got {}",
@@ -601,15 +611,16 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_lu_simple() {
+    fn test_lu_simple() -> Result<()> {
         // Create a simple 3x3 matrix
         let a = Array::from_vec(vec![4.0, 1.0, 2.0, 2.0, 5.0, 3.0, 1.0, 2.0, 6.0]).reshape(&[3, 3]);
 
         // Compute LU decomposition
-        let (l, u, p) = lu(&a).unwrap();
+        let (l, u, p) = lu(&a)?;
 
         // Check dimensions
         assert_eq!(l.shape(), vec![3, 3]);
@@ -619,24 +630,25 @@ mod tests {
         // Check L properties - lower triangular with ones on diagonal
         for i in 0..3 {
             for j in 0..3 {
+                let l_val = l.get(&[i, j])?;
                 if i < j {
                     // Upper part should be zero
                     assert!(
-                        num_traits::Float::abs(l.get(&[i, j]).unwrap()) < 1e-10,
+                        num_traits::Float::abs(l_val) < 1e-10,
                         "L should be lower triangular, but L[{},{}] = {}",
                         i,
                         j,
-                        l.get(&[i, j]).unwrap()
+                        l_val
                     );
                 }
                 if i == j {
                     // Diagonal should be one
                     assert!(
-                        num_traits::Float::abs(l.get(&[i, j]).unwrap() - 1.0) < 1e-10,
+                        num_traits::Float::abs(l_val - 1.0) < 1e-10,
                         "Diagonal of L should be 1, but L[{},{}] = {}",
                         i,
                         j,
-                        l.get(&[i, j]).unwrap()
+                        l_val
                     );
                 }
             }
@@ -646,13 +658,14 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 if i > j {
+                    let u_val = u.get(&[i, j])?;
                     // Lower part should be zero
                     assert!(
-                        num_traits::Float::abs(u.get(&[i, j]).unwrap()) < 1e-10,
+                        num_traits::Float::abs(u_val) < 1e-10,
                         "U should be upper triangular, but U[{},{}] = {}",
                         i,
                         j,
-                        u.get(&[i, j]).unwrap()
+                        u_val
                     );
                 }
             }
@@ -664,19 +677,19 @@ mod tests {
         let mut pa = Array::zeros(&[3, 3]);
         for i in 0..3 {
             for j in 0..3 {
-                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
-                    .unwrap();
+                let perm_idx = p.get(&[i])?;
+                pa.set(&[i, j], a.get(&[perm_idx, j])?)?;
             }
         }
 
         // Calculate L*U
-        let lu_product = l.matmul(&u).unwrap();
+        let lu_product = l.matmul(&u)?;
 
         // Check that PA ≈ LU
         for i in 0..3 {
             for j in 0..3 {
-                let pa_val = pa.get(&[i, j]).unwrap();
-                let lu_val = lu_product.get(&[i, j]).unwrap();
+                let pa_val = pa.get(&[i, j])?;
+                let lu_val = lu_product.get(&[i, j])?;
                 assert!(
                     num_traits::Float::abs(pa_val - lu_val) < 1e-10,
                     "PA ≈ LU check failed at ({},{}): PA = {}, LU = {}",
@@ -687,10 +700,11 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_lu_stability() {
+    fn test_lu_stability() -> Result<()> {
         // Create an ill-conditioned matrix
         let a = Array::from_vec(vec![
             1.0,
@@ -712,20 +726,22 @@ mod tests {
             "LU decomposition should succeed even for ill-conditioned matrix"
         );
 
-        let (l, u, p) = result.unwrap();
+        let (l, u, p) = result?;
 
         // Verify that L and U are triangular
         for i in 0..3 {
             for j in 0..3 {
                 if i < j {
+                    let l_val = l.get(&[i, j])?;
                     assert!(
-                        num_traits::Float::abs(l.get(&[i, j]).unwrap()) < 1e-8,
+                        num_traits::Float::abs(l_val) < 1e-8,
                         "L should be lower triangular"
                     );
                 }
                 if i > j {
+                    let u_val = u.get(&[i, j])?;
                     assert!(
-                        num_traits::Float::abs(u.get(&[i, j]).unwrap()) < 1e-8,
+                        num_traits::Float::abs(u_val) < 1e-8,
                         "U should be upper triangular"
                     );
                 }
@@ -733,14 +749,14 @@ mod tests {
         }
 
         // Check reconstruction with permutation
-        let lu_product = l.matmul(&u).unwrap();
+        let lu_product = l.matmul(&u)?;
 
         // Compute permuted A
         let mut pa = Array::zeros(&[3, 3]);
         for i in 0..3 {
             for j in 0..3 {
-                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
-                    .unwrap();
+                let perm_idx = p.get(&[i])?;
+                pa.set(&[i, j], a.get(&[perm_idx, j])?)?;
             }
         }
 
@@ -750,24 +766,25 @@ mod tests {
 
         for i in 0..3 {
             for j in 0..3 {
-                let diff_val = pa.get(&[i, j]).unwrap() - lu_product.get(&[i, j]).unwrap();
+                let diff_val = pa.get(&[i, j])? - lu_product.get(&[i, j])?;
                 let diff = num_traits::Float::abs(diff_val);
                 max_diff = max_diff.max(diff);
             }
         }
 
         assert!(max_diff < tol,
-            "LU decomposition should accurately reconstruct the original matrix even for ill-conditioned inputs. Max diff: {}", 
+            "LU decomposition should accurately reconstruct the original matrix even for ill-conditioned inputs. Max diff: {}",
             max_diff);
+        Ok(())
     }
 
     #[test]
-    fn test_condition_number_well_conditioned() {
+    fn test_condition_number_well_conditioned() -> Result<()> {
         // Create a well-conditioned diagonal matrix
         let a = Array::from_vec(vec![4.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 6.0]).reshape(&[3, 3]);
 
         // Compute condition number
-        let cond = condition_number(&a).unwrap();
+        let cond = condition_number(&a)?;
 
         // Expected condition number is max(diag) / min(diag) = 6.0 / 4.0 = 1.5
         let expected: f64 = 1.5;
@@ -779,7 +796,7 @@ mod tests {
         );
 
         // Test the array method
-        let cond2 = a.cond().unwrap();
+        let cond2 = a.cond()?;
         let diff2 = num_traits::Float::abs(cond2 - expected);
         assert!(
             diff2 < 1e-10,
@@ -788,7 +805,7 @@ mod tests {
         );
 
         // Test rcond (reciprocal condition number)
-        let rcond_val = rcond(&a).unwrap();
+        let rcond_val = rcond(&a)?;
         let expected_rcond: f64 = 1.0 / 1.5;
         let diff_rcond = num_traits::Float::abs(rcond_val - expected_rcond);
         assert!(
@@ -800,19 +817,20 @@ mod tests {
 
         // Test is_well_conditioned
         assert!(
-            a.is_well_conditioned().unwrap(),
+            a.is_well_conditioned()?,
             "Matrix should be well-conditioned"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_condition_number_ill_conditioned() {
+    fn test_condition_number_ill_conditioned() -> Result<()> {
         // Create an ill-conditioned matrix with very different singular values
         let a =
             Array::from_vec(vec![1.0, 0.0, 0.0, 0.0, 1e-14, 0.0, 0.0, 0.0, 1.0]).reshape(&[3, 3]);
 
         // Compute condition number
-        let cond = condition_number(&a).unwrap();
+        let cond = condition_number(&a)?;
 
         // Expected condition number is max(diag) / min(diag) = 1.0 / 1e-14 = 1e14
         let expected: f64 = 1e14;
@@ -826,19 +844,20 @@ mod tests {
 
         // Test is_well_conditioned - should return false (threshold is 1e12)
         assert!(
-            !a.is_well_conditioned().unwrap(),
+            !a.is_well_conditioned()?,
             "Matrix should be ill-conditioned with condition number {}",
             cond
         );
+        Ok(())
     }
 
     #[test]
-    fn test_condition_number_singular() {
+    fn test_condition_number_singular() -> Result<()> {
         // Create a more obviously singular matrix (with a zero row)
         let a = Array::from_vec(vec![1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0]).reshape(&[3, 3]);
 
         // This matrix is clearly rank deficient since it has identical rows
-        let cond: f64 = condition_number(&a).unwrap();
+        let cond: f64 = condition_number(&a)?;
         println!("Singular matrix condition number: {}", cond);
 
         // Either the result is infinity, or it should be a very large number
@@ -850,7 +869,7 @@ mod tests {
         );
 
         // Test rcond - should return 0 for singular matrix
-        let rcond_val = rcond(&a).unwrap();
+        let rcond_val = rcond(&a)?;
         assert!(
             rcond_val == 0.0,
             "Reciprocal condition number should be 0 for a singular matrix, got {}",
@@ -859,13 +878,14 @@ mod tests {
 
         // Test is_well_conditioned - should return false
         assert!(
-            !a.is_well_conditioned().unwrap(),
+            !a.is_well_conditioned()?,
             "Singular matrix should not be well-conditioned"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_condition_number_hilbert() {
+    fn test_condition_number_hilbert() -> Result<()> {
         // Create a Hilbert matrix, which is famously ill-conditioned
         // Hilbert matrix has entries H[i,j] = 1/(i+j+1)
         let n = 5;
@@ -873,12 +893,12 @@ mod tests {
         for i in 0..n {
             for j in 0..n {
                 let val = 1.0 / (i as f64 + j as f64 + 1.0);
-                hilbert.set(&[i, j], val).unwrap();
+                hilbert.set(&[i, j], val)?;
             }
         }
 
         // Compute condition number
-        let cond = condition_number(&hilbert).unwrap();
+        let cond = condition_number(&hilbert)?;
 
         // Hilbert matrices are known to have very high condition numbers
         // For n=5, it's approximately 4.8e5
@@ -893,22 +913,23 @@ mod tests {
         // Test is_well_conditioned - we don't explicitly test the result since the
         // threshold is dynamically calculated and might vary by implementation
         let _ = hilbert.is_well_conditioned();
+        Ok(())
     }
 
     #[test]
-    fn test_numerical_stability_relations() {
+    fn test_numerical_stability_relations() -> Result<()> {
         // Create a matrix with reasonably well-spaced singular values
         let a =
             Array::from_vec(vec![10.0, 4.0, 2.0, 4.0, 5.0, 1.0, 2.0, 1.0, 6.0]).reshape(&[3, 3]);
 
         // Compute the condition number
-        let cond = a.cond().unwrap();
+        let cond = a.cond()?;
 
         // Compute LU decomposition
-        let (l, u, p) = lu(&a).unwrap();
+        let (l, u, p) = lu(&a)?;
 
         // Compute SVD
-        let (us, s, vt) = svd(&a).unwrap();
+        let (us, s, vt) = svd(&a)?;
 
         // Check that the smallest singular value is reasonably related to condition number
         let smallest_sv = s.to_vec().iter().fold(f64::MAX, |a, &b| a.min(b));
@@ -921,7 +942,7 @@ mod tests {
         let abs_diff = num_traits::Float::abs(cond - computed_cond);
         let rel_error = abs_diff / computed_cond;
         assert!(rel_error < 0.01,
-                "Condition number should be approximately largest_sv / smallest_sv. Found: {}, Computed: {}", 
+                "Condition number should be approximately largest_sv / smallest_sv. Found: {}, Computed: {}",
                 cond, computed_cond);
 
         // Check that different decompositions are numerically compatible
@@ -931,22 +952,22 @@ mod tests {
         // Create a diagonal matrix from singular values
         let mut s_diag = Array::zeros(&[3, 3]);
         for i in 0..3 {
-            s_diag.set(&[i, i], s.get(&[i]).unwrap()).unwrap();
+            s_diag.set(&[i, i], s.get(&[i])?)?;
         }
 
         // Compute SVD reconstruction: U*S*V^T
-        let us_product = us.matmul(&s_diag).unwrap();
-        let usv_product = us_product.matmul(&vt).unwrap();
+        let us_product = us.matmul(&s_diag)?;
+        let usv_product = us_product.matmul(&vt)?;
 
         // Compute LU reconstruction with permutation
-        let lu_product = l.matmul(&u).unwrap();
+        let lu_product = l.matmul(&u)?;
 
         // Compute permuted A
         let mut pa = Array::zeros(&[3, 3]);
         for i in 0..3 {
             for j in 0..3 {
-                pa.set(&[i, j], a.get(&[p.get(&[i]).unwrap(), j]).unwrap())
-                    .unwrap();
+                let perm_idx = p.get(&[i])?;
+                pa.set(&[i, j], a.get(&[perm_idx, j])?)?;
             }
         }
 
@@ -959,14 +980,10 @@ mod tests {
 
         for i in 0..3 {
             for j in 0..3 {
-                let svd_diff = num_traits::Float::abs(
-                    a.get(&[i, j]).unwrap() - usv_product.get(&[i, j]).unwrap(),
-                );
+                let svd_diff = num_traits::Float::abs(a.get(&[i, j])? - usv_product.get(&[i, j])?);
                 svd_error = svd_error.max(svd_diff);
 
-                let lu_diff = num_traits::Float::abs(
-                    pa.get(&[i, j]).unwrap() - lu_product.get(&[i, j]).unwrap(),
-                );
+                let lu_diff = num_traits::Float::abs(pa.get(&[i, j])? - lu_product.get(&[i, j])?);
                 lu_error = lu_error.max(lu_diff);
             }
         }
@@ -982,5 +999,6 @@ mod tests {
             "LU reconstruction error should be small: {}",
             lu_error
         );
+        Ok(())
     }
 }

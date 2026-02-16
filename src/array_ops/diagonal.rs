@@ -25,23 +25,23 @@ use std::cmp;
 ///
 /// // Create a diagonal matrix from a 1D array
 /// let a = Array::from_vec(vec![1, 2, 3]);
-/// let diag_mat = diag(&a, Some(0)).unwrap();
+/// let diag_mat = diag(&a, Some(0)).expect("operation should succeed");
 /// assert_eq!(diag_mat.shape(), vec![3, 3]);
 /// assert_eq!(diag_mat.to_vec(), vec![1, 0, 0, 0, 2, 0, 0, 0, 3]);
 ///
 /// // Extract the main diagonal from a 2D array
 /// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
-/// let diag_vec = diag(&b, Some(0)).unwrap();
+/// let diag_vec = diag(&b, Some(0)).expect("operation should succeed");
 /// assert_eq!(diag_vec.shape(), vec![3]);
 /// assert_eq!(diag_vec.to_vec(), vec![1, 5, 9]);
 ///
 /// // Extract a super-diagonal (k=1)
-/// let super_diag = diag(&b, Some(1)).unwrap();
+/// let super_diag = diag(&b, Some(1)).expect("operation should succeed");
 /// assert_eq!(super_diag.shape(), vec![2]);
 /// assert_eq!(super_diag.to_vec(), vec![2, 6]);
 ///
 /// // Extract a sub-diagonal (k=-1)
-/// let sub_diag = diag(&b, Some(-1)).unwrap();
+/// let sub_diag = diag(&b, Some(-1)).expect("operation should succeed");
 /// assert_eq!(sub_diag.shape(), vec![2]);
 /// assert_eq!(sub_diag.to_vec(), vec![4, 8]);
 /// ```
@@ -163,23 +163,23 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
 ///
 /// // Extract the main diagonal from a 2D array
 /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
-/// let diag = diagonal(&a, Some(0), None, None).unwrap();
+/// let diag = diagonal(&a, Some(0), None, None).expect("operation should succeed");
 /// assert_eq!(diag.shape(), vec![3]);
 /// assert_eq!(diag.to_vec(), vec![1, 5, 9]);
 ///
 /// // Extract a super-diagonal (offset=1)
-/// let super_diag = diagonal(&a, Some(1), None, None).unwrap();
+/// let super_diag = diagonal(&a, Some(1), None, None).expect("operation should succeed");
 /// assert_eq!(super_diag.shape(), vec![2]);
 /// assert_eq!(super_diag.to_vec(), vec![2, 6]);
 ///
 /// // Extract a sub-diagonal (offset=-1)
-/// let sub_diag = diagonal(&a, Some(-1), None, None).unwrap();
+/// let sub_diag = diagonal(&a, Some(-1), None, None).expect("operation should succeed");
 /// assert_eq!(sub_diag.shape(), vec![2]);
 /// assert_eq!(sub_diag.to_vec(), vec![4, 8]);
 ///
 /// // Extract the diagonal from a 3D array
 /// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).reshape(&[2, 2, 3]);
-/// let diag = diagonal(&b, Some(0), Some(1), Some(2)).unwrap();
+/// let diag = diagonal(&b, Some(0), Some(1), Some(2)).expect("operation should succeed");
 /// assert_eq!(diag.shape(), vec![2, 2]);
 /// assert_eq!(diag.to_vec(), vec![1, 5, 7, 11]);
 /// ```
@@ -364,17 +364,17 @@ pub fn diagonal<T: Clone + num_traits::Zero>(
 ///
 /// // Fill diagonal of a 3x3 matrix
 /// let mut a = Array::zeros(&[3, 3]);
-/// fill_diagonal(&mut a, 5, false).unwrap();
+/// fill_diagonal(&mut a, 5, false).expect("operation should succeed");
 /// assert_eq!(a.to_vec(), vec![5, 0, 0, 0, 5, 0, 0, 0, 5]);
 ///
 /// // Fill diagonal of a 4x3 matrix
 /// let mut b = Array::zeros(&[4, 3]);
-/// fill_diagonal(&mut b, 7, false).unwrap();
+/// fill_diagonal(&mut b, 7, false).expect("operation should succeed");
 /// assert_eq!(b.to_vec(), vec![7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0]);
 ///
 /// // Fill diagonal of a 3D array
 /// let mut c = Array::zeros(&[3, 3, 3]);
-/// fill_diagonal(&mut c, 1, false).unwrap();
+/// fill_diagonal(&mut c, 1, false).expect("operation should succeed");
 /// // Only elements where all indices are equal get filled
 /// let expected = vec![
 ///     1, 0, 0, 0, 0, 0, 0, 0, 0,  // c[0,:,:]

@@ -124,7 +124,7 @@ impl<T: Clone> SharedArray<T> {
         let len = data.len();
         let nd_arr = NdArray::from_vec(data)
             .into_shape_with_order(IxDyn(&[len]))
-            .unwrap();
+            .expect("Failed to reshape 1D vector: length mismatch should be impossible");
         Self {
             data: nd_arr.into_shared(),
         }
@@ -136,9 +136,13 @@ impl<T: Clone> SharedArray<T> {
     ///
     /// ```
     /// use numrs2::shared_array::SharedArray;
+    /// use numrs2::error::Result;
     ///
-    /// let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
-    /// assert_eq!(arr.shape(), vec![2, 2]);
+    /// fn main() -> Result<()> {
+    ///     let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])?;
+    ///     assert_eq!(arr.shape(), vec![2, 2]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn from_vec_with_shape(data: Vec<T>, shape: &[usize]) -> Result<Self> {
         let expected_size: usize = shape.iter().product();
@@ -249,9 +253,13 @@ impl<T: Clone> SharedArray<T> {
     ///
     /// ```
     /// use numrs2::shared_array::SharedArray;
+    /// use numrs2::error::Result;
     ///
-    /// let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3]).unwrap();
-    /// assert_eq!(arr.shape(), vec![2, 3]);
+    /// fn main() -> Result<()> {
+    ///     let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3])?;
+    ///     assert_eq!(arr.shape(), vec![2, 3]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn shape(&self) -> Vec<usize> {
         self.data.shape().to_vec()
@@ -326,11 +334,15 @@ impl<T: Clone> SharedArray<T> {
     ///
     /// ```
     /// use numrs2::shared_array::SharedArray;
+    /// use numrs2::error::Result;
     ///
-    /// let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
-    /// assert_eq!(arr.get(&[0, 0]), Some(&1));
-    /// assert_eq!(arr.get(&[1, 1]), Some(&4));
-    /// assert_eq!(arr.get(&[2, 0]), None); // Out of bounds
+    /// fn main() -> Result<()> {
+    ///     let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])?;
+    ///     assert_eq!(arr.get(&[0, 0]), Some(&1));
+    ///     assert_eq!(arr.get(&[1, 1]), Some(&4));
+    ///     assert_eq!(arr.get(&[2, 0]), None); // Out of bounds
+    ///     Ok(())
+    /// }
     /// ```
     pub fn get(&self, indices: &[usize]) -> Option<&T> {
         self.data.get(IxDyn(indices))
@@ -361,6 +373,53 @@ impl<T: Clone> SharedArray<T> {
         }
     }
 
+    /// Get an element at a flat index.
+    ///
+    /// This converts a flat (1D) index to multi-dimensional indices and retrieves
+    /// the element. This is useful for expression templates that work with flat indices.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use numrs2::shared_array::SharedArray;
+    /// use numrs2::error::Result;
+    ///
+    /// fn main() -> Result<()> {
+    ///     let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])?;
+    ///     assert_eq!(arr.get_flat(0)?, 1);
+    ///     assert_eq!(arr.get_flat(3)?, 4);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn get_flat(&self, index: usize) -> Result<T> {
+        if index >= self.size() {
+            return Err(NumRs2Error::IndexOutOfBounds(format!(
+                "Flat index {} out of bounds for array of size {}",
+                index,
+                self.size()
+            )));
+        }
+
+        // Convert flat index to multi-dimensional indices
+        let shape = self.shape();
+        let mut indices = Vec::with_capacity(shape.len());
+        let mut remainder = index;
+
+        for i in (0..shape.len()).rev() {
+            indices.push(remainder % shape[i]);
+            remainder /= shape[i];
+        }
+        indices.reverse();
+
+        // Access using multi-dimensional indices
+        self.data.get(IxDyn(&indices)).cloned().ok_or_else(|| {
+            NumRs2Error::IndexOutOfBounds(format!(
+                "Failed to access element at flat index {}",
+                index
+            ))
+        })
+    }
+
     // ========================================
     // Conversion
     // ========================================
@@ -387,9 +446,13 @@ impl<T: Clone> SharedArray<T> {
     ///
     /// ```
     /// use numrs2::shared_array::SharedArray;
+    /// use numrs2::error::Result;
     ///
-    /// let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
-    /// assert_eq!(arr.to_vec(), vec![1, 2, 3, 4]);
+    /// fn main() -> Result<()> {
+    ///     let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])?;
+    ///     assert_eq!(arr.to_vec(), vec![1, 2, 3, 4]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn to_vec(&self) -> Vec<T> {
         self.data.iter().cloned().collect()
@@ -417,10 +480,14 @@ impl<T: Clone> SharedArray<T> {
     ///
     /// ```
     /// use numrs2::shared_array::SharedArray;
+    /// use numrs2::error::Result;
     ///
-    /// let arr = SharedArray::from_vec(vec![1, 2, 3, 4, 5, 6]);
-    /// let reshaped = arr.reshape(&[2, 3]).unwrap();
-    /// assert_eq!(reshaped.shape(), vec![2, 3]);
+    /// fn main() -> Result<()> {
+    ///     let arr = SharedArray::from_vec(vec![1, 2, 3, 4, 5, 6]);
+    ///     let reshaped = arr.reshape(&[2, 3])?;
+    ///     assert_eq!(reshaped.shape(), vec![2, 3]);
+    ///     Ok(())
+    /// }
     /// ```
     pub fn reshape(&self, new_shape: &[usize]) -> Result<Self> {
         let new_size: usize = new_shape.iter().product();
@@ -591,14 +658,18 @@ impl<T: Clone> SharedArray<T> {
 ///
 /// ```
 /// use numrs2::shared_array::{SharedArray, SharedArrayView};
+/// use numrs2::error::Result;
 ///
 /// fn get_row(arr: &SharedArray<f64>) -> SharedArrayView<f64> {
 ///     arr.shared_view()
 /// }
 ///
-/// let arr = SharedArray::from_vec_with_shape(vec![1.0, 2.0, 3.0, 4.0], &[2, 2]).unwrap();
-/// let view = get_row(&arr);
-/// // view can outlive the function because it shares ownership
+/// fn main() -> Result<()> {
+///     let arr = SharedArray::from_vec_with_shape(vec![1.0, 2.0, 3.0, 4.0], &[2, 2])?;
+///     let view = get_row(&arr);
+///     // view can outlive the function because it shares ownership
+///     Ok(())
+/// }
 /// ```
 #[derive(Clone)]
 pub struct SharedArrayView<T> {
@@ -1117,7 +1188,8 @@ mod tests {
 
     #[test]
     fn test_from_vec_with_shape() {
-        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3]).unwrap();
+        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3])
+            .expect("from_vec_with_shape should succeed for valid shape");
         assert_eq!(arr.shape(), vec![2, 3]);
         assert_eq!(arr.ndim(), 2);
     }
@@ -1147,7 +1219,8 @@ mod tests {
 
     #[test]
     fn test_element_access() {
-        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
+        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])
+            .expect("from_vec_with_shape should succeed for 2x2");
 
         assert_eq!(arr.get(&[0, 0]), Some(&1));
         assert_eq!(arr.get(&[0, 1]), Some(&2));
@@ -1158,15 +1231,17 @@ mod tests {
 
     #[test]
     fn test_set() {
-        let mut arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
-        arr.set(&[0, 0], 10).unwrap();
+        let mut arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])
+            .expect("from_vec_with_shape should succeed for 2x2");
+        arr.set(&[0, 0], 10)
+            .expect("set should succeed for valid index");
         assert_eq!(arr.get(&[0, 0]), Some(&10));
     }
 
     #[test]
     fn test_reshape() {
         let arr = SharedArray::from_vec(vec![1, 2, 3, 4, 5, 6]);
-        let reshaped = arr.reshape(&[2, 3]).unwrap();
+        let reshaped = arr.reshape(&[2, 3]).expect("reshape to 2x3 should succeed");
         assert_eq!(reshaped.shape(), vec![2, 3]);
 
         // Invalid reshape should fail
@@ -1175,7 +1250,8 @@ mod tests {
 
     #[test]
     fn test_flatten() {
-        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
+        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])
+            .expect("from_vec_with_shape should succeed for 2x2");
         let flat = arr.flatten();
         assert_eq!(flat.shape(), vec![4]);
         assert_eq!(flat.to_vec(), vec![1, 2, 3, 4]);
@@ -1183,7 +1259,8 @@ mod tests {
 
     #[test]
     fn test_transpose() {
-        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3]).unwrap();
+        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3])
+            .expect("from_vec_with_shape should succeed for 2x3");
         let transposed = arr.transpose();
         assert_eq!(transposed.shape(), vec![3, 2]);
     }
@@ -1194,16 +1271,16 @@ mod tests {
         let b = SharedArray::from_vec(vec![4.0, 5.0, 6.0]);
 
         // Use explicit method calls (returns Result)
-        let sum = SharedArray::add(&a, &b).unwrap();
+        let sum = SharedArray::add(&a, &b).expect("add should succeed for same-shape arrays");
         assert_eq!(sum.to_vec(), vec![5.0, 7.0, 9.0]);
 
-        let diff = SharedArray::sub(&b, &a).unwrap();
+        let diff = SharedArray::sub(&b, &a).expect("sub should succeed for same-shape arrays");
         assert_eq!(diff.to_vec(), vec![3.0, 3.0, 3.0]);
 
-        let prod = SharedArray::mul(&a, &b).unwrap();
+        let prod = SharedArray::mul(&a, &b).expect("mul should succeed for same-shape arrays");
         assert_eq!(prod.to_vec(), vec![4.0, 10.0, 18.0]);
 
-        let quot = SharedArray::div(&b, &a).unwrap();
+        let quot = SharedArray::div(&b, &a).expect("div should succeed for same-shape arrays");
         assert_eq!(quot.to_vec(), vec![4.0, 2.5, 2.0]);
     }
 
@@ -1236,7 +1313,8 @@ mod tests {
 
     #[test]
     fn test_shared_view() {
-        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
+        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])
+            .expect("from_vec_with_shape should succeed for 2x2");
         let view = arr.shared_view();
 
         assert_eq!(view.shape(), &[2, 2]);
@@ -1282,7 +1360,8 @@ mod tests {
 
     #[test]
     fn test_index_trait() {
-        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2]).unwrap();
+        let arr = SharedArray::from_vec_with_shape(vec![1, 2, 3, 4], &[2, 2])
+            .expect("from_vec_with_shape should succeed for 2x2");
         assert_eq!(arr[&[0, 0][..]], 1);
         assert_eq!(arr[&[1, 1][..]], 4);
     }

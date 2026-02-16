@@ -34,18 +34,18 @@
 //! ];
 //!
 //! // Build a k-d tree
-//! let tree = spatial::kdtree::KDTree::new(&points).unwrap();
+//! let tree = spatial::kdtree::KDTree::new(&points).expect("KDTree creation should succeed");
 //!
 //! // Query point (as a slice)
 //! let query = vec![6.0, 5.0];
 //!
 //! // Find nearest neighbor
-//! let (idx, dist) = tree.query(&query, 1).unwrap();
+//! let (idx, dist) = tree.query(&query, 1).expect("query should succeed");
 //! println!("Nearest neighbor index: {}, distance: {}", idx[0], dist[0]);
 //!
 //! // Find k nearest neighbors
 //! let k = 3;
-//! let (indices, distances) = tree.query(&query, k).unwrap();
+//! let (indices, distances) = tree.query(&query, k).expect("k-query should succeed");
 //! println!("k-nearest neighbor indices: {:?}", indices);
 //! ```
 //!
@@ -65,7 +65,8 @@
 //! ];
 //!
 //! // Compute the convex hull (returns hull vertices)
-//! let hull = spatial::convex_hull::convex_hull(&points.view()).unwrap();
+//! let hull = spatial::convex_hull::convex_hull(&points.view())
+//!     .expect("convex hull computation should succeed");
 //!
 //! println!("Convex hull vertices: {:?}", hull);
 //! ```
@@ -138,13 +139,13 @@ mod tests {
         let points = array![[2.0, 3.0], [5.0, 4.0], [9.0, 6.0], [4.0, 7.0], [8.0, 1.0],];
 
         // Build a k-d tree
-        let tree = kdtree::KDTree::new(&points).unwrap();
+        let tree = kdtree::KDTree::new(&points).expect("KDTree creation should succeed");
 
         // Query point
         let query = vec![6.0, 5.0];
 
         // Find nearest neighbor
-        let (idx, dist) = tree.query(&query, 1).unwrap();
+        let (idx, dist) = tree.query(&query, 1).expect("query should succeed");
 
         // Should find a neighbor
         assert_eq!(idx.len(), 1);
@@ -158,14 +159,14 @@ mod tests {
         let points = array![[2.0, 3.0], [5.0, 4.0], [9.0, 6.0], [4.0, 7.0], [8.0, 1.0],];
 
         // Build a k-d tree
-        let tree = kdtree::KDTree::new(&points).unwrap();
+        let tree = kdtree::KDTree::new(&points).expect("KDTree creation should succeed");
 
         // Query point
         let query = vec![6.0, 5.0];
 
         // Find 3 nearest neighbors
         let k = 3;
-        let (indices, distances) = tree.query(&query, k).unwrap();
+        let (indices, distances) = tree.query(&query, k).expect("query should succeed");
 
         // Should find exactly 3 neighbors
         assert_eq!(indices.len(), k);
@@ -186,14 +187,16 @@ mod tests {
         let points = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [5.0, 5.0],];
 
         // Build a k-d tree
-        let tree = kdtree::KDTree::new(&points).unwrap();
+        let tree = kdtree::KDTree::new(&points).expect("KDTree creation should succeed");
 
         // Query point at origin
         let query = vec![0.0, 0.0];
 
         // Find all points within radius 1.5
         let radius = 1.5;
-        let (indices, distances) = tree.query_radius(&query, radius).unwrap();
+        let (indices, distances) = tree
+            .query_radius(&query, radius)
+            .expect("query_radius should succeed");
 
         // Should find points at (0,0), (1,0), and (0,1)
         assert!(indices.len() >= 3);

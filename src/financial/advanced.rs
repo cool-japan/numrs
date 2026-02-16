@@ -41,7 +41,7 @@ use std::fmt::Debug;
 /// use numrs2::prelude::*;
 ///
 /// // $2,500 loan at 8.5% for 4 years
-/// let interest = ipmt(0.085/12.0, 1, 48, 2500.0, 0.0, 0).unwrap();
+/// let interest = ipmt(0.085/12.0, 1, 48, 2500.0, 0.0, 0).expect("ipmt calculation failed");
 /// // First month interest is approximately -17.71
 /// ```
 pub fn ipmt<T>(rate: T, per: usize, nper: usize, pv: T, fv: T, when: u8) -> Result<T>
@@ -55,15 +55,15 @@ where
         )));
     }
 
-    let nper_t = T::from(nper).unwrap();
-    let when_t = T::from(when).unwrap();
+    let nper_t = T::from(nper).expect("Failed to convert nper to type T");
+    let when_t = T::from(when).expect("Failed to convert when to type T");
 
     // Calculate payment amount
     let pmt = calculate_pmt(rate, nper_t, pv, fv, when_t)?;
 
     // Calculate balance at beginning of period
-    let per_t = T::from(per).unwrap();
-    let per_minus_1 = T::from(per - 1).unwrap();
+    let per_t = T::from(per).expect("Failed to convert per to type T");
+    let per_minus_1 = T::from(per - 1).expect("Failed to convert per-1 to type T");
 
     let balance = if rate.is_zero() {
         pv + pmt * per_minus_1
@@ -106,15 +106,15 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // $2,500 loan at 8.5% for 4 years
-/// let principal = ppmt(0.085/12.0, 1, 48, 2500.0, 0.0, 0).unwrap();
+/// let principal = ppmt(0.085/12.0, 1, 48, 2500.0, 0.0, 0).expect("ppmt calculation failed");
 /// // First month principal is approximately -43.00
 /// ```
 pub fn ppmt<T>(rate: T, per: usize, nper: usize, pv: T, fv: T, when: u8) -> Result<T>
 where
     T: Float + Debug + Clone,
 {
-    let nper_t = T::from(nper).unwrap();
-    let when_t = T::from(when).unwrap();
+    let nper_t = T::from(nper).expect("Failed to convert nper to type T");
+    let when_t = T::from(when).expect("Failed to convert when to type T");
 
     let pmt = calculate_pmt(rate, nper_t, pv, fv, when_t)?;
     let interest = ipmt(rate, per, nper, pv, fv, when)?;
@@ -143,7 +143,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Total interest paid in first year of $125,000 mortgage at 9% for 30 years
-/// let cum_interest = cumipmt(0.09/12.0, 360, 125000.0, 1, 12, 0).unwrap();
+/// let cum_interest = cumipmt(0.09/12.0, 360, 125000.0, 1, 12, 0).expect("cumipmt calculation failed");
 /// // First year interest is approximately -11135.23
 /// ```
 pub fn cumipmt<T>(
@@ -193,7 +193,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Total principal paid in first year of $125,000 mortgage at 9% for 30 years
-/// let cum_principal = cumprinc(0.09/12.0, 360, 125000.0, 1, 12, 0).unwrap();
+/// let cum_principal = cumprinc(0.09/12.0, 360, 125000.0, 1, 12, 0).expect("cumprinc calculation failed");
 /// // First year principal is approximately -927.43
 /// ```
 pub fn cumprinc<T>(
@@ -259,7 +259,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Convert 10% nominal rate compounded monthly to effective rate
-/// let effective = effect(0.10, 12).unwrap();
+/// let effective = effect(0.10, 12).expect("effect calculation failed");
 /// // Effective rate is approximately 0.1047 or 10.47%
 /// ```
 pub fn effect<T>(nominal_rate: T, nper: usize) -> Result<T>
@@ -272,7 +272,7 @@ where
         ));
     }
 
-    let nper_t = T::from(nper).unwrap();
+    let nper_t = T::from(nper).expect("Failed to convert nper to type T");
     let periodic_rate = nominal_rate / nper_t;
 
     Ok((T::one() + periodic_rate).powf(nper_t) - T::one())
@@ -295,7 +295,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Convert 10.47% effective rate to nominal rate compounded monthly
-/// let nominal = nominal(0.1047, 12).unwrap();
+/// let nominal = nominal(0.1047, 12).expect("nominal calculation failed");
 /// // Nominal rate is approximately 0.10 or 10%
 /// ```
 pub fn nominal<T>(effective_rate: T, nper: usize) -> Result<T>
@@ -308,7 +308,7 @@ where
         ));
     }
 
-    let nper_t = T::from(nper).unwrap();
+    let nper_t = T::from(nper).expect("Failed to convert nper to type T");
 
     // (1 + effective_rate)^(1/nper) - 1 = periodic_rate
     // nominal_rate = periodic_rate * nper
@@ -342,7 +342,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Asset costing $30,000 with $7,500 salvage over 10 years
-/// let depreciation = sln(30000.0, 7500.0, 10.0).unwrap();
+/// let depreciation = sln(30000.0, 7500.0, 10.0).expect("sln calculation failed");
 /// // Annual depreciation is 2,250
 /// ```
 pub fn sln<T>(cost: T, salvage: T, life: T) -> Result<T>
@@ -378,7 +378,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Asset costing $30,000 with $7,500 salvage over 10 years, year 1
-/// let depreciation = syd(30000.0, 7500.0, 10, 1).unwrap();
+/// let depreciation = syd(30000.0, 7500.0, 10, 1).expect("syd calculation failed");
 /// // First year depreciation is approximately 4,090.91
 /// ```
 pub fn syd<T>(cost: T, salvage: T, life: usize, per: usize) -> Result<T>
@@ -396,11 +396,12 @@ where
         )));
     }
 
-    let life_t = T::from(life).unwrap();
-    let per_t = T::from(per).unwrap();
+    let life_t = T::from(life).expect("Failed to convert life to type T");
+    let per_t = T::from(per).expect("Failed to convert per to type T");
 
     // Sum of years digits = n(n+1)/2
-    let sum_of_years = life_t * (life_t + T::one()) / T::from(2.0).unwrap();
+    let sum_of_years =
+        life_t * (life_t + T::one()) / T::from(2.0).expect("Failed to convert 2.0 to type T");
 
     // Remaining life at start of period
     let remaining = life_t - per_t + T::one();
@@ -431,7 +432,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Asset costing $1,000,000 with $100,000 salvage over 6 years, year 1
-/// let depreciation = db(1000000.0, 100000.0, 6, 1, 7).unwrap();
+/// let depreciation = db(1000000.0, 100000.0, 6, 1, 7).expect("db calculation failed");
 /// // First year depreciation with 7 months is approximately 186,083.33
 /// ```
 pub fn db<T>(cost: T, salvage: T, life: usize, period: usize, month: usize) -> Result<T>
@@ -450,16 +451,17 @@ where
         )));
     }
 
-    let life_t = T::from(life).unwrap();
-    let month_t = T::from(month).unwrap();
+    let life_t = T::from(life).expect("Failed to convert life to type T");
+    let month_t = T::from(month).expect("Failed to convert month to type T");
 
     // Calculate depreciation rate
     // rate = 1 - (salvage/cost)^(1/life), rounded to 3 decimal places
     let rate = T::one() - (salvage / cost).powf(T::one() / life_t);
-    let rate = (rate * T::from(1000.0).unwrap()).round() / T::from(1000.0).unwrap();
+    let thousand = T::from(1000.0).expect("Failed to convert 1000.0 to type T");
+    let rate = (rate * thousand).round() / thousand;
 
     let mut book_value = cost;
-    let twelve = T::from(12.0).unwrap();
+    let twelve = T::from(12.0).expect("Failed to convert 12.0 to type T");
 
     // Calculate depreciation for each period up to the target
     for p in 1..=period {
@@ -512,7 +514,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// // Asset costing $2,400 with $300 salvage over 10 years, year 1
-/// let depreciation = ddb(2400.0, 300.0, 10, 1, 2.0).unwrap();
+/// let depreciation = ddb(2400.0, 300.0, 10, 1, 2.0).expect("ddb calculation failed");
 /// // First year DDB depreciation is 480
 /// ```
 pub fn ddb<T>(cost: T, salvage: T, life: usize, period: usize, factor: T) -> Result<T>
@@ -530,7 +532,7 @@ where
         )));
     }
 
-    let life_t = T::from(life).unwrap();
+    let life_t = T::from(life).expect("Failed to convert life to type T");
 
     // Depreciation rate = factor / life
     let rate = factor / life_t;
@@ -579,7 +581,7 @@ where
 /// ```
 /// use numrs2::prelude::*;
 ///
-/// let schedule = amortization_schedule(10000.0, 0.05/12.0, 12).unwrap();
+/// let schedule = amortization_schedule(10000.0, 0.05/12.0, 12).expect("amortization_schedule calculation failed");
 /// // Returns full 12-month schedule
 /// ```
 pub fn amortization_schedule<T>(
@@ -596,7 +598,7 @@ where
         ));
     }
 
-    let nper_t = T::from(nper).unwrap();
+    let nper_t = T::from(nper).expect("Failed to convert nper to type T");
     let pmt = calculate_pmt(rate, nper_t, principal, T::zero(), T::zero())?;
 
     let mut periods = Vec::with_capacity(nper);
@@ -676,7 +678,7 @@ mod tests {
         let nper = 48;
         let pv = 2500.0;
 
-        let interest = ipmt(rate, 1, nper, pv, 0.0, 0).unwrap();
+        let interest = ipmt(rate, 1, nper, pv, 0.0, 0).expect("ipmt calculation should succeed");
         // First month interest should be about -17.71
         assert_relative_eq!(interest, -17.708333, epsilon = 0.01);
     }
@@ -687,7 +689,7 @@ mod tests {
         let nper = 48;
         let pv = 2500.0;
 
-        let principal = ppmt(rate, 1, nper, pv, 0.0, 0).unwrap();
+        let principal = ppmt(rate, 1, nper, pv, 0.0, 0).expect("ppmt calculation should succeed");
         // First month principal portion
         assert!(principal < 0.0); // Should be negative (outflow)
     }
@@ -699,11 +701,14 @@ mod tests {
         let nper = 60;
         let pv = 20000.0;
 
-        let pmt = calculate_pmt(rate, nper as f64, pv, 0.0, 0.0).unwrap();
+        let pmt =
+            calculate_pmt(rate, nper as f64, pv, 0.0, 0.0).expect("pmt calculation should succeed");
 
         for per in 1..=nper {
-            let interest = ipmt(rate, per, nper, pv, 0.0, 0).unwrap();
-            let principal = ppmt(rate, per, nper, pv, 0.0, 0).unwrap();
+            let interest =
+                ipmt(rate, per, nper, pv, 0.0, 0).expect("ipmt calculation should succeed");
+            let principal =
+                ppmt(rate, per, nper, pv, 0.0, 0).expect("ppmt calculation should succeed");
             assert_relative_eq!(interest + principal, pmt, epsilon = 1e-10);
         }
     }
@@ -715,7 +720,8 @@ mod tests {
         let nper = 360;
         let pv = 125000.0;
 
-        let cum_interest = cumipmt(rate, nper, pv, 1, 12, 0).unwrap();
+        let cum_interest =
+            cumipmt(rate, nper, pv, 1, 12, 0).expect("cumipmt calculation should succeed");
         // Verify it's negative and in reasonable range
         assert!(cum_interest < 0.0, "Cumulative interest should be negative");
         assert!(
@@ -731,7 +737,8 @@ mod tests {
         let nper = 360;
         let pv = 125000.0;
 
-        let cum_principal = cumprinc(rate, nper, pv, 1, 12, 0).unwrap();
+        let cum_principal =
+            cumprinc(rate, nper, pv, 1, 12, 0).expect("cumprinc calculation should succeed");
         // Verify it's negative (principal is being paid down)
         assert!(
             cum_principal < 0.0,
@@ -739,8 +746,10 @@ mod tests {
         );
 
         // Verify relationship: cumipmt + cumprinc ≈ total payments for first year
-        let cum_interest = cumipmt(rate, nper, pv, 1, 12, 0).unwrap();
-        let pmt = calculate_pmt(rate, nper as f64, pv, 0.0, 0.0).unwrap();
+        let cum_interest =
+            cumipmt(rate, nper, pv, 1, 12, 0).expect("cumipmt calculation should succeed");
+        let pmt =
+            calculate_pmt(rate, nper as f64, pv, 0.0, 0.0).expect("pmt calculation should succeed");
         let total_payments = pmt * 12.0;
 
         assert_relative_eq!(
@@ -753,33 +762,33 @@ mod tests {
     #[test]
     fn test_effect() {
         // 10% nominal compounded monthly
-        let eff = effect(0.10, 12).unwrap();
+        let eff = effect(0.10, 12).expect("effect calculation should succeed");
         assert_relative_eq!(eff, 0.10471307, epsilon = 1e-6);
     }
 
     #[test]
     fn test_nominal() {
         // Convert back from effective
-        let nom = nominal(0.10471307, 12).unwrap();
+        let nom = nominal(0.10471307, 12).expect("nominal calculation should succeed");
         assert_relative_eq!(nom, 0.10, epsilon = 1e-6);
     }
 
     #[test]
     fn test_sln() {
-        let dep = sln(30000.0, 7500.0, 10.0).unwrap();
+        let dep = sln(30000.0, 7500.0, 10.0).expect("sln calculation should succeed");
         assert_relative_eq!(dep, 2250.0, epsilon = 0.01);
     }
 
     #[test]
     fn test_syd() {
         // First year SYD depreciation
-        let dep = syd(30000.0, 7500.0, 10, 1).unwrap();
+        let dep = syd(30000.0, 7500.0, 10, 1).expect("syd calculation should succeed");
         assert_relative_eq!(dep, 4090.909, epsilon = 0.01);
 
         // Sum of all years should equal depreciable amount
         let mut total = 0.0;
         for per in 1..=10 {
-            total += syd(30000.0, 7500.0, 10, per).unwrap();
+            total += syd(30000.0, 7500.0, 10, per).expect("syd calculation should succeed");
         }
         assert_relative_eq!(total, 22500.0, epsilon = 0.01);
     }
@@ -787,23 +796,31 @@ mod tests {
     #[test]
     fn test_ddb() {
         // Double declining balance
-        let dep = ddb(2400.0, 300.0, 10, 1, 2.0).unwrap();
+        let dep = ddb(2400.0, 300.0, 10, 1, 2.0).expect("ddb calculation should succeed");
         assert_relative_eq!(dep, 480.0, epsilon = 0.01);
 
         // Year 2
-        let dep2 = ddb(2400.0, 300.0, 10, 2, 2.0).unwrap();
+        let dep2 = ddb(2400.0, 300.0, 10, 2, 2.0).expect("ddb calculation should succeed");
         assert_relative_eq!(dep2, 384.0, epsilon = 0.01);
     }
 
     #[test]
     fn test_amortization_schedule() {
-        let schedule = amortization_schedule(10000.0, 0.05 / 12.0, 12).unwrap();
+        let schedule = amortization_schedule(10000.0, 0.05 / 12.0, 12)
+            .expect("amortization_schedule calculation should succeed");
 
         // Should have 12 periods
         assert_eq!(schedule.periods.len(), 12);
 
         // Final balance should be close to zero
-        assert!(schedule.balances.last().unwrap().abs() < 0.01);
+        assert!(
+            schedule
+                .balances
+                .last()
+                .expect("balances should not be empty")
+                .abs()
+                < 0.01
+        );
 
         // Total principal paid should equal original loan
         let total_principal: f64 = schedule.principals.iter().sum();

@@ -352,7 +352,8 @@ mod tests {
         let b = Array1::from_vec(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
         let mask = Array1::from_vec(vec![true, false, true, false, true]);
 
-        let result = Avx512Ops::masked_add(&a.view(), &b.view(), &mask.view()).unwrap();
+        let result = Avx512Ops::masked_add(&a.view(), &b.view(), &mask.view())
+            .expect("masked_add should succeed for equal length arrays");
 
         assert_eq!(result[0], 11.0); // masked
         assert_eq!(result[1], 2.0); // not masked
@@ -367,7 +368,8 @@ mod tests {
         let data = Array1::from_vec(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
         let indices = Array1::from_vec(vec![4, 2, 0, 3, 1]);
 
-        let result = Avx512Ops::gather(&data.view(), &indices.view()).unwrap();
+        let result = Avx512Ops::gather(&data.view(), &indices.view())
+            .expect("gather should succeed for valid indices");
 
         assert_eq!(result[0], 50.0);
         assert_eq!(result[1], 30.0);
@@ -382,7 +384,8 @@ mod tests {
         let values = Array1::from_vec(vec![100.0, 200.0, 300.0]);
         let indices = Array1::from_vec(vec![2, 0, 4]);
 
-        let result = Avx512Ops::scatter(&values.view(), &indices.view(), 5).unwrap();
+        let result = Avx512Ops::scatter(&values.view(), &indices.view(), 5)
+            .expect("scatter should succeed for valid indices");
 
         assert_eq!(result[0], 200.0);
         assert_eq!(result[1], 0.0);
@@ -396,7 +399,8 @@ mod tests {
     fn test_histogram() {
         let data = Array1::from_vec(vec![0.5, 1.5, 2.5, 3.5, 4.5, 0.2, 1.8, 2.2, 3.8, 4.2]);
 
-        let hist = Avx512Ops::histogram(&data.view(), 5, 0.0, 5.0).unwrap();
+        let hist = Avx512Ops::histogram(&data.view(), 5, 0.0, 5.0)
+            .expect("histogram should succeed for valid parameters");
 
         assert_eq!(hist[0], 2); // 0.5, 0.2
         assert_eq!(hist[1], 2); // 1.5, 1.8

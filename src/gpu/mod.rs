@@ -53,6 +53,14 @@
 //! - Element-wise functions: exp, log, sin, cos, etc.
 //! - Matrix operations: matmul, transpose
 //! - Reduction operations: sum, mean, min, max
+//! - Batching operations: automatic batching of small operations for improved throughput
+//!
+//! ## Advanced Features
+//!
+//! - **Automatic Batching**: Queue small operations and execute them together to reduce overhead
+//! - **Dynamic Optimization**: Adaptive batch sizes based on GPU occupancy and performance
+//! - **Memory Management**: Buffer pooling, aliasing, and efficient data transfer strategies
+//! - **Shader Composition**: Build complex operations from simpler kernels
 //!
 //! ## Limitations
 //!
@@ -63,7 +71,7 @@
 
 // Re-export public types
 pub use array::GpuArray;
-pub use context::GpuContext;
+pub use context::{new_context, GpuContext, GpuContextRef};
 pub use ops::*;
 #[cfg(feature = "gpu")]
 pub use util::get_gpu_info;
@@ -72,7 +80,17 @@ pub use util::get_gpu_info;
 #[cfg(feature = "gpu")]
 mod array;
 #[cfg(feature = "gpu")]
+pub mod batching;
+#[cfg(feature = "gpu")]
+pub mod benchmarks;
+#[cfg(feature = "gpu")]
+pub mod compute;
+#[cfg(feature = "gpu")]
 mod context;
+#[cfg(feature = "gpu")]
+pub mod linalg;
+#[cfg(feature = "gpu")]
+pub mod memory;
 #[cfg(feature = "gpu")]
 mod ops;
 #[cfg(feature = "gpu")]

@@ -21,11 +21,11 @@
 //! let signal = vec![1.0, 2.0, 3.0, 4.0];
 //!
 //! // Forward FFT: time → frequency domain
-//! let spectrum = fft::fft(&signal, None).unwrap();
+//! let spectrum = fft::fft(&signal, None).expect("fft should succeed");
 //! println!("Frequency spectrum: {:?}", spectrum);
 //!
 //! // Inverse FFT: frequency → time domain
-//! let recovered = fft::ifft(&spectrum, None).unwrap();
+//! let recovered = fft::ifft(&spectrum, None).expect("ifft should succeed");
 //! println!("Recovered signal: {:?}", recovered);
 //! ```
 //!
@@ -38,11 +38,11 @@
 //! let signal = vec![1.0, 0.5, -0.5, -1.0, 0.0, 0.5];
 //!
 //! // RFFT: optimized for real inputs, returns only positive frequencies
-//! let spectrum = fft::rfft(&signal, None).unwrap();
+//! let spectrum = fft::rfft(&signal, None).expect("rfft should succeed");
 //! println!("Spectrum length: {} (from {} real samples)", spectrum.len(), signal.len());
 //!
 //! // Inverse RFFT
-//! let recovered = fft::irfft(&spectrum, Some(signal.len())).unwrap();
+//! let recovered = fft::irfft(&spectrum, Some(signal.len())).expect("irfft should succeed");
 //! ```
 //!
 //! ## 2D FFT (Image Processing)
@@ -55,11 +55,11 @@
 //! let image = Array2::<f64>::zeros((8, 8));
 //!
 //! // 2D FFT: spatial → frequency domain
-//! let spectrum = fft::fft2(&image, None, None, None).unwrap();
+//! let spectrum = fft::fft2(&image, None, None, None).expect("fft2 should succeed");
 //! println!("2D spectrum shape: {:?}", spectrum.dim());
 //!
 //! // Inverse 2D FFT: frequency → spatial domain
-//! let recovered = fft::ifft2(&spectrum, None, None, None).unwrap();
+//! let recovered = fft::ifft2(&spectrum, None, None, None).expect("ifft2 should succeed");
 //! ```
 //!
 //! ## Discrete Cosine Transform (DCT)
@@ -71,11 +71,11 @@
 //! let signal = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
 //!
 //! // DCT Type-II (most common, used in JPEG/MP3)
-//! let dct_coeffs = fft::dct(&signal, Some(DCTType::Type2), None).unwrap();
+//! let dct_coeffs = fft::dct(&signal, Some(DCTType::Type2), None).expect("dct should succeed");
 //! println!("DCT coefficients: {:?}", dct_coeffs);
 //!
 //! // Inverse DCT
-//! let recovered = fft::idct(&dct_coeffs, Some(DCTType::Type2), None).unwrap();
+//! let recovered = fft::idct(&dct_coeffs, Some(DCTType::Type2), None).expect("idct should succeed");
 //! ```
 //!
 //! ## Short-Time Fourier Transform (STFT)
@@ -97,7 +97,7 @@
 //!     None,     // no detrending
 //!     None,     // return onesided spectrum
 //!     None,     // boundary
-//! ).unwrap();
+//! ).expect("spectrogram_stft should succeed");
 //!
 //! println!("Time bins: {}, Frequency bins: {}", times.len(), freqs.len());
 //! ```
@@ -110,11 +110,11 @@
 //! // Get FFT frequency bins
 //! let n = 128;
 //! let sample_rate = 1000.0;
-//! let freqs = fft::fftfreq(n, 1.0 / sample_rate).unwrap();
+//! let freqs = fft::fftfreq(n, 1.0 / sample_rate).expect("fftfreq should succeed");
 //! println!("FFT frequencies: {:?}", &freqs[..10]);
 //!
 //! // Get RFFT frequency bins (only positive frequencies)
-//! let rfreqs = fft::rfftfreq(n, 1.0 / sample_rate).unwrap();
+//! let rfreqs = fft::rfftfreq(n, 1.0 / sample_rate).expect("rfftfreq should succeed");
 //! println!("RFFT frequencies: {:?}", rfreqs);
 //!
 //! // Find optimal FFT size (power of 2 or 3×2^k for faster computation)
@@ -172,8 +172,8 @@
 //!
 //! // Plans are automatically cached for repeated transforms
 //! let signal = vec![0.0; 1024];
-//! let spectrum1 = fft::fft(&signal, None).unwrap(); // Creates and caches plan
-//! let spectrum2 = fft::fft(&signal, None).unwrap(); // Reuses cached plan (faster)
+//! let spectrum1 = fft::fft(&signal, None).expect("fft should succeed"); // Creates and caches plan
+//! let spectrum2 = fft::fft(&signal, None).expect("fft should succeed"); // Reuses cached plan (faster)
 //! ```
 //!
 //! ## SIMD Optimization
@@ -182,10 +182,10 @@
 //!
 //! // SIMD-optimized variants (AVX/AVX2/AVX-512)
 //! let signal = vec![0.0; 1024];
-//! let spectrum = fft::fft_simd(&signal, None).unwrap();
+//! let spectrum = fft::fft_simd(&signal, None).expect("fft_simd should succeed");
 //!
 //! // Adaptive: automatically chooses best implementation
-//! let spectrum = fft::fft_adaptive(&signal, None).unwrap();
+//! let spectrum = fft::fft_adaptive(&signal, None).expect("fft_adaptive should succeed");
 //! ```
 //!
 //! ## Worker Pools (Parallel)
@@ -197,7 +197,7 @@
 //!
 //! // Large transforms will use parallel execution
 //! let large_signal = vec![0.0; 1048576];
-//! let spectrum = fft::fft(&large_signal, None).unwrap();
+//! let spectrum = fft::fft(&large_signal, None).expect("fft should succeed");
 //! ```
 //!
 //! # Use Cases
@@ -222,13 +222,13 @@ mod tests {
     fn test_fft_basic() {
         // Basic FFT test
         let signal = vec![1.0_f64, 2.0, 3.0, 4.0];
-        let spectrum = fft(&signal, None).unwrap();
+        let spectrum = fft(&signal, None).expect("fft should succeed");
 
         // FFT of real signal has length equal to input
         assert_eq!(spectrum.len(), signal.len());
 
         // Inverse FFT should recover original signal
-        let recovered = ifft(&spectrum, None).unwrap();
+        let recovered = ifft(&spectrum, None).expect("ifft should succeed");
         for (orig, rec) in signal.iter().zip(recovered.iter()) {
             assert!((orig - rec.re).abs() < 1e-10);
             assert!(rec.im.abs() < 1e-10);
@@ -239,13 +239,13 @@ mod tests {
     fn test_rfft_basic() {
         // RFFT test (optimized for real inputs)
         let signal = vec![1.0_f64, 2.0, 3.0, 4.0];
-        let spectrum = rfft(&signal, None).unwrap();
+        let spectrum = rfft(&signal, None).expect("rfft should succeed");
 
         // RFFT output length is n/2 + 1
         assert_eq!(spectrum.len(), signal.len() / 2 + 1);
 
         // Inverse RFFT should recover original signal
-        let recovered = irfft(&spectrum, Some(signal.len())).unwrap();
+        let recovered = irfft(&spectrum, Some(signal.len())).expect("irfft should succeed");
         for (orig, rec) in signal.iter().zip(recovered.iter()) {
             assert!((orig - rec).abs() < 1e-10);
         }
@@ -257,13 +257,13 @@ mod tests {
 
         // 2D FFT test
         let image = Array2::<f64>::from_shape_fn((4, 4), |(i, j)| (i * 4 + j) as f64);
-        let spectrum = fft2(&image, None, None, None).unwrap();
+        let spectrum = fft2(&image, None, None, None).expect("fft2 should succeed");
 
         // Output should have same shape
         assert_eq!(spectrum.dim(), image.dim());
 
         // Inverse FFT should recover original
-        let recovered = ifft2(&spectrum, None, None, None).unwrap();
+        let recovered = ifft2(&spectrum, None, None, None).expect("ifft2 should succeed");
         for (orig, rec) in image.iter().zip(recovered.iter()) {
             assert!((orig - rec.re).abs() < 1e-10);
         }
@@ -273,13 +273,13 @@ mod tests {
     fn test_dct_basic() {
         // DCT test
         let signal = vec![1.0_f64, 2.0, 3.0, 4.0];
-        let dct_coeffs = dct(&signal, Some(DCTType::Type2), None).unwrap();
+        let dct_coeffs = dct(&signal, Some(DCTType::Type2), None).expect("dct should succeed");
 
         // DCT output has same length as input
         assert_eq!(dct_coeffs.len(), signal.len());
 
         // IDCT should recover original
-        let recovered = idct(&dct_coeffs, Some(DCTType::Type2), None).unwrap();
+        let recovered = idct(&dct_coeffs, Some(DCTType::Type2), None).expect("idct should succeed");
         for (orig, rec) in signal.iter().zip(recovered.iter()) {
             assert!((orig - rec).abs() < 1e-9);
         }
@@ -289,7 +289,7 @@ mod tests {
     fn test_dst_basic() {
         // DST test
         let signal = vec![1.0_f64, 2.0, 3.0, 4.0];
-        let dst_coeffs = dst(&signal, Some(DSTType::Type2), None).unwrap();
+        let dst_coeffs = dst(&signal, Some(DSTType::Type2), None).expect("dst should succeed");
 
         // DST output has same length as input
         assert_eq!(dst_coeffs.len(), signal.len());
@@ -306,7 +306,7 @@ mod tests {
         // Test FFT frequency bins
         let n = 8;
         let dt = 0.1;
-        let freqs = fftfreq(n, dt).unwrap();
+        let freqs = fftfreq(n, dt).expect("fftfreq should succeed");
 
         assert_eq!(freqs.len(), n);
 
@@ -322,7 +322,7 @@ mod tests {
         // Test RFFT frequency bins
         let n = 8;
         let dt = 0.1;
-        let freqs = rfftfreq(n, dt).unwrap();
+        let freqs = rfftfreq(n, dt).expect("rfftfreq should succeed");
 
         // RFFT returns n/2 + 1 frequencies
         assert_eq!(freqs.len(), n / 2 + 1);
@@ -359,7 +359,7 @@ mod tests {
 
         // Test FFT shift (DC component to center)
         let arr = Array1::<f64>::from(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-        let shifted = fftshift(&arr).unwrap();
+        let shifted = fftshift(&arr).expect("fftshift should succeed");
 
         assert_eq!(shifted.len(), arr.len());
 
@@ -373,8 +373,8 @@ mod tests {
 
         // Test inverse FFT shift
         let arr = Array1::<f64>::from(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-        let shifted = fftshift(&arr).unwrap();
-        let recovered = ifftshift(&shifted).unwrap();
+        let shifted = fftshift(&arr).expect("fftshift should succeed");
+        let recovered = ifftshift(&shifted).expect("ifftshift should succeed");
 
         // Should recover original arrangement
         for (orig, rec) in arr.iter().zip(recovered.iter()) {
@@ -404,7 +404,7 @@ mod tests {
         let signal = vec![1.0_f64, 2.0, 3.0, 4.0];
         let mu = 0.0;
         let bias = 0.0;
-        let hartley = fht(&signal, mu, bias, None, None).unwrap();
+        let hartley = fht(&signal, mu, bias, None, None).expect("fht should succeed");
 
         // FHT output has same length
         assert_eq!(hartley.len(), signal.len());
@@ -429,13 +429,13 @@ mod tests {
             Complex64::new(2.0, -1.0),
         ];
 
-        let signal = hfft(&spectrum, None, None).unwrap();
+        let signal = hfft(&spectrum, None, None).expect("hfft should succeed");
 
         // HFFT produces real output
         assert!(signal.iter().all(|x| x.is_finite()));
 
         // IHFFT should recover spectrum
-        let recovered = ihfft(&signal, None, None).unwrap();
+        let recovered = ihfft(&signal, None, None).expect("ihfft should succeed");
         for (orig, rec) in spectrum.iter().zip(recovered.iter()) {
             assert!((orig.re - rec.re).abs() < 1e-9);
             assert!((orig.im - rec.im).abs() < 1e-9);

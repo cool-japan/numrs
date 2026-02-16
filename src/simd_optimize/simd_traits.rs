@@ -220,10 +220,14 @@ mod tests {
         let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]);
 
         // Test SIMD-optimized operations
-        let sum = a.simd_add(&b).unwrap();
+        let sum = a
+            .simd_add(&b)
+            .expect("simd_add should succeed with equal-sized arrays");
         assert_eq!(sum.to_vec(), vec![6.0, 8.0, 10.0, 12.0]);
 
-        let product = a.simd_mul(&b).unwrap();
+        let product = a
+            .simd_mul(&b)
+            .expect("simd_mul should succeed with equal-sized arrays");
         assert_eq!(product.to_vec(), vec![5.0, 12.0, 21.0, 32.0]);
     }
 

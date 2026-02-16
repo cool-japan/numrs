@@ -11,6 +11,7 @@
 //! Results help validate our SIMD optimizations and identify areas for improvement.
 
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use numrs2::prelude::*;

@@ -152,7 +152,9 @@ where
         // Set diagonal elements to 1
         for i in 0..n {
             let value = T::from(1u8);
-            array.set(&[i, i], value.clone()).unwrap();
+            array
+                .set(&[i, i], value.clone())
+                .expect("eye: diagonal index should always be valid");
         }
 
         Self { data: array }
@@ -197,7 +199,12 @@ where
         for i in 0..rows {
             let mut row = Vec::with_capacity(cols);
             for j in 0..cols {
-                row.push(self.data.get(&[i, j]).unwrap().clone());
+                row.push(
+                    self.data
+                        .get(&[i, j])
+                        .expect("to_nested_vec: index within matrix bounds should be valid")
+                        .clone(),
+                );
             }
             result.push(row);
         }
@@ -296,7 +303,12 @@ where
         let mut diag_data = Vec::with_capacity(diag_len);
 
         for i in 0..diag_len {
-            diag_data.push(self.data.get(&[i, i]).unwrap().clone());
+            diag_data.push(
+                self.data
+                    .get(&[i, i])
+                    .expect("diagonal: index within min(rows, cols) should be valid")
+                    .clone(),
+            );
         }
 
         // Create a column matrix with the diagonal elements
@@ -322,8 +334,14 @@ where
 
         for i in 0..n {
             for j in (i + 1)..n {
-                let a_ij = self.data.get(&[i, j]).unwrap();
-                let a_ji = self.data.get(&[j, i]).unwrap();
+                let a_ij = self
+                    .data
+                    .get(&[i, j])
+                    .expect("is_symmetric: index within square matrix should be valid");
+                let a_ji = self
+                    .data
+                    .get(&[j, i])
+                    .expect("is_symmetric: index within square matrix should be valid");
 
                 if a_ij != a_ji {
                     return false;
@@ -362,8 +380,16 @@ where
                 let mut sum = T::default();
 
                 for k in 0..p {
-                    let a_ik = self.data.get(&[i, k]).unwrap().clone();
-                    let b_kj = other.data.get(&[k, j]).unwrap().clone();
+                    let a_ik = self
+                        .data
+                        .get(&[i, k])
+                        .expect("dot: index within self matrix bounds should be valid")
+                        .clone();
+                    let b_kj = other
+                        .data
+                        .get(&[k, j])
+                        .expect("dot: index within other matrix bounds should be valid")
+                        .clone();
 
                     // sum += a_ik * b_kj
                     sum = sum + (a_ik * b_kj);
@@ -397,7 +423,10 @@ where
     type Output = Matrix<T>;
 
     fn add(self, other: &Matrix<T>) -> Matrix<T> {
-        let result_array = self.data.add_broadcast(&other.data).unwrap();
+        let result_array = self
+            .data
+            .add_broadcast(&other.data)
+            .expect("Matrix addition: shapes must be broadcastable");
         Matrix { data: result_array }
     }
 }
@@ -409,7 +438,10 @@ where
     type Output = Matrix<T>;
 
     fn sub(self, other: &Matrix<T>) -> Matrix<T> {
-        let result_array = self.data.subtract_broadcast(&other.data).unwrap();
+        let result_array = self
+            .data
+            .subtract_broadcast(&other.data)
+            .expect("Matrix subtraction: shapes must be broadcastable");
         Matrix { data: result_array }
     }
 }
@@ -423,7 +455,8 @@ impl<
 
     fn mul(self, other: &Matrix<T>) -> Matrix<T> {
         // Call the dot method for matrix multiplication
-        self.dot(other).unwrap()
+        self.dot(other)
+            .expect("Matrix multiplication: inner dimensions must match")
     }
 }
 
@@ -453,10 +486,11 @@ where
             write!(f, "[")?;
 
             for j in 0..cols {
-                let value = match self.data.get(&[i, j]) {
-                    Ok(v) => v.clone(),
-                    Err(_) => panic!("Failed to access element at ({}, {})", i, j),
-                };
+                let value = self
+                    .data
+                    .get(&[i, j])
+                    .expect("Display: index within matrix bounds should be valid")
+                    .clone();
 
                 if j > 0 {
                     write!(f, ", ")?;
@@ -499,16 +533,16 @@ where
 ///
 /// // From 2D array
 /// let arr = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-/// let mat = matrix(arr).unwrap();
+/// let mat = matrix(arr).expect("matrix should succeed");
 ///
 /// // From 1D array (becomes row vector)
 /// let arr_1d = Array::from_vec(vec![1, 2, 3]);
-/// let mat_1d = matrix(arr_1d).unwrap();
+/// let mat_1d = matrix(arr_1d).expect("matrix should succeed");
 /// assert_eq!(mat_1d.shape(), (1, 3));
 ///
 /// // From nested vector
 /// let nested = vec![vec![1, 2], vec![3, 4]];
-/// let mat_nested = matrix_from_nested(nested).unwrap();
+/// let mat_nested = matrix_from_nested(nested).expect("matrix_from_nested should succeed");
 /// assert_eq!(mat_nested.shape(), (2, 2));
 /// ```
 pub fn matrix<T>(data: Array<T>) -> Result<Matrix<T>>
@@ -518,7 +552,10 @@ where
     match data.ndim() {
         0 => {
             // Scalar: convert to 1x1 matrix
-            let scalar_value = data.get(&[]).unwrap().clone();
+            let scalar_value = data
+                .get(&[])
+                .expect("matrix: 0-dimensional array should have a single element")
+                .clone();
             let scalar_array = Array::from_vec(vec![scalar_value]).reshape(&[1, 1]);
             Matrix::new(scalar_array)
         }
@@ -565,7 +602,7 @@ where
 ///     vec![1, 2, 3],
 ///     vec![4, 5, 6],
 /// ];
-/// let mat = matrix_from_nested(data).unwrap();
+/// let mat = matrix_from_nested(data).expect("matrix_from_nested should succeed");
 /// assert_eq!(mat.shape(), (2, 3));
 /// ```
 pub fn matrix_from_nested<T>(nested_vec: Vec<Vec<T>>) -> Result<Matrix<T>>
@@ -594,14 +631,14 @@ where
 ///
 /// let mat = matrix_from_scalar(42);
 /// assert_eq!(mat.shape(), (1, 1));
-/// assert_eq!(mat.get(0, 0).unwrap(), 42);
+/// assert_eq!(mat.get(0, 0).expect("get should succeed"), 42);
 /// ```
 pub fn matrix_from_scalar<T>(scalar: T) -> Matrix<T>
 where
     T: Clone + Zero + One + PartialEq + Default + PartialOrd,
 {
     let scalar_array = Array::from_vec(vec![scalar]).reshape(&[1, 1]);
-    Matrix::new(scalar_array).unwrap()
+    Matrix::new(scalar_array).expect("matrix_from_scalar: 1x1 array is always a valid matrix")
 }
 
 /// Convert input to a matrix (alias for `matrix()`)
@@ -625,7 +662,7 @@ where
 /// use numrs2::matrix::asmatrix;
 ///
 /// let arr = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-/// let mat = asmatrix(arr).unwrap();
+/// let mat = asmatrix(arr).expect("asmatrix should succeed");
 /// assert_eq!(mat.shape(), (2, 2));
 /// ```
 pub fn asmatrix<T>(data: Array<T>) -> Result<Matrix<T>>
@@ -654,7 +691,7 @@ where
 /// use numrs2::matrix::asmatrix_from_nested;
 ///
 /// let data = vec![vec![1, 2], vec![3, 4]];
-/// let mat = asmatrix_from_nested(data).unwrap();
+/// let mat = asmatrix_from_nested(data).expect("asmatrix_from_nested should succeed");
 /// assert_eq!(mat.shape(), (2, 2));
 /// ```
 pub fn asmatrix_from_nested<T>(nested_vec: Vec<Vec<T>>) -> Result<Matrix<T>>

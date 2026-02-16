@@ -24,7 +24,7 @@ use num_traits::Zero;
 ///     .reshape(&[2, 2, 3]);
 ///
 /// // Roll axis 2 to position 0
-/// let b = rollaxis(&a, 2, 0).unwrap();
+/// let b = rollaxis(&a, 2, 0).expect("operation should succeed");
 /// assert_eq!(b.shape(), vec![3, 2, 2]);
 /// ```
 pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) -> Result<Array<T>> {
@@ -100,7 +100,10 @@ pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) ->
         }
 
         // Copy the value
-        result_data[target_flat_index] = source_array.as_slice().unwrap()[i].clone();
+        result_data[target_flat_index] = source_array
+            .as_slice()
+            .expect("source array should be contiguous and sliceable")[i]
+            .clone();
     }
 
     // Create the result array
@@ -126,7 +129,7 @@ pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) ->
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-/// let b = swapaxes(&a, 0, 1).unwrap();
+/// let b = swapaxes(&a, 0, 1).expect("operation should succeed");
 /// assert_eq!(b.shape(), vec![3, 2]);
 /// ```
 pub fn swapaxes<T: Clone>(array: &Array<T>, axis1: usize, axis2: usize) -> Result<Array<T>> {
@@ -195,7 +198,7 @@ pub fn swapaxes<T: Clone>(array: &Array<T>, axis1: usize, axis2: usize) -> Resul
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8]).reshape(&[2, 2, 2]);
-/// let b = moveaxis(&a, &[0], &[2]).unwrap();
+/// let b = moveaxis(&a, &[0], &[2]).expect("operation should succeed");
 /// assert_eq!(b.shape(), vec![2, 2, 2]);
 /// ```
 pub fn moveaxis<T: Clone>(
@@ -250,7 +253,9 @@ pub fn moveaxis<T: Clone>(
     for i in 0..ndim {
         if perm[i] != i {
             // Find where the i-th axis should go
-            let j = perm.iter().position(|&p| p == i).unwrap();
+            let j = perm.iter().position(|&p| p == i).expect(
+                "axis i should exist in permutation array as perm contains all axes 0..ndim",
+            );
 
             // Swap axes i and j in the result
             result = result.transpose_axis(i, j);

@@ -540,7 +540,10 @@ impl<T: Copy> MmapArray<T> {
             return Ok(());
         }
 
-        let pattern = self.access_pattern.lock().unwrap();
+        let pattern = self
+            .access_pattern
+            .lock()
+            .expect("Access pattern mutex poisoned");
 
         match (self.config.prefetch, pattern.pattern_type) {
             (PrefetchStrategy::Sequential, AccessPatternType::Sequential)
@@ -750,7 +753,9 @@ fn apply_memory_advice(_mmap: &mut MmapMut, _config: &MmapConfig) {
 
 /// Get or create access pattern tracking for a file
 fn get_or_create_access_pattern(path: &Path) -> Arc<Mutex<AccessPattern>> {
-    let mut cache = GLOBAL_MMAP_CACHE.lock().unwrap();
+    let mut cache = GLOBAL_MMAP_CACHE
+        .lock()
+        .expect("Global mmap cache mutex poisoned");
 
     cache
         .entry(path.to_path_buf())

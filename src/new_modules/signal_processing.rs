@@ -227,8 +227,10 @@ impl SignalProcessor {
         for (i, &freq) in freq_data.iter().enumerate() {
             let normalized_freq = freq.abs() / params.cutoff;
             let epsilon = (<T as NumCast>::from(10.0)
-                .unwrap()
-                .powf(ripple / <T as NumCast>::from(10.0).unwrap())
+                .expect("10.0 should convert to float type")
+                .powf(
+                    ripple / <T as NumCast>::from(10.0).expect("10.0 should convert to float type"),
+                )
                 - T::one())
             .sqrt();
 
@@ -265,7 +267,7 @@ impl SignalProcessor {
                 let mut t0 = T::one();
                 let mut t1 = x;
                 for _ in 2..=n {
-                    let t2 = T::from(2.0).unwrap() * x * t1 - t0;
+                    let t2 = T::from(2.0).expect("2.0 should convert to float type") * x * t1 - t0;
                     t0 = t1;
                     t1 = t2;
                 }
@@ -495,8 +497,11 @@ impl SignalProcessor {
         if n.is_multiple_of(2) {
             // Even length: DC, positive frequencies, Nyquist, negative frequencies
             for i in 1..n / 2 {
-                fft_data[i] =
-                    fft_data[i] * Complex::new(<T as NumCast>::from(2.0).unwrap(), T::zero());
+                fft_data[i] = fft_data[i]
+                    * Complex::new(
+                        <T as NumCast>::from(2.0).expect("2.0 should convert to float type"),
+                        T::zero(),
+                    );
             }
             // Zero out negative frequencies
             for i in (n / 2 + 1)..n {
@@ -506,8 +511,11 @@ impl SignalProcessor {
         } else {
             // Odd length: DC, positive frequencies, negative frequencies
             for i in 1..n.div_ceil(2) {
-                fft_data[i] =
-                    fft_data[i] * Complex::new(<T as NumCast>::from(2.0).unwrap(), T::zero());
+                fft_data[i] = fft_data[i]
+                    * Complex::new(
+                        <T as NumCast>::from(2.0).expect("2.0 should convert to float type"),
+                        T::zero(),
+                    );
             }
             // Zero out negative frequencies
             for i in n.div_ceil(2)..n {
@@ -725,7 +733,8 @@ mod tests {
         let signal1 = Array::from_vec(vec![1.0, 2.0, 3.0]);
         let signal2 = Array::from_vec(vec![0.5, 1.0, 0.5]);
 
-        let result = SignalProcessor::convolve(&signal1, &signal2).unwrap();
+        let result =
+            SignalProcessor::convolve(&signal1, &signal2).expect("convolution should succeed");
         let result_data = result.to_vec();
 
         // Expected convolution result
@@ -752,7 +761,8 @@ mod tests {
         let input = Array::from_vec(signal);
         let params = FilterParams::new(5.0, 64.0); // 5 Hz cutoff, 64 Hz sample rate
 
-        let filtered = SignalProcessor::filter(&input, FilterType::LowPass, params).unwrap();
+        let filtered = SignalProcessor::filter(&input, FilterType::LowPass, params)
+            .expect("lowpass filter should succeed");
 
         // Verify that high frequencies are attenuated
         assert_eq!(filtered.shape(), input.shape());
@@ -762,7 +772,8 @@ mod tests {
     fn test_autocorrelation() {
         let signal = Array::from_vec(vec![1.0, 2.0, 3.0, 2.0, 1.0]);
 
-        let autocorr = SignalProcessor::autocorrelate(&signal).unwrap();
+        let autocorr =
+            SignalProcessor::autocorrelate(&signal).expect("autocorrelation should succeed");
         let autocorr_data = autocorr.to_vec();
 
         // Autocorrelation should be symmetric
@@ -785,7 +796,7 @@ mod tests {
         }
 
         let input = Array::from_vec(signal);
-        let detrended = SignalProcessor::detrend(&input).unwrap();
+        let detrended = SignalProcessor::detrend(&input).expect("detrend should succeed");
         let detrended_data = detrended.to_vec();
 
         // Mean should be close to zero after detrending
@@ -798,11 +809,12 @@ mod tests {
         let signal = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
 
         // Upsample
-        let upsampled = SignalProcessor::resample(&signal, 9).unwrap();
+        let upsampled = SignalProcessor::resample(&signal, 9).expect("upsampling should succeed");
         assert_eq!(upsampled.shape()[0], 9);
 
         // Downsample
-        let downsampled = SignalProcessor::resample(&signal, 3).unwrap();
+        let downsampled =
+            SignalProcessor::resample(&signal, 3).expect("downsampling should succeed");
         assert_eq!(downsampled.shape()[0], 3);
 
         // Check endpoints are preserved
@@ -825,7 +837,8 @@ mod tests {
         }
 
         let input = Array::from_vec(signal);
-        let spec_result = SignalProcessor::spectrogram(&input, 64, 32, "hann").unwrap();
+        let spec_result = SignalProcessor::spectrogram(&input, 64, 32, "hann")
+            .expect("spectrogram should succeed");
 
         // Check dimensions
         assert!(spec_result.spectrogram.shape()[0] > 0); // Time frames
@@ -852,7 +865,7 @@ mod tests {
         }
 
         let input = Array::from_vec(signal);
-        let analytic = SignalProcessor::hilbert(&input).unwrap();
+        let analytic = SignalProcessor::hilbert(&input).expect("Hilbert transform should succeed");
         let analytic_data = analytic.to_vec();
 
         // Check that we get complex output

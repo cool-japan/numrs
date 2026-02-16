@@ -182,7 +182,10 @@ where
     /// Get or create thread-local state
     fn get_thread_local_state(&self) -> Result<Arc<Mutex<ThreadLocalState>>> {
         let thread_id = thread::current().id();
-        let mut allocators = self.thread_allocators.lock().unwrap();
+        let mut allocators = self
+            .thread_allocators
+            .lock()
+            .expect("lock should not be poisoned");
 
         if let Some(state) = allocators.get(&thread_id) {
             Ok(Arc::clone(state))
@@ -203,7 +206,10 @@ where
             return None;
         }
 
-        let mut pool = self.global_pool.lock().unwrap();
+        let mut pool = self
+            .global_pool
+            .lock()
+            .expect("lock should not be poisoned");
 
         for (i, block) in pool.iter().enumerate() {
             if block.layout.size() >= layout.size() && block.layout.align() >= layout.align() {
@@ -224,7 +230,10 @@ where
             return;
         }
 
-        let mut pool = self.global_pool.lock().unwrap();
+        let mut pool = self
+            .global_pool
+            .lock()
+            .expect("lock should not be poisoned");
 
         if pool.len() < self.config.global_pool_size / std::mem::size_of::<CachedBlock>() {
             pool.push(CachedBlock {
@@ -242,7 +251,10 @@ where
 
     /// Trigger garbage collection for all thread-local caches
     pub fn garbage_collect_all(&self) -> Result<()> {
-        let allocators = self.thread_allocators.lock().unwrap();
+        let allocators = self
+            .thread_allocators
+            .lock()
+            .expect("lock should not be poisoned");
 
         for state in allocators.values() {
             if let Ok(mut local_state) = state.try_lock() {
@@ -252,7 +264,10 @@ where
 
         // Also clean global pool
         {
-            let mut pool = self.global_pool.lock().unwrap();
+            let mut pool = self
+                .global_pool
+                .lock()
+                .expect("lock should not be poisoned");
             let now = Instant::now();
             pool.retain(|block| {
                 if now.duration_since(block.allocated_at) > self.config.max_block_age {
@@ -271,8 +286,15 @@ where
 
     /// Get aggregate statistics from all threads
     pub fn aggregate_statistics(&self) -> AllocationStats {
-        let global_stats = self.global_stats.read().unwrap().clone();
-        let allocators = self.thread_allocators.lock().unwrap();
+        let global_stats = self
+            .global_stats
+            .read()
+            .expect("lock should not be poisoned")
+            .clone();
+        let allocators = self
+            .thread_allocators
+            .lock()
+            .expect("lock should not be poisoned");
 
         let mut aggregate = global_stats;
 
@@ -292,7 +314,10 @@ where
 
     /// Get number of cached blocks across all threads
     pub fn total_cached_blocks(&self) -> usize {
-        let allocators = self.thread_allocators.lock().unwrap();
+        let allocators = self
+            .thread_allocators
+            .lock()
+            .expect("lock should not be poisoned");
         let mut total = 0;
 
         for state in allocators.values() {
@@ -301,14 +326,21 @@ where
             }
         }
 
-        total += self.global_pool.lock().unwrap().len();
+        total += self
+            .global_pool
+            .lock()
+            .expect("lock should not be poisoned")
+            .len();
         total
     }
 
     /// Force cleanup of all cached memory
     pub fn force_cleanup(&self) -> Result<()> {
         // Clean thread-local caches
-        let allocators = self.thread_allocators.lock().unwrap();
+        let allocators = self
+            .thread_allocators
+            .lock()
+            .expect("lock should not be poisoned");
 
         for state in allocators.values() {
             if let Ok(mut local_state) = state.try_lock() {
@@ -322,7 +354,10 @@ where
 
         // Clean global pool
         {
-            let mut pool = self.global_pool.lock().unwrap();
+            let mut pool = self
+                .global_pool
+                .lock()
+                .expect("lock should not be poisoned");
             for block in pool.drain(..) {
                 unsafe {
                     self.base_allocator.deallocate(block.ptr, block.layout)?;
@@ -344,7 +379,7 @@ where
         // Try thread-local cache first
         if self.config.enable_thread_local_cache {
             let state = self.get_thread_local_state()?;
-            let mut local_state = state.lock().unwrap();
+            let mut local_state = state.lock().expect("lock should not be poisoned");
 
             // Check if we should do garbage collection
             if local_state.should_gc(self.config.gc_interval) {
@@ -362,7 +397,10 @@ where
         // Try global pool
         if let Some(ptr) = self.try_allocate_from_global_pool(layout) {
             if self.config.enable_tracking {
-                let mut stats = self.global_stats.write().unwrap();
+                let mut stats = self
+                    .global_stats
+                    .write()
+                    .expect("lock should not be poisoned");
                 stats.allocation_count += 1;
                 stats.active_allocations += 1;
             }
@@ -373,7 +411,10 @@ where
         let ptr = self.base_allocator.allocate(layout)?;
 
         if self.config.enable_tracking {
-            let mut stats = self.global_stats.write().unwrap();
+            let mut stats = self
+                .global_stats
+                .write()
+                .expect("lock should not be poisoned");
             stats.bytes_allocated += layout.size();
             stats.allocation_count += 1;
             stats.active_allocations += 1;
@@ -389,7 +430,7 @@ where
         // Try to cache the block for reuse
         if self.config.enable_thread_local_cache {
             if let Ok(state) = self.get_thread_local_state() {
-                let mut local_state = state.lock().unwrap();
+                let mut local_state = state.lock().expect("lock should not be poisoned");
                 if local_state.cached_blocks.len() < self.config.max_cached_blocks_per_thread {
                     local_state.cache_block(ptr, layout);
                     local_state.stats.deallocation_count += 1;
@@ -404,7 +445,10 @@ where
         self.return_to_global_pool(ptr, layout);
 
         if self.config.enable_tracking {
-            let mut stats = self.global_stats.write().unwrap();
+            let mut stats = self
+                .global_stats
+                .write()
+                .expect("lock should not be poisoned");
             stats.bytes_deallocated += layout.size();
             stats.deallocation_count += 1;
             stats.active_allocations = stats.active_allocations.saturating_sub(1);
@@ -587,11 +631,16 @@ mod tests {
         let config = ParallelAllocatorConfig::default();
         let allocator = ParallelAllocator::new(base, config);
 
-        let layout = Layout::from_size_align(1024, 8).unwrap();
-        let ptr = allocator.allocate(layout).unwrap();
+        let layout =
+            Layout::from_size_align(1024, 8).expect("layout with size 1024 and align 8 is valid");
+        let ptr = allocator
+            .allocate(layout)
+            .expect("allocation should succeed");
 
         unsafe {
-            allocator.deallocate(ptr, layout).unwrap();
+            allocator
+                .deallocate(ptr, layout)
+                .expect("deallocation should succeed");
         }
     }
 
@@ -604,13 +653,18 @@ mod tests {
         };
         let allocator = ParallelAllocator::new(base, config);
 
-        let layout = Layout::from_size_align(64, 8).unwrap();
+        let layout =
+            Layout::from_size_align(64, 8).expect("layout with size 64 and align 8 is valid");
 
         // Allocate and deallocate several blocks
         for _ in 0..3 {
-            let ptr = allocator.allocate(layout).unwrap();
+            let ptr = allocator
+                .allocate(layout)
+                .expect("allocation should succeed");
             unsafe {
-                allocator.deallocate(ptr, layout).unwrap();
+                allocator
+                    .deallocate(ptr, layout)
+                    .expect("deallocation should succeed");
             }
         }
 
@@ -624,12 +678,17 @@ mod tests {
         let config = ParallelAllocatorConfig::default();
         let allocator = ParallelAllocator::new(base, config);
 
-        let layout = Layout::from_size_align(128, 8).unwrap();
+        let layout =
+            Layout::from_size_align(128, 8).expect("layout with size 128 and align 8 is valid");
 
         // Make some allocations
         let mut ptrs = Vec::new();
         for _ in 0..5 {
-            ptrs.push(allocator.allocate(layout).unwrap());
+            ptrs.push(
+                allocator
+                    .allocate(layout)
+                    .expect("allocation should succeed"),
+            );
         }
 
         let stats = allocator.aggregate_statistics();
@@ -639,7 +698,9 @@ mod tests {
         // Clean up
         for ptr in ptrs {
             unsafe {
-                allocator.deallocate(ptr, layout).unwrap();
+                allocator
+                    .deallocate(ptr, layout)
+                    .expect("deallocation should succeed");
             }
         }
     }
@@ -653,13 +714,18 @@ mod tests {
         };
         let allocator = ParallelAllocator::new(base, config);
 
-        let layout = Layout::from_size_align(64, 8).unwrap();
+        let layout =
+            Layout::from_size_align(64, 8).expect("layout with size 64 and align 8 is valid");
 
         // Allocate and deallocate to create cached blocks
         for _ in 0..3 {
-            let ptr = allocator.allocate(layout).unwrap();
+            let ptr = allocator
+                .allocate(layout)
+                .expect("allocation should succeed");
             unsafe {
-                allocator.deallocate(ptr, layout).unwrap();
+                allocator
+                    .deallocate(ptr, layout)
+                    .expect("deallocation should succeed");
             }
         }
 
@@ -670,7 +736,9 @@ mod tests {
         std::thread::sleep(Duration::from_millis(10));
 
         // Trigger garbage collection
-        allocator.garbage_collect_all().unwrap();
+        allocator
+            .garbage_collect_all()
+            .expect("garbage collection should succeed");
 
         // Should have fewer cached blocks
         let final_cached = allocator.total_cached_blocks();
@@ -684,16 +752,25 @@ mod tests {
 
         // Initialize for current thread
         let base = NumericalArrayAllocator::new();
-        tl_allocator.initialize_current_thread(base).unwrap();
+        tl_allocator
+            .initialize_current_thread(base)
+            .expect("thread-local initialization should succeed");
 
-        let layout = Layout::from_size_align(256, 8).unwrap();
-        let ptr = tl_allocator.allocate(layout).unwrap();
+        let layout =
+            Layout::from_size_align(256, 8).expect("layout with size 256 and align 8 is valid");
+        let ptr = tl_allocator
+            .allocate(layout)
+            .expect("allocation should succeed");
 
         unsafe {
-            tl_allocator.deallocate(ptr, layout).unwrap();
+            tl_allocator
+                .deallocate(ptr, layout)
+                .expect("deallocation should succeed");
         }
 
-        let stats = tl_allocator.current_thread_statistics().unwrap();
+        let stats = tl_allocator
+            .current_thread_statistics()
+            .expect("thread-local stats should be available");
         assert_eq!(stats.allocation_count, 1);
         assert_eq!(stats.deallocation_count, 1);
     }
@@ -704,20 +781,27 @@ mod tests {
         let config = ParallelAllocatorConfig::default();
         let allocator = ParallelAllocator::new(base, config);
 
-        let layout = Layout::from_size_align(64, 8).unwrap();
+        let layout =
+            Layout::from_size_align(64, 8).expect("layout with size 64 and align 8 is valid");
 
         // Create some cached blocks
         for _ in 0..3 {
-            let ptr = allocator.allocate(layout).unwrap();
+            let ptr = allocator
+                .allocate(layout)
+                .expect("allocation should succeed");
             unsafe {
-                allocator.deallocate(ptr, layout).unwrap();
+                allocator
+                    .deallocate(ptr, layout)
+                    .expect("deallocation should succeed");
             }
         }
 
         assert!(allocator.total_cached_blocks() > 0);
 
         // Force cleanup
-        allocator.force_cleanup().unwrap();
+        allocator
+            .force_cleanup()
+            .expect("force cleanup should succeed");
 
         // Should have no cached blocks
         assert_eq!(allocator.total_cached_blocks(), 0);
@@ -729,14 +813,22 @@ mod tests {
         let config = ParallelAllocatorConfig::default();
         let allocator = ParallelAllocator::new(base, config);
 
-        let old_layout = Layout::from_size_align(64, 8).unwrap();
-        let new_layout = Layout::from_size_align(128, 8).unwrap();
+        let old_layout =
+            Layout::from_size_align(64, 8).expect("layout with size 64 and align 8 is valid");
+        let new_layout =
+            Layout::from_size_align(128, 8).expect("layout with size 128 and align 8 is valid");
 
-        let ptr = allocator.allocate(old_layout).unwrap();
+        let ptr = allocator
+            .allocate(old_layout)
+            .expect("allocation should succeed");
 
         unsafe {
-            let new_ptr = allocator.reallocate(ptr, old_layout, new_layout).unwrap();
-            allocator.deallocate(new_ptr, new_layout).unwrap();
+            let new_ptr = allocator
+                .reallocate(ptr, old_layout, new_layout)
+                .expect("reallocation should succeed");
+            allocator
+                .deallocate(new_ptr, new_layout)
+                .expect("deallocation should succeed");
         }
     }
 
@@ -751,12 +843,17 @@ mod tests {
         for _ in 0..4 {
             let allocator_clone = Arc::clone(&allocator);
             let handle = std::thread::spawn(move || {
-                let layout = Layout::from_size_align(128, 8).unwrap();
+                let layout = Layout::from_size_align(128, 8)
+                    .expect("layout with size 128 and align 8 is valid");
 
                 for _ in 0..10 {
-                    let ptr = allocator_clone.allocate(layout).unwrap();
+                    let ptr = allocator_clone
+                        .allocate(layout)
+                        .expect("allocation should succeed");
                     unsafe {
-                        allocator_clone.deallocate(ptr, layout).unwrap();
+                        allocator_clone
+                            .deallocate(ptr, layout)
+                            .expect("deallocation should succeed");
                     }
                 }
             });
@@ -764,7 +861,7 @@ mod tests {
         }
 
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should join successfully");
         }
 
         let stats = allocator.aggregate_statistics();

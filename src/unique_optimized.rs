@@ -120,7 +120,9 @@ where
             } else {
                 // Otherwise, count directly from original data
                 for value in flat_data.iter() {
-                    let idx = *value_to_index.get(value).unwrap();
+                    let idx = *value_to_index
+                        .get(value)
+                        .expect("value must exist in value_to_index map");
                     counts_vec[idx] += 1;
                 }
             }
@@ -149,7 +151,7 @@ where
     }
 
     // Process along a specific axis
-    let axis_val = axis.unwrap();
+    let axis_val = axis.expect("axis must be Some at this point (None case handled above)");
     if axis_val >= a.ndim() {
         return Err(NumRs2Error::DimensionMismatch(format!(
             "Axis {} out of bounds for array of dimension {}",
@@ -216,7 +218,9 @@ where
         } else {
             // This subarray has been seen before
             if need_inverse {
-                let idx = *index_map.get(hash_rep).unwrap();
+                let idx = *index_map
+                    .get(hash_rep)
+                    .expect("hash_rep must exist in index_map for seen subarrays");
                 inverse[i] = idx;
             }
         }
@@ -332,7 +336,9 @@ where
         }
 
         // Second pass: merge with global unique set
-        let mut value_map = value_to_index.write().unwrap();
+        let mut value_map = value_to_index
+            .write()
+            .expect("value_to_index RwLock poisoned: failed to acquire write lock");
         for (value, local_first_idx) in local_uniques {
             if !value_map.contains_key(&value) {
                 let new_idx = unique_counter.fetch_add(1, Ordering::SeqCst);
@@ -349,10 +355,16 @@ where
 
     // Create inverse indices if needed
     let inverse_indices = if need_inverse {
-        let value_map = value_to_index.read().unwrap();
+        let value_map = value_to_index
+            .read()
+            .expect("value_to_index RwLock poisoned: failed to acquire read lock");
         flat_data
             .par_iter()
-            .map(|value| *value_map.get(value).unwrap())
+            .map(|value| {
+                *value_map
+                    .get(value)
+                    .expect("value must exist in value_map for inverse indices")
+            })
             .collect()
     } else {
         Vec::new()
@@ -369,13 +381,17 @@ where
             }
         } else {
             // Otherwise, count directly using value map
-            let value_map = value_to_index.read().unwrap();
+            let value_map = value_to_index
+                .read()
+                .expect("value_to_index RwLock poisoned: failed to acquire read lock");
 
             // Use thread-local counters and then merge
             let local_counts = flat_data
                 .par_iter()
                 .map(|value| {
-                    let idx = *value_map.get(value).unwrap();
+                    let idx = *value_map
+                        .get(value)
+                        .expect("value must exist in value_map for counting");
                     (idx, 1)
                 })
                 .collect::<Vec<(usize, usize)>>();
@@ -415,7 +431,7 @@ fn synchronized_push<T: Send + Clone>(vec: &mut Vec<T>, value: T) {
     // For simplicity, using a mutex, but a lock-free implementation would be better
     // in a production environment
     let mutex = std::sync::Mutex::new(());
-    let guard = mutex.lock().unwrap();
+    let guard = mutex.lock().expect("Mutex poisoned in synchronized_push");
     vec.push(value);
     drop(guard);
 }

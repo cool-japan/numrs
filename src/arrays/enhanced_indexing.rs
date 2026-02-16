@@ -860,11 +860,13 @@ mod tests {
         let engine = IndexingEngine::new();
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8];
         let shape = Shape::new(vec![2, 4]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let ranges = vec![RangeSpec::new(0, 2, 1), RangeSpec::new(1, 3, 1)];
 
-        let result = engine.multidim_slice(&view, &ranges).unwrap();
+        let result = engine
+            .multidim_slice(&view, &ranges)
+            .expect("test: operation should succeed");
         assert_eq!(result.len(), 4); // 2 * 2 elements
     }
 
@@ -873,14 +875,18 @@ mod tests {
         let engine = IndexingEngine::new();
         let data = vec![1, 2, 3, 4];
         let shape = Shape::new(vec![4]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         // Test circular indexing with negative index
-        let result = engine.circular_index(&view, &[-1]).unwrap();
+        let result = engine
+            .circular_index(&view, &[-1])
+            .expect("test: operation should succeed");
         assert_eq!(result, 4); // Last element
 
         // Test circular indexing with out-of-bounds positive index
-        let result = engine.circular_index(&view, &[5]).unwrap();
+        let result = engine
+            .circular_index(&view, &[5])
+            .expect("test: operation should succeed");
         assert_eq!(result, 2); // 5 % 4 = 1, so second element
     }
 
@@ -889,10 +895,12 @@ mod tests {
         let engine = IndexingEngine::new();
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let shape = Shape::new(vec![3, 3]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let block_spec = BlockSpec::new(vec![1, 1], vec![2, 2]);
-        let result = engine.block_index(&view, &block_spec).unwrap();
+        let result = engine
+            .block_index(&view, &block_spec)
+            .expect("test: operation should succeed");
 
         // Should extract a 2x2 block starting at (1,1)
         assert_eq!(result.len(), 4);
@@ -903,10 +911,12 @@ mod tests {
         let engine = IndexingEngine::new();
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::new(vec![6]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let mask = vec![true, false, true, false, true, false];
-        let result = engine.masked_index(&view, &mask).unwrap();
+        let result = engine
+            .masked_index(&view, &mask)
+            .expect("test: operation should succeed");
 
         assert_eq!(result, vec![1, 3, 5]);
     }
@@ -916,9 +926,11 @@ mod tests {
         let engine = IndexingEngine::new();
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::new(vec![6]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let result = engine.conditional_index(&view, |x| x > 3).unwrap();
+        let result = engine
+            .conditional_index(&view, |x| x > 3)
+            .expect("test: operation should succeed");
 
         assert_eq!(result.len(), 3); // Elements 4, 5, 6
         assert_eq!(result[0].1, 4);
@@ -931,9 +943,11 @@ mod tests {
         let engine = IndexingEngine::new();
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let shape = Shape::new(vec![3, 3]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let result = engine.diagonal_index(&view, 0, None, None).unwrap();
+        let result = engine
+            .diagonal_index(&view, 0, None, None)
+            .expect("test: operation should succeed");
         assert_eq!(result.len(), 3); // Main diagonal elements
     }
 

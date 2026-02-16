@@ -136,7 +136,7 @@ where
 /// use numrs2::new_modules::matrix_decomp::condition::slogdet;
 ///
 /// let a = Array::from_vec(vec![2.0, 0.0, 0.0, 3.0]).reshape(&[2, 2]);
-/// let (sign, logdet) = slogdet(&a).unwrap();
+/// let (sign, logdet) = slogdet(&a).expect("slogdet should succeed for square matrix");
 /// // For this diagonal matrix: det = 2*3 = 6, so sign = 1, logdet = ln(6) ≈ 1.79
 /// ```
 pub fn slogdet<T>(a: &Array<T>) -> Result<(i8, T)>
@@ -301,7 +301,7 @@ where
 /// // Solve simple 2x2 system
 /// let a = Array::from_vec(vec![1.0, 1.0, 1.0, 2.0]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![3.0, 4.0]);
-/// let (x, residuals, rank, sv) = lstsq(&a, &b, None).unwrap();
+/// let (x, residuals, rank, sv) = lstsq(&a, &b, None).expect("lstsq should succeed");
 /// ```
 pub fn lstsq<T>(a: &Array<T>, b: &Array<T>, rcond: Option<T>) -> LstsqResult<T>
 where
@@ -366,7 +366,8 @@ where
         for j in 0..k {
             let ut_b_val = ut_b.get(&[i, j])?;
             if i < s_vec.len() && s_vec[i] > cutoff {
-                let sv_as_t = <T as num_traits::NumCast>::from(s_vec[i]).unwrap();
+                let sv_as_t = <T as num_traits::NumCast>::from(s_vec[i])
+                    .expect("singular value should convert to float type");
                 let new_val = ut_b_val / sv_as_t;
                 s_pinv_ut_b.set(&[i, j], new_val)?;
             } else {
@@ -382,7 +383,9 @@ where
 
     // Reshape x if b was a vector
     let x_final = if b_is_vector && x.shape().len() == 2 && x.shape()[1] == 1 {
-        let x_vec: Vec<T> = (0..x.shape()[0]).map(|i| x.get(&[i, 0]).unwrap()).collect();
+        let x_vec: Vec<T> = (0..x.shape()[0])
+            .map(|i| x.get(&[i, 0]).expect("index should be valid"))
+            .collect();
         Array::from_vec(x_vec)
     } else {
         x
@@ -394,7 +397,9 @@ where
         let ax = a.matmul(&x_final)?;
         let diff = if b_is_vector {
             // Both ax and b should be vectors for element-wise operations
-            let ax_vec: Vec<T> = (0..ax.shape()[0]).map(|i| ax.get(&[i]).unwrap()).collect();
+            let ax_vec: Vec<T> = (0..ax.shape()[0])
+                .map(|i| ax.get(&[i]).expect("index should be valid"))
+                .collect();
             let b_vec = b.to_vec();
             let diff_vec: Vec<T> = ax_vec
                 .iter()

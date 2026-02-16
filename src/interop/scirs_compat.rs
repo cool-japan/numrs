@@ -158,7 +158,8 @@ mod tests {
 
     #[test]
     fn test_noncentral_chisquare() {
-        let samples = noncentral_chisquare(2.0f64, 1.0f64, &[10]).unwrap();
+        let samples = noncentral_chisquare(2.0f64, 1.0f64, &[10])
+            .expect("Noncentral chi-square distribution should generate samples");
         assert_eq!(samples.shape(), vec![10]);
 
         // All samples should be positive
@@ -169,7 +170,8 @@ mod tests {
 
     #[test]
     fn test_noncentral_f() {
-        let samples = noncentral_f(2.0f64, 3.0f64, 1.0f64, &[10]).unwrap();
+        let samples = noncentral_f(2.0f64, 3.0f64, 1.0f64, &[10])
+            .expect("Noncentral F distribution should generate samples");
         assert_eq!(samples.shape(), vec![10]);
 
         // All samples should be positive
@@ -191,14 +193,17 @@ mod tests {
         let b_data = vec![5.0f64, 6.0f64];
         let b = Array::from_vec(b_data);
 
-        let x = solve_linear_system(&a, &b).unwrap();
+        let x = solve_linear_system(&a, &b).expect("Linear system should be solvable");
 
         // Check shape
         assert_eq!(x.shape(), vec![2]);
 
         // Verify the solution by checking A*x = b rather than exact values
         // (since different solvers may have different numerical behavior)
-        let ax = a.matmul(&x.reshape(&[2, 1])).unwrap().reshape(&[2]);
+        let ax = a
+            .matmul(&x.reshape(&[2, 1]))
+            .expect("Matrix multiplication should succeed")
+            .reshape(&[2]);
         let ax_data = ax.to_vec();
         let b_data = b.to_vec();
 

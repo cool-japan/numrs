@@ -35,7 +35,7 @@ use std::fmt::Debug;
 /// use numrs2::prelude::*;
 ///
 /// // Calculate number of periods to pay off a loan
-/// let result = nper(0.05/12.0, -188.71, 10000.0, 0.0, 0).unwrap();
+/// let result = nper(0.05/12.0, -188.71, 10000.0, 0.0, 0).expect("nper calculation failed");
 /// assert!((result - 60.0_f64).abs() < 0.01);
 /// ```
 pub fn nper<T>(rate: T, pmt: T, pv: T, fv: T, when: i32) -> Result<T>
@@ -131,7 +131,7 @@ where
 /// let pvs = Array::from_vec(vec![10000.0, 12000.0, 15000.0]);
 /// let fvs = Array::from_vec(vec![0.0, 0.0, 0.0]);
 ///
-/// let result = nper_array(&rates, &pmts, &pvs, &fvs, 0).unwrap();
+/// let result = nper_array(&rates, &pmts, &pvs, &fvs, 0).expect("nper_array calculation failed");
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
 pub fn nper_array<T>(
@@ -175,28 +175,29 @@ mod tests {
     fn test_nper_basic_loan() {
         // Test number of periods for a loan payment
         let monthly_rate = 0.05 / 12.0;
-        let result = nper(monthly_rate, -188.71, 10000.0, 0.0, 0).unwrap();
+        let result =
+            nper(monthly_rate, -188.71, 10000.0, 0.0, 0).expect("nper calculation should succeed");
         assert_relative_eq!(result, 60.0, epsilon = 1e-2);
     }
 
     #[test]
     fn test_nper_savings_goal() {
         // Test number of periods to reach a savings goal
-        let result = nper(0.05, -100.0, 0.0, 1257.79, 0).unwrap();
+        let result = nper(0.05, -100.0, 0.0, 1257.79, 0).expect("nper calculation should succeed");
         assert_relative_eq!(result, 10.0, epsilon = 1e-2);
     }
 
     #[test]
     fn test_nper_zero_payment() {
         // Test number of periods with no payment (simple compound interest)
-        let result = nper(0.05, 0.0, -1000.0, 1628.89, 0).unwrap();
+        let result = nper(0.05, 0.0, -1000.0, 1628.89, 0).expect("nper calculation should succeed");
         assert_relative_eq!(result, 10.0, epsilon = 1e-2);
     }
 
     #[test]
     fn test_nper_zero_rate() {
         // Test number of periods with zero interest rate
-        let result = nper(0.0, -100.0, 1000.0, 0.0, 0).unwrap();
+        let result = nper(0.0, -100.0, 1000.0, 0.0, 0).expect("nper calculation should succeed");
         assert_relative_eq!(result, 10.0, epsilon = 1e-9);
     }
 
@@ -204,7 +205,8 @@ mod tests {
     fn test_nper_beginning_of_period() {
         // Test number of periods with payments at beginning
         let monthly_rate = 0.05 / 12.0;
-        let result = nper(monthly_rate, -188.71, 10000.0, 0.0, 1).unwrap();
+        let result =
+            nper(monthly_rate, -188.71, 10000.0, 0.0, 1).expect("nper calculation should succeed");
         // Should be slightly less than 60 months
         assert!(result < 60.0 && result > 58.0);
     }
@@ -212,7 +214,8 @@ mod tests {
     #[test]
     fn test_nper_with_future_value() {
         // Test number of periods with both present and future values
-        let result = nper(0.05, -200.0, 1000.0, 5000.0, 0).unwrap();
+        let result =
+            nper(0.05, -200.0, 1000.0, 5000.0, 0).expect("nper calculation should succeed");
         assert!(result > 0.0); // Should be positive
     }
 
@@ -223,7 +226,8 @@ mod tests {
         let pvs = Array::from_vec(vec![10000.0, 12000.0]);
         let fvs = Array::from_vec(vec![0.0, 0.0]);
 
-        let result = nper_array(&rates, &pmts, &pvs, &fvs, 0).unwrap();
+        let result = nper_array(&rates, &pmts, &pvs, &fvs, 0)
+            .expect("nper_array calculation should succeed");
         assert_eq!(result.shape(), vec![2]);
 
         let values = result.to_vec();

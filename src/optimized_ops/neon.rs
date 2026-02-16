@@ -243,7 +243,8 @@ mod tests {
         let b = vec![8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let mut result = vec![0.0; 8];
 
-        neon_add_f32(&a, &b, &mut result).unwrap();
+        neon_add_f32(&a, &b, &mut result)
+            .expect("neon_add_f32 should succeed for equal length arrays");
 
         let expected = vec![9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0];
         assert_eq!(result, expected);
@@ -260,7 +261,8 @@ mod tests {
         let b = vec![2.0, 2.0, 2.0, 2.0];
         let mut result = vec![0.0; 4];
 
-        neon_mul_f32(&a, &b, &mut result).unwrap();
+        neon_mul_f32(&a, &b, &mut result)
+            .expect("neon_mul_f32 should succeed for equal length arrays");
 
         let expected = vec![2.0, 4.0, 6.0, 8.0];
         assert_eq!(result, expected);
@@ -276,7 +278,8 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0];
         let b = vec![1.0, 1.0, 1.0, 1.0];
 
-        let result = neon_dot_f32(&a, &b).unwrap();
+        let result =
+            neon_dot_f32(&a, &b).expect("neon_dot_f32 should succeed for equal length arrays");
         assert_eq!(result, 10.0);
     }
 
@@ -300,8 +303,10 @@ mod tests {
         }
 
         let data = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
-        let max = neon_max_f32(&data).unwrap();
-        let min = neon_min_f32(&data).unwrap();
+        let max =
+            neon_max_f32(&data).expect("neon_max_f32 should return a value for non-empty array");
+        let min =
+            neon_min_f32(&data).expect("neon_min_f32 should return a value for non-empty array");
 
         assert_eq!(max, 9.0);
         assert_eq!(min, 1.0);

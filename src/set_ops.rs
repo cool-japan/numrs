@@ -32,7 +32,7 @@ type UniqueResult<T> = (Array<T>, Array<usize>, Array<usize>, Array<usize>);
 ///
 /// let a = Array::from_vec(vec![1, 3, 4, 3]);
 /// let b = Array::from_vec(vec![3, 1, 2, 1]);
-/// let result = intersect1d(&a, &b).unwrap();
+/// let result = intersect1d(&a, &b).expect("intersect1d should succeed");
 /// assert_eq!(result.to_vec(), vec![1, 3]);
 /// ```
 pub fn intersect1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
@@ -65,7 +65,7 @@ pub fn intersect1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -
 ///
 /// let a = Array::from_vec(vec![1, 2, 3, 2, 4]);
 /// let b = Array::from_vec(vec![2, 3, 5, 7, 5]);
-/// let result = union1d(&a, &b).unwrap();
+/// let result = union1d(&a, &b).expect("union1d should succeed");
 /// assert_eq!(result.to_vec(), vec![1, 2, 3, 4, 5, 7]);
 /// ```
 pub fn union1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
@@ -98,7 +98,7 @@ pub fn union1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Re
 ///
 /// let a = Array::from_vec(vec![1, 2, 3, 2, 4, 1]);
 /// let b = Array::from_vec(vec![3, 4, 5, 6]);
-/// let result = setdiff1d(&a, &b).unwrap();
+/// let result = setdiff1d(&a, &b).expect("setdiff1d should succeed");
 /// assert_eq!(result.to_vec(), vec![1, 2]);
 /// ```
 pub fn setdiff1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
@@ -131,7 +131,7 @@ pub fn setdiff1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> 
 ///
 /// let a = Array::from_vec(vec![1, 2, 3, 2, 4]);
 /// let b = Array::from_vec(vec![2, 3, 5, 7, 5]);
-/// let result = setxor1d(&a, &b).unwrap();
+/// let result = setxor1d(&a, &b).expect("setxor1d should succeed");
 /// assert_eq!(result.to_vec(), vec![1, 4, 5, 7]);
 /// ```
 pub fn setxor1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
@@ -165,7 +165,7 @@ pub fn setxor1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> R
 ///
 /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]);
 /// let b = Array::from_vec(vec![2, 4, 6]);
-/// let result = in1d(&a, &b).unwrap();
+/// let result = in1d(&a, &b).expect("in1d should succeed");
 /// assert_eq!(result.to_vec(), vec![false, true, false, true, false, true]);
 /// ```
 pub fn in1d<T: Clone + Eq + Hash>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<bool>> {
@@ -200,11 +200,11 @@ pub fn in1d<T: Clone + Eq + Hash>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Arra
 ///
 /// let element = Array::from_vec(vec![0, 1, 2, 5, 0]).reshape(&[5]);
 /// let test_elements = Array::from_vec(vec![0, 2, 5, 7, 9]);
-/// let result = isin(&element, &test_elements, false, false).unwrap();
+/// let result = isin(&element, &test_elements, false, false).expect("isin should succeed");
 /// assert_eq!(result.to_vec(), vec![true, false, true, true, true]);
 ///
 /// // With invert=true
-/// let result_inv = isin(&element, &test_elements, false, true).unwrap();
+/// let result_inv = isin(&element, &test_elements, false, true).expect("isin inverted should succeed");
 /// assert_eq!(result_inv.to_vec(), vec![false, true, false, false, false]);
 /// ```
 pub fn isin<T: Clone + Eq + Hash>(
@@ -263,7 +263,7 @@ pub fn isin<T: Clone + Eq + Hash>(
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1, 1, 2, 2, 3, 3]);
-/// let (unique, indices, inverse, counts) = unique_with_options(&a, true, true, true).unwrap();
+/// let (unique, indices, inverse, counts) = unique_with_options(&a, true, true, true).expect("unique_with_options should succeed");
 /// assert_eq!(unique.to_vec(), vec![1, 2, 3]);
 /// assert_eq!(indices.to_vec(), vec![0, 2, 4]);
 /// assert_eq!(inverse.to_vec(), vec![0, 0, 1, 1, 2, 2]);
@@ -322,7 +322,11 @@ pub fn unique_with_options<T: Clone + Eq + Hash + Ord + Debug>(
 
         let inverse: Vec<usize> = data
             .iter()
-            .map(|val| *value_to_pos.get(val).unwrap())
+            .map(|val| {
+                *value_to_pos
+                    .get(val)
+                    .expect("value must exist in value_to_pos map")
+            })
             .collect();
 
         Array::from_vec(inverse)
@@ -333,7 +337,7 @@ pub fn unique_with_options<T: Clone + Eq + Hash + Ord + Debug>(
     let counts_array = if return_counts {
         let sorted_counts: Vec<usize> = sorted_unique
             .iter()
-            .map(|val| seen.get(val).unwrap().1)
+            .map(|val| seen.get(val).expect("value must exist in seen map").1)
             .collect();
         Array::from_vec(sorted_counts)
     } else {
@@ -368,17 +372,17 @@ pub fn unique_with_options<T: Clone + Eq + Hash + Ord + Debug>(
 ///
 /// // 1D case (same as unique_with_options)
 /// let a = Array::from_vec(vec![3, 1, 2, 1, 3, 2, 1]);
-/// let (unique, indices, inverse, counts) = unique_axis(&a, None, true, true, true).unwrap();
+/// let (unique, indices, inverse, counts) = unique_axis(&a, None, true, true, true).expect("unique_axis should succeed");
 /// assert_eq!(unique.to_vec(), vec![1, 2, 3]);
 ///
 /// // 2D case along axis 0 (find unique rows)
 /// let b = Array::from_vec(vec![1, 2, 3, 1, 2, 3, 4, 5, 6]).reshape(&[3, 3]);
-/// let (unique_rows, _, _, _) = unique_axis(&b, Some(0), false, false, false).unwrap();
+/// let (unique_rows, _, _, _) = unique_axis(&b, Some(0), false, false, false).expect("unique_axis axis 0 should succeed");
 /// assert_eq!(unique_rows.shape(), vec![2, 3]); // Two unique rows
 ///
 /// // 2D case along axis 1 (find unique columns)
 /// let c = Array::from_vec(vec![1, 2, 1, 3, 4, 3]).reshape(&[2, 3]);
-/// let (unique_cols, _, _, _) = unique_axis(&c, Some(1), false, false, false).unwrap();
+/// let (unique_cols, _, _, _) = unique_axis(&c, Some(1), false, false, false).expect("unique_axis axis 1 should succeed");
 /// assert_eq!(unique_cols.shape(), vec![2, 2]); // Two unique columns
 /// ```
 pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
@@ -479,7 +483,11 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
 
                 let inverse: Vec<usize> = slice_vecs
                     .iter()
-                    .map(|slice_vec| *slice_to_pos.get(slice_vec).unwrap())
+                    .map(|slice_vec| {
+                        *slice_to_pos
+                            .get(slice_vec)
+                            .expect("slice_vec must exist in slice_to_pos map")
+                    })
                     .collect();
 
                 Array::from_vec(inverse)
@@ -493,7 +501,9 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
                     .iter()
                     .map(|&i| {
                         let slice_vec = unique_slices[i].to_vec();
-                        seen.get(&slice_vec).unwrap().1
+                        seen.get(&slice_vec)
+                            .expect("slice_vec must exist in seen map")
+                            .1
                     })
                     .collect();
                 Array::from_vec(sorted_counts)
@@ -528,11 +538,11 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
 /// use numrs2::set_ops::ediff1d;
 ///
 /// let a = Array::from_vec(vec![1, 2, 4, 7, 0]);
-/// let result = ediff1d(&a, None, None).unwrap();
+/// let result = ediff1d(&a, None, None).expect("ediff1d should succeed");
 /// assert_eq!(result.to_vec(), vec![1, 2, 3, -7]);
 ///
 /// // With to_begin and to_end
-/// let result_full = ediff1d(&a, Some(&Array::from_vec(vec![99])), Some(&Array::from_vec(vec![-99]))).unwrap();
+/// let result_full = ediff1d(&a, Some(&Array::from_vec(vec![99])), Some(&Array::from_vec(vec![-99]))).expect("ediff1d with ends should succeed");
 /// assert_eq!(result_full.to_vec(), vec![-99, 1, 2, 3, -7, 99]);
 /// ```
 pub fn ediff1d<T>(
@@ -588,7 +598,7 @@ mod tests {
     fn test_intersect1d() {
         let a = Array::from_vec(vec![1, 3, 4, 3]);
         let b = Array::from_vec(vec![3, 1, 2, 1]);
-        let result = intersect1d(&a, &b).unwrap();
+        let result = intersect1d(&a, &b).expect("intersect1d should succeed");
         assert_eq!(result.to_vec(), vec![1, 3]);
     }
 
@@ -596,7 +606,7 @@ mod tests {
     fn test_union1d() {
         let a = Array::from_vec(vec![1, 2, 3, 2, 4]);
         let b = Array::from_vec(vec![2, 3, 5, 7, 5]);
-        let result = union1d(&a, &b).unwrap();
+        let result = union1d(&a, &b).expect("union1d should succeed");
         assert_eq!(result.to_vec(), vec![1, 2, 3, 4, 5, 7]);
     }
 
@@ -604,7 +614,7 @@ mod tests {
     fn test_setdiff1d() {
         let a = Array::from_vec(vec![1, 2, 3, 2, 4, 1]);
         let b = Array::from_vec(vec![3, 4, 5, 6]);
-        let result = setdiff1d(&a, &b).unwrap();
+        let result = setdiff1d(&a, &b).expect("setdiff1d should succeed");
         assert_eq!(result.to_vec(), vec![1, 2]);
     }
 
@@ -612,7 +622,7 @@ mod tests {
     fn test_setxor1d() {
         let a = Array::from_vec(vec![1, 2, 3, 2, 4]);
         let b = Array::from_vec(vec![2, 3, 5, 7, 5]);
-        let result = setxor1d(&a, &b).unwrap();
+        let result = setxor1d(&a, &b).expect("setxor1d should succeed");
         assert_eq!(result.to_vec(), vec![1, 4, 5, 7]);
     }
 
@@ -620,7 +630,7 @@ mod tests {
     fn test_in1d() {
         let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]);
         let b = Array::from_vec(vec![2, 4, 6]);
-        let result = in1d(&a, &b).unwrap();
+        let result = in1d(&a, &b).expect("in1d should succeed");
         assert_eq!(result.to_vec(), vec![false, true, false, true, false, true]);
     }
 
@@ -628,18 +638,20 @@ mod tests {
     fn test_isin() {
         let element = Array::from_vec(vec![0, 1, 2, 5, 0]);
         let test_elements = Array::from_vec(vec![0, 2, 5, 7, 9]);
-        let result = isin(&element, &test_elements, false, false).unwrap();
+        let result = isin(&element, &test_elements, false, false).expect("isin should succeed");
         assert_eq!(result.to_vec(), vec![true, false, true, true, true]);
 
         // With invert=true
-        let result_inv = isin(&element, &test_elements, false, true).unwrap();
+        let result_inv =
+            isin(&element, &test_elements, false, true).expect("isin with invert should succeed");
         assert_eq!(result_inv.to_vec(), vec![false, true, false, false, false]);
     }
 
     #[test]
     fn test_unique_with_options() {
         let a = Array::from_vec(vec![1, 1, 2, 2, 3, 3]);
-        let (unique, indices, inverse, counts) = unique_with_options(&a, true, true, true).unwrap();
+        let (unique, indices, inverse, counts) =
+            unique_with_options(&a, true, true, true).expect("unique_with_options should succeed");
         assert_eq!(unique.to_vec(), vec![1, 2, 3]);
         assert_eq!(indices.to_vec(), vec![0, 2, 4]);
         assert_eq!(inverse.to_vec(), vec![0, 0, 1, 1, 2, 2]);
@@ -649,23 +661,26 @@ mod tests {
     #[test]
     fn test_ediff1d() {
         let a = Array::from_vec(vec![1, 2, 4, 7, 0]);
-        let result = ediff1d(&a, None, None).unwrap();
+        let result = ediff1d(&a, None, None).expect("ediff1d should succeed");
         assert_eq!(result.to_vec(), vec![1, 2, 3, -7]);
 
         // With to_begin and to_end
         let begin = Array::from_vec(vec![-99]);
         let end = Array::from_vec(vec![99]);
-        let result_full = ediff1d(&a, Some(&end), Some(&begin)).unwrap();
+        let result_full =
+            ediff1d(&a, Some(&end), Some(&begin)).expect("ediff1d with begin/end should succeed");
         assert_eq!(result_full.to_vec(), vec![-99, 1, 2, 3, -7, 99]);
 
         // Test with single element array
         let single = Array::from_vec(vec![42]);
-        let result_single = ediff1d(&single, None, None).unwrap();
+        let result_single =
+            ediff1d(&single, None, None).expect("ediff1d with single element should succeed");
         assert_eq!(result_single.to_vec(), Vec::<i32>::new());
 
         // Test with empty array
         let empty = Array::from_vec(Vec::<i32>::new());
-        let result_empty = ediff1d(&empty, None, None).unwrap();
+        let result_empty =
+            ediff1d(&empty, None, None).expect("ediff1d with empty array should succeed");
         assert_eq!(result_empty.to_vec(), Vec::<i32>::new());
     }
 }

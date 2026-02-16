@@ -35,7 +35,7 @@ use std::fmt::Debug;
 /// let na_mat = DMatrix::from_row_slice(2, 3, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
 ///
 /// // Convert to NumRS Array
-/// let num_arr = from_dmatrix(&na_mat).unwrap();
+/// let num_arr = from_dmatrix(&na_mat).expect("Failed to convert from DMatrix");
 ///
 /// assert_eq!(num_arr.shape(), vec![2, 3]);
 /// assert_eq!(num_arr.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
@@ -81,7 +81,7 @@ where
 /// let num_arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 ///
 /// // Convert to nalgebra DMatrix
-/// let na_mat = to_dmatrix(&num_arr).unwrap();
+/// let na_mat = to_dmatrix(&num_arr).expect("Failed to convert to DMatrix");
 ///
 /// assert_eq!(na_mat.nrows(), 2);
 /// assert_eq!(na_mat.ncols(), 3);
@@ -133,7 +133,7 @@ where
 /// let na_vec = DVector::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
 ///
 /// // Convert to NumRS Array
-/// let num_arr = from_dvector(&na_vec).unwrap();
+/// let num_arr = from_dvector(&na_vec).expect("Failed to convert from DVector");
 ///
 /// assert_eq!(num_arr.shape(), vec![4]);
 /// assert_eq!(num_arr.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
@@ -167,7 +167,7 @@ where
 /// let num_arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
 ///
 /// // Convert to nalgebra DVector
-/// let na_vec = to_dvector(&num_arr).unwrap();
+/// let na_vec = to_dvector(&num_arr).expect("Failed to convert to DVector");
 ///
 /// assert_eq!(na_vec.len(), 4);
 /// assert_eq!(na_vec[0], 1.0);
@@ -261,7 +261,7 @@ mod tests {
         let na_mat = DMatrix::from_row_slice(2, 3, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
 
         // Convert to NumRS Array
-        let num_arr = from_dmatrix(&na_mat).unwrap();
+        let num_arr = from_dmatrix(&na_mat).expect("Failed to convert from DMatrix");
 
         assert_eq!(num_arr.shape(), vec![2, 3]);
         assert_eq!(num_arr.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
@@ -273,7 +273,7 @@ mod tests {
         let num_arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
         // Convert to nalgebra matrix
-        let na_mat = to_dmatrix(&num_arr).unwrap();
+        let na_mat = to_dmatrix(&num_arr).expect("Failed to convert to DMatrix");
 
         assert_eq!(na_mat.nrows(), 2);
         assert_eq!(na_mat.ncols(), 3);
@@ -287,7 +287,7 @@ mod tests {
         let na_vec = DVector::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
 
         // Convert to NumRS Array
-        let num_arr = from_dvector(&na_vec).unwrap();
+        let num_arr = from_dvector(&na_vec).expect("Failed to convert from DVector");
 
         assert_eq!(num_arr.shape(), vec![4]);
         assert_eq!(num_arr.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
@@ -299,7 +299,7 @@ mod tests {
         let num_arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
 
         // Convert to nalgebra vector
-        let na_vec = to_dvector(&num_arr).unwrap();
+        let na_vec = to_dvector(&num_arr).expect("Failed to convert to DVector");
 
         assert_eq!(na_vec.len(), 4);
         assert_eq!(na_vec[0], 1.0);
@@ -312,11 +312,17 @@ mod tests {
         let mat3 = Matrix3::new(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
 
         // Convert to NumRS Array
-        let arr = from_matrix(&mat3).unwrap();
+        let arr = from_matrix(&mat3).expect("Failed to convert from Matrix3");
 
         assert_eq!(arr.shape(), vec![3, 3]);
-        assert_eq!(arr.get(&[0, 0]).unwrap(), 1.0);
-        assert_eq!(arr.get(&[2, 2]).unwrap(), 9.0);
+        assert_eq!(
+            arr.get(&[0, 0]).expect("Failed to get element at [0,0]"),
+            1.0
+        );
+        assert_eq!(
+            arr.get(&[2, 2]).expect("Failed to get element at [2,2]"),
+            9.0
+        );
     }
 
     #[test]
@@ -325,7 +331,7 @@ mod tests {
         let vec3 = Vector3::new(1.0, 2.0, 3.0);
 
         // Convert to NumRS Array
-        let arr = from_matrix(&vec3).unwrap();
+        let arr = from_matrix(&vec3).expect("Failed to convert from Vector3");
 
         assert_eq!(arr.shape(), vec![3, 1]);
         assert_eq!(arr.to_vec(), vec![1.0, 2.0, 3.0]);

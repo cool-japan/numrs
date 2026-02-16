@@ -400,13 +400,16 @@ mod tests {
     fn test_enhanced_allocator_bridge() {
         let allocator = EnhancedAllocatorBridge::new(StandardAllocator);
 
-        let layout = Layout::from_size_align(1024, 8).unwrap();
+        let layout = Layout::from_size_align(1024, 8)
+            .expect("Layout::from_size_align(1024, 8) should succeed");
         let ptr = allocator
             .allocate(layout)
             .expect("Allocation should succeed");
 
         // Check statistics
-        let stats = allocator.statistics().unwrap();
+        let stats = allocator
+            .statistics()
+            .expect("statistics should be available");
         assert_eq!(stats.bytes_allocated, 1024);
         assert_eq!(stats.active_allocations, 1);
 
@@ -416,7 +419,9 @@ mod tests {
                 .expect("Deallocation should succeed");
         }
 
-        let stats = allocator.statistics().unwrap();
+        let stats = allocator
+            .statistics()
+            .expect("statistics should be available");
         assert_eq!(stats.bytes_deallocated, 1024);
         assert_eq!(stats.active_allocations, 0);
     }
@@ -433,7 +438,7 @@ mod tests {
         // Verify alignment
         assert_eq!(ptr.as_ptr() as usize % 32, 0, "Should be 32-byte aligned");
 
-        let layout = Layout::array::<f64>(100).unwrap();
+        let layout = Layout::array::<f64>(100).expect("Layout::array::<f64>(100) should succeed");
         unsafe {
             allocator
                 .deallocate(ptr.cast(), layout)
@@ -448,7 +453,8 @@ mod tests {
         // Test different requirement scenarios
         let array_req = AllocationRequirements::for_array::<f64>(1000);
         let allocator = strategy.select_allocator(&array_req);
-        assert!(allocator.supports_layout(Layout::from_size_align(8000, 8).unwrap()));
+        assert!(allocator
+            .supports_layout(Layout::from_size_align(8000, 8).expect("Layout should succeed")));
 
         let simd_req = AllocationRequirements::for_simd_operation::<f32>(256, 32);
         let allocator = strategy.select_allocator(&simd_req);

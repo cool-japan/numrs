@@ -24,7 +24,7 @@ pub fn hilbert(n: usize) -> Matrix<f64> {
     }
 
     let array = Array::from_vec(data).reshape(&[n, n]);
-    Matrix::new(array).unwrap()
+    Matrix::new(array).expect("hilbert: n x n array is always a valid matrix")
 }
 
 /// Create a Vandermonde matrix from a vector
@@ -53,7 +53,7 @@ pub fn vandermonde(x: Vec<f64>, n: Option<usize>) -> Matrix<f64> {
     }
 
     let array = Array::from_vec(data).reshape(&[rows, cols]);
-    Matrix::new(array).unwrap()
+    Matrix::new(array).expect("vandermonde: rows x cols array is always a valid matrix")
 }
 
 /// Create a Toeplitz matrix from first row and first column
@@ -129,7 +129,7 @@ pub fn circulant(first_row: Vec<f64>) -> Matrix<f64> {
     }
 
     let array = Array::from_vec(data).reshape(&[n, n]);
-    Matrix::new(array).unwrap()
+    Matrix::new(array).expect("circulant: n x n array is always a valid matrix")
 }
 
 /// Create a Hankel matrix from the first column and last row
@@ -294,12 +294,14 @@ pub fn hadamard(n: usize) -> Result<Matrix<f64>> {
 
     // Base cases
     if n == 1 {
-        return Ok(Matrix::try_from(Array::from_vec(vec![1.0])).unwrap());
+        return Ok(Matrix::try_from(Array::from_vec(vec![1.0]))
+            .expect("hadamard: 1x1 array is always a valid matrix"));
     }
 
     if n == 2 {
         let h2 = vec![1.0, 1.0, 1.0, -1.0];
-        return Ok(Matrix::try_from(Array::from_vec(h2).reshape(&[2, 2])).unwrap());
+        return Ok(Matrix::try_from(Array::from_vec(h2).reshape(&[2, 2]))
+            .expect("hadamard: 2x2 array is always a valid matrix"));
     }
 
     // Recursive construction using Sylvester's method

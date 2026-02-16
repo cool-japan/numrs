@@ -32,11 +32,11 @@ use std::fmt::Display;
 /// let x = Array::from_vec(vec![0.0, 1.5, 2.0, 2.5, 3.0, 4.0]);
 ///
 /// // Without explicitly specifying `left` and `right`
-/// let y = interp(&x, &xp, &fp, None, None, None).unwrap();
+/// let y = interp(&x, &xp, &fp, None, None, None).expect("operation should succeed");
 /// assert_eq!(y.to_vec(), vec![3.0, 2.5, 2.0, 1.0, 0.0, 0.0]);
 ///
 /// // With explicit `left` and `right` values
-/// let y = interp(&x, &xp, &fp, Some(-5.0), Some(-1.0), None).unwrap();
+/// let y = interp(&x, &xp, &fp, Some(-5.0), Some(-1.0), None).expect("operation should succeed");
 /// assert_eq!(y.to_vec(), vec![-5.0, 2.5, 2.0, 1.0, 0.0, -1.0]);
 /// ```
 pub fn interp<T>(
@@ -95,8 +95,14 @@ where
     let mut result = Array::zeros(&x_flat.shape());
 
     // Get default left and right values
-    let left_val = left.unwrap_or_else(|| fp.get(&[0]).unwrap());
-    let right_val = right.unwrap_or_else(|| fp.get(&[fp.len() - 1]).unwrap());
+    let left_val = left.unwrap_or_else(|| {
+        fp.get(&[0])
+            .expect("fp array should have at least 2 elements as validated above")
+    });
+    let right_val = right.unwrap_or_else(|| {
+        fp.get(&[fp.len() - 1])
+            .expect("fp array should have at least 2 elements as validated above")
+    });
 
     // Process each element in x
     for i in 0..x_flat.len() {
@@ -176,14 +182,14 @@ where
 /// let condition = Array::from_vec(vec![true, false, true, false]);
 /// let x = Array::from_vec(vec![1, 2, 3, 4]);
 /// let y = Array::from_vec(vec![10, 20, 30, 40]);
-/// let result = where_cond(&condition, &x, &y).unwrap();
+/// let result = where_cond(&condition, &x, &y).expect("operation should succeed");
 /// assert_eq!(result.to_vec(), vec![1, 20, 3, 40]);
 ///
 /// // With broadcasting
 /// let condition_2d = Array::from_vec(vec![true, false, true, false]).reshape(&[2, 2]);
 /// let x_scalar = Array::from_vec(vec![100]);
 /// let y_2d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-/// let result_2d = where_cond(&condition_2d, &x_scalar, &y_2d).unwrap();
+/// let result_2d = where_cond(&condition_2d, &x_scalar, &y_2d).expect("operation should succeed");
 /// assert_eq!(result_2d.to_vec(), vec![100, 2, 100, 4]);
 /// ```
 pub fn where_cond<T: Clone + Display + Send + Sync>(
@@ -274,13 +280,13 @@ pub fn where_cond<T: Clone + Display + Send + Sync>(
 /// let choice1 = Array::from_vec(vec![10, 10, 10, 10, 10, 10]);
 /// let choice2 = Array::from_vec(vec![20, 20, 20, 20, 20, 20]);
 ///
-/// let result = select(&[&cond1, &cond2], &[&choice1, &choice2], Some(99)).unwrap();
+/// let result = select(&[&cond1, &cond2], &[&choice1, &choice2], Some(99)).expect("operation should succeed");
 /// assert_eq!(result.to_vec(), vec![10, 10, 10, 20, 20, 20]);
 ///
 /// // When no condition matches, use default
 /// let always_false = Array::from_vec(vec![false, false, false]);
 /// let choice_unused = Array::from_vec(vec![1, 2, 3]);
-/// let result_default = select(&[&always_false], &[&choice_unused], Some(99)).unwrap();
+/// let result_default = select(&[&always_false], &[&choice_unused], Some(99)).expect("operation should succeed");
 /// assert_eq!(result_default.to_vec(), vec![99, 99, 99]);
 /// ```
 pub fn select<T: Clone + num_traits::Zero>(
@@ -342,12 +348,12 @@ pub fn select<T: Clone + num_traits::Zero>(
             let cond_val = cond_broadcast
                 .array()
                 .get(scirs2_core::ndarray::IxDyn(&indices))
-                .unwrap();
+                .expect("indices should be valid within broadcast shape");
             if *cond_val {
                 let choice_val = choice_broadcast
                     .array()
                     .get(scirs2_core::ndarray::IxDyn(&indices))
-                    .unwrap();
+                    .expect("indices should be valid within broadcast shape");
                 result.set(&indices, choice_val.clone())?;
                 break; // Take the first matching condition
             }
@@ -384,7 +390,7 @@ pub fn select<T: Clone + num_traits::Zero>(
 ///     Array::from_vec(vec![20, 21, 22, 23]),
 ///     Array::from_vec(vec![30, 31, 32, 33]),
 /// ];
-/// let result = choose(&indices, &choices.iter().collect::<Vec<_>>(), "raise").unwrap();
+/// let result = choose(&indices, &choices.iter().collect::<Vec<_>>(), "raise").expect("operation should succeed");
 /// assert_eq!(result.to_vec(), vec![10, 21, 12, 33]);
 ///
 /// // Example with broadcasting
@@ -393,7 +399,7 @@ pub fn select<T: Clone + num_traits::Zero>(
 ///     Array::from_vec(vec![5]),  // will broadcast
 ///     Array::from_vec(vec![7]),  // will broadcast
 /// ];
-/// let result = choose(&indices, &choices.iter().collect::<Vec<_>>(), "raise").unwrap();
+/// let result = choose(&indices, &choices.iter().collect::<Vec<_>>(), "raise").expect("operation should succeed");
 /// assert_eq!(result.to_vec(), vec![5, 7, 7, 5]);
 /// ```
 pub fn choose<T: Clone + num_traits::Zero>(
@@ -504,7 +510,7 @@ pub fn choose<T: Clone + num_traits::Zero>(
 /// let cond2 = x.map(|val| val >= 2.0);
 ///
 /// let func = |arr: &Array<f64>| arr.map(|x| x * 2.0);
-/// let result = piecewise(&x, &[&cond1, &cond2], &[&func, &func], Some(0.0)).unwrap();
+/// let result = piecewise(&x, &[&cond1, &cond2], &[&func, &func], Some(0.0)).expect("operation should succeed");
 /// // Should double values where conditions are met
 /// ```
 pub fn piecewise<T, F>(

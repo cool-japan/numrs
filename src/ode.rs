@@ -21,7 +21,7 @@
 //!
 //! // Solve dy/dt = -y, y(0) = 1 (exponential decay)
 //! let f = |t: f64, y: &[f64]| vec![-y[0]];
-//! let result = solve_ivp(f, (0.0, 2.0), &[1.0], OdeMethod::RK45).unwrap();
+//! let result = solve_ivp(f, (0.0, 2.0), &[1.0], OdeMethod::RK45).expect("ODE solve should succeed");
 //! ```
 
 use crate::error::{NumRs2Error, Result};
@@ -67,11 +67,11 @@ pub struct OdeConfig<T> {
 impl<T: Float> Default for OdeConfig<T> {
     fn default() -> Self {
         OdeConfig {
-            h0: T::from(0.01).unwrap(),
-            h_min: T::from(1e-10).unwrap(),
-            h_max: T::from(1.0).unwrap(),
-            atol: T::from(1e-6).unwrap(),
-            rtol: T::from(1e-3).unwrap(),
+            h0: T::from(0.01).expect("0.01 is representable as Float"),
+            h_min: T::from(1e-10).expect("1e-10 is representable as Float"),
+            h_max: T::from(1.0).expect("1.0 is representable as Float"),
+            atol: T::from(1e-6).expect("1e-6 is representable as Float"),
+            rtol: T::from(1e-3).expect("1e-3 is representable as Float"),
             max_steps: 10000,
             t_eval: None,
         }
@@ -118,7 +118,7 @@ pub struct OdeResult<T> {
 ///     (0.0, 1.0),
 ///     &[1.0],
 ///     OdeMethod::RK4
-/// ).unwrap();
+/// ).expect("ODE solve should succeed");
 /// ```
 pub fn solve_ivp<T, F>(f: F, t_span: (T, T), y0: &[T], method: OdeMethod) -> Result<OdeResult<T>>
 where
@@ -218,8 +218,8 @@ where
 {
     let n = y0.len();
     let h = config.h0;
-    let two = T::from(2.0).unwrap();
-    let six = T::from(6.0).unwrap();
+    let two = T::from(2.0).expect("2.0 is representable as Float");
+    let six = T::from(6.0).expect("6.0 is representable as Float");
 
     let mut t_vals = vec![t0];
     let mut y_vals = vec![y0.to_vec()];
@@ -291,31 +291,31 @@ where
     // RK45 coefficients (Fehlberg)
     let c: [T; 6] = [
         T::zero(),
-        T::from(0.25).unwrap(),
-        T::from(0.375).unwrap(),
-        T::from(12.0 / 13.0).unwrap(),
+        T::from(0.25).expect("RK coefficient is representable as Float"),
+        T::from(0.375).expect("RK coefficient is representable as Float"),
+        T::from(12.0 / 13.0).expect("RK coefficient is representable as Float"),
         T::one(),
-        T::from(0.5).unwrap(),
+        T::from(0.5).expect("RK coefficient is representable as Float"),
     ];
 
     // 4th order weights
     let b4: [T; 6] = [
-        T::from(25.0 / 216.0).unwrap(),
+        T::from(25.0 / 216.0).expect("RK weight is representable as Float"),
         T::zero(),
-        T::from(1408.0 / 2565.0).unwrap(),
-        T::from(2197.0 / 4104.0).unwrap(),
-        T::from(-1.0 / 5.0).unwrap(),
+        T::from(1408.0 / 2565.0).expect("RK weight is representable as Float"),
+        T::from(2197.0 / 4104.0).expect("RK weight is representable as Float"),
+        T::from(-1.0 / 5.0).expect("RK weight is representable as Float"),
         T::zero(),
     ];
 
     // 5th order weights
     let b5: [T; 6] = [
-        T::from(16.0 / 135.0).unwrap(),
+        T::from(16.0 / 135.0).expect("RK weight is representable as Float"),
         T::zero(),
-        T::from(6656.0 / 12825.0).unwrap(),
-        T::from(28561.0 / 56430.0).unwrap(),
-        T::from(-9.0 / 50.0).unwrap(),
-        T::from(2.0 / 55.0).unwrap(),
+        T::from(6656.0 / 12825.0).expect("RK weight is representable as Float"),
+        T::from(28561.0 / 56430.0).expect("RK weight is representable as Float"),
+        T::from(-9.0 / 50.0).expect("RK weight is representable as Float"),
+        T::from(2.0 / 55.0).expect("RK weight is representable as Float"),
     ];
 
     let mut t_vals = vec![t0];
@@ -346,8 +346,8 @@ where
         nfev += 1;
 
         // k3
-        let a31 = T::from(3.0 / 32.0).unwrap();
-        let a32 = T::from(9.0 / 32.0).unwrap();
+        let a31 = T::from(3.0 / 32.0).expect("RK coefficient is representable as Float");
+        let a32 = T::from(9.0 / 32.0).expect("RK coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] = y[i] + h * (a31 * k1[i] + a32 * k2[i]);
         }
@@ -355,9 +355,9 @@ where
         nfev += 1;
 
         // k4
-        let a41 = T::from(1932.0 / 2197.0).unwrap();
-        let a42 = T::from(-7200.0 / 2197.0).unwrap();
-        let a43 = T::from(7296.0 / 2197.0).unwrap();
+        let a41 = T::from(1932.0 / 2197.0).expect("RK coefficient is representable as Float");
+        let a42 = T::from(-7200.0 / 2197.0).expect("RK coefficient is representable as Float");
+        let a43 = T::from(7296.0 / 2197.0).expect("RK coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] = y[i] + h * (a41 * k1[i] + a42 * k2[i] + a43 * k3[i]);
         }
@@ -365,10 +365,10 @@ where
         nfev += 1;
 
         // k5
-        let a51 = T::from(439.0 / 216.0).unwrap();
-        let a52 = T::from(-8.0).unwrap();
-        let a53 = T::from(3680.0 / 513.0).unwrap();
-        let a54 = T::from(-845.0 / 4104.0).unwrap();
+        let a51 = T::from(439.0 / 216.0).expect("RK coefficient is representable as Float");
+        let a52 = T::from(-8.0).expect("RK coefficient is representable as Float");
+        let a53 = T::from(3680.0 / 513.0).expect("RK coefficient is representable as Float");
+        let a54 = T::from(-845.0 / 4104.0).expect("RK coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] = y[i] + h * (a51 * k1[i] + a52 * k2[i] + a53 * k3[i] + a54 * k4[i]);
         }
@@ -376,11 +376,11 @@ where
         nfev += 1;
 
         // k6
-        let a61 = T::from(-8.0 / 27.0).unwrap();
-        let a62 = T::from(2.0).unwrap();
-        let a63 = T::from(-3544.0 / 2565.0).unwrap();
-        let a64 = T::from(1859.0 / 4104.0).unwrap();
-        let a65 = T::from(-11.0 / 40.0).unwrap();
+        let a61 = T::from(-8.0 / 27.0).expect("RK coefficient is representable as Float");
+        let a62 = T::from(2.0).expect("RK coefficient is representable as Float");
+        let a63 = T::from(-3544.0 / 2565.0).expect("RK coefficient is representable as Float");
+        let a64 = T::from(1859.0 / 4104.0).expect("RK coefficient is representable as Float");
+        let a65 = T::from(-11.0 / 40.0).expect("RK coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] =
                 y[i] + h * (a61 * k1[i] + a62 * k2[i] + a63 * k3[i] + a64 * k4[i] + a65 * k5[i]);
@@ -424,12 +424,12 @@ where
         }
 
         // Adjust step size
-        let safety = T::from(0.9).unwrap();
-        let min_factor = T::from(0.2).unwrap();
-        let max_factor = T::from(10.0).unwrap();
+        let safety = T::from(0.9).expect("safety factor is representable as Float");
+        let min_factor = T::from(0.2).expect("min factor is representable as Float");
+        let max_factor = T::from(10.0).expect("max factor is representable as Float");
 
         let factor = if error > T::epsilon() {
-            safety * (T::one() / error).powf(T::from(0.2).unwrap())
+            safety * (T::one() / error).powf(T::from(0.2).expect("0.2 is representable as Float"))
         } else {
             max_factor
         };
@@ -459,34 +459,34 @@ where
     // Dormand-Prince coefficients
     let c: [T; 7] = [
         T::zero(),
-        T::from(0.2).unwrap(),
-        T::from(0.3).unwrap(),
-        T::from(0.8).unwrap(),
-        T::from(8.0 / 9.0).unwrap(),
+        T::from(0.2).expect("DP coefficient is representable as Float"),
+        T::from(0.3).expect("DP coefficient is representable as Float"),
+        T::from(0.8).expect("DP coefficient is representable as Float"),
+        T::from(8.0 / 9.0).expect("DP coefficient is representable as Float"),
         T::one(),
         T::one(),
     ];
 
     // 5th order weights
     let b5: [T; 7] = [
-        T::from(35.0 / 384.0).unwrap(),
+        T::from(35.0 / 384.0).expect("DP weight is representable as Float"),
         T::zero(),
-        T::from(500.0 / 1113.0).unwrap(),
-        T::from(125.0 / 192.0).unwrap(),
-        T::from(-2187.0 / 6784.0).unwrap(),
-        T::from(11.0 / 84.0).unwrap(),
+        T::from(500.0 / 1113.0).expect("DP weight is representable as Float"),
+        T::from(125.0 / 192.0).expect("DP weight is representable as Float"),
+        T::from(-2187.0 / 6784.0).expect("DP weight is representable as Float"),
+        T::from(11.0 / 84.0).expect("DP weight is representable as Float"),
         T::zero(),
     ];
 
     // 4th order weights for error estimation
     let b4: [T; 7] = [
-        T::from(5179.0 / 57600.0).unwrap(),
+        T::from(5179.0 / 57600.0).expect("DP weight is representable as Float"),
         T::zero(),
-        T::from(7571.0 / 16695.0).unwrap(),
-        T::from(393.0 / 640.0).unwrap(),
-        T::from(-92097.0 / 339200.0).unwrap(),
-        T::from(187.0 / 2100.0).unwrap(),
-        T::from(1.0 / 40.0).unwrap(),
+        T::from(7571.0 / 16695.0).expect("DP weight is representable as Float"),
+        T::from(393.0 / 640.0).expect("DP weight is representable as Float"),
+        T::from(-92097.0 / 339200.0).expect("DP weight is representable as Float"),
+        T::from(187.0 / 2100.0).expect("DP weight is representable as Float"),
+        T::from(1.0 / 40.0).expect("DP weight is representable as Float"),
     ];
 
     let mut t_vals = vec![t0];
@@ -512,14 +512,14 @@ where
 
         // k2
         for i in 0..n {
-            y_temp[i] = y[i] + h * T::from(0.2).unwrap() * k[0][i];
+            y_temp[i] = y[i] + h * T::from(0.2).expect("0.2 is representable as Float") * k[0][i];
         }
         k.push(f(t + c[1] * h, &y_temp));
         nfev += 1;
 
         // k3
-        let a31 = T::from(3.0 / 40.0).unwrap();
-        let a32 = T::from(9.0 / 40.0).unwrap();
+        let a31 = T::from(3.0 / 40.0).expect("DP coefficient is representable as Float");
+        let a32 = T::from(9.0 / 40.0).expect("DP coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] = y[i] + h * (a31 * k[0][i] + a32 * k[1][i]);
         }
@@ -527,9 +527,9 @@ where
         nfev += 1;
 
         // k4
-        let a41 = T::from(44.0 / 45.0).unwrap();
-        let a42 = T::from(-56.0 / 15.0).unwrap();
-        let a43 = T::from(32.0 / 9.0).unwrap();
+        let a41 = T::from(44.0 / 45.0).expect("DP coefficient is representable as Float");
+        let a42 = T::from(-56.0 / 15.0).expect("DP coefficient is representable as Float");
+        let a43 = T::from(32.0 / 9.0).expect("DP coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] = y[i] + h * (a41 * k[0][i] + a42 * k[1][i] + a43 * k[2][i]);
         }
@@ -537,10 +537,10 @@ where
         nfev += 1;
 
         // k5
-        let a51 = T::from(19372.0 / 6561.0).unwrap();
-        let a52 = T::from(-25360.0 / 2187.0).unwrap();
-        let a53 = T::from(64448.0 / 6561.0).unwrap();
-        let a54 = T::from(-212.0 / 729.0).unwrap();
+        let a51 = T::from(19372.0 / 6561.0).expect("DP coefficient is representable as Float");
+        let a52 = T::from(-25360.0 / 2187.0).expect("DP coefficient is representable as Float");
+        let a53 = T::from(64448.0 / 6561.0).expect("DP coefficient is representable as Float");
+        let a54 = T::from(-212.0 / 729.0).expect("DP coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] = y[i] + h * (a51 * k[0][i] + a52 * k[1][i] + a53 * k[2][i] + a54 * k[3][i]);
         }
@@ -548,11 +548,11 @@ where
         nfev += 1;
 
         // k6
-        let a61 = T::from(9017.0 / 3168.0).unwrap();
-        let a62 = T::from(-355.0 / 33.0).unwrap();
-        let a63 = T::from(46732.0 / 5247.0).unwrap();
-        let a64 = T::from(49.0 / 176.0).unwrap();
-        let a65 = T::from(-5103.0 / 18656.0).unwrap();
+        let a61 = T::from(9017.0 / 3168.0).expect("DP coefficient is representable as Float");
+        let a62 = T::from(-355.0 / 33.0).expect("DP coefficient is representable as Float");
+        let a63 = T::from(46732.0 / 5247.0).expect("DP coefficient is representable as Float");
+        let a64 = T::from(49.0 / 176.0).expect("DP coefficient is representable as Float");
+        let a65 = T::from(-5103.0 / 18656.0).expect("DP coefficient is representable as Float");
         for i in 0..n {
             y_temp[i] = y[i]
                 + h * (a61 * k[0][i]
@@ -606,12 +606,12 @@ where
         }
 
         // Adjust step size
-        let safety = T::from(0.9).unwrap();
-        let min_factor = T::from(0.2).unwrap();
-        let max_factor = T::from(10.0).unwrap();
+        let safety = T::from(0.9).expect("safety factor is representable as Float");
+        let min_factor = T::from(0.2).expect("min factor is representable as Float");
+        let max_factor = T::from(10.0).expect("max factor is representable as Float");
 
         let factor = if error > T::epsilon() {
-            safety * (T::one() / error).powf(T::from(0.2).unwrap())
+            safety * (T::one() / error).powf(T::from(0.2).expect("0.2 is representable as Float"))
         } else {
             max_factor
         };
@@ -686,7 +686,7 @@ where
                 residual = residual + r_i.abs();
             }
 
-            if residual < newton_tol * T::from(n).unwrap() {
+            if residual < newton_tol * T::from(n).expect("n is representable as Float") {
                 break;
             }
 
@@ -726,9 +726,9 @@ where
     let newton_tol = config.atol;
     let max_newton_iter = 10;
 
-    let four_thirds = T::from(4.0 / 3.0).unwrap();
-    let one_third = T::from(1.0 / 3.0).unwrap();
-    let two_thirds = T::from(2.0 / 3.0).unwrap();
+    let four_thirds = T::from(4.0 / 3.0).expect("BDF coefficient is representable as Float");
+    let one_third = T::from(1.0 / 3.0).expect("BDF coefficient is representable as Float");
+    let two_thirds = T::from(2.0 / 3.0).expect("BDF coefficient is representable as Float");
 
     let mut t_vals = vec![t0];
     let mut y_vals = vec![y0.to_vec()];
@@ -763,7 +763,7 @@ where
                 y_new[i] = y[i] + h_actual * f_new[i];
             }
 
-            if residual < newton_tol * T::from(n).unwrap() {
+            if residual < newton_tol * T::from(n).expect("n is representable as Float") {
                 break;
             }
         }
@@ -800,7 +800,7 @@ where
                 y_new[i] = target;
             }
 
-            if residual < newton_tol * T::from(n).unwrap() {
+            if residual < newton_tol * T::from(n).expect("n is representable as Float") {
                 break;
             }
         }
@@ -829,7 +829,7 @@ where
 /// ```ignore
 /// use numrs2::ode::odeint;
 ///
-/// let result = odeint(|t, y| -y, (0.0, 1.0), 1.0).unwrap();
+/// let result = odeint(|_t, y| -y, (0.0, 1.0), 1.0).expect("ODE solve should succeed");
 /// ```
 pub fn odeint<T, F>(f: F, t_span: (T, T), y0: T) -> Result<OdeResult<T>>
 where
@@ -848,10 +848,11 @@ mod tests {
     fn test_euler_exponential_decay() {
         // dy/dt = -y, y(0) = 1 => y(t) = e^(-t)
         let f = |_t: f64, y: &[f64]| vec![-y[0]];
-        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::Euler).unwrap();
+        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::Euler)
+            .expect("Euler should solve exponential decay");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = (-1.0f64).exp();
         // Euler is first-order, so expect larger error
         assert!((y_final - expected).abs() < 0.1);
@@ -861,10 +862,11 @@ mod tests {
     fn test_rk4_exponential_decay() {
         // dy/dt = -y, y(0) = 1 => y(t) = e^(-t)
         let f = |_t: f64, y: &[f64]| vec![-y[0]];
-        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::RK4).unwrap();
+        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::RK4)
+            .expect("RK4 should solve exponential decay");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = (-1.0f64).exp();
         // RK4 is 4th order, much more accurate
         assert!((y_final - expected).abs() < 1e-4);
@@ -874,10 +876,11 @@ mod tests {
     fn test_rk45_exponential_decay() {
         // dy/dt = -y, y(0) = 1 => y(t) = e^(-t)
         let f = |_t: f64, y: &[f64]| vec![-y[0]];
-        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::RK45).unwrap();
+        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::RK45)
+            .expect("RK45 should solve exponential decay");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = (-1.0f64).exp();
         // Adaptive methods with default tolerances
         assert!(
@@ -892,10 +895,11 @@ mod tests {
     fn test_dopri5_exponential_decay() {
         // dy/dt = -y, y(0) = 1 => y(t) = e^(-t)
         let f = |_t: f64, y: &[f64]| vec![-y[0]];
-        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::DoPri5).unwrap();
+        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::DoPri5)
+            .expect("DoPri5 should solve exponential decay");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = (-1.0f64).exp();
         // Adaptive methods with default tolerances
         assert!(
@@ -909,10 +913,11 @@ mod tests {
     #[test]
     fn test_implicit_euler() {
         let f = |_t: f64, y: &[f64]| vec![-y[0]];
-        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::ImplicitEuler).unwrap();
+        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::ImplicitEuler)
+            .expect("ImplicitEuler should solve exponential decay");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = (-1.0f64).exp();
         // Implicit Euler is first-order
         assert!((y_final - expected).abs() < 0.1);
@@ -921,10 +926,11 @@ mod tests {
     #[test]
     fn test_bdf2() {
         let f = |_t: f64, y: &[f64]| vec![-y[0]];
-        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::BDF2).unwrap();
+        let result = solve_ivp(f, (0.0, 1.0), &[1.0], OdeMethod::BDF2)
+            .expect("BDF2 should solve exponential decay");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = (-1.0f64).exp();
         // BDF2 is second-order
         assert!((y_final - expected).abs() < 0.05);
@@ -936,11 +942,11 @@ mod tests {
         // Initial conditions: y(0) = 1, y'(0) = 0
         // Solution: y = cos(t)
         let f = |_t: f64, y: &[f64]| vec![y[1], -y[0]];
-        let result =
-            solve_ivp(f, (0.0, std::f64::consts::PI), &[1.0, 0.0], OdeMethod::RK4).unwrap();
+        let result = solve_ivp(f, (0.0, std::f64::consts::PI), &[1.0, 0.0], OdeMethod::RK4)
+            .expect("RK4 should solve harmonic oscillator");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         // y(π) = cos(π) = -1
         assert!((y_final - (-1.0)).abs() < 1e-3);
     }
@@ -950,20 +956,22 @@ mod tests {
         // dy/dt = y * (1 - y), y(0) = 0.5
         // Solution: y = 1 / (1 + e^(-t))
         let f = |_t: f64, y: &[f64]| vec![y[0] * (1.0 - y[0])];
-        let result = solve_ivp(f, (0.0, 2.0), &[0.5], OdeMethod::RK45).unwrap();
+        let result = solve_ivp(f, (0.0, 2.0), &[0.5], OdeMethod::RK45)
+            .expect("RK45 should solve logistic growth");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = 1.0 / (1.0 + (-2.0f64).exp());
         assert!((y_final - expected).abs() < 1e-3);
     }
 
     #[test]
     fn test_odeint_convenience() {
-        let result = odeint(|_t: f64, y: f64| -y, (0.0, 1.0), 1.0).unwrap();
+        let result = odeint(|_t: f64, y: f64| -y, (0.0, 1.0), 1.0)
+            .expect("odeint should solve exponential decay");
 
         assert!(result.success);
-        let y_final = result.y.last().unwrap()[0];
+        let y_final = result.y.last().expect("solution should have elements")[0];
         let expected = (-1.0f64).exp();
         // odeint uses RK45 by default
         assert!(
@@ -989,7 +997,8 @@ mod tests {
             ]
         };
 
-        let result = solve_ivp(f, (0.0, 1.0), &[1.0, 1.0, 1.0], OdeMethod::RK45).unwrap();
+        let result = solve_ivp(f, (0.0, 1.0), &[1.0, 1.0, 1.0], OdeMethod::RK45)
+            .expect("RK45 should solve Lorenz system");
 
         // Just check it completes without error
         assert!(result.success);

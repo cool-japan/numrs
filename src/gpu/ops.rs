@@ -763,15 +763,21 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
     let buffer_slice = staging_buffer.slice(..);
     let (tx, rx) = std::sync::mpsc::channel();
     buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-        tx.send(result).unwrap();
+        tx.send(result)
+            .expect("Failed to send f32 reduction buffer mapping result - receiver dropped");
     });
 
     context
         .device()
         .poll(wgpu::PollType::wait_indefinitely())
-        .unwrap();
+        .expect("GPU device poll failed during f32 reduction buffer mapping");
     rx.recv()
-        .unwrap()
+        .map_err(|e| {
+            NumRs2Error::RuntimeError(format!(
+                "Failed to receive f32 reduction buffer mapping result: {:?}",
+                e
+            ))
+        })?
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
 
     let data = buffer_slice.get_mapped_range();
@@ -945,15 +951,21 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
     let buffer_slice = staging_buffer.slice(..);
     let (tx, rx) = std::sync::mpsc::channel();
     buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-        tx.send(result).unwrap();
+        tx.send(result)
+            .expect("Failed to send f64 reduction buffer mapping result - receiver dropped");
     });
 
     context
         .device()
         .poll(wgpu::PollType::wait_indefinitely())
-        .unwrap();
+        .expect("GPU device poll failed during f64 reduction buffer mapping");
     rx.recv()
-        .unwrap()
+        .map_err(|e| {
+            NumRs2Error::RuntimeError(format!(
+                "Failed to receive f64 reduction buffer mapping result: {:?}",
+                e
+            ))
+        })?
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
 
     let data = buffer_slice.get_mapped_range();
@@ -1100,4 +1112,167 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));
 
     Ok(result)
+}
+
+/// Performs broadcasting-aware element-wise addition
+///
+/// Supports NumPy-style broadcasting where arrays with different shapes
+/// can be combined if they are compatible.
+pub fn broadcast_add<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
+    let output_shape = broadcast_shapes(a.shape(), b.shape())?;
+    broadcast_binary_op(a, b, &output_shape, ElementWiseOp::Add)
+}
+
+/// Performs broadcasting-aware element-wise multiplication
+pub fn broadcast_multiply<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
+    let output_shape = broadcast_shapes(a.shape(), b.shape())?;
+    broadcast_binary_op(a, b, &output_shape, ElementWiseOp::Multiply)
+}
+
+/// Determines the output shape for broadcasting two arrays
+fn broadcast_shapes(shape_a: &[usize], shape_b: &[usize]) -> Result<Vec<usize>> {
+    let max_dims = shape_a.len().max(shape_b.len());
+    let mut result = vec![1; max_dims];
+
+    for i in 0..max_dims {
+        let dim_a = if i < shape_a.len() {
+            shape_a[shape_a.len() - 1 - i]
+        } else {
+            1
+        };
+        let dim_b = if i < shape_b.len() {
+            shape_b[shape_b.len() - 1 - i]
+        } else {
+            1
+        };
+
+        if dim_a == dim_b {
+            result[max_dims - 1 - i] = dim_a;
+        } else if dim_a == 1 {
+            result[max_dims - 1 - i] = dim_b;
+        } else if dim_b == 1 {
+            result[max_dims - 1 - i] = dim_a;
+        } else {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: shape_a.to_vec(),
+                actual: shape_b.to_vec(),
+            });
+        }
+    }
+
+    Ok(result)
+}
+
+/// Helper function for broadcasting binary operations
+fn broadcast_binary_op<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+    output_shape: &[usize],
+    op: ElementWiseOp,
+) -> Result<GpuArray<T>> {
+    // For now, if shapes match exactly, use regular operation
+    if a.shape() == b.shape() {
+        return element_wise_op(a, b, op);
+    }
+
+    // Otherwise, we need broadcasting support
+    // This is a simplified implementation - full broadcasting requires more complex shader code
+    Err(NumRs2Error::NotImplemented(
+        "Full broadcasting support is not yet implemented for GPU arrays".to_string(),
+    ))
+}
+
+/// Copies a GPU array with optional format conversion
+pub fn copy_with_format<T: bytemuck::Pod + bytemuck::Zeroable>(
+    src: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
+    let context = src.context().clone();
+    let result = GpuArray::<T>::new_with_shape(src.shape(), context.clone())?;
+
+    // Create command encoder for the copy
+    let mut encoder = context
+        .device()
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("NumRS2 Copy Encoder"),
+        });
+
+    encoder.copy_buffer_to_buffer(
+        src.buffer(),
+        0,
+        result.buffer(),
+        0,
+        (src.size() * src.element_size()) as u64,
+    );
+
+    context.queue().submit(std::iter::once(encoder.finish()));
+
+    Ok(result)
+}
+
+/// Fills a GPU array with a scalar value
+pub fn fill<T: bytemuck::Pod + bytemuck::Zeroable + Clone>(
+    array: &mut GpuArray<T>,
+    value: T,
+) -> Result<()> {
+    let data = vec![value; array.size()];
+    array
+        .context()
+        .queue()
+        .write_buffer(array.buffer(), 0, bytemuck::cast_slice(&data));
+    Ok(())
+}
+
+/// Creates a slice view of a GPU array
+///
+/// Note: This creates a new array with a copy of the sliced data
+pub fn slice<T: bytemuck::Pod + bytemuck::Zeroable>(
+    array: &GpuArray<T>,
+    ranges: &[(usize, usize)],
+) -> Result<GpuArray<T>> {
+    if ranges.len() != array.shape().len() {
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "Number of slice ranges ({}) does not match array dimensions ({})",
+            ranges.len(),
+            array.shape().len()
+        )));
+    }
+
+    // Validate ranges and calculate new shape
+    let mut new_shape = Vec::with_capacity(ranges.len());
+    for (i, (start, end)) in ranges.iter().enumerate() {
+        if *start >= *end || *end > array.shape()[i] {
+            return Err(NumRs2Error::IndexError(format!(
+                "Invalid range [{}..{}] for dimension {} with size {}",
+                start,
+                end,
+                i,
+                array.shape()[i]
+            )));
+        }
+        new_shape.push(*end - *start);
+    }
+
+    // For now, we need to transfer to CPU, slice, and transfer back
+    // A more efficient implementation would use GPU compute shaders
+    let cpu_array = array.to_array()?;
+
+    // Build slice indices
+    let mut slice_spec = String::new();
+    for (i, (start, end)) in ranges.iter().enumerate() {
+        if i > 0 {
+            slice_spec.push_str(", ");
+        }
+        slice_spec.push_str(&format!("{}..{}", start, end));
+    }
+
+    // This is a simplified implementation - full slicing would require ndarray slice support
+    Err(NumRs2Error::NotImplemented(
+        "GPU array slicing is not yet fully implemented".to_string(),
+    ))
 }

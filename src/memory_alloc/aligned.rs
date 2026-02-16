@@ -295,7 +295,8 @@ impl<T> Drop for AlignedBox<T> {
 impl<T: Clone> Clone for AlignedBox<T> {
     fn clone(&self) -> Self {
         let value = self.get().clone();
-        Self::new(value, self.allocator.alignment()).unwrap()
+        Self::new(value, self.allocator.alignment())
+            .expect("aligned allocation for clone should succeed")
     }
 }
 

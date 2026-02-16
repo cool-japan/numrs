@@ -4,10 +4,11 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.1.1** - First Stable Release (2025-12-30): Production-ready SIMD optimizations,
-//! scipy-equivalent numerical computing, complete NumPy compatibility. Features 86 AVX2-vectorized
-//! functions + 42 ARM NEON operations, comprehensive interpolation with all cubic spline boundary
-//! conditions, and 1,111+ tests passing with zero warnings. Built on pure Rust SciRS2 ecosystem.
+//! **Version 0.2.0** - Ecosystem Compliance Release (2026-01-30): Replaced numpy with scirs2-numpy
+//! for COOLJAPAN ecosystem compliance, removed openblas linking flags for pure Rust OxiBLAS backend.
+//! Production-ready SIMD optimizations, scipy-equivalent numerical computing, complete NumPy compatibility.
+//! Features 86 AVX2-vectorized functions + 42 ARM NEON operations, comprehensive interpolation with
+//! all cubic spline boundary conditions, and 1,111+ tests passing with zero warnings.
 //!
 //! ## Quick Start
 //!
@@ -16,7 +17,7 @@
 //!
 //! let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 //! let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-//! let c = a.matmul(&b).unwrap();
+//! let c = a.matmul(&b).expect("matrix multiplication should succeed for compatible shapes");
 //! println!("Matrix multiplication result: {}", c);
 //! ```
 //!
@@ -29,9 +30,11 @@
 //!   - Sparse matrices (COO, CSR, CSC, DIA formats) with iterative solvers
 //!   - Randomized algorithms (randomized SVD, random projections)
 //! - **Automatic Differentiation**: Forward and reverse mode AD with higher-order derivatives
+//! - **Symbolic Computation**: Expression manipulation, symbolic differentiation, and symbolic linear algebra
 //! - **Data Interoperability**:
 //!   - Apache Arrow integration for zero-copy data exchange (requires `arrow` feature)
 //!   - Python bindings via PyO3 for NumPy compatibility (requires `python` feature)
+//!   - WebAssembly bindings for browser and Node.js environments (requires `wasm` feature)
 //!   - Feather format support for fast columnar storage
 //!
 //! ### Performance Features
@@ -53,6 +56,7 @@
 //! - `python`: Python bindings via PyO3 for NumPy interoperability
 //! - `lapack`: LAPACK-dependent linear algebra operations
 //! - `gpu`: GPU acceleration using WGPU
+//! - `wasm`: WebAssembly bindings for browser and Node.js environments
 //! - `matrix_decomp`: Matrix decomposition functions (enabled by default)
 //! - `validation`: Additional runtime validation checks
 
@@ -83,6 +87,8 @@ pub mod complex_ops;
 pub mod conversions;
 pub mod derivative;
 pub mod distance;
+#[cfg(feature = "distributed")]
+pub mod distributed;
 pub mod error;
 pub mod error_handling;
 pub mod expr;
@@ -111,6 +117,7 @@ pub mod memory_alloc;
 pub mod memory_optimize;
 pub mod mmap;
 pub mod ndimage;
+pub mod nn;
 pub mod ode;
 pub mod optimize;
 pub mod parallel;
@@ -132,6 +139,7 @@ pub mod spatial;
 pub mod special;
 pub mod stats;
 pub mod stride_tricks;
+pub mod symbolic;
 pub mod testing;
 pub mod traits;
 pub mod types;
@@ -140,22 +148,14 @@ pub mod unique;
 pub mod unique_optimized;
 pub mod util;
 pub mod views;
+#[cfg(feature = "visualization")]
+pub mod viz;
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
-// Transitional modules (will be restructured in 0.2.0)
-// TODO(0.2.0): Migrate to new core module structure and deprecate
-pub mod new_modules {
-    pub mod eigenvalues;
-    pub mod fft;
-    pub mod fft_enhanced;
-    pub mod frequency_analysis;
-    #[cfg(feature = "matrix_decomp")]
-    pub mod matrix_decomp;
-    pub mod polynomial;
-    pub mod signal_processing;
-    pub mod sparse;
-    pub mod special;
-    pub mod spectral_analysis;
-}
+// Extended modules with advanced functionality
+// Includes transformers, graph neural networks, advanced signal processing, etc.
+pub mod new_modules;
 
 pub use error::{NumRs2Error, Result};
 
@@ -564,7 +564,9 @@ mod tests {
         let col = Array::<f64>::from_vec(vec![4.0, 5.0]).reshape(&[2, 1]);
 
         // Broadcast addition (should be 2x3)
-        let result = row.add_broadcast(&col).unwrap();
+        let result = row
+            .add_broadcast(&col)
+            .expect("test: broadcast addition should succeed");
         assert_eq!(result.shape(), vec![2, 3]);
         assert_eq!(result.to_vec(), vec![5.0, 6.0, 7.0, 6.0, 7.0, 8.0]);
 
@@ -573,14 +575,17 @@ mod tests {
         let b = Array::<f64>::from_vec(vec![10.0, 20.0]).reshape(&[1, 2]);
 
         // Broadcast multiplication
-        let result = a.multiply_broadcast(&b).unwrap();
+        let result = a
+            .multiply_broadcast(&b)
+            .expect("test: broadcast multiplication should succeed");
         assert_eq!(result.shape(), vec![2, 2]);
         assert_eq!(result.to_vec(), vec![10.0, 40.0, 30.0, 80.0]);
 
         // Test 4: Test broadcasting_shape function
         let shape1 = vec![3, 1, 4];
         let shape2 = vec![2, 1];
-        let broadcast_shape = Array::<f64>::broadcast_shape(&shape1, &shape2).unwrap();
+        let broadcast_shape = Array::<f64>::broadcast_shape(&shape1, &shape2)
+            .expect("test: broadcast shape computation should succeed");
         assert_eq!(broadcast_shape, vec![3, 2, 4]);
     }
 
@@ -633,7 +638,9 @@ mod tests {
         assert!(at_vec.contains(&6.0));
 
         // Test slice
-        let slice = a.slice(0, 1).unwrap();
+        let slice = a
+            .slice(0, 1)
+            .expect("test: slice should succeed for valid axis");
         assert_eq!(slice.shape(), vec![3]);
         assert_eq!(slice.to_vec(), vec![4.0, 5.0, 6.0]);
     }
@@ -664,18 +671,20 @@ mod tests {
         let a = Array::<f64>::from_vec(vec![4.0, 7.0, 2.0, 6.0]).reshape(&[2, 2]);
 
         // Test determinant
-        let det_a = det(&a).unwrap();
+        let det_a = det(&a).expect("test: determinant computation should succeed");
         assert_relative_eq!(det_a, 10.0, epsilon = 1e-10);
 
         // Test matrix inverse
-        let inv_a = inv(&a).unwrap();
+        let inv_a = inv(&a).expect("test: matrix inverse should succeed for invertible matrix");
         let expected_inv = [0.6, -0.7, -0.2, 0.4];
         for (actual, expected) in inv_a.to_vec().iter().zip(expected_inv.iter()) {
             assert_relative_eq!(*actual, *expected, epsilon = 1e-10);
         }
 
         // Test that A * A^-1 = I
-        let identity = a.matmul(&inv_a).unwrap();
+        let identity = a
+            .matmul(&inv_a)
+            .expect("test: matrix multiplication should succeed");
         assert_relative_eq!(identity.to_vec()[0], 1.0, epsilon = 1e-10);
         assert_relative_eq!(identity.to_vec()[1], 0.0, epsilon = 1e-10);
         assert_relative_eq!(identity.to_vec()[2], 0.0, epsilon = 1e-10);
@@ -683,17 +692,17 @@ mod tests {
 
         // Test solving linear system
         let b = Array::<f64>::from_vec(vec![1.0, 3.0]);
-        let x = solve(&a, &b).unwrap();
+        let x = solve(&a, &b).expect("test: linear system solve should succeed");
 
         // Expected solution x = [-1.5, 1.0]
         assert_relative_eq!(x.to_vec()[0], -1.5, epsilon = 1e-10);
         assert_relative_eq!(x.to_vec()[1], 1.0, epsilon = 1e-10);
 
         // Verify: A*x = b
-        let b_check = match a.matmul(&x.reshape(&[2, 1])) {
-            Ok(result) => result.reshape(&[2]),
-            Err(_) => panic!("Matrix multiplication failed"),
-        };
+        let b_check = a
+            .matmul(&x.reshape(&[2, 1]))
+            .expect("test: matrix-vector multiplication should succeed")
+            .reshape(&[2]);
         assert_relative_eq!(b_check.to_vec()[0], b.to_vec()[0], epsilon = 1e-10);
         assert_relative_eq!(b_check.to_vec()[1], b.to_vec()[1], epsilon = 1e-10);
     }
@@ -704,12 +713,12 @@ mod tests {
         let a = Array::<f64>::from_vec(vec![1.0, 2.0]).reshape(&[1, 2]);
         let b = Array::<f64>::from_vec(vec![3.0, 4.0]).reshape(&[2, 1]);
 
-        let kron_result = kron(&a, &b).unwrap();
+        let kron_result = kron(&a, &b).expect("test: Kronecker product should succeed");
         assert_eq!(kron_result.shape(), &[2, 2]);
         assert_eq!(kron_result.to_vec(), vec![3.0, 6.0, 4.0, 8.0]);
 
         // Test tensordot via prelude
-        let tensordot_result = tensordot(&a, &b, &[1, 0]).unwrap();
+        let tensordot_result = tensordot(&a, &b, &[1, 0]).expect("test: tensordot should succeed");
         assert_eq!(tensordot_result.shape(), &[1, 1]);
         assert_relative_eq!(tensordot_result.to_vec()[0], 11.0, epsilon = 1e-10);
     }
@@ -721,13 +730,18 @@ mod tests {
         let b = Array::<f64>::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 
         // Test matrix multiplication
-        let c = a.matmul(&b).unwrap();
+        let c = a
+            .matmul(&b)
+            .expect("test: matrix multiplication should succeed");
         assert_eq!(c.shape(), vec![2, 2]);
         assert_eq!(c.to_vec(), vec![19.0, 22.0, 43.0, 50.0]);
 
         // Test matrix-vector multiplication
         let v = Array::<f64>::from_vec(vec![1.0, 2.0]);
-        let result = a.matmul(&v.reshape(&[2, 1])).unwrap().reshape(&[2]);
+        let result = a
+            .matmul(&v.reshape(&[2, 1]))
+            .expect("test: matrix-vector multiplication should succeed")
+            .reshape(&[2]);
         assert_eq!(result.to_vec(), vec![5.0, 11.0]);
     }
 
@@ -737,15 +751,15 @@ mod tests {
         let b = Array::<f64>::from_vec(vec![5.0, 6.0, 7.0, 8.0]);
 
         // Test SIMD addition
-        let c = simd_add(&a, &b).unwrap();
+        let c = simd_add(&a, &b).expect("test: SIMD addition should succeed");
         assert_eq!(c.to_vec(), vec![6.0, 8.0, 10.0, 12.0]);
 
         // Test SIMD multiplication
-        let d = simd_mul(&a, &b).unwrap();
+        let d = simd_mul(&a, &b).expect("test: SIMD multiplication should succeed");
         assert_eq!(d.to_vec(), vec![5.0, 12.0, 21.0, 32.0]);
 
         // Test SIMD division
-        let e = simd_div(&a, &b).unwrap();
+        let e = simd_div(&a, &b).expect("test: SIMD division should succeed");
         assert_relative_eq!(e.to_vec()[0], 0.2, epsilon = 1e-10);
         assert_relative_eq!(e.to_vec()[1], 1.0 / 3.0, epsilon = 1e-10);
         assert_relative_eq!(e.to_vec()[2], 3.0 / 7.0, epsilon = 1e-10);
@@ -773,26 +787,29 @@ mod tests {
         let v = Array::<f64>::from_vec(vec![3.0, 4.0]);
 
         // L1 norm (sum of absolute values)
-        let norm_1 = norm(&v, Some(1.0)).unwrap();
+        let norm_1 = norm(&v, Some(1.0)).expect("test: L1 norm computation should succeed");
         assert_relative_eq!(norm_1, 7.0, epsilon = 1e-10);
 
         // L2 norm (Euclidean norm)
-        let norm_2 = norm(&v, Some(2.0)).unwrap();
+        let norm_2 = norm(&v, Some(2.0)).expect("test: L2 norm computation should succeed");
         assert_relative_eq!(norm_2, 5.0, epsilon = 1e-10);
 
         // L-infinity norm (maximum absolute value)
-        let norm_inf = norm(&v, Some(f64::INFINITY)).unwrap();
+        let norm_inf =
+            norm(&v, Some(f64::INFINITY)).expect("test: infinity norm computation should succeed");
         assert_relative_eq!(norm_inf, 4.0, epsilon = 1e-10);
 
         // Matrix norms
         let m = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
         // L1 norm (maximum column sum)
-        let matrix_norm_1 = norm(&m, Some(1.0)).unwrap();
+        let matrix_norm_1 =
+            norm(&m, Some(1.0)).expect("test: matrix L1 norm computation should succeed");
         assert_relative_eq!(matrix_norm_1, 6.0, epsilon = 1e-10);
 
         // L-infinity norm (maximum row sum)
-        let matrix_norm_inf = norm(&m, Some(f64::INFINITY)).unwrap();
+        let matrix_norm_inf = norm(&m, Some(f64::INFINITY))
+            .expect("test: matrix infinity norm computation should succeed");
         assert_relative_eq!(matrix_norm_inf, 7.0, epsilon = 1e-10);
     }
 
@@ -909,12 +926,12 @@ mod tests {
 
         // Test tile
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]);
-        let tiled = tile(&a, &[2]).unwrap();
+        let tiled = tile(&a, &[2]).expect("test: tile operation should succeed");
         assert_eq!(tiled.shape(), vec![6]);
         assert_eq!(tiled.to_vec(), vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0]);
 
         let a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-        let tiled_2d = tile(&a_2d, &[2, 1]).unwrap();
+        let tiled_2d = tile(&a_2d, &[2, 1]).expect("test: 2D tile operation should succeed");
         assert_eq!(tiled_2d.shape(), vec![4, 2]);
         assert_eq!(
             tiled_2d.to_vec(),
@@ -923,12 +940,13 @@ mod tests {
 
         // Test repeat
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]);
-        let repeated = repeat(&a, 2, None).unwrap();
+        let repeated = repeat(&a, 2, None).expect("test: repeat operation should succeed");
         assert_eq!(repeated.shape(), vec![6]);
         assert_eq!(repeated.to_vec(), vec![1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);
 
         let a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-        let repeated_axis0 = repeat(&a_2d, 2, Some(0)).unwrap();
+        let repeated_axis0 =
+            repeat(&a_2d, 2, Some(0)).expect("test: repeat along axis 0 should succeed");
         assert_eq!(repeated_axis0.shape(), vec![4, 2]);
         assert_eq!(
             repeated_axis0.to_vec(),
@@ -938,20 +956,22 @@ mod tests {
         // Test concatenate
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]);
         let b = Array::<f64>::from_vec(vec![4.0, 5.0, 6.0]);
-        let c = concatenate(&[&a, &b], 0).unwrap();
+        let c = concatenate(&[&a, &b], 0).expect("test: concatenate should succeed");
         assert_eq!(c.shape(), vec![6]);
         assert_eq!(c.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
 
         let a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let b_2d = Array::<f64>::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-        let c_axis0 = concatenate(&[&a_2d, &b_2d], 0).unwrap();
+        let c_axis0 =
+            concatenate(&[&a_2d, &b_2d], 0).expect("test: concatenate along axis 0 should succeed");
         assert_eq!(c_axis0.shape(), vec![4, 2]);
         assert_eq!(
             c_axis0.to_vec(),
             vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
         );
 
-        let c_axis1 = concatenate(&[&a_2d, &b_2d], 1).unwrap();
+        let c_axis1 =
+            concatenate(&[&a_2d, &b_2d], 1).expect("test: concatenate along axis 1 should succeed");
         assert_eq!(c_axis1.shape(), vec![2, 4]);
         let c_vec = c_axis1.to_vec();
         // Check all elements are present - order might differ due to memory layout
@@ -968,7 +988,7 @@ mod tests {
         // Test stack
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]);
         let b = Array::<f64>::from_vec(vec![4.0, 5.0, 6.0]);
-        let c = stack(&[&a, &b], 0).unwrap();
+        let c = stack(&[&a, &b], 0).expect("test: stack along axis 0 should succeed");
         assert_eq!(c.shape(), vec![2, 3]);
         let c_vec = c.to_vec();
         // Check all elements are present
@@ -980,7 +1000,7 @@ mod tests {
         assert!(c_vec.contains(&5.0));
         assert!(c_vec.contains(&6.0));
 
-        let d = stack(&[&a, &b], 1).unwrap();
+        let d = stack(&[&a, &b], 1).expect("test: stack along axis 1 should succeed");
         assert_eq!(d.shape(), vec![3, 2]);
         let d_vec = d.to_vec();
         // Check all elements are present
@@ -994,7 +1014,7 @@ mod tests {
 
         // Test split
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-        let splits = split(&a, &[2, 4], 0).unwrap();
+        let splits = split(&a, &[2, 4], 0).expect("test: split should succeed");
         assert_eq!(splits.len(), 3);
         assert_eq!(splits[0].to_vec(), vec![1.0, 2.0]);
         assert_eq!(splits[1].to_vec(), vec![3.0, 4.0]);
@@ -1002,33 +1022,34 @@ mod tests {
 
         let _a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
         // First, check if the split function is working correctly with multiple indices
-        let splits_a = split(&a, &[2, 4], 0).unwrap();
+        let splits_a =
+            split(&a, &[2, 4], 0).expect("test: split with multiple indices should succeed");
         assert_eq!(splits_a.len(), 3);
 
         // Skip this test temporarily since it's causing issues
         // This will be fixed in a future implementation
         /*
-        let splits_axis1 = split(&a_2d, &[1], 1).unwrap();
+        let splits_axis1 = split(&a_2d, &[1], 1).expect("test: split along axis 1 should succeed");
         assert_eq!(splits_axis1.len(), 2);
         */
 
         // Test expand_dims
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]);
-        let expanded = expand_dims(&a, 0).unwrap();
+        let expanded = expand_dims(&a, 0).expect("test: expand_dims should succeed");
         assert_eq!(expanded.shape(), vec![1, 3]);
         assert_eq!(expanded.to_vec(), vec![1.0, 2.0, 3.0]);
 
-        let expanded_end = expand_dims(&a, 1).unwrap();
+        let expanded_end = expand_dims(&a, 1).expect("test: expand_dims at end should succeed");
         assert_eq!(expanded_end.shape(), vec![3, 1]);
         assert_eq!(expanded_end.to_vec(), vec![1.0, 2.0, 3.0]);
 
         // Test squeeze
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]).reshape(&[1, 3, 1]);
-        let squeezed = squeeze(&a, None).unwrap();
+        let squeezed = squeeze(&a, None).expect("test: squeeze should succeed");
         assert_eq!(squeezed.shape(), vec![3]);
         assert_eq!(squeezed.to_vec(), vec![1.0, 2.0, 3.0]);
 
-        let squeezed_axis = squeeze(&a, Some(0)).unwrap();
+        let squeezed_axis = squeeze(&a, Some(0)).expect("test: squeeze at axis 0 should succeed");
         assert_eq!(squeezed_axis.shape(), vec![3, 1]);
         assert_eq!(squeezed_axis.to_vec(), vec![1.0, 2.0, 3.0]);
     }
@@ -1062,14 +1083,29 @@ mod tests {
 
         // Test covariance and correlation
         let b = Array::<f64>::from_vec(vec![5.0, 4.0, 3.0, 2.0, 1.0]);
-        let cov_result = cov(&a, Some(&b), None, None, None).unwrap();
-        assert_relative_eq!(cov_result.get(&[0, 1]).unwrap(), -2.5, epsilon = 1e-10);
-        let corrcoef_result = corrcoef(&a, Some(&b), None).unwrap();
-        assert_relative_eq!(corrcoef_result.get(&[0, 1]).unwrap(), -1.0, epsilon = 1e-10);
+        let cov_result =
+            cov(&a, Some(&b), None, None, None).expect("test: covariance should succeed");
+        assert_relative_eq!(
+            cov_result
+                .get(&[0, 1])
+                .expect("test: cov element access should succeed"),
+            -2.5,
+            epsilon = 1e-10
+        );
+        let corrcoef_result =
+            corrcoef(&a, Some(&b), None).expect("test: correlation coefficient should succeed");
+        assert_relative_eq!(
+            corrcoef_result
+                .get(&[0, 1])
+                .expect("test: corrcoef element access should succeed"),
+            -1.0,
+            epsilon = 1e-10
+        );
 
         // Test histogram
         let data = Array::<f64>::from_vec(vec![1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]);
-        let (counts, bins) = histogram(&data, 4, None, None).unwrap();
+        let (counts, bins) =
+            histogram(&data, 4, None, None).expect("test: histogram should succeed");
         assert_eq!(counts.to_vec(), vec![2.0, 2.0, 2.0, 3.0]);
         assert_eq!(bins.size(), 5);
         assert_relative_eq!(bins.to_vec()[0], 1.0, epsilon = 1e-10);
@@ -1099,8 +1135,13 @@ mod tests {
         for (i, &m) in mask.iter().enumerate() {
             if m {
                 filtered
-                    .set(&[i], values.get(&[value_idx]).unwrap())
-                    .unwrap();
+                    .set(
+                        &[i],
+                        values
+                            .get(&[value_idx])
+                            .expect("test: value access should succeed"),
+                    )
+                    .expect("test: set filtered value should succeed");
                 value_idx += 1;
             }
         }
@@ -1117,7 +1158,9 @@ mod tests {
         let _col_indices = [0]; // First column
 
         // Select using standard indexing instead (until boolean indexing is fixed)
-        let row_result = a_2d.index(&[IndexSpec::Index(0), IndexSpec::All]).unwrap();
+        let row_result = a_2d
+            .index(&[IndexSpec::Index(0), IndexSpec::All])
+            .expect("test: row indexing should succeed");
         assert_eq!(row_result.shape(), vec![3]); // Changed from [1, 3] to [3] since we're extracting a row
 
         // Print debug info to understand the issue
@@ -1125,7 +1168,9 @@ mod tests {
         assert_eq!(row_vec.len(), 3);
         assert_eq!(row_vec, vec![1.0, 2.0, 3.0]);
 
-        let col_result = a_2d.index(&[IndexSpec::All, IndexSpec::Index(0)]).unwrap();
+        let col_result = a_2d
+            .index(&[IndexSpec::All, IndexSpec::Index(0)])
+            .expect("test: column indexing should succeed");
         assert_eq!(col_result.shape(), vec![3]); // Changed from [3, 1] to [3] since we're extracting a column
         assert_eq!(col_result.to_vec(), vec![1.0, 4.0, 7.0]);
 
@@ -1136,7 +1181,7 @@ mod tests {
                 &Array::<bool>::from_vec(vec![true, false, true, false, true]),
                 &Array::<f64>::from_vec(vec![10.0, 30.0, 50.0]),
             )
-            .unwrap();
+            .expect("test: set_mask should succeed");
 
         assert_eq!(a_copy.to_vec(), vec![10.0, 2.0, 30.0, 4.0, 50.0]);
     }
@@ -1151,7 +1196,7 @@ mod tests {
         // Skip fancy indexing tests for now as they need deeper fixes
         // We'll implement a more complete solution later
         let _indices = [0, 1, 2];
-        // let result = a.index(&[IndexSpec::Indices(indices)]).unwrap();
+        // let result = a.index(&[IndexSpec::Indices(indices)]).expect("indexing should succeed");
 
         // Define a_2d for the single element access test
         let a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
@@ -1160,13 +1205,13 @@ mod tests {
         // Test using Index for single element access
         let single_element = a_2d
             .index(&[IndexSpec::Index(1), IndexSpec::Index(1)])
-            .unwrap();
+            .expect("test: single element indexing should succeed");
         assert_eq!(single_element.to_vec(), vec![5.0]);
 
         // Test slice indexing
         let slice_result = a_2d
             .index(&[IndexSpec::Slice(0, Some(2), None), IndexSpec::All])
-            .unwrap();
+            .expect("test: slice indexing should succeed");
         assert_eq!(slice_result.shape(), vec![2, 3]);
         assert_eq!(slice_result.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     }
@@ -1177,98 +1222,148 @@ mod tests {
 
         // Create a 2D array for testing - manually create to avoid reshape issues
         let mut array = Array::<f64>::zeros(&[2, 3]);
-        array.set(&[0, 0], 1.0).unwrap();
-        array.set(&[0, 1], 2.0).unwrap();
-        array.set(&[0, 2], 3.0).unwrap();
-        array.set(&[1, 0], 4.0).unwrap();
-        array.set(&[1, 1], 5.0).unwrap();
-        array.set(&[1, 2], 6.0).unwrap();
+        array
+            .set(&[0, 0], 1.0)
+            .expect("test: set [0,0] should succeed");
+        array
+            .set(&[0, 1], 2.0)
+            .expect("test: set [0,1] should succeed");
+        array
+            .set(&[0, 2], 3.0)
+            .expect("test: set [0,2] should succeed");
+        array
+            .set(&[1, 0], 4.0)
+            .expect("test: set [1,0] should succeed");
+        array
+            .set(&[1, 1], 5.0)
+            .expect("test: set [1,1] should succeed");
+        array
+            .set(&[1, 2], 6.0)
+            .expect("test: set [1,2] should succeed");
 
         // Test sum along axis 0
-        let sum_axis0 = array.sum_axis(0).unwrap();
+        let sum_axis0 = array.sum_axis(0).expect("test: sum_axis(0) should succeed");
         assert_eq!(sum_axis0.shape(), vec![3]);
         assert_eq!(sum_axis0.to_vec(), vec![5.0, 7.0, 9.0]);
 
         // Test sum along axis 1
-        let sum_axis1 = array.sum_axis(1).unwrap();
+        let sum_axis1 = array.sum_axis(1).expect("test: sum_axis(1) should succeed");
         assert_eq!(sum_axis1.shape(), vec![2]);
         assert_eq!(sum_axis1.to_vec(), vec![6.0, 15.0]);
 
         // Test mean along axis 0
-        let mean_axis0 = array.mean_axis(Some(0)).unwrap();
+        let mean_axis0 = array
+            .mean_axis(Some(0))
+            .expect("test: mean_axis(Some(0)) should succeed");
         assert_eq!(mean_axis0.shape(), vec![3]);
         assert_eq!(mean_axis0.to_vec(), vec![2.5, 3.5, 4.5]);
 
         // Test mean along axis 1
-        let mean_axis1 = array.mean_axis(Some(1)).unwrap();
+        let mean_axis1 = array
+            .mean_axis(Some(1))
+            .expect("test: mean_axis(Some(1)) should succeed");
         assert_eq!(mean_axis1.shape(), vec![2]);
         assert_eq!(mean_axis1.to_vec(), vec![2.0, 5.0]);
 
         // Test min along axis 0 - should be the minimum of each column
         // For a 2x3 array, axis 0 refers to rows, so min of each column is the smaller of the two rows
-        let min_axis0 = array.min_axis(Some(0)).unwrap();
+        let min_axis0 = array
+            .min_axis(Some(0))
+            .expect("test: min_axis(Some(0)) should succeed");
         assert_eq!(min_axis0.shape(), vec![3]);
         // Check that min_axis0 is correct - min of each column
         let min_axis0_vec = min_axis0.to_vec();
         assert_eq!(min_axis0_vec, vec![1.0, 2.0, 3.0]);
 
         // Test min along axis 1
-        let min_axis1 = array.min_axis(Some(1)).unwrap();
+        let min_axis1 = array
+            .min_axis(Some(1))
+            .expect("test: min_axis(Some(1)) should succeed");
         assert_eq!(min_axis1.shape(), vec![2]);
         // Check that min_axis1 is correct - min of each row
         assert_eq!(min_axis1.to_vec(), vec![1.0, 4.0]);
 
         // Test max along axis 1
-        let max_axis1 = array.max_axis(Some(1)).unwrap();
+        let max_axis1 = array
+            .max_axis(Some(1))
+            .expect("test: max_axis(Some(1)) should succeed");
         assert_eq!(max_axis1.shape(), vec![2]);
         // Check max of each row
         assert_eq!(max_axis1.to_vec(), vec![3.0, 6.0]);
 
         // Create a more suitable array for testing argmin - manually create
         let mut array2 = Array::<f64>::zeros(&[2, 3]);
-        array2.set(&[0, 0], 3.0).unwrap();
-        array2.set(&[0, 1], 2.0).unwrap();
-        array2.set(&[0, 2], 1.0).unwrap();
-        array2.set(&[1, 0], 0.0).unwrap();
-        array2.set(&[1, 1], 5.0).unwrap();
-        array2.set(&[1, 2], 6.0).unwrap();
+        array2
+            .set(&[0, 0], 3.0)
+            .expect("test: set array2[0,0] should succeed");
+        array2
+            .set(&[0, 1], 2.0)
+            .expect("test: set array2[0,1] should succeed");
+        array2
+            .set(&[0, 2], 1.0)
+            .expect("test: set array2[0,2] should succeed");
+        array2
+            .set(&[1, 0], 0.0)
+            .expect("test: set array2[1,0] should succeed");
+        array2
+            .set(&[1, 1], 5.0)
+            .expect("test: set array2[1,1] should succeed");
+        array2
+            .set(&[1, 2], 6.0)
+            .expect("test: set array2[1,2] should succeed");
 
         // Test argmin along axis 0
-        let argmin_axis0 = array2.argmin_axis(0).unwrap();
+        let argmin_axis0 = array2
+            .argmin_axis(0)
+            .expect("test: argmin_axis(0) should succeed");
         assert_eq!(argmin_axis0.shape(), vec![3]);
         assert_eq!(argmin_axis0.to_vec(), vec![1, 0, 0]);
 
         // Skip testing argmax along axis 1 for now due to reshape issues
         // Note: The expected behavior would be:
-        // let argmax_axis1 = array.argmax_axis(1).unwrap();
+        // let argmax_axis1 = array.argmax_axis(1).expect("argmax_axis should succeed");
         // assert_eq!(argmax_axis1.shape(), vec![2]);
         // assert_eq!(argmax_axis1.to_vec(), vec![2, 2]);
 
         // Skip testing cumsum along axis 1 for now due to reshape issues
         // Note: The expected behavior would be:
-        // let cumsum_axis1 = array.cumsum_axis(1).unwrap();
+        // let cumsum_axis1 = array.cumsum_axis(1).expect("cumsum_axis should succeed");
         // assert_eq!(cumsum_axis1.shape(), vec![2, 3]);
         // assert_eq!(cumsum_axis1.to_vec(), vec![1.0, 3.0, 6.0, 4.0, 9.0, 15.0]);
 
         // Test var and std
-        let var_axis0 = array.var_axis(Some(0)).unwrap();
+        let var_axis0 = array
+            .var_axis(Some(0))
+            .expect("test: var_axis(Some(0)) should succeed");
         assert_eq!(var_axis0.shape(), vec![3]);
-        assert_relative_eq!(var_axis0.get(&[0]).unwrap(), 2.25, epsilon = 1e-10);
+        assert_relative_eq!(
+            var_axis0
+                .get(&[0])
+                .expect("test: var_axis0 element access should succeed"),
+            2.25,
+            epsilon = 1e-10
+        );
 
         // Check std_axis1 with more lenient checks to accommodate implementation differences
-        let std_axis1 = array.std_axis(Some(1)).unwrap();
+        let std_axis1 = array
+            .std_axis(Some(1))
+            .expect("test: std_axis(Some(1)) should succeed");
         assert_eq!(std_axis1.shape(), vec![2]);
 
         // The expected variance for [1,2,3] is 1.0 or 0.816496 depending on whether we use
         // population or sample variance (n vs n-1 denominator)
-        let std_row1 = std_axis1.get(&[0]).unwrap();
+        let std_row1 = std_axis1
+            .get(&[0])
+            .expect("test: std_axis1[0] access should succeed");
         assert!(
             std_row1 > 0.8 && std_row1 < 1.1,
             "std_row1 ({}) should be approximately 1.0 or 0.82",
             std_row1
         );
 
-        let std_row2 = std_axis1.get(&[1]).unwrap();
+        let std_row2 = std_axis1
+            .get(&[1])
+            .expect("test: std_axis1[1] access should succeed");
         assert!(
             std_row2 > 0.8 && std_row2 < 1.1,
             "std_row2 ({}) should be approximately 1.0 or 0.82",
@@ -1290,14 +1385,23 @@ mod tests {
 
         // Test mutable view
         let mut view_mut = a.view_mut();
-        view_mut.set(&[0, 0], 10.0).unwrap();
-        assert_eq!(a.get(&[0, 0]).unwrap(), 10.0);
+        view_mut
+            .set(&[0, 0], 10.0)
+            .expect("test: view_mut set should succeed");
+        assert_eq!(
+            a.get(&[0, 0])
+                .expect("test: get after view_mut set should succeed"),
+            10.0
+        );
 
         // Reset for the next tests
-        a.set(&[0, 0], 1.0).unwrap();
+        a.set(&[0, 0], 1.0)
+            .expect("test: reset value should succeed");
 
         // Test strided view - every other element
-        let strided = a.strided_view(&[2, 2]).unwrap();
+        let strided = a
+            .strided_view(&[2, 2])
+            .expect("test: strided_view should succeed");
         assert_eq!(strided.shape(), vec![2, 2]);
         let flat_data = strided.to_vec();
         assert!(flat_data.contains(&1.0));
@@ -1310,7 +1414,9 @@ mod tests {
             SliceOrIndex::Slice(0, Some(2), None),
             SliceOrIndex::Slice(0, Some(2), None),
         ];
-        let sliced = a.sliced_view(&slices).unwrap();
+        let sliced = a
+            .sliced_view(&slices)
+            .expect("test: sliced_view should succeed");
         assert_eq!(sliced.shape(), vec![2, 2]);
         assert_eq!(sliced.to_vec(), vec![1.0, 2.0, 4.0, 5.0]);
 
@@ -1319,14 +1425,36 @@ mod tests {
         assert_eq!(transposed.shape(), vec![3, 3]);
         let _t_flat = transposed.to_vec();
         // Checking some specific values
-        assert_eq!(transposed.get(&[0, 1]).unwrap(), 4.0);
-        assert_eq!(transposed.get(&[1, 0]).unwrap(), 2.0);
+        assert_eq!(
+            transposed
+                .get(&[0, 1])
+                .expect("test: transposed get [0,1] should succeed"),
+            4.0
+        );
+        assert_eq!(
+            transposed
+                .get(&[1, 0])
+                .expect("test: transposed get [1,0] should succeed"),
+            2.0
+        );
 
         // Test broadcast view
-        let broadcast = a.broadcast_view(&[3, 3, 3]).unwrap();
+        let broadcast = a
+            .broadcast_view(&[3, 3, 3])
+            .expect("test: broadcast_view should succeed");
         assert_eq!(broadcast.shape(), vec![3, 3, 3]);
-        assert_eq!(broadcast.get(&[0, 0, 0]).unwrap(), 1.0);
-        assert_eq!(broadcast.get(&[1, 0, 0]).unwrap(), 1.0);
+        assert_eq!(
+            broadcast
+                .get(&[0, 0, 0])
+                .expect("test: broadcast get [0,0,0] should succeed"),
+            1.0
+        );
+        assert_eq!(
+            broadcast
+                .get(&[1, 0, 0])
+                .expect("test: broadcast get [1,0,0] should succeed"),
+            1.0
+        );
     }
 
     #[test]
@@ -1338,22 +1466,22 @@ mod tests {
         let b = Array::<f64>::from_vec(vec![5.0, 6.0, 7.0, 8.0]);
 
         // Test binary ufuncs
-        let result = add(&a, &b).unwrap();
+        let result = add(&a, &b).expect("test: ufunc add should succeed");
         assert_eq!(result.to_vec(), vec![6.0, 8.0, 10.0, 12.0]);
 
-        let result = subtract(&a, &b).unwrap();
+        let result = subtract(&a, &b).expect("test: ufunc subtract should succeed");
         assert_eq!(result.to_vec(), vec![-4.0, -4.0, -4.0, -4.0]);
 
-        let result = multiply(&a, &b).unwrap();
+        let result = multiply(&a, &b).expect("test: ufunc multiply should succeed");
         assert_eq!(result.to_vec(), vec![5.0, 12.0, 21.0, 32.0]);
 
-        let result = divide(&a, &b).unwrap();
+        let result = divide(&a, &b).expect("test: ufunc divide should succeed");
         assert_relative_eq!(result.to_vec()[0], 0.2, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[1], 1.0 / 3.0, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[2], 3.0 / 7.0, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[3], 0.5, epsilon = 1e-10);
 
-        let result = power(&a, &b).unwrap();
+        let result = power(&a, &b).expect("test: ufunc power should succeed");
         assert_relative_eq!(result.to_vec()[0], 1.0, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[1], 64.0, epsilon = 1e-10);
         assert_relative_eq!(result.to_vec()[2], 2187.0, epsilon = 1e-10);
@@ -1392,7 +1520,7 @@ mod tests {
         // Test broadcasting with binary operations
         let row = Array::<f64>::from_vec(vec![10.0, 20.0]).reshape(&[1, 2]);
         let col = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]).reshape(&[3, 1]);
-        let result = add(&row, &col).unwrap();
+        let result = add(&row, &col).expect("test: ufunc add with broadcasting should succeed");
         assert_eq!(result.shape(), vec![3, 2]);
         assert_eq!(result.to_vec(), vec![11.0, 21.0, 12.0, 22.0, 13.0, 23.0]);
     }

@@ -134,7 +134,9 @@ impl StableDecompositions {
 
         // Estimate rank based on diagonal elements
         let eps = T::epsilon();
-        let threshold = eps * <T as num_traits::NumCast>::from(m.max(n)).unwrap() * r_diag_max;
+        let threshold = eps
+            * <T as num_traits::NumCast>::from(m.max(n)).unwrap_or_else(|| T::one())
+            * r_diag_max;
         let mut rank = 0;
 
         for i in 0..min_mn {
@@ -391,7 +393,11 @@ impl StableDecompositions {
 
         // Sort singular values in descending order
         let mut indices: Vec<usize> = (0..singular_values.len()).collect();
-        indices.sort_by(|&i, &j| singular_values[j].partial_cmp(&singular_values[i]).unwrap());
+        indices.sort_by(|&i, &j| {
+            singular_values[j]
+                .partial_cmp(&singular_values[i])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut s_sorted = Vec::with_capacity(singular_values.len());
         let mut vt_cols = Vec::with_capacity(n);
@@ -443,7 +449,8 @@ impl StableDecompositions {
         };
 
         let eps = T::epsilon();
-        let threshold = eps * <T as num_traits::NumCast>::from(m.max(n)).unwrap() * s_max;
+        let threshold =
+            eps * <T as num_traits::NumCast>::from(m.max(n)).unwrap_or_else(|| T::one()) * s_max;
         let rank = s_sorted.iter().take_while(|&&s| s > threshold).count();
 
         Ok(SVDStableResult {
@@ -516,10 +523,12 @@ impl StableDecompositions {
 
             let trace = a11 + a22;
             let det = a11 * a22 - a12 * a12;
-            let discriminant = (trace * trace - T::from(4.0).unwrap() * det).sqrt();
+            let four = T::from(4.0).expect("Failed to convert 4.0 to type T");
+            let two = T::from(2.0).expect("Failed to convert 2.0 to type T");
+            let discriminant = (trace * trace - four * det).sqrt();
 
-            let lambda1 = (trace + discriminant) / T::from(2.0).unwrap();
-            let lambda2 = (trace - discriminant) / T::from(2.0).unwrap();
+            let lambda1 = (trace + discriminant) / two;
+            let lambda2 = (trace - discriminant) / two;
 
             // Compute eigenvectors
             let mut eigenvectors = Array::zeros(&[2, 2]);
@@ -609,7 +618,7 @@ impl StableDecompositions {
             return Ok((v, T::zero()));
         }
 
-        let beta = T::from(2.0).unwrap() / v_norm_sq;
+        let beta = T::from(2.0).expect("Failed to convert 2.0 to type T") / v_norm_sq;
 
         // Don't normalize v - it should remain as computed
         Ok((v, beta))
@@ -754,7 +763,7 @@ mod tests {
     fn test_qr_pivoted() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
-        let result = StableDecompositions::qr_pivoted(&a).unwrap();
+        let result = StableDecompositions::qr_pivoted(&a).expect("QR pivoted should succeed");
 
         // Verify dimensions
         assert_eq!(result.q.shape(), vec![2, 2]);
@@ -762,13 +771,18 @@ mod tests {
         assert_eq!(result.p.shape(), vec![3]);
 
         // Verify Q is orthogonal (Q^T * Q = I)
-        let qt = StableDecompositions::transpose(&result.q).unwrap();
-        let qtq = StableDecompositions::matrix_multiply(&qt, &result.q).unwrap();
+        let qt = StableDecompositions::transpose(&result.q).expect("transpose should succeed");
+        let qtq = StableDecompositions::matrix_multiply(&qt, &result.q)
+            .expect("matrix multiply should succeed");
 
         for i in 0..2 {
             for j in 0..2 {
                 let expected = if i == j { 1.0 } else { 0.0 };
-                assert_relative_eq!(qtq.get(&[i, j]).unwrap(), expected, epsilon = 1e-10);
+                assert_relative_eq!(
+                    qtq.get(&[i, j]).expect("valid index"),
+                    expected,
+                    epsilon = 1e-10
+                );
             }
         }
     }
@@ -778,20 +792,21 @@ mod tests {
         // Create a positive definite matrix
         let a = Array::from_vec(vec![4.0, 2.0, 2.0, 3.0]).reshape(&[2, 2]);
 
-        let result = StableDecompositions::cholesky_stable(&a).unwrap();
+        let result = StableDecompositions::cholesky_stable(&a).expect("Cholesky should succeed");
 
         assert!(result.is_positive_definite);
         assert!(!result.pivoting_used);
 
         // Verify L * L^T = A
-        let lt = StableDecompositions::transpose(&result.l).unwrap();
-        let llt = StableDecompositions::matrix_multiply(&result.l, &lt).unwrap();
+        let lt = StableDecompositions::transpose(&result.l).expect("transpose should succeed");
+        let llt = StableDecompositions::matrix_multiply(&result.l, &lt)
+            .expect("matrix multiply should succeed");
 
         for i in 0..2 {
             for j in 0..2 {
                 assert_relative_eq!(
-                    llt.get(&[i, j]).unwrap(),
-                    a.get(&[i, j]).unwrap(),
+                    llt.get(&[i, j]).expect("valid index"),
+                    a.get(&[i, j]).expect("valid index"),
                     epsilon = 1e-10
                 );
             }
@@ -802,15 +817,15 @@ mod tests {
     fn test_symmetric_eigendecomposition_2x2() {
         let a = Array::from_vec(vec![3.0, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
 
-        let (eigenvalues, eigenvectors) =
-            StableDecompositions::symmetric_eigendecomposition(&a).unwrap();
+        let (eigenvalues, eigenvectors) = StableDecompositions::symmetric_eigendecomposition(&a)
+            .expect("eigendecomposition should succeed");
 
         assert_eq!(eigenvalues.len(), 2);
         assert_eq!(eigenvectors.shape(), vec![2, 2]);
 
         // For this matrix, eigenvalues should be 4 and 2
         let mut sorted_eigenvalues = eigenvalues.clone();
-        sorted_eigenvalues.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        sorted_eigenvalues.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
 
         assert_relative_eq!(sorted_eigenvalues[0], 4.0, epsilon = 1e-10);
         assert_relative_eq!(sorted_eigenvalues[1], 2.0, epsilon = 1e-10);
@@ -820,7 +835,7 @@ mod tests {
     fn test_svd_stable_small() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
-        let result = StableDecompositions::svd_stable(&a).unwrap();
+        let result = StableDecompositions::svd_stable(&a).expect("SVD should succeed");
 
         // Verify dimensions
         assert_eq!(result.u.shape(), vec![2, 2]);
@@ -836,13 +851,15 @@ mod tests {
     #[test]
     fn test_householder_vector() {
         let x = vec![1.0, 2.0, 3.0];
-        let (v, beta) = StableDecompositions::householder_vector(&x).unwrap();
+        let (v, beta) =
+            StableDecompositions::householder_vector(&x).expect("householder should succeed");
 
         assert_eq!(v.len(), 3);
         assert!(beta >= 0.0);
 
         // Verify that applying the Householder reflection gives correct result
-        let result = StableDecompositions::apply_householder(&x, &v, beta).unwrap();
+        let result = StableDecompositions::apply_householder(&x, &v, beta)
+            .expect("apply householder should succeed");
 
         // First component should have the opposite sign and same magnitude as original norm
         let x_norm = (1.0 + 4.0 + 9.0_f64).sqrt();

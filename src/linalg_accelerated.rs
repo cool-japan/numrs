@@ -138,7 +138,7 @@ fn linalg_to_numrs2_error(e: LinalgError) -> NumRs2Error {
 ///
 /// let x = Array::from_vec(vec![1.0f64, 2.0, 3.0]);
 /// let y = Array::from_vec(vec![4.0f64, 5.0, 6.0]);
-/// let result = dot(&x, &y).unwrap();
+/// let result = dot(&x, &y).expect("dot product should succeed");
 /// assert!((result - 32.0f64).abs() < 1e-10);
 /// ```
 pub fn dot<T>(x: &Array<T>, y: &Array<T>) -> Result<T>
@@ -287,7 +287,7 @@ where
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-/// let c = matmul(&a, &b).unwrap();
+/// let c = matmul(&a, &b).expect("matmul should succeed");
 /// // c = [[19, 22], [43, 50]]
 /// ```
 pub fn matmul<T>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>>
@@ -671,7 +671,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0f64, 2.0, 3.0]);
         let y = Array::from_vec(vec![4.0f64, 5.0, 6.0]);
 
-        let result = dot(&x, &y).unwrap();
+        let result = dot(&x, &y).expect("dot product should succeed");
         assert_relative_eq!(result, 32.0, epsilon = 1e-10);
     }
 
@@ -679,7 +679,7 @@ mod tests {
     fn test_norm() {
         let x = Array::from_vec(vec![3.0f64, 4.0]);
 
-        let result = norm(&x).unwrap();
+        let result = norm(&x).expect("norm should succeed");
         assert_relative_eq!(result, 5.0, epsilon = 1e-10);
     }
 
@@ -688,13 +688,13 @@ mod tests {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 
-        let c = matmul(&a, &b).unwrap();
+        let c = matmul(&a, &b).expect("matmul should succeed");
 
         // Expected: [[19, 22], [43, 50]]
-        assert_relative_eq!(c.get(&[0, 0]).unwrap(), 19.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[0, 1]).unwrap(), 22.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 0]).unwrap(), 43.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 1]).unwrap(), 50.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 0]).expect("valid index"), 19.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 1]).expect("valid index"), 22.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 0]).expect("valid index"), 43.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 1]).expect("valid index"), 50.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -702,11 +702,11 @@ mod tests {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
         let x = Array::from_vec(vec![1.0f64, 2.0]);
 
-        let y = matvec(&a, &x).unwrap();
+        let y = matvec(&a, &x).expect("matvec should succeed");
 
         // Expected: [5, 11]
-        assert_relative_eq!(y.get(&[0]).unwrap(), 5.0, epsilon = 1e-10);
-        assert_relative_eq!(y.get(&[1]).unwrap(), 11.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[0]).expect("valid index"), 5.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[1]).expect("valid index"), 11.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -716,32 +716,48 @@ mod tests {
         let a = Array::from_vec(vec![2.0f64, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
         let b = Array::from_vec(vec![5.0f64, 6.0]);
 
-        let x = solve(&a, &b).unwrap();
+        let x = solve(&a, &b).expect("solve should succeed");
 
-        assert_relative_eq!(x.get(&[0]).unwrap(), 1.8, epsilon = 1e-10);
-        assert_relative_eq!(x.get(&[1]).unwrap(), 1.4, epsilon = 1e-10);
+        assert_relative_eq!(x.get(&[0]).expect("valid index"), 1.8, epsilon = 1e-10);
+        assert_relative_eq!(x.get(&[1]).expect("valid index"), 1.4, epsilon = 1e-10);
     }
 
     #[test]
     fn test_inv() {
         let a = Array::from_vec(vec![4.0f64, 7.0, 2.0, 6.0]).reshape(&[2, 2]);
 
-        let a_inv = inv(&a).unwrap();
+        let a_inv = inv(&a).expect("inverse should succeed");
 
         // A * A^-1 should be identity
-        let identity = matmul(&a, &a_inv).unwrap();
+        let identity = matmul(&a, &a_inv).expect("matmul should succeed");
 
-        assert_relative_eq!(identity.get(&[0, 0]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(identity.get(&[0, 1]).unwrap(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(identity.get(&[1, 0]).unwrap(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(identity.get(&[1, 1]).unwrap(), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            identity.get(&[0, 0]).expect("valid index"),
+            1.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            identity.get(&[0, 1]).expect("valid index"),
+            0.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            identity.get(&[1, 0]).expect("valid index"),
+            0.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            identity.get(&[1, 1]).expect("valid index"),
+            1.0,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
     fn test_det() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
-        let d = det(&a).unwrap();
+        let d = det(&a).expect("determinant should succeed");
 
         // det([[1, 2], [3, 4]]) = 1*4 - 2*3 = -2
         assert_relative_eq!(d, -2.0, epsilon = 1e-10);
@@ -751,22 +767,46 @@ mod tests {
     fn test_qr() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
-        let (q, r) = qr(&a).unwrap();
+        let (q, r) = qr(&a).expect("QR decomposition should succeed");
 
         // Q should be orthogonal: Q * Q^T = I
         let q_t = q.transpose();
-        let identity = matmul(&q, &q_t).unwrap();
+        let identity = matmul(&q, &q_t).expect("matmul should succeed");
 
-        assert_relative_eq!(identity.get(&[0, 0]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(identity.get(&[1, 1]).unwrap(), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            identity.get(&[0, 0]).expect("valid index"),
+            1.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            identity.get(&[1, 1]).expect("valid index"),
+            1.0,
+            epsilon = 1e-10
+        );
 
         // A = Q * R
-        let reconstructed = matmul(&q, &r).unwrap();
+        let reconstructed = matmul(&q, &r).expect("matmul should succeed");
 
-        assert_relative_eq!(reconstructed.get(&[0, 0]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(reconstructed.get(&[0, 1]).unwrap(), 2.0, epsilon = 1e-10);
-        assert_relative_eq!(reconstructed.get(&[1, 0]).unwrap(), 3.0, epsilon = 1e-10);
-        assert_relative_eq!(reconstructed.get(&[1, 1]).unwrap(), 4.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            reconstructed.get(&[0, 0]).expect("valid index"),
+            1.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            reconstructed.get(&[0, 1]).expect("valid index"),
+            2.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            reconstructed.get(&[1, 0]).expect("valid index"),
+            3.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            reconstructed.get(&[1, 1]).expect("valid index"),
+            4.0,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
@@ -774,16 +814,32 @@ mod tests {
         // Symmetric positive-definite matrix
         let a = Array::from_vec(vec![4.0f64, 2.0, 2.0, 3.0]).reshape(&[2, 2]);
 
-        let l = cholesky(&a).unwrap();
+        let l = cholesky(&a).expect("Cholesky decomposition should succeed");
 
         // L * L^T should equal A
         let l_t = l.transpose();
-        let reconstructed = matmul(&l, &l_t).unwrap();
+        let reconstructed = matmul(&l, &l_t).expect("matmul should succeed");
 
-        assert_relative_eq!(reconstructed.get(&[0, 0]).unwrap(), 4.0, epsilon = 1e-10);
-        assert_relative_eq!(reconstructed.get(&[0, 1]).unwrap(), 2.0, epsilon = 1e-10);
-        assert_relative_eq!(reconstructed.get(&[1, 0]).unwrap(), 2.0, epsilon = 1e-10);
-        assert_relative_eq!(reconstructed.get(&[1, 1]).unwrap(), 3.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            reconstructed.get(&[0, 0]).expect("valid index"),
+            4.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            reconstructed.get(&[0, 1]).expect("valid index"),
+            2.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            reconstructed.get(&[1, 0]).expect("valid index"),
+            2.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            reconstructed.get(&[1, 1]).expect("valid index"),
+            3.0,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
@@ -791,11 +847,11 @@ mod tests {
         // Symmetric matrix
         let a = Array::from_vec(vec![2.0f64, 1.0, 1.0, 2.0]).reshape(&[2, 2]);
 
-        let (eigenvalues, eigenvectors) = eigh(&a).unwrap();
+        let (eigenvalues, _eigenvectors) = eigh(&a).expect("eigendecomposition should succeed");
 
         // Eigenvalues should be 1 and 3
         let mut eigs = eigenvalues.to_vec();
-        eigs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        eigs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         assert_relative_eq!(eigs[0], 1.0, epsilon = 1e-10);
         assert_relative_eq!(eigs[1], 3.0, epsilon = 1e-10);
@@ -807,11 +863,11 @@ mod tests {
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
         let mut c = Array::zeros(&[2, 2]);
 
-        AcceleratedBlas::gemm(&a, &b, &mut c, 1.0, 0.0, false, false).unwrap();
+        AcceleratedBlas::gemm(&a, &b, &mut c, 1.0, 0.0, false, false).expect("gemm should succeed");
 
-        assert_relative_eq!(c.get(&[0, 0]).unwrap(), 19.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[0, 1]).unwrap(), 22.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 0]).unwrap(), 43.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 1]).unwrap(), 50.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 0]).expect("valid index"), 19.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 1]).expect("valid index"), 22.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 0]).expect("valid index"), 43.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 1]).expect("valid index"), 50.0, epsilon = 1e-10);
     }
 }

@@ -7,6 +7,13 @@ use super::shape_manipulation::MemoryLayout;
 use std::collections::HashMap;
 
 /// Advanced stride calculator with optimization capabilities
+///
+/// CACHE ALIGNMENT: Aligned to 64-byte cache lines for optimal cache performance.
+/// The stride_cache HashMap is a hot data structure accessed frequently during
+/// array operations. Cache alignment minimizes cache misses and improves lookup
+/// performance, especially in multi-threaded scenarios where different threads
+/// may access different stride calculations.
+#[repr(align(64))]
 pub struct StrideCalculator {
     /// Cache for computed optimal strides
     stride_cache: HashMap<StrideKey, Vec<usize>>,

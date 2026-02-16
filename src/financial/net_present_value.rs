@@ -35,7 +35,7 @@ use std::fmt::Debug;
 ///
 /// // Calculate NPV for an investment
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0, 600.0]);
-/// let result = npv(0.1, &cash_flows).unwrap();
+/// let result = npv(0.1, &cash_flows).expect("npv calculation failed");
 /// assert!((result - 388.77_f64).abs() < 0.01);
 /// ```
 pub fn npv<T>(rate: T, values: &Array<T>) -> Result<T>
@@ -85,7 +85,8 @@ where
             npv_value = npv_value + cash_flow;
         } else {
             // Discount future cash flows
-            let discount_factor = one_plus_rate.powf(T::from(i).unwrap());
+            let discount_factor =
+                one_plus_rate.powf(T::from(i).expect("Failed to convert index to type T"));
             if discount_factor.is_zero() {
                 return Err(NumRs2Error::ComputationError(
                     "Discount factor became zero (rate too negative)".to_string(),
@@ -116,7 +117,7 @@ where
 ///
 /// let rates = Array::from_vec(vec![0.05, 0.10, 0.15]);
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
-/// let result = npv_rates(&rates, &cash_flows).unwrap();
+/// let result = npv_rates(&rates, &cash_flows).expect("npv_rates calculation failed");
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
 pub fn npv_rates<T>(rates: &Array<T>, values: &Array<T>) -> Result<Array<T>>
@@ -155,7 +156,7 @@ where
 ///     -1000.0, 300.0, 400.0, 500.0,  // Project 1
 ///     -1200.0, 400.0, 500.0, 600.0   // Project 2
 /// ]).reshape(&[2, 4]);
-/// let result = npv_multiple_series(0.1, &cash_flows).unwrap();
+/// let result = npv_multiple_series(0.1, &cash_flows).expect("npv_multiple_series calculation failed");
 /// assert_eq!(result.shape(), vec![2]);
 /// ```
 pub fn npv_multiple_series<T>(rate: T, values_matrix: &Array<T>) -> Result<Array<T>>
@@ -197,7 +198,7 @@ mod tests {
     fn test_npv_basic() {
         // Test basic NPV calculation
         let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0, 600.0]);
-        let result = npv(0.1, &cash_flows).unwrap();
+        let result = npv(0.1, &cash_flows).expect("npv calculation should succeed");
         assert_relative_eq!(result, 388.771259, epsilon = 1e-5);
     }
 
@@ -205,7 +206,7 @@ mod tests {
     fn test_npv_zero_rate() {
         // Test NPV with zero discount rate
         let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
-        let result = npv(0.0, &cash_flows).unwrap();
+        let result = npv(0.0, &cash_flows).expect("npv calculation should succeed");
         assert_relative_eq!(result, 200.0, epsilon = 1e-9);
     }
 
@@ -213,7 +214,7 @@ mod tests {
     fn test_npv_negative_rate() {
         // Test NPV with negative discount rate
         let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0]);
-        let result = npv(-0.05, &cash_flows).unwrap();
+        let result = npv(-0.05, &cash_flows).expect("npv calculation should succeed");
         // With negative rate, future cash flows are discounted at negative rate
         // Expected: -1000 + 300/0.95 + 400/0.95^2 = -240.997
         assert_relative_eq!(result, -240.997230, epsilon = 1e-5);
@@ -223,7 +224,7 @@ mod tests {
     fn test_npv_single_cash_flow() {
         // Test NPV with only initial investment
         let cash_flows = Array::from_vec(vec![-1000.0]);
-        let result = npv(0.1, &cash_flows).unwrap();
+        let result = npv(0.1, &cash_flows).expect("npv calculation should succeed");
         assert_relative_eq!(result, -1000.0, epsilon = 1e-9);
     }
 
@@ -231,7 +232,7 @@ mod tests {
     fn test_npv_positive_initial() {
         // Test NPV with positive initial cash flow
         let cash_flows = Array::from_vec(vec![1000.0, -300.0, -400.0, -500.0]);
-        let result = npv(0.1, &cash_flows).unwrap();
+        let result = npv(0.1, &cash_flows).expect("npv calculation should succeed");
         // Expected: 1000 - 300/1.1 - 400/1.1^2 - 500/1.1^3 = 21.037
         assert_relative_eq!(result, 21.036814, epsilon = 1e-5);
     }
@@ -240,7 +241,7 @@ mod tests {
     fn test_npv_rates() {
         let rates = Array::from_vec(vec![0.05, 0.10, 0.15]);
         let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
-        let result = npv_rates(&rates, &cash_flows).unwrap();
+        let result = npv_rates(&rates, &cash_flows).expect("npv_rates calculation should succeed");
         assert_eq!(result.shape(), vec![3]);
 
         let values = result.to_vec();
@@ -256,7 +257,8 @@ mod tests {
             -1200.0, 400.0, 500.0, 600.0, // Project 2
         ])
         .reshape(&[2, 4]);
-        let result = npv_multiple_series(0.1, &cash_flows).unwrap();
+        let result = npv_multiple_series(0.1, &cash_flows)
+            .expect("npv_multiple_series calculation should succeed");
         assert_eq!(result.shape(), vec![2]);
 
         let values = result.to_vec();

@@ -10,6 +10,7 @@
 use std::arch::aarch64::*;
 
 /// Represents CPU features relevant for SIMD optimization
+#[repr(align(64))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CpuFeatures {
     /// SSE2 support (x86_64)

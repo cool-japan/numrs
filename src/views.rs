@@ -27,7 +27,7 @@ use std::ops::{Add, Div, Mul, Sub};
 /// let col_slice = SliceOrIndex::Slice(0, None, None);
 ///
 /// // Combined to get view of first row
-/// let sliced = array.sliced_view(&[row_slice, col_slice]).unwrap();
+/// let sliced = array.sliced_view(&[row_slice, col_slice]).expect("sliced_view should succeed");
 /// // Size differs based on implementation, so we don't assert shape
 /// ```
 #[derive(Debug, Clone)]
@@ -88,7 +88,7 @@ impl SliceOrIndex {
 /// let view = array.view();
 ///
 /// // Use the view for read-only operations
-/// assert_eq!(view.get(&[0, 0]).unwrap(), 1.0);
+/// assert_eq!(view.get(&[0, 0]).expect("get should succeed"), 1.0);
 /// assert_eq!(view.shape(), vec![2, 2]);
 /// ```
 pub struct ArrayView<'a, T> {
@@ -119,10 +119,10 @@ pub struct ArrayView<'a, T> {
 /// let mut view_mut = array.view_mut();
 ///
 /// // Modify the array through the view
-/// view_mut.set(&[0, 0], 10.0).unwrap();
+/// view_mut.set(&[0, 0], 10.0).expect("set should succeed");
 ///
 /// // The change is reflected in the original array
-/// assert_eq!(array.get(&[0, 0]).unwrap(), 10.0);
+/// assert_eq!(array.get(&[0, 0]).expect("get should succeed"), 10.0);
 /// ```
 pub struct ArrayViewMut<'a, T> {
     data: NdArrayViewMut<'a, T, IxDyn>,
@@ -310,8 +310,8 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     /// //           [3, 4]
     /// // Transposed: [1, 3]
     /// //             [2, 4]
-    /// assert_eq!(transposed.get(&[0, 1]).unwrap(), 3);
-    /// assert_eq!(transposed.get(&[1, 0]).unwrap(), 2);
+    /// assert_eq!(transposed.get(&[0, 1]).expect("get [0,1] should succeed"), 3);
+    /// assert_eq!(transposed.get(&[1, 0]).expect("get [1,0] should succeed"), 2);
     /// ```
     pub fn t(&'a self) -> ArrayView<'a, T> {
         let transposed = self.data.t();
@@ -362,8 +362,8 @@ impl<'a, T: 'a> ArrayView<'a, T> {
     /// let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
     /// let view = array.view();
     ///
-    /// assert_eq!(view.get(&[0, 0]).unwrap(), 1);
-    /// assert_eq!(view.get(&[1, 1]).unwrap(), 4);
+    /// assert_eq!(view.get(&[0, 0]).expect("get [0,0] should succeed"), 1);
+    /// assert_eq!(view.get(&[1, 1]).expect("get [1,1] should succeed"), 4);
     ///
     /// // Error: wrong number of indices
     /// assert!(view.get(&[0]).is_err());
@@ -730,11 +730,11 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     /// let mut view_mut = array.view_mut();
     ///
     /// // Get and modify an element
-    /// let element = view_mut.get_mut(&[0, 0]).unwrap();
+    /// let element = view_mut.get_mut(&[0, 0]).expect("get_mut should succeed");
     /// *element = 10;
     ///
     /// // The change is reflected in the original array
-    /// assert_eq!(array.get(&[0, 0]).unwrap(), 10);
+    /// assert_eq!(array.get(&[0, 0]).expect("get should succeed"), 10);
     /// ```
     pub fn get_mut(&mut self, indices: &[usize]) -> Result<&mut T> {
         if indices.len() != self.ndim() {
@@ -780,10 +780,10 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     /// let mut view_mut = array.view_mut();
     ///
     /// // Set an element value
-    /// view_mut.set(&[0, 1], 20).unwrap();
+    /// view_mut.set(&[0, 1], 20).expect("set should succeed");
     ///
     /// // The change is reflected in the original array
-    /// assert_eq!(array.get(&[0, 1]).unwrap(), 20);
+    /// assert_eq!(array.get(&[0, 1]).expect("get should succeed"), 20);
     /// ```
     pub fn set(&mut self, indices: &[usize], value: T) -> Result<()>
     where
@@ -829,10 +829,10 @@ impl<'a, T: 'a> ArrayViewMut<'a, T> {
     /// let mut row_view = view_mut.slice_axis_mut(Axis(0), Slice::from(0..1));
     ///
     /// // Modify an element in the row view
-    /// row_view.set(&[0, 1], 20).unwrap();
+    /// row_view.set(&[0, 1], 20).expect("set should succeed");
     ///
     /// // The change is reflected in the original array
-    /// assert_eq!(array.get(&[0, 1]).unwrap(), 20);
+    /// assert_eq!(array.get(&[0, 1]).expect("get should succeed"), 20);
     /// ```
     pub fn slice_axis_mut(&mut self, axis: Axis, indices: Slice) -> ArrayViewMut<'_, T> {
         let sliced = self.data.slice_axis_mut(axis, indices);
@@ -1270,7 +1270,7 @@ impl<T: Clone> Array<T> {
     /// let view = array.view();
     ///
     /// // Use the view to access elements
-    /// assert_eq!(view.get(&[0, 0]).unwrap(), 1);
+    /// assert_eq!(view.get(&[0, 0]).expect("get should succeed"), 1);
     /// assert_eq!(view.shape(), vec![2, 2]);
     /// ```
     pub fn view(&self) -> ArrayView<'_, T> {
@@ -1296,10 +1296,10 @@ impl<T: Clone> Array<T> {
     /// let mut view_mut = array.view_mut();
     ///
     /// // Modify the array through the view
-    /// view_mut.set(&[0, 0], 10).unwrap();
+    /// view_mut.set(&[0, 0], 10).expect("set should succeed");
     ///
     /// // The change is reflected in the original array
-    /// assert_eq!(array.get(&[0, 0]).unwrap(), 10);
+    /// assert_eq!(array.get(&[0, 0]).expect("get should succeed"), 10);
     /// ```
     pub fn view_mut(&mut self) -> ArrayViewMut<'_, T> {
         ArrayViewMut::from_ndarray_view_mut(self.array_mut().view_mut())
@@ -1328,14 +1328,14 @@ impl<T: Clone> Array<T> {
     /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
     ///
     /// // Create a view with stride 2 in both dimensions (every other element)
-    /// let strided = array.strided_view(&[2, 2]).unwrap();
+    /// let strided = array.strided_view(&[2, 2]).expect("strided_view should succeed");
     /// assert_eq!(strided.shape(), vec![2, 2]);
     ///
     /// // The view should contain elements at [0,0], [0,2], [2,0], and [2,2]
-    /// assert_eq!(strided.get(&[0, 0]).unwrap(), 1);
-    /// assert_eq!(strided.get(&[0, 1]).unwrap(), 3);
-    /// assert_eq!(strided.get(&[1, 0]).unwrap(), 7);
-    /// assert_eq!(strided.get(&[1, 1]).unwrap(), 9);
+    /// assert_eq!(strided.get(&[0, 0]).expect("get [0,0] should succeed"), 1);
+    /// assert_eq!(strided.get(&[0, 1]).expect("get [0,1] should succeed"), 3);
+    /// assert_eq!(strided.get(&[1, 0]).expect("get [1,0] should succeed"), 7);
+    /// assert_eq!(strided.get(&[1, 1]).expect("get [1,1] should succeed"), 9);
     /// ```
     pub fn strided_view(&self, strides: &[isize]) -> Result<Array<T>>
     where
@@ -1416,7 +1416,7 @@ impl<T: Clone> Array<T> {
     ///     SliceOrIndex::Slice(0, None, None)      // all columns
     /// ];
     ///
-    /// let sliced = array.sliced_view(&slices).unwrap();
+    /// let sliced = array.sliced_view(&slices).expect("sliced_view should succeed");
     /// // Shape and element order depend on implementation details
     /// ```
     pub fn sliced_view(&self, slices: &[SliceOrIndex]) -> Result<Array<T>>
@@ -1462,8 +1462,8 @@ impl<T: Clone> Array<T> {
     ///
     /// // Original: [1, 2]  Transposed: [1, 3]
     /// //           [3, 4]              [2, 4]
-    /// assert_eq!(transposed.get(&[0, 1]).unwrap(), 3);
-    /// assert_eq!(transposed.get(&[1, 0]).unwrap(), 2);
+    /// assert_eq!(transposed.get(&[0, 1]).expect("get [0,1] should succeed"), 3);
+    /// assert_eq!(transposed.get(&[1, 0]).expect("get [1,0] should succeed"), 2);
     /// ```
     pub fn transposed_view(&self) -> ArrayView<'_, T> {
         let transposed = self.array().view().reversed_axes();
@@ -1495,14 +1495,14 @@ impl<T: Clone> Array<T> {
     /// let array = Array::from_vec(vec![1, 2, 3]);
     ///
     /// // Broadcast to shape [3, 3] (repeat the array for each row)
-    /// let broadcasted = array.broadcast_view(&[3, 3]).unwrap();
+    /// let broadcasted = array.broadcast_view(&[3, 3]).expect("broadcast_view should succeed");
     /// assert_eq!(broadcasted.shape(), vec![3, 3]);
     ///
     /// // Each row should be [1, 2, 3]
-    /// assert_eq!(broadcasted.get(&[0, 0]).unwrap(), 1);
-    /// assert_eq!(broadcasted.get(&[0, 1]).unwrap(), 2);
-    /// assert_eq!(broadcasted.get(&[1, 0]).unwrap(), 1); // Same as row 0
-    /// assert_eq!(broadcasted.get(&[2, 2]).unwrap(), 3); // Last element
+    /// assert_eq!(broadcasted.get(&[0, 0]).expect("get [0,0] should succeed"), 1);
+    /// assert_eq!(broadcasted.get(&[0, 1]).expect("get [0,1] should succeed"), 2);
+    /// assert_eq!(broadcasted.get(&[1, 0]).expect("get [1,0] should succeed"), 1); // Same as row 0
+    /// assert_eq!(broadcasted.get(&[2, 2]).expect("get [2,2] should succeed"), 3); // Last element
     /// ```
     pub fn broadcast_view(&self, shape: &[usize]) -> Result<Array<T>>
     where
@@ -1533,7 +1533,7 @@ impl<T: Clone> Array<T> {
     /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
     ///
     /// // Create a view that takes every other element in each dimension
-    /// let view = array.strided_array_view(&[2, 2]).unwrap();
+    /// let view = array.strided_array_view(&[2, 2]).expect("strided_array_view should succeed");
     /// assert_eq!(view.shape(), &[2, 2]);
     /// assert_eq!(view.get(&[0, 0]), Some(&1));
     /// assert_eq!(view.get(&[0, 1]), Some(&3));
@@ -1603,7 +1603,7 @@ impl<T: Clone> Array<T> {
     /// use numrs2::prelude::*;
     ///
     /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-    /// let window_view = array.window_view(&[2, 2], None).unwrap();
+    /// let window_view = array.window_view(&[2, 2], None).expect("window_view should succeed");
     /// assert_eq!(window_view.shape(), vec![1, 2, 2, 2]);
     /// ```
     pub fn window_view(
@@ -1646,7 +1646,7 @@ impl<T: Clone> Array<T> {
     /// use numrs2::prelude::*;
     ///
     /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
-    /// let diag = array.diagonal_view(0).unwrap();
+    /// let diag = array.diagonal_view(0).expect("diagonal_view should succeed");
     /// assert_eq!(diag.len(), 3);
     /// assert_eq!(diag.to_vec(), vec![1, 5, 9]);
     /// ```
@@ -1732,7 +1732,7 @@ mod tests {
         let view = array.create_strided_view(vec![2, 3], vec![3, 1]);
 
         // Get first row
-        let row_view = view.subview(0, 0).unwrap();
+        let row_view = view.subview(0, 0).expect("test: subview should succeed");
         assert_eq!(row_view.shape(), &[3]);
         assert_eq!(row_view.get(&[0]), Some(&1));
         assert_eq!(row_view.get(&[1]), Some(&2));
@@ -1742,36 +1742,45 @@ mod tests {
     #[test]
     fn test_window_view_1d() {
         let data = vec![1, 2, 3, 4, 5];
-        let window_view = WindowView::new(&data, vec![5], vec![3], vec![1]).unwrap();
+        let window_view = WindowView::new(&data, vec![5], vec![3], vec![1])
+            .expect("test: WindowView creation should succeed");
 
         assert_eq!(window_view.shape(), vec![3, 3]);
         assert_eq!(window_view.n_windows(), &[3]);
 
         // First window: [1, 2, 3]
-        let win0 = window_view.get_window(&[0]).unwrap();
+        let win0 = window_view
+            .get_window(&[0])
+            .expect("test: get_window(0) should succeed");
         assert_eq!(win0, vec![1, 2, 3]);
 
         // Second window: [2, 3, 4]
-        let win1 = window_view.get_window(&[1]).unwrap();
+        let win1 = window_view
+            .get_window(&[1])
+            .expect("test: get_window(1) should succeed");
         assert_eq!(win1, vec![2, 3, 4]);
     }
 
     #[test]
     fn test_window_view_2d() {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let window_view = WindowView::new(&data, vec![3, 3], vec![2, 2], vec![1, 1]).unwrap();
+        let window_view = WindowView::new(&data, vec![3, 3], vec![2, 2], vec![1, 1])
+            .expect("test: 2D WindowView creation should succeed");
 
         assert_eq!(window_view.shape(), vec![2, 2, 2, 2]);
 
         // First window at (0, 0): top-left 2x2
-        let win = window_view.get_window(&[0, 0]).unwrap();
+        let win = window_view
+            .get_window(&[0, 0])
+            .expect("test: get_window([0,0]) should succeed");
         assert_eq!(win, vec![1, 2, 4, 5]);
     }
 
     #[test]
     fn test_diagonal_view_main_diagonal() {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let diag = DiagonalView::new(&data, 3, 3, 0).unwrap();
+        let diag = DiagonalView::new(&data, 3, 3, 0)
+            .expect("test: DiagonalView main diagonal should succeed");
 
         assert_eq!(diag.len(), 3);
         assert_eq!(diag.get(0), Some(&1));
@@ -1783,7 +1792,8 @@ mod tests {
     #[test]
     fn test_diagonal_view_upper_diagonal() {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let diag = DiagonalView::new(&data, 3, 3, 1).unwrap();
+        let diag = DiagonalView::new(&data, 3, 3, 1)
+            .expect("test: DiagonalView upper diagonal should succeed");
 
         assert_eq!(diag.len(), 2);
         assert_eq!(diag.to_vec(), vec![2, 6]);
@@ -1792,7 +1802,8 @@ mod tests {
     #[test]
     fn test_diagonal_view_lower_diagonal() {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let diag = DiagonalView::new(&data, 3, 3, -1).unwrap();
+        let diag = DiagonalView::new(&data, 3, 3, -1)
+            .expect("test: DiagonalView lower diagonal should succeed");
 
         assert_eq!(diag.len(), 2);
         assert_eq!(diag.to_vec(), vec![4, 8]);
@@ -1801,7 +1812,8 @@ mod tests {
     #[test]
     fn test_diagonal_view_iterator() {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let diag = DiagonalView::new(&data, 3, 3, 0).unwrap();
+        let diag = DiagonalView::new(&data, 3, 3, 0)
+            .expect("test: DiagonalView for iterator test should succeed");
 
         let collected: Vec<_> = diag.iter().copied().collect();
         assert_eq!(collected, vec![1, 5, 9]);

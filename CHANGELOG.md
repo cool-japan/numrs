@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-30
+
+### Changed
+- **COOLJAPAN Ecosystem Compliance**: Full compliance with COOLJAPAN pure Rust policies
+  - Replaced `numpy` dependency with `scirs2-numpy` (v0.1.3) for Python bindings
+  - Removed OpenBLAS linker flags from `.cargo/config.toml` (now using OxiBLAS pure Rust backend)
+  - Removed `cdylib` crate-type (Python extension builds handled by maturin)
+
+### Fixed
+- Fixed linking errors when building with `--all-features` due to openblas flags
+- Fixed Python symbol resolution issues in test builds
+
+### Dependencies
+- **scirs2-numpy**: v0.1.3 (replaces direct numpy dependency)
+- **SciRS2 Ecosystem**: scirs2-* v0.1.3 (latest stable releases)
+- All Python bindings now go through SciRS2 ecosystem
+
 ## [0.1.1] - 2025-12-30
 
 ### Added

@@ -833,7 +833,9 @@ mod tests {
 
         assert!(shape1.is_broadcastable_with(&shape2));
 
-        let broadcast_shape = shape1.broadcast_with(&shape2).unwrap();
+        let broadcast_shape = shape1
+            .broadcast_with(&shape2)
+            .expect("test: operation should succeed");
         assert_eq!(broadcast_shape.dims, vec![3, 2, 4]);
     }
 
@@ -862,11 +864,15 @@ mod tests {
         let shape = Shape::new(vec![2, 3, 4]);
 
         // Default transpose (reverse axes)
-        let transposed = shape.transpose(None).unwrap();
+        let transposed = shape
+            .transpose(None)
+            .expect("test: operation should succeed");
         assert_eq!(transposed.dims, vec![4, 3, 2]);
 
         // Custom transpose
-        let transposed = shape.transpose(Some(vec![1, 0, 2])).unwrap();
+        let transposed = shape
+            .transpose(Some(vec![1, 0, 2]))
+            .expect("test: operation should succeed");
         assert_eq!(transposed.dims, vec![3, 2, 4]);
     }
 
@@ -874,17 +880,17 @@ mod tests {
     fn test_index_spec_resolution() {
         // Test integer index
         let spec = IndexSpec::Int(2);
-        let resolved = spec.resolve(5).unwrap();
+        let resolved = spec.resolve(5).expect("test: operation should succeed");
         assert!(matches!(resolved, ResolvedIndex::Single(2)));
 
         // Test negative index
         let spec = IndexSpec::Int(-1);
-        let resolved = spec.resolve(5).unwrap();
+        let resolved = spec.resolve(5).expect("test: operation should succeed");
         assert!(matches!(resolved, ResolvedIndex::Single(4)));
 
         // Test slice
         let spec = IndexSpec::Slice(Some(1), Some(4), Some(2));
-        let resolved = spec.resolve(5).unwrap();
+        let resolved = spec.resolve(5).expect("test: operation should succeed");
         if let ResolvedIndex::Multiple(indices) = resolved {
             assert_eq!(indices, vec![1, 3]);
         } else {
@@ -896,65 +902,104 @@ mod tests {
     fn test_array_view_creation() {
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_2d(2, 3);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         assert_eq!(view.shape().dims, vec![2, 3]);
-        assert_eq!(view.get(&[0, 0]).unwrap(), &1);
-        assert_eq!(view.get(&[1, 2]).unwrap(), &6);
+        assert_eq!(
+            view.get(&[0, 0]).expect("test: operation should succeed"),
+            &1
+        );
+        assert_eq!(
+            view.get(&[1, 2]).expect("test: operation should succeed"),
+            &6
+        );
     }
 
     #[test]
     fn test_array_view_slicing() {
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
         let shape = Shape::new(vec![3, 4]);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         // Slice first row
         let row_slice = view
             .slice(&[IndexSpec::Int(0), IndexSpec::Slice(None, None, None)])
-            .unwrap();
+            .expect("test: operation should succeed");
         assert_eq!(row_slice.shape().dims, vec![4]);
-        assert_eq!(row_slice.get(&[0]).unwrap(), &1);
-        assert_eq!(row_slice.get(&[3]).unwrap(), &4);
+        assert_eq!(
+            row_slice.get(&[0]).expect("test: operation should succeed"),
+            &1
+        );
+        assert_eq!(
+            row_slice.get(&[3]).expect("test: operation should succeed"),
+            &4
+        );
     }
 
     #[test]
     fn test_array_view_transpose() {
         let data = vec![1, 2, 3, 4, 5, 6];
         let shape = Shape::from_2d(2, 3);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        let transposed = view.transpose(None).unwrap();
+        let transposed = view
+            .transpose(None)
+            .expect("test: operation should succeed");
         assert_eq!(transposed.shape().dims, vec![3, 2]);
-        assert_eq!(transposed.get(&[0, 0]).unwrap(), &1);
-        assert_eq!(transposed.get(&[2, 1]).unwrap(), &6);
+        assert_eq!(
+            transposed
+                .get(&[0, 0])
+                .expect("test: operation should succeed"),
+            &1
+        );
+        assert_eq!(
+            transposed
+                .get(&[2, 1])
+                .expect("test: operation should succeed"),
+            &6
+        );
     }
 
     #[test]
     fn test_array_view_iterator() {
         let data = vec![1, 2, 3, 4];
         let shape = Shape::from_2d(2, 2);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         // Test that we can access elements manually
-        assert_eq!(view.get(&[0, 0]).unwrap(), &1);
-        assert_eq!(view.get(&[0, 1]).unwrap(), &2);
-        assert_eq!(view.get(&[1, 0]).unwrap(), &3);
-        assert_eq!(view.get(&[1, 1]).unwrap(), &4);
+        assert_eq!(
+            view.get(&[0, 0]).expect("test: operation should succeed"),
+            &1
+        );
+        assert_eq!(
+            view.get(&[0, 1]).expect("test: operation should succeed"),
+            &2
+        );
+        assert_eq!(
+            view.get(&[1, 0]).expect("test: operation should succeed"),
+            &3
+        );
+        assert_eq!(
+            view.get(&[1, 1]).expect("test: operation should succeed"),
+            &4
+        );
     }
 
     #[test]
     fn test_broadcast_binary_op() {
         let data_a = vec![1.0, 2.0, 3.0];
         let shape_a = Shape::from_1d(3);
-        let view_a = ArrayView::from_data(&data_a, shape_a).unwrap();
+        let view_a =
+            ArrayView::from_data(&data_a, shape_a).expect("test: operation should succeed");
 
         let data_b = vec![10.0];
         let shape_b = Shape::from_1d(1);
-        let view_b = ArrayView::from_data(&data_b, shape_b).unwrap();
+        let view_b =
+            ArrayView::from_data(&data_b, shape_b).expect("test: operation should succeed");
 
         let mut output = vec![0.0; 3];
-        BroadcastOp::binary_op(&view_a, &view_b, &mut output, |a, b| a + b).unwrap();
+        BroadcastOp::binary_op(&view_a, &view_b, &mut output, |a, b| a + b)
+            .expect("test: operation should succeed");
 
         assert_eq!(output, vec![11.0, 12.0, 13.0]);
     }
@@ -963,12 +1008,13 @@ mod tests {
     fn test_broadcast_unary_op() {
         let data = vec![1.0, 2.0];
         let shape = Shape::from_1d(2);
-        let view = ArrayView::from_data(&data, shape).unwrap();
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
         let target_shape = Shape::from_2d(2, 2);
         let mut output = vec![0.0; 4];
 
-        BroadcastOp::unary_op(&view, &mut output, &target_shape, |x| x * 2.0).unwrap();
+        BroadcastOp::unary_op(&view, &mut output, &target_shape, |x| x * 2.0)
+            .expect("test: operation should succeed");
         assert_eq!(output, vec![2.0, 4.0, 2.0, 4.0]);
     }
 
@@ -978,7 +1024,7 @@ mod tests {
         let indices = vec![0, 2, 4];
         let spec = IndexSpec::Array(indices);
 
-        let resolved = spec.resolve(5).unwrap();
+        let resolved = spec.resolve(5).expect("test: operation should succeed");
         if let ResolvedIndex::Multiple(indices) = resolved {
             assert_eq!(indices, vec![0, 2, 4]);
         } else {
@@ -991,7 +1037,7 @@ mod tests {
         let mask = vec![true, false, true, false, true];
         let spec = IndexSpec::BoolMask(mask);
 
-        let resolved = spec.resolve(5).unwrap();
+        let resolved = spec.resolve(5).expect("test: operation should succeed");
         if let ResolvedIndex::Multiple(indices) = resolved {
             assert_eq!(indices, vec![0, 2, 4]);
         } else {

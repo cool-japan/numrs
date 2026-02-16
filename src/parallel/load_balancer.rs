@@ -200,7 +200,7 @@ impl LoadBalancer {
 
     /// Select the best worker for a new task
     pub fn select_worker(&self) -> Result<usize> {
-        let strategy = *self.strategy.read().unwrap();
+        let strategy = *self.strategy.read().expect("lock should not be poisoned");
 
         match strategy {
             BalancingStrategy::RoundRobin => self.round_robin_selection(),
@@ -221,7 +221,7 @@ impl LoadBalancer {
         memory_usage: f64,
     ) -> Result<()> {
         {
-            let mut workers = self.workers.write().unwrap();
+            let mut workers = self.workers.write().expect("lock should not be poisoned");
 
             if let Some(worker) = workers.get_mut(worker_id) {
                 worker.queue_length = queue_length;
@@ -250,7 +250,7 @@ impl LoadBalancer {
 
     /// Get current workload metrics
     pub fn current_metrics(&self) -> WorkloadMetrics {
-        let workers = self.workers.read().unwrap();
+        let workers = self.workers.read().expect("lock should not be poisoned");
 
         let active_tasks = workers.iter().map(|w| w.queue_length as u64).sum();
 
@@ -287,38 +287,51 @@ impl LoadBalancer {
 
     /// Get number of workers
     pub fn num_workers(&self) -> usize {
-        self.workers.read().unwrap().len()
+        self.workers
+            .read()
+            .expect("lock should not be poisoned")
+            .len()
     }
 
     /// Force a strategy change
     pub fn set_strategy(&self, new_strategy: BalancingStrategy) {
-        let mut strategy = self.strategy.write().unwrap();
+        let mut strategy = self.strategy.write().expect("lock should not be poisoned");
         *strategy = new_strategy;
-        *self.last_strategy_change.lock().unwrap() = Instant::now();
+        *self
+            .last_strategy_change
+            .lock()
+            .expect("lock should not be poisoned") = Instant::now();
     }
 
     /// Get current strategy
     pub fn current_strategy(&self) -> BalancingStrategy {
-        *self.strategy.read().unwrap()
+        *self.strategy.read().expect("lock should not be poisoned")
     }
 
     // Private helper methods
 
     fn round_robin_selection(&self) -> Result<usize> {
-        let mut next = self.next_worker.lock().unwrap();
-        let workers = self.workers.read().unwrap();
+        let mut next = self
+            .next_worker
+            .lock()
+            .expect("lock should not be poisoned");
+        let workers = self.workers.read().expect("lock should not be poisoned");
         let worker_id = *next;
         *next = (*next + 1) % workers.len();
         Ok(worker_id)
     }
 
     fn least_loaded_selection(&self) -> Result<usize> {
-        let workers = self.workers.read().unwrap();
+        let workers = self.workers.read().expect("lock should not be poisoned");
 
         let worker_id = workers
             .iter()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.load_factor().partial_cmp(&b.load_factor()).unwrap())
+            .min_by(|(_, a), (_, b)| {
+                a.load_factor()
+                    .partial_cmp(&b.load_factor())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|(idx, _)| idx)
             .ok_or_else(|| NumRs2Error::RuntimeError("No workers available".to_string()))?;
 
@@ -326,7 +339,7 @@ impl LoadBalancer {
     }
 
     fn weighted_capacity_selection(&self) -> Result<usize> {
-        let workers = self.workers.read().unwrap();
+        let workers = self.workers.read().expect("lock should not be poisoned");
 
         // Select based on inverse of load factor weighted by capacity
         let worker_id = workers
@@ -335,7 +348,9 @@ impl LoadBalancer {
             .min_by(|(_, a), (_, b)| {
                 let a_score = a.load_factor() / a.capacity_weight;
                 let b_score = b.load_factor() / b.capacity_weight;
-                a_score.partial_cmp(&b_score).unwrap()
+                a_score
+                    .partial_cmp(&b_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(idx, _)| idx)
             .ok_or_else(|| NumRs2Error::RuntimeError("No workers available".to_string()))?;
@@ -348,7 +363,7 @@ impl LoadBalancer {
         self.maybe_adapt_strategy()?;
 
         // Use the current strategy
-        let strategy = *self.strategy.read().unwrap();
+        let strategy = *self.strategy.read().expect("lock should not be poisoned");
         match strategy {
             BalancingStrategy::Adaptive => self.least_loaded_selection(), // Fallback
             _ => self.select_worker(), // Recursive call with the adapted strategy
@@ -362,7 +377,7 @@ impl LoadBalancer {
     }
 
     fn numa_aware_selection(&self) -> Result<usize> {
-        let workers = self.workers.read().unwrap();
+        let workers = self.workers.read().expect("lock should not be poisoned");
 
         // Get current thread's NUMA node (simplified - would need system detection)
         let current_numa = Self::get_current_numa_node();
@@ -382,7 +397,11 @@ impl LoadBalancer {
         // Among same-NUMA workers, pick the least loaded
         let worker_id = same_numa_workers
             .iter()
-            .min_by(|(_, a), (_, b)| a.load_factor().partial_cmp(&b.load_factor()).unwrap())
+            .min_by(|(_, a), (_, b)| {
+                a.load_factor()
+                    .partial_cmp(&b.load_factor())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|(idx, _)| *idx)
             .ok_or_else(|| NumRs2Error::RuntimeError("No NUMA workers available".to_string()))?;
 
@@ -391,7 +410,7 @@ impl LoadBalancer {
 
     #[allow(dead_code)]
     fn should_rebalance(&self) -> Result<bool> {
-        let workers = self.workers.read().unwrap();
+        let workers = self.workers.read().expect("lock should not be poisoned");
         let imbalance = self.calculate_load_imbalance(&workers);
         Ok(imbalance > self.rebalance_threshold)
     }
@@ -420,13 +439,16 @@ impl LoadBalancer {
     }
 
     fn maybe_adapt_strategy(&self) -> Result<()> {
-        let last_change = *self.last_strategy_change.lock().unwrap();
+        let last_change = *self
+            .last_strategy_change
+            .lock()
+            .expect("lock should not be poisoned");
         if last_change.elapsed() < self.adaptation_window {
             return Ok(()); // Too soon to adapt
         }
 
         let metrics = self.current_metrics();
-        let current_strategy = *self.strategy.read().unwrap();
+        let current_strategy = *self.strategy.read().expect("lock should not be poisoned");
 
         // Simple adaptation logic
         let new_strategy = if metrics.load_imbalance > 0.4 {
@@ -595,36 +617,44 @@ mod tests {
 
     #[test]
     fn test_load_balancer_creation() {
-        let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 4).unwrap();
+        let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 4)
+            .expect("failed to create load balancer");
         assert_eq!(balancer.num_workers(), 4);
         assert_eq!(balancer.current_strategy(), BalancingStrategy::LeastLoaded);
     }
 
     #[test]
     fn test_round_robin_selection() {
-        let balancer = LoadBalancer::new(BalancingStrategy::RoundRobin, 3).unwrap();
+        let balancer = LoadBalancer::new(BalancingStrategy::RoundRobin, 3)
+            .expect("failed to create load balancer");
 
-        let selections: Vec<usize> = (0..6).map(|_| balancer.select_worker().unwrap()).collect();
+        let selections: Vec<usize> = (0..6)
+            .map(|_| balancer.select_worker().expect("failed to select worker"))
+            .collect();
 
         assert_eq!(selections, vec![0, 1, 2, 0, 1, 2]);
     }
 
     #[test]
     fn test_least_loaded_selection() {
-        let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 3).unwrap();
+        let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 3)
+            .expect("failed to create load balancer");
 
         // Update worker 1 to be heavily loaded - use simpler metrics
-        balancer.update_worker_metrics(1, 10, 0.5, 0.5).unwrap();
+        balancer
+            .update_worker_metrics(1, 10, 0.5, 0.5)
+            .expect("failed to update worker metrics");
 
         // Should select worker 0 or 2 (both lightly loaded)
         // Use a simple selection without complex calculations
-        let selection = balancer.select_worker().unwrap();
+        let selection = balancer.select_worker().expect("failed to select worker");
         assert!(selection < 3); // Just ensure we get a valid worker ID
     }
 
     #[test]
     fn test_strategy_switching() {
-        let balancer = LoadBalancer::new(BalancingStrategy::RoundRobin, 2).unwrap();
+        let balancer = LoadBalancer::new(BalancingStrategy::RoundRobin, 2)
+            .expect("failed to create load balancer");
         assert_eq!(balancer.current_strategy(), BalancingStrategy::RoundRobin);
 
         balancer.set_strategy(BalancingStrategy::LeastLoaded);
@@ -633,12 +663,19 @@ mod tests {
 
     #[test]
     fn test_workload_metrics() {
-        let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 3).unwrap();
+        let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 3)
+            .expect("failed to create load balancer");
 
         // Use simpler metric updates to avoid timing issues
-        balancer.update_worker_metrics(0, 5, 0.5, 0.4).unwrap();
-        balancer.update_worker_metrics(1, 3, 0.4, 0.3).unwrap();
-        balancer.update_worker_metrics(2, 7, 0.6, 0.5).unwrap();
+        balancer
+            .update_worker_metrics(0, 5, 0.5, 0.4)
+            .expect("failed to update worker 0 metrics");
+        balancer
+            .update_worker_metrics(1, 3, 0.4, 0.3)
+            .expect("failed to update worker 1 metrics");
+        balancer
+            .update_worker_metrics(2, 7, 0.6, 0.5)
+            .expect("failed to update worker 2 metrics");
 
         // Get metrics but avoid complex calculations that might hang
         let metrics = balancer.current_metrics();

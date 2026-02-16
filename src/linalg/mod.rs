@@ -373,7 +373,9 @@ where
             }
 
             let eps = T::epsilon();
-            let acceptable_error = eps * T::from(n).unwrap() * T::from(100.0).unwrap();
+            let acceptable_error = eps
+                * T::from(n).expect("n is a valid usize")
+                * T::from(100.0).expect("100.0 is a valid f64 constant");
 
             if max_error > acceptable_error {
                 eprintln!(
@@ -758,7 +760,7 @@ where
 
             // Check for singularity
             let eps = T::epsilon();
-            if max_val < eps * T::from(n).unwrap() {
+            if max_val < eps * T::from(n).expect("n is a valid usize") {
                 return Err(NumRs2Error::InvalidOperation(
                     "coefficient matrix is numerically singular".to_string(),
                 ));
@@ -976,7 +978,7 @@ where
             }
 
             // Check for numerical singularity
-            if p_val < T::epsilon() * T::from(100.0).unwrap() {
+            if p_val < T::epsilon() * T::from(100.0).expect("100.0 is a valid f64 constant") {
                 // Matrix is numerically singular - determinant is effectively zero
                 return Ok(T::zero());
             }
@@ -1135,7 +1137,7 @@ where
 
             // Check for singularity
             let eps = T::epsilon();
-            if max_val < eps * T::from(n).unwrap() {
+            if max_val < eps * T::from(n).expect("n is a valid usize") {
                 return Err(NumRs2Error::InvalidOperation(
                     "matrix is numerically singular and cannot be inverted".to_string(),
                 ));
@@ -1196,7 +1198,9 @@ where
             }
 
             let eps = T::epsilon();
-            let acceptable_error = eps * T::from(n).unwrap() * T::from(100.0).unwrap();
+            let acceptable_error = eps
+                * T::from(n).expect("n is a valid usize")
+                * T::from(100.0).expect("100.0 is a valid f64 constant");
 
             if max_error > acceptable_error {
                 eprintln!(
@@ -1581,7 +1585,7 @@ where
 
             // Check for singularity
             let eps = T::epsilon();
-            if max_val < eps * T::from(n).unwrap() {
+            if max_val < eps * T::from(n).expect("n is a valid usize") {
                 return Err(NumRs2Error::InvalidOperation(
                     "coefficient matrix is numerically singular".to_string(),
                 ));

@@ -142,15 +142,19 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         rt.block_on(async {
             let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
             buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-                tx.send(result).unwrap();
+                tx.send(result)
+                    .expect("Failed to send buffer mapping result - receiver dropped");
             });
 
             self.context
                 .device()
                 .poll(wgpu::PollType::wait_indefinitely())
-                .unwrap();
+                .expect("GPU device poll failed during buffer mapping");
 
-            rx.receive().await.unwrap().unwrap();
+            rx.receive()
+                .await
+                .expect("Failed to receive buffer mapping result - channel closed")
+                .expect("Buffer mapping operation failed");
 
             // Copy the data from the staging buffer
             let mapped_data = buffer_slice.get_mapped_range();
@@ -195,6 +199,59 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
     /// Returns a reference to the GPU context
     pub fn context(&self) -> &GpuContextRef {
         &self.context
+    }
+
+    /// Reshapes the GPU array to a new shape without copying data
+    ///
+    /// # Arguments
+    ///
+    /// * `new_shape` - The new shape for the array
+    ///
+    /// # Returns
+    ///
+    /// A new GpuArray with the same data but different shape
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the new shape is incompatible with the current size
+    pub fn reshape(&self, new_shape: &[usize]) -> Result<Self> {
+        let new_size: usize = new_shape.iter().product();
+        if new_size != self.size {
+            return Err(NumRs2Error::DimensionMismatch(format!(
+                "Cannot reshape array of size {} to shape {:?} (size {})",
+                self.size, new_shape, new_size
+            )));
+        }
+
+        // Calculate new strides (row-major layout)
+        let mut strides = vec![1; new_shape.len()];
+        for i in (0..new_shape.len().saturating_sub(1)).rev() {
+            strides[i] = strides[i + 1] * new_shape[i + 1];
+        }
+
+        Ok(Self {
+            context: self.context.clone(),
+            buffer: self.buffer.clone(),
+            shape: new_shape.to_vec(),
+            strides,
+            size: self.size,
+            element_size: self.element_size,
+            _phantom: PhantomData,
+        })
+    }
+}
+
+impl<T> Clone for GpuArray<T> {
+    fn clone(&self) -> Self {
+        Self {
+            context: self.context.clone(),
+            buffer: self.buffer.clone(),
+            shape: self.shape.clone(),
+            strides: self.strides.clone(),
+            size: self.size,
+            element_size: self.element_size,
+            _phantom: PhantomData,
+        }
     }
 }
 

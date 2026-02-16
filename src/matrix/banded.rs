@@ -226,8 +226,12 @@ where
         for i in 0..self.rows {
             for j in 0..self.cols {
                 if self.is_in_band(i, j) {
-                    let value = self.get(i, j).unwrap();
-                    array.set(&[i, j], value).unwrap();
+                    let value = self
+                        .get(i, j)
+                        .expect("to_array: index within band should be valid");
+                    array
+                        .set(&[i, j], value)
+                        .expect("to_array: index within array bounds should be valid");
                 }
             }
         }
@@ -241,7 +245,10 @@ where
         let mut diag = Vec::with_capacity(diag_length);
 
         for i in 0..diag_length {
-            diag.push(self.get(i, i).unwrap());
+            diag.push(
+                self.get(i, i)
+                    .expect("diagonal: index within min(rows, cols) should be valid"),
+            );
         }
 
         diag
@@ -290,7 +297,9 @@ where
 
             #[allow(clippy::needless_range_loop)]
             for j in j_start..j_end {
-                let a_ij = self.get(i, j).unwrap();
+                let a_ij = self
+                    .get(i, j)
+                    .expect("matvec: index within band should be valid");
                 let x_j = vec[j].clone();
                 sum = sum + (a_ij * x_j);
             }
@@ -318,7 +327,9 @@ where
             write!(f, "[")?;
 
             for j in 0..self.cols {
-                let value = self.get(i, j).unwrap();
+                let value = self
+                    .get(i, j)
+                    .expect("Display: index within matrix bounds should be valid");
 
                 if j > 0 {
                     write!(f, ", ")?;

@@ -273,10 +273,19 @@ impl<B: BitGenerator> Generator<B> {
 
         for _ in 0..size {
             // Convert bounds to f64, use SciRS2 uniform distribution, then convert back
-            let low_f64 = low.clone().into().to_f64().unwrap();
-            let high_f64 = high.clone().into().to_f64().unwrap();
+            let low_f64 = low
+                .clone()
+                .into()
+                .to_f64()
+                .expect("integers: low bound should be convertible to f64");
+            let high_f64 = high
+                .clone()
+                .into()
+                .to_f64()
+                .expect("integers: high bound should be convertible to f64");
 
-            let uniform_dist = Uniform::new(low_f64, high_f64).unwrap();
+            let uniform_dist = Uniform::new(low_f64, high_f64)
+                .expect("integers: uniform distribution should be valid for given bounds");
             let val_f64 = uniform_dist.rvs(1).expect("uniform sampling failed")[0];
             let val_i64 = val_f64.floor() as i64;
             let val = T::try_from(val_i64).map_err(|_| {
@@ -635,7 +644,8 @@ impl<B: BitGenerator> Generator<B> {
                 NumRs2Error::InvalidOperation("Failed to convert high bound to f64".to_string())
             })?;
 
-            let uniform_dist = Uniform::new(low_f64, high_f64).unwrap();
+            let uniform_dist = Uniform::new(low_f64, high_f64)
+                .expect("uniform: uniform distribution should be valid for given bounds");
             let val_f64 = uniform_dist.rvs(1).expect("uniform sampling failed")[0];
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
@@ -796,7 +806,7 @@ impl<B: BitGenerator> Generator<B> {
 /// use numrs2::random::default_rng;
 ///
 /// let rng = default_rng();
-/// let random_array = rng.random::<f64>(&[3, 3]).unwrap();
+/// let random_array = rng.random::<f64>(&[3, 3]).expect("random should succeed");
 /// ```
 pub fn default_rng() -> Generator<StdBitGenerator> {
     Generator::new(StdBitGenerator::new_random())
@@ -812,7 +822,7 @@ pub fn default_rng() -> Generator<StdBitGenerator> {
 /// use numrs2::random::seed_rng;
 ///
 /// let rng = seed_rng(42);
-/// let random_array = rng.random::<f64>(&[3, 3]).unwrap();
+/// let random_array = rng.random::<f64>(&[3, 3]).expect("seeded random should succeed");
 /// ```
 pub fn seed_rng(seed: u64) -> Generator<StdBitGenerator> {
     Generator::new(StdBitGenerator::new(seed))
@@ -830,7 +840,7 @@ pub fn seed_rng(seed: u64) -> Generator<StdBitGenerator> {
 /// use numrs2::random::pcg64_rng;
 ///
 /// let rng = pcg64_rng();
-/// let random_array = rng.random::<f64>(&[3, 3]).unwrap();
+/// let random_array = rng.random::<f64>(&[3, 3]).expect("pcg64 random should succeed");
 /// ```
 pub fn pcg64_rng() -> Generator<PCG64BitGenerator> {
     Generator::new(PCG64BitGenerator::new_random())
@@ -846,7 +856,7 @@ pub fn pcg64_rng() -> Generator<PCG64BitGenerator> {
 /// use numrs2::random::pcg64_seed_rng;
 ///
 /// let rng = pcg64_seed_rng(42);
-/// let random_array = rng.random::<f64>(&[3, 3]).unwrap();
+/// let random_array = rng.random::<f64>(&[3, 3]).expect("seeded pcg64 random should succeed");
 /// ```
 pub fn pcg64_seed_rng(seed: u64) -> Generator<PCG64BitGenerator> {
     Generator::new(PCG64BitGenerator::new(seed))
@@ -859,7 +869,9 @@ mod tests {
     #[test]
     fn test_default_rng() {
         let rng = default_rng();
-        let arr = rng.random::<f64>(&[3, 3]).unwrap();
+        let arr = rng
+            .random::<f64>(&[3, 3])
+            .expect("test: random should succeed");
         assert_eq!(arr.shape(), vec![3, 3]);
     }
 
@@ -867,10 +879,14 @@ mod tests {
     #[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
     fn test_seed_rng() {
         let rng1 = seed_rng(42);
-        let arr1 = rng1.random::<f64>(&[3, 3]).unwrap();
+        let arr1 = rng1
+            .random::<f64>(&[3, 3])
+            .expect("test: random should succeed");
 
         let rng2 = seed_rng(42);
-        let arr2 = rng2.random::<f64>(&[3, 3]).unwrap();
+        let arr2 = rng2
+            .random::<f64>(&[3, 3])
+            .expect("test: random should succeed");
 
         // Same seed should produce the same random numbers
         assert_eq!(arr1.to_vec(), arr2.to_vec());
@@ -879,14 +895,18 @@ mod tests {
     #[test]
     fn test_generator_normal() {
         let rng = default_rng();
-        let arr = rng.normal(0.0, 1.0, &[10]).unwrap();
+        let arr = rng
+            .normal(0.0, 1.0, &[10])
+            .expect("test: normal should succeed");
         assert_eq!(arr.shape(), vec![10]);
     }
 
     #[test]
     fn test_pcg64_generator() {
         let rng = pcg64_rng();
-        let arr = rng.random::<f64>(&[3, 3]).unwrap();
+        let arr = rng
+            .random::<f64>(&[3, 3])
+            .expect("test: random should succeed");
         assert_eq!(arr.shape(), vec![3, 3]);
     }
 
@@ -894,10 +914,14 @@ mod tests {
     #[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
     fn test_pcg64_seed_produces_same_output() {
         let rng1 = pcg64_seed_rng(42);
-        let arr1 = rng1.random::<f64>(&[5]).unwrap();
+        let arr1 = rng1
+            .random::<f64>(&[5])
+            .expect("test: random should succeed");
 
         let rng2 = pcg64_seed_rng(42);
-        let arr2 = rng2.random::<f64>(&[5]).unwrap();
+        let arr2 = rng2
+            .random::<f64>(&[5])
+            .expect("test: random should succeed");
 
         // Same seed should produce the same random numbers
         assert_eq!(arr1.to_vec(), arr2.to_vec());
@@ -908,19 +932,29 @@ mod tests {
         let rng = default_rng();
 
         // Test various distributions
-        let beta_arr = rng.beta(2.0, 5.0, &[10]).unwrap();
+        let beta_arr = rng
+            .beta(2.0, 5.0, &[10])
+            .expect("test: beta should succeed");
         assert_eq!(beta_arr.shape(), vec![10]);
 
-        let gamma_arr = rng.gamma(2.0, 2.0, &[10]).unwrap();
+        let gamma_arr = rng
+            .gamma(2.0, 2.0, &[10])
+            .expect("test: gamma should succeed");
         assert_eq!(gamma_arr.shape(), vec![10]);
 
-        let uniform_arr = rng.uniform(0.0, 1.0, &[10]).unwrap();
+        let uniform_arr = rng
+            .uniform(0.0, 1.0, &[10])
+            .expect("test: uniform should succeed");
         assert_eq!(uniform_arr.shape(), vec![10]);
 
-        let binomial_arr = rng.binomial::<u32>(10, 0.5, &[10]).unwrap();
+        let binomial_arr = rng
+            .binomial::<u32>(10, 0.5, &[10])
+            .expect("test: binomial should succeed");
         assert_eq!(binomial_arr.shape(), vec![10]);
 
-        let poisson_arr = rng.poisson::<u32>(5.0, &[10]).unwrap();
+        let poisson_arr = rng
+            .poisson::<u32>(5.0, &[10])
+            .expect("test: poisson should succeed");
         assert_eq!(poisson_arr.shape(), vec![10]);
     }
 

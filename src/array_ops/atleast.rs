@@ -17,7 +17,7 @@ use crate::error::Result;
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
-/// let b = atleast_1d(&[&a]).unwrap();
+/// let b = atleast_1d(&[&a]).expect("operation should succeed");
 /// assert_eq!(b[0].shape(), vec![3]);
 /// ```
 pub fn atleast_1d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>> {
@@ -26,7 +26,9 @@ pub fn atleast_1d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
     for &array in arys {
         if array.ndim() == 0 {
             // Scalar, reshape to 1-D
-            let scalar_value = array.get(&[]).unwrap();
+            let scalar_value = array
+                .get(&[])
+                .expect("scalar array (ndim=0) should have a value at empty index");
             result.push(Array::from_vec(vec![scalar_value]).reshape(&[1]));
         } else {
             // Already at least 1-D, add a view of the array
@@ -53,7 +55,7 @@ pub fn atleast_1d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
-/// let b = atleast_2d(&[&a]).unwrap();
+/// let b = atleast_2d(&[&a]).expect("operation should succeed");
 /// assert_eq!(b[0].shape(), vec![1, 3]);
 /// ```
 pub fn atleast_2d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>> {
@@ -62,7 +64,9 @@ pub fn atleast_2d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
     for &array in arys {
         if array.ndim() == 0 {
             // Scalar, reshape to 2-D
-            let scalar_value = array.get(&[]).unwrap();
+            let scalar_value = array
+                .get(&[])
+                .expect("scalar array (ndim=0) should have a value at empty index");
             result.push(Array::from_vec(vec![scalar_value]).reshape(&[1, 1]));
         } else if array.ndim() == 1 {
             // 1-D, reshape to 2-D
@@ -94,7 +98,7 @@ pub fn atleast_2d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
-/// let b = atleast_3d(&[&a]).unwrap();
+/// let b = atleast_3d(&[&a]).expect("operation should succeed");
 /// assert_eq!(b[0].shape(), vec![1, 3, 1]);
 /// ```
 pub fn atleast_3d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec<Array<T>>> {
@@ -103,7 +107,9 @@ pub fn atleast_3d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
     for &array in arys {
         if array.ndim() == 0 {
             // Scalar, reshape to 3-D
-            let scalar_value = array.get(&[]).unwrap();
+            let scalar_value = array
+                .get(&[])
+                .expect("scalar array (ndim=0) should have a value at empty index");
             result.push(Array::from_vec(vec![scalar_value]).reshape(&[1, 1, 1]));
         } else if array.ndim() == 1 {
             // 1-D, reshape to 3-D

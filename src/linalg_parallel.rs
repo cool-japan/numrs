@@ -380,7 +380,7 @@ impl ParallelLinAlg {
             return Ok((v, T::zero()));
         }
 
-        let beta = T::from(2.0).unwrap() / v_norm_sq;
+        let beta = T::from(2.0).expect("Failed to convert 2.0 to type T") / v_norm_sq;
         Ok((v, beta))
     }
 
@@ -421,43 +421,45 @@ mod tests {
         let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
         let mut c = Array::zeros(&[2, 2]);
 
-        ParallelLinAlg::parallel_gemm(&a, &b, &mut c, 1.0, 0.0, false, false, Some(2)).unwrap();
+        ParallelLinAlg::parallel_gemm(&a, &b, &mut c, 1.0, 0.0, false, false, Some(2))
+            .expect("parallel gemm should succeed");
 
         // Expected result: [[19, 22], [43, 50]]
-        assert_relative_eq!(c.get(&[0, 0]).unwrap(), 19.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[0, 1]).unwrap(), 22.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 0]).unwrap(), 43.0, epsilon = 1e-10);
-        assert_relative_eq!(c.get(&[1, 1]).unwrap(), 50.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 0]).expect("valid index"), 19.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[0, 1]).expect("valid index"), 22.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 0]).expect("valid index"), 43.0, epsilon = 1e-10);
+        assert_relative_eq!(c.get(&[1, 1]).expect("valid index"), 50.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_parallel_lu_decomposition() {
         let a = Array::from_vec(vec![2.0, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
 
-        let (l, u, _p) = ParallelLinAlg::parallel_lu(&a, Some(2)).unwrap();
+        let (l, u, _p) =
+            ParallelLinAlg::parallel_lu(&a, Some(2)).expect("parallel LU should succeed");
 
         // Verify L is lower triangular with 1s on diagonal
-        assert_relative_eq!(l.get(&[0, 0]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(&[1, 1]).unwrap(), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(l.get(&[0, 1]).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(&[0, 0]).expect("valid index"), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(&[1, 1]).expect("valid index"), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(l.get(&[0, 1]).expect("valid index"), 0.0, epsilon = 1e-10);
 
         // Verify U is upper triangular
-        assert_relative_eq!(u.get(&[1, 0]).unwrap(), 0.0, epsilon = 1e-10);
+        assert_relative_eq!(u.get(&[1, 0]).expect("valid index"), 0.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_parallel_qr_decomposition() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
-        let (q, r) = ParallelLinAlg::parallel_qr(&a, Some(2)).unwrap();
+        let (q, r) = ParallelLinAlg::parallel_qr(&a, Some(2)).expect("parallel QR should succeed");
 
         // Verify Q is orthogonal (Q^T * Q should be identity)
         assert_eq!(q.shape(), vec![2, 2]);
         assert_eq!(r.shape(), vec![2, 2]);
 
         // Basic sanity checks
-        assert!(q.get(&[0, 0]).unwrap().abs() <= 1.0);
-        assert!(q.get(&[1, 1]).unwrap().abs() <= 1.0);
+        assert!(q.get(&[0, 0]).expect("valid index").abs() <= 1.0);
+        assert!(q.get(&[1, 1]).expect("valid index").abs() <= 1.0);
     }
 
     #[test]
@@ -466,11 +468,12 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 2.0]);
         let mut y = Array::zeros(&[2]);
 
-        ParallelLinAlg::parallel_matvec(&a, &x, &mut y, 1.0, 0.0, false, Some(2)).unwrap();
+        ParallelLinAlg::parallel_matvec(&a, &x, &mut y, 1.0, 0.0, false, Some(2))
+            .expect("parallel matvec should succeed");
 
         // Expected result: [5, 11]
-        assert_relative_eq!(y.get(&[0]).unwrap(), 5.0, epsilon = 1e-10);
-        assert_relative_eq!(y.get(&[1]).unwrap(), 11.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[0]).expect("valid index"), 5.0, epsilon = 1e-10);
+        assert_relative_eq!(y.get(&[1]).expect("valid index"), 11.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -498,13 +501,14 @@ mod tests {
     #[test]
     fn test_householder_vector() {
         let x = vec![1.0, 2.0, 3.0];
-        let (v, beta) = ParallelLinAlg::householder_vector(&x).unwrap();
+        let (v, beta) = ParallelLinAlg::householder_vector(&x).expect("householder should succeed");
 
         assert_eq!(v.len(), 3);
         assert!(beta >= 0.0);
 
         // Verify that applying the Householder reflection gives correct result
-        let result = ParallelLinAlg::apply_householder(&x, &v, beta).unwrap();
+        let result = ParallelLinAlg::apply_householder(&x, &v, beta)
+            .expect("apply householder should succeed");
 
         // First component should have the opposite sign and same magnitude as original norm
         let x_norm = (1.0 + 4.0 + 9.0_f64).sqrt();

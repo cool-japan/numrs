@@ -774,31 +774,178 @@ where
     rng.multivariate_normal_with_rotation(mean, cov, size, rotation)
 }
 
+/// Generate random values from a multivariate t-distribution using the global generator
+///
+/// The multivariate t-distribution is a generalization of the Student's t-distribution
+/// to multiple dimensions. It has heavier tails than the multivariate normal distribution.
+///
+/// # Arguments
+///
+/// * `mean` - Mean vector
+/// * `cov` - Covariance matrix (must be positive definite)
+/// * `df` - Degrees of freedom (must be positive)
+/// * `size` - Optional shape of the output array
+///
+/// # Returns
+///
+/// An array of random values from the multivariate t-distribution
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::random::distributions::multivariate_t;
+/// use numrs2::array::Array;
+///
+/// let mean = vec![0.0, 0.0];
+/// let cov_data = vec![1.0, 0.5, 0.5, 1.0];
+/// let cov = Array::from_vec(cov_data).reshape(&[2, 2]);
+/// let samples = multivariate_t(&mean, &cov, 5.0, Some(&[10]));
+/// ```
+pub fn multivariate_t<T>(
+    mean: &[T],
+    cov: &Array<T>,
+    df: T,
+    size: Option<&[usize]>,
+) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
+{
+    let rng = get_global_random_state()?;
+    rng.multivariate_t(mean, cov, df, size)
+}
+
+/// Generate random values from a Wishart distribution using the global generator
+///
+/// The Wishart distribution is a generalization of the chi-squared distribution to
+/// positive-definite matrices. It's commonly used as the conjugate prior for the
+/// precision matrix in multivariate normal distributions.
+///
+/// # Arguments
+///
+/// * `df` - Degrees of freedom (must be >= dimension of scale matrix)
+/// * `scale` - Scale matrix (positive definite)
+/// * `size` - Optional shape of the output array
+///
+/// # Returns
+///
+/// An array of random positive-definite matrices from the Wishart distribution
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::random::distributions::wishart;
+/// use numrs2::array::Array;
+///
+/// let scale_data = vec![1.0, 0.5, 0.5, 1.0];
+/// let scale = Array::from_vec(scale_data).reshape(&[2, 2]);
+/// let samples = wishart(5.0, &scale, Some(&[3]));
+/// // Returns 3 random 2x2 positive-definite matrices
+/// ```
+pub fn wishart<T>(df: T, scale: &Array<T>, size: Option<&[usize]>) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
+{
+    let rng = get_global_random_state()?;
+    rng.wishart(df, scale, size)
+}
+
+/// Generate random values from a Frechet distribution using the global generator
+///
+/// The Frechet distribution (Type II extreme value distribution) is used in extreme
+/// value theory to model the maximum of a large sample of random variables.
+///
+/// # Arguments
+///
+/// * `shape` - Shape parameter (alpha, must be positive)
+/// * `loc` - Location parameter
+/// * `scale` - Scale parameter (must be positive)
+/// * `output_shape` - Shape of the output array
+///
+/// # Returns
+///
+/// An array of random values from the Frechet distribution
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::random::distributions::frechet;
+///
+/// let samples = frechet(2.0, 0.0, 1.0, &[100]);
+/// // All values should be > loc (0.0)
+/// ```
+pub fn frechet<T>(shape: T, loc: T, scale: T, output_shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
+{
+    let rng = get_global_random_state()?;
+    rng.frechet(shape, loc, scale, output_shape)
+}
+
+/// Generate random values from a Generalized Extreme Value (GEV) distribution using the global generator
+///
+/// The GEV distribution combines three types of extreme value distributions:
+/// - Type I (Gumbel): shape = 0
+/// - Type II (Frechet): shape > 0
+/// - Type III (Weibull): shape < 0
+///
+/// # Arguments
+///
+/// * `shape` - Shape parameter (ξ, xi)
+/// * `loc` - Location parameter (μ, mu)
+/// * `scale` - Scale parameter (σ, sigma, must be positive)
+/// * `output_shape` - Shape of the output array
+///
+/// # Returns
+///
+/// An array of random values from the GEV distribution
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::random::distributions::gev;
+///
+/// // Gumbel (shape ≈ 0)
+/// let gumbel = gev(0.0, 0.0, 1.0, &[100]);
+///
+/// // Frechet (shape > 0)
+/// let frechet = gev(0.5, 0.0, 1.0, &[100]);
+///
+/// // Weibull (shape < 0)
+/// let weibull = gev(-0.5, 0.0, 1.0, &[100]);
+/// ```
+pub fn gev<T>(shape: T, loc: T, scale: T, output_shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
+{
+    let rng = get_global_random_state()?;
+    rng.gev(shape, loc, scale, output_shape)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_beta_distribution() {
-        let arr = beta(2.0, 5.0, &[10]).unwrap();
+        let arr = beta(2.0, 5.0, &[10]).expect("test: beta should succeed");
         assert_eq!(arr.shape(), vec![10]);
     }
 
     #[test]
     fn test_normal_distribution() {
-        let arr = normal(0.0, 1.0, &[5, 5]).unwrap();
+        let arr = normal(0.0, 1.0, &[5, 5]).expect("test: normal should succeed");
         assert_eq!(arr.shape(), vec![5, 5]);
     }
 
     #[test]
     fn test_standard_normal_distribution() {
-        let arr = standard_normal::<f64>(&[3, 3]).unwrap();
+        let arr = standard_normal::<f64>(&[3, 3]).expect("test: standard_normal should succeed");
         assert_eq!(arr.shape(), vec![3, 3]);
     }
 
     #[test]
     fn test_binomial_distribution() {
-        let arr = binomial::<u64>(10, 0.5, &[5]).unwrap();
+        let arr = binomial::<u64>(10, 0.5, &[5]).expect("test: binomial should succeed");
         assert_eq!(arr.shape(), vec![5]);
 
         // Values should be in the range [0, 10]
@@ -809,7 +956,7 @@ mod tests {
 
     #[test]
     fn test_gamma_distribution() {
-        let arr = gamma(2.0, 2.0, &[10]).unwrap();
+        let arr = gamma(2.0, 2.0, &[10]).expect("test: gamma should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Gamma values should be positive
@@ -828,13 +975,13 @@ mod tests {
 
         // First sequence with seed1
         set_seed(seed1);
-        let arr1_a = normal(0.0, 1.0, &[5]).unwrap();
-        let arr1_b = normal(0.0, 1.0, &[5]).unwrap();
+        let arr1_a = normal(0.0, 1.0, &[5]).expect("test: normal should succeed");
+        let arr1_b = normal(0.0, 1.0, &[5]).expect("test: normal should succeed");
 
         // Reset to seed1 and generate the same sequence
         set_seed(seed1);
-        let arr2_a = normal(0.0, 1.0, &[5]).unwrap();
-        let arr2_b = normal(0.0, 1.0, &[5]).unwrap();
+        let arr2_a = normal(0.0, 1.0, &[5]).expect("test: normal should succeed");
+        let arr2_b = normal(0.0, 1.0, &[5]).expect("test: normal should succeed");
 
         // Verify that resetting the seed reproduces the same sequence
         assert_eq!(
@@ -850,7 +997,7 @@ mod tests {
 
         // Now test with a different seed
         set_seed(seed2);
-        let arr3_a = normal(0.0, 1.0, &[5]).unwrap();
+        let arr3_a = normal(0.0, 1.0, &[5]).expect("test: normal should succeed");
 
         // Different seeds should produce different results
         assert_ne!(
@@ -862,7 +1009,7 @@ mod tests {
 
     #[test]
     fn test_pareto_distribution() {
-        let arr = pareto(2.0, &[10]).unwrap();
+        let arr = pareto(2.0, &[10]).expect("test: pareto should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Pareto values should be greater than or equal to 1
@@ -875,7 +1022,7 @@ mod tests {
     fn test_triangular_distribution() {
         // Now using our own implementation instead of rand_distr
         let result = triangular(0.0, 2.0, 10.0, &[10]);
-        let arr = result.unwrap();
+        let arr = result.expect("test: triangular should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Triangular values should be in the range [low, high]
@@ -886,7 +1033,7 @@ mod tests {
 
     #[test]
     fn test_pert_distribution() {
-        let arr = pert(0.0, 5.0, 10.0, &[10]).unwrap();
+        let arr = pert(0.0, 5.0, 10.0, &[10]).expect("test: pert should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // PERT values should be in the range [min, max]
@@ -901,26 +1048,28 @@ mod tests {
         let cov_data = vec![1.0, 0.5, 0.5, 1.0];
         let cov = Array::from_vec(cov_data).reshape(&[2, 2]);
 
-        let arr = multivariate_normal(&mean, &cov, Some(&[10])).unwrap();
+        let arr = multivariate_normal(&mean, &cov, Some(&[10]))
+            .expect("test: multivariate_normal should succeed");
         assert_eq!(arr.shape(), vec![10, 2]);
     }
 
     #[test]
     fn test_laplace_distribution() {
-        let arr = laplace(0.0, 1.0, &[10]).unwrap();
+        let arr = laplace(0.0, 1.0, &[10]).expect("test: laplace should succeed");
         assert_eq!(arr.shape(), vec![10]);
     }
 
     #[test]
     fn test_negative_binomial_distribution() {
-        let arr = negative_binomial::<u64>(5.0, 0.5, &[10]).unwrap();
+        let arr = negative_binomial::<u64>(5.0, 0.5, &[10])
+            .expect("test: negative_binomial should succeed");
         assert_eq!(arr.shape(), vec![10]);
     }
 
     #[test]
     fn test_multinomial_distribution() {
         let pvals = vec![0.2, 0.3, 0.5];
-        let arr = multinomial::<u64>(10, &pvals, None).unwrap();
+        let arr = multinomial::<u64>(10, &pvals, None).expect("test: multinomial should succeed");
         assert_eq!(arr.shape(), vec![3]);
 
         // Sum of counts should equal the number of trials
@@ -930,7 +1079,8 @@ mod tests {
 
     #[test]
     fn test_noncentral_chisquare_distribution() {
-        let arr = noncentral_chisquare(2.0, 1.0, &[10]).unwrap();
+        let arr = noncentral_chisquare(2.0, 1.0, &[10])
+            .expect("test: noncentral_chisquare should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Noncentral chi-square values should be positive
@@ -941,7 +1091,7 @@ mod tests {
 
     #[test]
     fn test_noncentral_f_distribution() {
-        let arr = noncentral_f(2.0, 5.0, 1.0, &[10]).unwrap();
+        let arr = noncentral_f(2.0, 5.0, 1.0, &[10]).expect("test: noncentral_f should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Noncentral F values should be positive
@@ -952,7 +1102,7 @@ mod tests {
 
     #[test]
     fn test_vonmises_distribution() {
-        let arr = vonmises(0.0, 1.0, &[10]).unwrap();
+        let arr = vonmises(0.0, 1.0, &[10]).expect("test: vonmises should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Von Mises values should be in the range [-π, π)
@@ -963,7 +1113,7 @@ mod tests {
 
     #[test]
     fn test_maxwell_distribution() {
-        let arr = maxwell(1.0, &[10]).unwrap();
+        let arr = maxwell(1.0, &[10]).expect("test: maxwell should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Maxwell values should be positive
@@ -976,7 +1126,8 @@ mod tests {
     fn test_truncated_normal_distribution() {
         let low = -2.0;
         let high = 2.0;
-        let arr = truncated_normal(0.0, 1.0, low, high, &[10]).unwrap();
+        let arr = truncated_normal(0.0, 1.0, low, high, &[10])
+            .expect("test: truncated_normal should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Truncated normal values should be within bounds
@@ -1000,12 +1151,194 @@ mod tests {
         ];
         let rotation = Array::from_vec(rotation_data).reshape(&[2, 2]);
 
-        let arr =
-            multivariate_normal_with_rotation(&mean, &cov, Some(&[5]), Some(&rotation)).unwrap();
+        let arr = multivariate_normal_with_rotation(&mean, &cov, Some(&[5]), Some(&rotation))
+            .expect("test: multivariate_normal_with_rotation should succeed");
         assert_eq!(arr.shape(), vec![5, 2]);
 
         // Test without rotation matrix (should default to regular multivariate normal)
-        let arr_no_rot = multivariate_normal_with_rotation(&mean, &cov, Some(&[5]), None).unwrap();
+        let arr_no_rot = multivariate_normal_with_rotation(&mean, &cov, Some(&[5]), None)
+            .expect("test: multivariate_normal_with_rotation (no rotation) should succeed");
         assert_eq!(arr_no_rot.shape(), vec![5, 2]);
+    }
+
+    #[test]
+    fn test_multivariate_t_distribution() {
+        let mean = vec![0.0, 0.0];
+        let cov_data = vec![1.0, 0.3, 0.3, 1.0];
+        let cov = Array::from_vec(cov_data).reshape(&[2, 2]);
+        let df = 5.0;
+
+        let arr = multivariate_t(&mean, &cov, df, Some(&[10]))
+            .expect("test: multivariate_t should succeed");
+        assert_eq!(arr.shape(), vec![10, 2]);
+
+        // Test with single sample (no size parameter)
+        let arr_single = multivariate_t(&mean, &cov, df, None)
+            .expect("test: multivariate_t (single sample) should succeed");
+        assert_eq!(arr_single.shape(), vec![2]);
+    }
+
+    #[test]
+    fn test_multivariate_t_parameter_validation() {
+        let mean = vec![0.0, 0.0];
+        let cov_data = vec![1.0, 0.3, 0.3, 1.0];
+        let cov = Array::from_vec(cov_data).reshape(&[2, 2]);
+
+        // Test with invalid degrees of freedom (df <= 0)
+        let result = multivariate_t::<f64>(&mean, &cov, 0.0, Some(&[5]));
+        assert!(result.is_err(), "multivariate_t should fail with df = 0");
+
+        let result = multivariate_t::<f64>(&mean, &cov, -1.0, Some(&[5]));
+        assert!(
+            result.is_err(),
+            "multivariate_t should fail with negative df"
+        );
+
+        // Test with non-positive-definite covariance
+        let bad_cov_data = vec![1.0, 2.0, 2.0, 1.0]; // Not positive definite
+        let bad_cov = Array::from_vec(bad_cov_data).reshape(&[2, 2]);
+        let result = multivariate_t::<f64>(&mean, &bad_cov, 5.0, Some(&[5]));
+        assert!(
+            result.is_err(),
+            "multivariate_t should fail with non-positive-definite covariance"
+        );
+    }
+
+    #[test]
+    fn test_wishart_distribution() {
+        let scale_data = vec![1.0, 0.2, 0.2, 1.0];
+        let scale = Array::from_vec(scale_data).reshape(&[2, 2]);
+        let df = 5.0;
+
+        let arr = wishart(df, &scale, Some(&[3])).expect("test: wishart should succeed");
+        // Should produce 3 matrices of size 2x2
+        assert_eq!(arr.shape(), vec![3, 2, 2]);
+
+        // Test with single sample
+        let arr_single =
+            wishart(df, &scale, None).expect("test: wishart (single sample) should succeed");
+        assert_eq!(arr_single.shape(), vec![2, 2]);
+    }
+
+    #[test]
+    fn test_wishart_parameter_validation() {
+        let scale_data = vec![1.0, 0.2, 0.2, 1.0];
+        let scale = Array::from_vec(scale_data).reshape(&[2, 2]);
+
+        // Test with df < dimension
+        let result = wishart::<f64>(1.0, &scale, Some(&[3]));
+        assert!(result.is_err(), "wishart should fail when df < dimension");
+
+        // Test with non-square scale matrix
+        let bad_scale_data = vec![1.0, 0.2, 0.2];
+        let bad_scale = Array::from_vec(bad_scale_data).reshape(&[3, 1]);
+        let result = wishart::<f64>(5.0, &bad_scale, Some(&[3]));
+        assert!(
+            result.is_err(),
+            "wishart should fail with non-square scale matrix"
+        );
+
+        // Test with non-positive-definite scale matrix
+        let bad_scale_data = vec![1.0, 2.0, 2.0, 1.0]; // Not positive definite
+        let bad_scale = Array::from_vec(bad_scale_data).reshape(&[2, 2]);
+        let result = wishart::<f64>(5.0, &bad_scale, Some(&[3]));
+        assert!(
+            result.is_err(),
+            "wishart should fail with non-positive-definite scale matrix"
+        );
+    }
+
+    #[test]
+    fn test_frechet_distribution() {
+        let arr = frechet(2.0, 0.0, 1.0, &[100]).expect("test: frechet should succeed");
+        assert_eq!(arr.shape(), vec![100]);
+
+        // Frechet values should be > loc
+        let loc = 0.0;
+        for val in arr.to_vec() {
+            assert!(val > loc, "Frechet values should be > loc, got {}", val);
+        }
+    }
+
+    #[test]
+    fn test_frechet_parameter_validation() {
+        // Test with invalid shape parameter (alpha <= 0)
+        let result = frechet::<f64>(0.0, 0.0, 1.0, &[10]);
+        assert!(result.is_err(), "frechet should fail with shape = 0");
+
+        let result = frechet::<f64>(-1.0, 0.0, 1.0, &[10]);
+        assert!(result.is_err(), "frechet should fail with negative shape");
+
+        // Test with invalid scale parameter (scale <= 0)
+        let result = frechet::<f64>(2.0, 0.0, 0.0, &[10]);
+        assert!(result.is_err(), "frechet should fail with scale = 0");
+
+        let result = frechet::<f64>(2.0, 0.0, -1.0, &[10]);
+        assert!(result.is_err(), "frechet should fail with negative scale");
+    }
+
+    #[test]
+    fn test_frechet_with_different_parameters() {
+        // Test with different location parameter
+        let arr = frechet(3.0, 5.0, 2.0, &[50]).expect("test: frechet with loc=5 should succeed");
+        assert_eq!(arr.shape(), vec![50]);
+
+        // All values should be > loc
+        for val in arr.to_vec() {
+            assert!(val > 5.0, "Frechet values should be > 5.0, got {}", val);
+        }
+    }
+
+    #[test]
+    fn test_gev_distribution_gumbel() {
+        // Test Gumbel case (shape ≈ 0)
+        let arr = gev(0.0, 0.0, 1.0, &[100]).expect("test: gev (Gumbel) should succeed");
+        assert_eq!(arr.shape(), vec![100]);
+
+        // Values can be any real number for Gumbel
+        // Just verify we got samples
+        assert!(!arr.to_vec().is_empty());
+    }
+
+    #[test]
+    fn test_gev_distribution_frechet() {
+        // Test Frechet case (shape > 0)
+        let arr = gev(0.5, 0.0, 1.0, &[100]).expect("test: gev (Frechet) should succeed");
+        assert_eq!(arr.shape(), vec![100]);
+
+        // For Frechet (xi > 0), values should be > loc when scale > 0
+        // Just verify we got samples
+        assert!(!arr.to_vec().is_empty());
+    }
+
+    #[test]
+    fn test_gev_distribution_weibull() {
+        // Test Weibull case (shape < 0)
+        let arr = gev(-0.5, 0.0, 1.0, &[100]).expect("test: gev (Weibull) should succeed");
+        assert_eq!(arr.shape(), vec![100]);
+
+        // For Weibull (xi < 0), values should be < loc + scale/|xi|
+        // Just verify we got samples
+        assert!(!arr.to_vec().is_empty());
+    }
+
+    #[test]
+    fn test_gev_parameter_validation() {
+        // Test with invalid scale parameter (scale <= 0)
+        let result = gev::<f64>(0.0, 0.0, 0.0, &[10]);
+        assert!(result.is_err(), "gev should fail with scale = 0");
+
+        let result = gev::<f64>(0.0, 0.0, -1.0, &[10]);
+        assert!(result.is_err(), "gev should fail with negative scale");
+    }
+
+    #[test]
+    fn test_gev_with_different_parameters() {
+        // Test with different location and scale
+        let arr = gev(0.2, 10.0, 2.0, &[50]).expect("test: gev with custom params should succeed");
+        assert_eq!(arr.shape(), vec![50]);
+
+        // Just verify we got valid samples
+        assert!(!arr.to_vec().is_empty());
     }
 }

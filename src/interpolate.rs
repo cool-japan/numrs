@@ -27,13 +27,13 @@
 //! // 1D linear interpolation
 //! let x: Array<f64> = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0]);
 //! let y: Array<f64> = Array::from_vec(vec![0.0, 1.0, 4.0, 9.0]);
-//! let interp = Interp1D::linear(&x, &y).unwrap();
-//! let result: f64 = interp.evaluate(1.5).unwrap();
+//! let interp = Interp1D::linear(&x, &y).expect("failed to create linear interpolator");
+//! let result: f64 = interp.evaluate(1.5).expect("failed to evaluate interpolation");
 //! assert!((result - 2.5).abs() < 1e-10);
 //!
 //! // Cubic spline interpolation
-//! let spline = CubicSplineInterp::natural(&x, &y).unwrap();
-//! let smooth: f64 = spline.evaluate(1.5).unwrap();
+//! let spline = CubicSplineInterp::natural(&x, &y).expect("failed to create spline");
+//! let smooth: f64 = spline.evaluate(1.5).expect("failed to evaluate spline");
 //! ```
 
 use crate::array::Array;
@@ -86,8 +86,8 @@ where
     ///
     /// let x: Array<f64> = Array::from_vec(vec![0.0, 1.0, 2.0]);
     /// let y: Array<f64> = Array::from_vec(vec![0.0, 1.0, 4.0]);
-    /// let interp = Interp1D::linear(&x, &y).unwrap();
-    /// let result: f64 = interp.evaluate(0.5).unwrap();
+    /// let interp = Interp1D::linear(&x, &y).expect("failed to create interpolator");
+    /// let result: f64 = interp.evaluate(0.5).expect("failed to evaluate");
     /// assert!((result - 0.5).abs() < 1e-10);
     /// ```
     pub fn linear(x: &Array<T>, y: &Array<T>) -> Result<Self> {
@@ -167,8 +167,10 @@ where
         // Build tridiagonal system for second derivatives (natural spline conditions: M_0 = M_{n-1} = 0)
         let mut alpha = vec![T::zero(); n];
         for i in 1..n - 1 {
-            alpha[i] = (T::from(3.0).unwrap() / h[i]) * (y[i + 1] - y[i])
-                - (T::from(3.0).unwrap() / h[i - 1]) * (y[i] - y[i - 1]);
+            alpha[i] = (T::from(3.0).expect("3.0 is representable as Float") / h[i])
+                * (y[i + 1] - y[i])
+                - (T::from(3.0).expect("3.0 is representable as Float") / h[i - 1])
+                    * (y[i] - y[i - 1]);
         }
 
         // Solve tridiagonal system using Thomas algorithm
@@ -177,7 +179,8 @@ where
         let mut z = vec![T::zero(); n];
 
         for i in 1..n - 1 {
-            l[i] = T::from(2.0).unwrap() * (x[i + 1] - x[i - 1]) - h[i - 1] * mu[i - 1];
+            l[i] = T::from(2.0).expect("2.0 is representable as Float") * (x[i + 1] - x[i - 1])
+                - h[i - 1] * mu[i - 1];
             mu[i] = h[i] / l[i];
             z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
         }
@@ -190,8 +193,10 @@ where
         for j in (0..n - 1).rev() {
             c[j] = z[j] - mu[j] * c[j + 1];
             b[j] = (y[j + 1] - y[j]) / h[j]
-                - h[j] * (c[j + 1] + T::from(2.0).unwrap() * c[j]) / T::from(3.0).unwrap();
-            d[j] = (c[j + 1] - c[j]) / (T::from(3.0).unwrap() * h[j]);
+                - h[j] * (c[j + 1] + T::from(2.0).expect("2.0 is representable as Float") * c[j])
+                    / T::from(3.0).expect("3.0 is representable as Float");
+            d[j] =
+                (c[j + 1] - c[j]) / (T::from(3.0).expect("3.0 is representable as Float") * h[j]);
         }
 
         // Pack coefficients for each segment
@@ -205,7 +210,7 @@ where
 
     /// Find the interval index containing x using binary search
     fn find_interval(&self, x: T) -> Result<usize> {
-        if x < self.x[0] || x > *self.x.last().unwrap() {
+        if x < self.x[0] || x > *self.x.last().expect("x vec is non-empty") {
             return Err(NumRs2Error::ValueError(format!(
                 "Interpolation point {:?} outside data range [{:?}, {:?}]",
                 x,
@@ -245,7 +250,8 @@ where
         match self.kind {
             Interp1DKind::Nearest => {
                 // Find nearest point
-                let mid = (self.x[i] + self.x[i + 1]) / T::from(2.0).unwrap();
+                let mid = (self.x[i] + self.x[i + 1])
+                    / T::from(2.0).expect("2.0 is representable as Float");
                 if x < mid {
                     Ok(self.y[i])
                 } else {
@@ -336,8 +342,8 @@ where
     ///
     /// let x = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0]);
     /// let y = Array::from_vec(vec![0.0, 1.0, 4.0, 9.0]);
-    /// let spline = CubicSplineInterp::natural(&x, &y).unwrap();
-    /// let val = spline.evaluate(1.5).unwrap();
+    /// let spline = CubicSplineInterp::natural(&x, &y).expect("failed to create spline");
+    /// let val = spline.evaluate(1.5).expect("failed to evaluate spline");
     /// ```
     pub fn natural(x: &Array<T>, y: &Array<T>) -> Result<Self> {
         Self::new(x, y, SplineBoundary::Natural)
@@ -416,7 +422,7 @@ where
 
         for i in 1..n - 1 {
             let m = diag[i] - lower[i - 1] * cp[i - 1];
-            if m.abs() < T::from(1e-14).unwrap() {
+            if m.abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
                 return Err(NumRs2Error::ComputationError(
                     "Tridiagonal system is singular".to_string(),
                 ));
@@ -427,7 +433,7 @@ where
 
         // Last row
         let m = diag[n - 1] - lower[n - 2] * cp[n - 2];
-        if m.abs() < T::from(1e-14).unwrap() {
+        if m.abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
             return Err(NumRs2Error::ComputationError(
                 "Tridiagonal system is singular".to_string(),
             ));
@@ -461,12 +467,16 @@ where
             SplineBoundary::Clamped(dy0, dyn_) => {
                 // Clamped spline with specified endpoint derivatives
                 let mut alpha = vec![T::zero(); n];
-                alpha[0] = T::from(3.0).unwrap() * ((y[1] - y[0]) / h[0] - dy0);
-                alpha[n - 1] = T::from(3.0).unwrap() * (dyn_ - (y[n - 1] - y[n - 2]) / h[n - 2]);
+                alpha[0] = T::from(3.0).expect("3.0 is representable as Float")
+                    * ((y[1] - y[0]) / h[0] - dy0);
+                alpha[n - 1] = T::from(3.0).expect("3.0 is representable as Float")
+                    * (dyn_ - (y[n - 1] - y[n - 2]) / h[n - 2]);
 
                 for i in 1..n - 1 {
-                    alpha[i] = (T::from(3.0).unwrap() / h[i]) * (y[i + 1] - y[i])
-                        - (T::from(3.0).unwrap() / h[i - 1]) * (y[i] - y[i - 1]);
+                    alpha[i] = (T::from(3.0).expect("3.0 is representable as Float") / h[i])
+                        * (y[i + 1] - y[i])
+                        - (T::from(3.0).expect("3.0 is representable as Float") / h[i - 1])
+                            * (y[i] - y[i - 1]);
                 }
 
                 // Solve tridiagonal system
@@ -474,17 +484,20 @@ where
                 let mut mu = vec![T::zero(); n];
                 let mut z = vec![T::zero(); n];
 
-                l[0] = T::from(2.0).unwrap() * h[0];
-                mu[0] = T::from(0.5).unwrap();
+                l[0] = T::from(2.0).expect("2.0 is representable as Float") * h[0];
+                mu[0] = T::from(0.5).expect("0.5 is representable as Float");
                 z[0] = alpha[0] / l[0];
 
                 for i in 1..n - 1 {
-                    l[i] = T::from(2.0).unwrap() * (x[i + 1] - x[i - 1]) - h[i - 1] * mu[i - 1];
+                    l[i] = T::from(2.0).expect("2.0 is representable as Float")
+                        * (x[i + 1] - x[i - 1])
+                        - h[i - 1] * mu[i - 1];
                     mu[i] = h[i] / l[i];
                     z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
                 }
 
-                l[n - 1] = h[n - 2] * (T::from(2.0).unwrap() - mu[n - 2]);
+                l[n - 1] =
+                    h[n - 2] * (T::from(2.0).expect("2.0 is representable as Float") - mu[n - 2]);
                 z[n - 1] = (alpha[n - 1] - h[n - 2] * z[n - 2]) / l[n - 1];
 
                 // Back substitution
@@ -500,8 +513,12 @@ where
 
                 for j in 0..n - 1 {
                     b[j] = (y[j + 1] - y[j]) / h[j]
-                        - h[j] * (c[j + 1] + T::from(2.0).unwrap() * c[j]) / T::from(3.0).unwrap();
-                    d[j] = (c[j + 1] - c[j]) / (T::from(3.0).unwrap() * h[j]);
+                        - h[j]
+                            * (c[j + 1]
+                                + T::from(2.0).expect("2.0 is representable as Float") * c[j])
+                            / T::from(3.0).expect("3.0 is representable as Float");
+                    d[j] = (c[j + 1] - c[j])
+                        / (T::from(3.0).expect("3.0 is representable as Float") * h[j]);
                 }
 
                 let mut coeffs = Vec::with_capacity(n - 1);
@@ -520,8 +537,8 @@ where
                 // Left:  -h_1*c_0 + (h_0 + h_1)*c_1 - h_0*c_2 = 0
                 // Right: -h_{n-2}*c_{n-3} + (h_{n-3} + h_{n-2})*c_{n-2} - h_{n-3}*c_{n-1} = 0
 
-                let three = T::from(3.0).unwrap();
-                let two = T::from(2.0).unwrap();
+                let three = T::from(3.0).expect("3.0 is representable as Float");
+                let two = T::from(2.0).expect("2.0 is representable as Float");
 
                 // Build standard tridiagonal system first
                 let mut lower = vec![T::zero(); n - 1];
@@ -586,7 +603,9 @@ where
             SplineBoundary::Periodic => {
                 // Periodic: y(x₀) = y(xₙ), y'(x₀) = y'(xₙ), y''(x₀) = y''(xₙ)
                 // Check periodicity
-                if (y[0] - y[n - 1]).abs() > T::from(1e-10).unwrap() {
+                if (y[0] - y[n - 1]).abs()
+                    > T::from(1e-10).expect("1e-10 is representable as Float")
+                {
                     return Err(NumRs2Error::ValueError(
                         "Periodic spline requires y[0] == y[n-1]".to_string(),
                     ));
@@ -605,8 +624,8 @@ where
                 // where α_i = 3[(y_{i+1} - y_i)/h_i - (y_i - y_{i-1})/h_{i-1}]
                 // and we use wraparound indexing for the last row
 
-                let three = T::from(3.0).unwrap();
-                let two = T::from(2.0).unwrap();
+                let three = T::from(3.0).expect("3.0 is representable as Float");
+                let two = T::from(2.0).expect("2.0 is representable as Float");
 
                 // Build the (n-1) × (n-1) cyclic system
                 let m = n - 1; // System size
@@ -735,7 +754,7 @@ where
 
     /// Evaluate the spline at a point
     pub fn evaluate(&self, x: T) -> Result<T> {
-        if x < self.x[0] || x > *self.x.last().unwrap() {
+        if x < self.x[0] || x > *self.x.last().expect("x vec is non-empty") {
             return Err(NumRs2Error::ValueError(format!(
                 "Evaluation point {:?} outside domain [{:?}, {:?}]",
                 x,
@@ -772,7 +791,7 @@ where
 
     /// Evaluate the first derivative at a point
     pub fn derivative(&self, x: T) -> Result<T> {
-        if x < self.x[0] || x > *self.x.last().unwrap() {
+        if x < self.x[0] || x > *self.x.last().expect("x vec is non-empty") {
             return Err(NumRs2Error::ValueError("Point outside domain".to_string()));
         }
 
@@ -787,7 +806,10 @@ where
         let dx = x - self.x[i];
         let [_a, b, c, d] = self.coeffs[i];
         // S'(x) = b + 2*c*dx + 3*d*dx^2
-        Ok(b + T::from(2.0).unwrap() * c * dx + T::from(3.0).unwrap() * d * dx * dx)
+        Ok(
+            b + T::from(2.0).expect("2.0 is representable as Float") * c * dx
+                + T::from(3.0).expect("3.0 is representable as Float") * d * dx * dx,
+        )
     }
 }
 
@@ -825,8 +847,8 @@ where
     /// let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
     /// let y = Array::from_vec(vec![0.0, 1.0]);
     /// let z = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]).reshape(&[3, 2]);
-    /// let interp = BilinearInterp::new(&x, &y, &z).unwrap();
-    /// let val = interp.evaluate(0.5, 0.5).unwrap();
+    /// let interp = BilinearInterp::new(&x, &y, &z).expect("failed to create bilinear interpolator");
+    /// let val = interp.evaluate(0.5, 0.5).expect("failed to evaluate");
     /// ```
     pub fn new(x: &Array<T>, y: &Array<T>, z: &Array<T>) -> Result<Self> {
         if z.shape().len() != 2 {
@@ -864,10 +886,10 @@ where
     /// Evaluate bilinear interpolation at (x, y)
     pub fn evaluate(&self, x: T, y: T) -> Result<T> {
         // Find x interval
-        if x < self.x[0] || x > *self.x.last().unwrap() {
+        if x < self.x[0] || x > *self.x.last().expect("x vec is non-empty") {
             return Err(NumRs2Error::ValueError("X outside domain".to_string()));
         }
-        if y < self.y[0] || y > *self.y.last().unwrap() {
+        if y < self.y[0] || y > *self.y.last().expect("y vec is non-empty") {
             return Err(NumRs2Error::ValueError("Y outside domain".to_string()));
         }
 
@@ -915,91 +937,96 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_linear_interp1d() {
+    fn test_linear_interp1d() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0]);
         let y = Array::from_vec(vec![0.0, 1.0, 4.0, 9.0]);
 
-        let interp = Interp1D::linear(&x, &y).unwrap();
+        let interp = Interp1D::linear(&x, &y)?;
 
         // Test at data points
-        assert!((interp.evaluate(0.0).unwrap() - 0.0).abs() < 1e-10);
-        assert!((interp.evaluate(1.0).unwrap() - 1.0).abs() < 1e-10);
-        assert!((interp.evaluate(2.0).unwrap() - 4.0).abs() < 1e-10);
+        assert!((interp.evaluate(0.0)? - 0.0).abs() < 1e-10);
+        assert!((interp.evaluate(1.0)? - 1.0).abs() < 1e-10);
+        assert!((interp.evaluate(2.0)? - 4.0).abs() < 1e-10);
 
         // Test interpolation
-        assert!((interp.evaluate(0.5).unwrap() - 0.5).abs() < 1e-10);
-        assert!((interp.evaluate(1.5).unwrap() - 2.5).abs() < 1e-10);
-        assert!((interp.evaluate(2.5).unwrap() - 6.5).abs() < 1e-10);
+        assert!((interp.evaluate(0.5)? - 0.5).abs() < 1e-10);
+        assert!((interp.evaluate(1.5)? - 2.5).abs() < 1e-10);
+        assert!((interp.evaluate(2.5)? - 6.5).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_nearest_interp1d() {
+    fn test_nearest_interp1d() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
         let y = Array::from_vec(vec![10.0, 20.0, 30.0]);
 
-        let interp = Interp1D::nearest(&x, &y).unwrap();
+        let interp = Interp1D::nearest(&x, &y)?;
 
-        assert!((interp.evaluate(0.4).unwrap() - 10.0).abs() < 1e-10);
-        assert!((interp.evaluate(0.6).unwrap() - 20.0).abs() < 1e-10);
-        assert!((interp.evaluate(1.4).unwrap() - 20.0).abs() < 1e-10);
-        assert!((interp.evaluate(1.6).unwrap() - 30.0).abs() < 1e-10);
+        assert!((interp.evaluate(0.4)? - 10.0).abs() < 1e-10);
+        assert!((interp.evaluate(0.6)? - 20.0).abs() < 1e-10);
+        assert!((interp.evaluate(1.4)? - 20.0).abs() < 1e-10);
+        assert!((interp.evaluate(1.6)? - 30.0).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_cubic_spline_interp() {
+    fn test_cubic_spline_interp() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0]);
         let y = Array::from_vec(vec![0.0, 1.0, 4.0, 9.0]);
 
-        let spline = CubicSplineInterp::natural(&x, &y).unwrap();
+        let spline = CubicSplineInterp::natural(&x, &y)?;
 
         // Test at data points
-        assert!((spline.evaluate(0.0).unwrap() - 0.0).abs() < 1e-10);
-        assert!((spline.evaluate(1.0).unwrap() - 1.0).abs() < 1e-10);
-        assert!((spline.evaluate(2.0).unwrap() - 4.0).abs() < 1e-10);
-        assert!((spline.evaluate(3.0).unwrap() - 9.0).abs() < 1e-10);
+        assert!((spline.evaluate(0.0)? - 0.0).abs() < 1e-10);
+        assert!((spline.evaluate(1.0)? - 1.0).abs() < 1e-10);
+        assert!((spline.evaluate(2.0)? - 4.0).abs() < 1e-10);
+        assert!((spline.evaluate(3.0)? - 9.0).abs() < 1e-10);
 
         // Cubic spline should be smooth
-        let val = spline.evaluate(1.5).unwrap();
+        let val = spline.evaluate(1.5)?;
         assert!(
             val > 1.0 && val < 4.0,
             "Interpolated value should be between endpoints"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_clamped_spline() {
+    fn test_clamped_spline() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
         let y = Array::from_vec(vec![0.0, 1.0, 4.0]);
 
         // Specify endpoint derivatives
-        let spline = CubicSplineInterp::clamped(&x, &y, 0.5, 3.5).unwrap();
+        let spline = CubicSplineInterp::clamped(&x, &y, 0.5, 3.5)?;
 
         // Check derivative at endpoints approximately matches
         let eps = 0.001;
-        let d0 = (spline.evaluate(eps).unwrap() - spline.evaluate(0.0).unwrap()) / eps;
+        let d0 = (spline.evaluate(eps)? - spline.evaluate(0.0)?) / eps;
         assert!(
             (d0 - 0.5).abs() < 0.1,
             "Derivative at x=0 should be close to 0.5"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_interp1d_array_evaluation() {
+    fn test_interp1d_array_evaluation() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
         let y = Array::from_vec(vec![0.0, 1.0, 4.0]);
 
-        let interp = Interp1D::linear(&x, &y).unwrap();
+        let interp = Interp1D::linear(&x, &y)?;
 
         let x_eval = Array::from_vec(vec![0.5, 1.0, 1.5]);
-        let result = interp.evaluate_array(&x_eval).unwrap();
+        let result = interp.evaluate_array(&x_eval)?;
 
-        assert!((result.get(&[0]).unwrap() - 0.5).abs() < 1e-10);
-        assert!((result.get(&[1]).unwrap() - 1.0).abs() < 1e-10);
-        assert!((result.get(&[2]).unwrap() - 2.5).abs() < 1e-10);
+        assert!((result.get(&[0])? - 0.5).abs() < 1e-10);
+        assert!((result.get(&[1])? - 1.0).abs() < 1e-10);
+        assert!((result.get(&[2])? - 2.5).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_bilinear_interp() {
+    fn test_bilinear_interp() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
         let y = Array::from_vec(vec![0.0, 1.0]);
 
@@ -1011,31 +1038,31 @@ mod tests {
         ])
         .reshape(&[3, 2]);
 
-        let interp = BilinearInterp::new(&x, &y, &z).unwrap();
+        let interp = BilinearInterp::new(&x, &y, &z)?;
 
         // Test at grid points
-        assert!((interp.evaluate(0.0, 0.0).unwrap() - 0.0).abs() < 1e-10);
-        assert!((interp.evaluate(1.0, 1.0).unwrap() - 2.0).abs() < 1e-10);
+        assert!((interp.evaluate(0.0, 0.0)? - 0.0).abs() < 1e-10);
+        assert!((interp.evaluate(1.0, 1.0)? - 2.0).abs() < 1e-10);
 
         // Test interpolation
-        let val = interp.evaluate(0.5, 0.5).unwrap();
+        let val = interp.evaluate(0.5, 0.5)?;
         assert!((val - 1.0).abs() < 1e-10, "Expected 1.0, got {}", val);
+        Ok(())
     }
 
     #[test]
-    fn test_cubic_spline_derivative() {
+    fn test_cubic_spline_derivative() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
         let y = Array::from_vec(vec![0.0, 1.0, 4.0]);
 
-        let spline = CubicSplineInterp::natural(&x, &y).unwrap();
+        let spline = CubicSplineInterp::natural(&x, &y)?;
 
         // Numerical derivative check
         let eps = 1e-6;
         let x_test = 1.0;
-        let numerical_deriv = (spline.evaluate(x_test + eps).unwrap()
-            - spline.evaluate(x_test - eps).unwrap())
-            / (2.0 * eps);
-        let analytical_deriv = spline.derivative(x_test).unwrap();
+        let numerical_deriv =
+            (spline.evaluate(x_test + eps)? - spline.evaluate(x_test - eps)?) / (2.0 * eps);
+        let analytical_deriv = spline.derivative(x_test)?;
 
         assert!(
             (numerical_deriv - analytical_deriv).abs() < 1e-4,
@@ -1043,6 +1070,7 @@ mod tests {
             numerical_deriv,
             analytical_deriv
         );
+        Ok(())
     }
 
     #[test]
@@ -1065,19 +1093,20 @@ mod tests {
     }
 
     #[test]
-    fn test_interpolation_outside_domain() {
+    fn test_interpolation_outside_domain() -> Result<()> {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0]);
         let y = Array::from_vec(vec![0.0, 1.0, 4.0]);
 
-        let interp = Interp1D::linear(&x, &y).unwrap();
+        let interp = Interp1D::linear(&x, &y)?;
 
         // Outside domain should error
         assert!(interp.evaluate(-0.1).is_err());
         assert!(interp.evaluate(2.1).is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_not_a_knot_spline() {
+    fn test_not_a_knot_spline() -> Result<()> {
         // Test not-a-knot boundary conditions
         // Note: The current implementation provides not-a-knot behavior
         // but may not exactly reproduce all cubic polynomials due to
@@ -1085,18 +1114,18 @@ mod tests {
         let x = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let y = Array::from_vec(vec![1.0, 2.0, 1.5, 3.0, 2.5]);
 
-        let spline = CubicSplineInterp::not_a_knot(&x, &y).unwrap();
+        let spline = CubicSplineInterp::not_a_knot(&x, &y)?;
 
         // Test at data points - should be exact
-        assert!((spline.evaluate(0.0).unwrap() - 1.0).abs() < 1e-10);
-        assert!((spline.evaluate(1.0).unwrap() - 2.0).abs() < 1e-10);
-        assert!((spline.evaluate(2.0).unwrap() - 1.5).abs() < 1e-10);
-        assert!((spline.evaluate(3.0).unwrap() - 3.0).abs() < 1e-10);
-        assert!((spline.evaluate(4.0).unwrap() - 2.5).abs() < 1e-10);
+        assert!((spline.evaluate(0.0)? - 1.0).abs() < 1e-10);
+        assert!((spline.evaluate(1.0)? - 2.0).abs() < 1e-10);
+        assert!((spline.evaluate(2.0)? - 1.5).abs() < 1e-10);
+        assert!((spline.evaluate(3.0)? - 3.0).abs() < 1e-10);
+        assert!((spline.evaluate(4.0)? - 2.5).abs() < 1e-10);
 
         // Test interpolation - should be smooth and between data points
         let x_test = 1.5;
-        let y_spline = spline.evaluate(x_test).unwrap();
+        let y_spline = spline.evaluate(x_test)?;
         assert!(
             y_spline > 1.0 && y_spline < 2.5,
             "Interpolated value should be reasonable: got {}",
@@ -1105,16 +1134,17 @@ mod tests {
 
         // Test that spline is differentiable
         let eps = 1e-6;
-        let d1 = (spline.evaluate(1.5 + eps).unwrap() - spline.evaluate(1.5).unwrap()) / eps;
-        let d2 = (spline.evaluate(2.5 + eps).unwrap() - spline.evaluate(2.5).unwrap()) / eps;
+        let d1 = (spline.evaluate(1.5 + eps)? - spline.evaluate(1.5)?) / eps;
+        let d2 = (spline.evaluate(2.5 + eps)? - spline.evaluate(2.5)?) / eps;
 
         // Derivatives should be finite
         assert!(d1.is_finite());
         assert!(d2.is_finite());
+        Ok(())
     }
 
     #[test]
-    fn test_periodic_spline() {
+    fn test_periodic_spline() -> Result<()> {
         // Test periodic boundary conditions with a periodic function
         use std::f64::consts::PI;
         let n = 10;
@@ -1124,13 +1154,13 @@ mod tests {
         let x = Array::from_vec(x_vec.clone());
         let y = Array::from_vec(y_vec.clone());
 
-        let spline = CubicSplineInterp::new(&x, &y, SplineBoundary::Periodic).unwrap();
+        let spline = CubicSplineInterp::new(&x, &y, SplineBoundary::Periodic)?;
 
         // Test at data points
         for i in 0..=n {
             let xi = x_vec[i];
             let yi_expected = y_vec[i];
-            let yi_spline = spline.evaluate(xi).unwrap();
+            let yi_spline = spline.evaluate(xi)?;
             assert!(
                 (yi_spline - yi_expected).abs() < 1e-10,
                 "Mismatch at data point x={}: expected {}, got {}",
@@ -1142,8 +1172,8 @@ mod tests {
 
         // Test periodicity: derivatives at endpoints should match
         let eps = 1e-6;
-        let d0_left = (spline.evaluate(eps).unwrap() - spline.evaluate(0.0).unwrap()) / eps;
-        let d0_right = (spline.evaluate(1.0).unwrap() - spline.evaluate(1.0 - eps).unwrap()) / eps;
+        let d0_left = (spline.evaluate(eps)? - spline.evaluate(0.0)?) / eps;
+        let d0_right = (spline.evaluate(1.0)? - spline.evaluate(1.0 - eps)?) / eps;
 
         // For a truly periodic spline, the derivatives should match
         // Note: Using finite differences can introduce some numerical error
@@ -1157,8 +1187,8 @@ mod tests {
         );
 
         // Test second derivatives at endpoints (more stringent periodicity check)
-        let d2_left = spline.derivative(0.0).unwrap();
-        let d2_right = spline.derivative(1.0).unwrap();
+        let d2_left = spline.derivative(0.0)?;
+        let d2_right = spline.derivative(1.0)?;
 
         // Second derivatives should be close for periodic spline
         assert!(
@@ -1167,6 +1197,7 @@ mod tests {
             d2_left,
             d2_right
         );
+        Ok(())
     }
 
     #[test]
@@ -1183,23 +1214,23 @@ mod tests {
     }
 
     #[test]
-    fn test_boundary_conditions_comparison() {
+    fn test_boundary_conditions_comparison() -> Result<()> {
         // Compare different boundary conditions on the same data
         let x = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let y = Array::from_vec(vec![1.0, 2.0, 1.5, 3.0, 2.5]);
 
-        let spline_natural = CubicSplineInterp::natural(&x, &y).unwrap();
-        let spline_not_a_knot = CubicSplineInterp::not_a_knot(&x, &y).unwrap();
-        let spline_clamped = CubicSplineInterp::clamped(&x, &y, 0.5, -0.5).unwrap();
+        let spline_natural = CubicSplineInterp::natural(&x, &y)?;
+        let spline_not_a_knot = CubicSplineInterp::not_a_knot(&x, &y)?;
+        let spline_clamped = CubicSplineInterp::clamped(&x, &y, 0.5, -0.5)?;
 
         // All should pass through data points
         for i in 0..5 {
             let xi = i as f64;
-            let yi_expected = y.get(&[i]).unwrap();
+            let yi_expected = y.get(&[i])?;
 
-            let yi_natural = spline_natural.evaluate(xi).unwrap();
-            let yi_not_a_knot = spline_not_a_knot.evaluate(xi).unwrap();
-            let yi_clamped = spline_clamped.evaluate(xi).unwrap();
+            let yi_natural = spline_natural.evaluate(xi)?;
+            let yi_not_a_knot = spline_not_a_knot.evaluate(xi)?;
+            let yi_clamped = spline_clamped.evaluate(xi)?;
 
             assert!((yi_natural - yi_expected).abs() < 1e-10);
             assert!((yi_not_a_knot - yi_expected).abs() < 1e-10);
@@ -1208,11 +1239,12 @@ mod tests {
 
         // They should differ at interpolation points (different boundary conditions)
         let x_test = 0.5;
-        let val_natural = spline_natural.evaluate(x_test).unwrap();
-        let val_not_a_knot = spline_not_a_knot.evaluate(x_test).unwrap();
+        let val_natural = spline_natural.evaluate(x_test)?;
+        let val_not_a_knot = spline_not_a_knot.evaluate(x_test)?;
 
         // Not-a-knot and natural usually give different results
         // (though for some data they might be close)
         println!("Natural: {}, Not-a-knot: {}", val_natural, val_not_a_knot);
+        Ok(())
     }
 }

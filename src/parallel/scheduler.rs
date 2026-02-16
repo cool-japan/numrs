@@ -135,7 +135,9 @@ pub enum TaskResult {
 }
 
 /// Thread-local scheduler state
+/// Cache-aligned to prevent false sharing
 #[derive(Debug)]
+#[repr(align(64))]
 struct ThreadState {
     #[allow(dead_code)]
     id: usize,
@@ -144,6 +146,8 @@ struct ThreadState {
     total_execution_time: Duration,
     idle_time: Duration,
     last_steal_time: Instant,
+    // Cache-line padding
+    _padding: [u8; 0],
 }
 
 impl ThreadState {
@@ -155,6 +159,7 @@ impl ThreadState {
             total_execution_time: Duration::ZERO,
             idle_time: Duration::ZERO,
             last_steal_time: Instant::now(),
+            _padding: [],
         }
     }
 
@@ -204,7 +209,7 @@ impl ParallelScheduler {
 
         // Initialize thread states
         {
-            let mut states = thread_states.lock().unwrap();
+            let mut states = thread_states.lock().expect("lock should not be poisoned");
             for i in 0..config.num_threads {
                 states.push(ThreadState::new(i));
             }
@@ -257,7 +262,10 @@ impl ParallelScheduler {
         F: FnOnce() -> TaskResult + Send + 'static,
     {
         let task_id = {
-            let mut id = self.next_task_id.lock().unwrap();
+            let mut id = self
+                .next_task_id
+                .lock()
+                .expect("lock should not be poisoned");
             *id += 1;
             *id
         };
@@ -271,11 +279,17 @@ impl ParallelScheduler {
             task: Box::new(task),
         };
 
-        let mut queue = self.global_queue.lock().unwrap();
+        let mut queue = self
+            .global_queue
+            .lock()
+            .expect("lock should not be poisoned");
 
         // Check queue capacity
         if queue.len() >= self.config.max_queue_size {
-            let mut stats = self.scheduler_stats.lock().unwrap();
+            let mut stats = self
+                .scheduler_stats
+                .lock()
+                .expect("lock should not be poisoned");
             stats.queue_overflows += 1;
             drop(stats);
             drop(queue);
@@ -285,7 +299,10 @@ impl ParallelScheduler {
         queue.push(scheduled_task);
 
         {
-            let mut stats = self.scheduler_stats.lock().unwrap();
+            let mut stats = self
+                .scheduler_stats
+                .lock()
+                .expect("lock should not be poisoned");
             stats.tasks_submitted += 1;
         }
 
@@ -306,7 +323,10 @@ impl ParallelScheduler {
 
     /// Get current scheduler statistics
     pub fn statistics(&self) -> SchedulerStats {
-        let mut stats = self.scheduler_stats.lock().unwrap();
+        let mut stats = self
+            .scheduler_stats
+            .lock()
+            .expect("lock should not be poisoned");
 
         // Update thread efficiencies
         if let Ok(thread_states) = self.thread_states.try_lock() {
@@ -326,7 +346,10 @@ impl ParallelScheduler {
 
     /// Get current queue length
     pub fn queue_length(&self) -> usize {
-        self.global_queue.lock().unwrap().len()
+        self.global_queue
+            .lock()
+            .expect("lock should not be poisoned")
+            .len()
     }
 
     /// Shutdown the scheduler gracefully
@@ -334,7 +357,7 @@ impl ParallelScheduler {
         // Signal shutdown
         {
             let (shutdown_flag, condvar) = &*self.shutdown_signal;
-            let mut flag = shutdown_flag.lock().unwrap();
+            let mut flag = shutdown_flag.lock().expect("lock should not be poisoned");
             *flag = true;
             condvar.notify_all();
         }
@@ -360,7 +383,7 @@ impl ParallelScheduler {
         loop {
             // Check shutdown signal
             {
-                let flag = shutdown_flag.lock().unwrap();
+                let flag = shutdown_flag.lock().expect("lock should not be poisoned");
                 if *flag {
                     break;
                 }
@@ -368,7 +391,7 @@ impl ParallelScheduler {
 
             // Try to get a task from global queue
             let task = {
-                let mut queue = global_queue.lock().unwrap();
+                let mut queue = global_queue.lock().expect("lock should not be poisoned");
                 queue.pop()
             };
 
@@ -383,7 +406,7 @@ impl ParallelScheduler {
 
                     // Update thread state
                     {
-                        let mut states = thread_states.lock().unwrap();
+                        let mut states = thread_states.lock().expect("lock should not be poisoned");
                         if let Some(state) = states.get_mut(thread_id) {
                             state.tasks_executed += 1;
                             state.total_execution_time += execution_time;
@@ -392,7 +415,8 @@ impl ParallelScheduler {
 
                     // Update global statistics
                     {
-                        let mut stats = scheduler_stats.lock().unwrap();
+                        let mut stats =
+                            scheduler_stats.lock().expect("lock should not be poisoned");
                         match result {
                             TaskResult::Success => stats.tasks_completed += 1,
                             TaskResult::Error(_) | TaskResult::Cancelled => stats.tasks_failed += 1,
@@ -421,7 +445,7 @@ impl ParallelScheduler {
                     }
 
                     // Wait for notification or timeout
-                    let flag = shutdown_flag.lock().unwrap();
+                    let flag = shutdown_flag.lock().expect("lock should not be poisoned");
                     if !*flag {
                         let _ =
                             condvar.wait_timeout(flag, Duration::from_millis(config.time_slice_ms));
@@ -429,7 +453,7 @@ impl ParallelScheduler {
 
                     let idle_time = idle_start.elapsed();
                     {
-                        let mut states = thread_states.lock().unwrap();
+                        let mut states = thread_states.lock().expect("lock should not be poisoned");
                         if let Some(state) = states.get_mut(thread_id) {
                             state.idle_time += idle_time;
                         }
@@ -494,7 +518,8 @@ mod tests {
     #[test]
     fn test_scheduler_creation() {
         let config = SchedulerConfig::optimal_for_cores(2);
-        let scheduler = ParallelScheduler::new(config).unwrap();
+        let scheduler =
+            ParallelScheduler::new(config).expect("failed to create parallel scheduler");
         assert_eq!(scheduler.num_threads(), 2);
         assert_eq!(scheduler.queue_length(), 0);
     }
@@ -502,7 +527,8 @@ mod tests {
     #[test]
     fn test_task_submission() {
         let config = SchedulerConfig::optimal_for_cores(2);
-        let scheduler = ParallelScheduler::new(config).unwrap();
+        let scheduler =
+            ParallelScheduler::new(config).expect("failed to create parallel scheduler");
 
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = Arc::clone(&counter);
@@ -517,7 +543,7 @@ mod tests {
                 None,
                 None,
             )
-            .unwrap();
+            .expect("failed to submit task");
 
         assert!(task_id > 0);
 
@@ -530,7 +556,8 @@ mod tests {
     #[test]
     fn test_priority_scheduling() {
         let config = SchedulerConfig::optimal_for_cores(1); // Single thread to ensure sequential execution
-        let scheduler = ParallelScheduler::new(config).unwrap();
+        let scheduler =
+            ParallelScheduler::new(config).expect("failed to create parallel scheduler");
 
         let execution_order = Arc::new(Mutex::new(Vec::new()));
 
@@ -558,7 +585,7 @@ mod tests {
                 None,
                 None,
             )
-            .unwrap();
+            .expect("failed to submit blocker task");
 
         // Give the blocker time to start executing
         std::thread::sleep(Duration::from_millis(50));
@@ -570,7 +597,10 @@ mod tests {
                 .submit_task(
                     move || {
                         // Record execution order immediately when task starts
-                        order_clone.lock().unwrap().push(priority);
+                        order_clone
+                            .lock()
+                            .expect("lock should not be poisoned")
+                            .push(priority);
                         std::thread::sleep(Duration::from_millis(10));
                         TaskResult::Success
                     },
@@ -578,7 +608,7 @@ mod tests {
                     None,
                     None,
                 )
-                .unwrap();
+                .expect("failed to submit priority task");
         }
 
         // Give tasks time to queue
@@ -590,7 +620,7 @@ mod tests {
         // Wait for all tasks to complete
         std::thread::sleep(Duration::from_millis(300));
 
-        let order = execution_order.lock().unwrap();
+        let order = execution_order.lock().expect("lock should not be poisoned");
         assert_eq!(
             order.len(),
             4,
@@ -616,7 +646,8 @@ mod tests {
     #[test]
     fn test_scheduler_statistics() {
         let config = SchedulerConfig::optimal_for_cores(2);
-        let scheduler = ParallelScheduler::new(config).unwrap();
+        let scheduler =
+            ParallelScheduler::new(config).expect("failed to create parallel scheduler");
 
         // Submit some tasks
         for _ in 0..5 {
@@ -630,7 +661,7 @@ mod tests {
                     None,
                     None,
                 )
-                .unwrap();
+                .expect("failed to submit statistics test task");
         }
 
         // Wait for execution (increased time for reliability)
@@ -645,7 +676,8 @@ mod tests {
     #[test]
     fn test_urgent_task_submission() {
         let config = SchedulerConfig::optimal_for_cores(1);
-        let scheduler = ParallelScheduler::new(config).unwrap();
+        let scheduler =
+            ParallelScheduler::new(config).expect("failed to create parallel scheduler");
 
         let executed = Arc::new(AtomicU32::new(0));
         let executed_clone = Arc::clone(&executed);
@@ -655,7 +687,7 @@ mod tests {
                 executed_clone.store(1, Ordering::SeqCst);
                 TaskResult::Success
             })
-            .unwrap();
+            .expect("failed to submit urgent task");
 
         assert!(task_id > 0);
 

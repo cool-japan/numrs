@@ -28,7 +28,7 @@ use std::fmt::Debug;
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let det_val = det(&a).unwrap();
+/// let det_val = det(&a).expect("determinant computation should succeed for square matrix");
 /// assert_eq!(det_val, -2.0);
 /// ```
 #[cfg(feature = "lapack")]
@@ -65,7 +65,7 @@ pub fn det<
 /// use numrs2::prelude::*;
 ///
 /// let a = Array::from_vec(vec![2.0, 0.0, 0.0, 2.0]).reshape(&[2, 2]);
-/// let a_squared = matrix_power(&a, 2).unwrap();
+/// let a_squared = matrix_power(&a, 2).expect("matrix power should succeed for square matrix");
 /// let expected = Array::from_vec(vec![4.0, 0.0, 0.0, 4.0]).reshape(&[2, 2]);
 /// // Result should be [[4, 0], [0, 4]]
 /// ```

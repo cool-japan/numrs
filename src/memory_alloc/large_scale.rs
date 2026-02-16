@@ -326,13 +326,19 @@ impl LargeScaleManager {
         // Register the spilled data
         let spilled = SpilledData::new(spill_path, data.len());
         {
-            let mut registry = self.spilled_data.write().unwrap();
+            let mut registry = self
+                .spilled_data
+                .write()
+                .expect("spilled_data RwLock should not be poisoned");
             registry.insert(spill_id.clone(), spilled);
         }
 
         // Add to cleanup queue
         {
-            let mut queue = self.cleanup_queue.lock().unwrap();
+            let mut queue = self
+                .cleanup_queue
+                .lock()
+                .expect("cleanup_queue mutex should not be poisoned");
             queue.push_back(spill_id.clone());
         }
 
@@ -341,7 +347,10 @@ impl LargeScaleManager {
 
     /// Load spilled data back into memory
     pub fn load_spilled_data(&self, spill_id: &str) -> Result<Vec<u8>> {
-        let mut registry = self.spilled_data.write().unwrap();
+        let mut registry = self
+            .spilled_data
+            .write()
+            .expect("spilled_data RwLock should not be poisoned");
         if let Some(spilled) = registry.get_mut(spill_id) {
             spilled.load()
         } else {
@@ -354,10 +363,16 @@ impl LargeScaleManager {
 
     /// Remove spilled data
     pub fn remove_spilled_data(&self, spill_id: &str) -> Result<()> {
-        let mut registry = self.spilled_data.write().unwrap();
+        let mut registry = self
+            .spilled_data
+            .write()
+            .expect("spilled_data RwLock should not be poisoned");
         if registry.remove(spill_id).is_some() {
             // Remove from cleanup queue as well
-            let mut queue = self.cleanup_queue.lock().unwrap();
+            let mut queue = self
+                .cleanup_queue
+                .lock()
+                .expect("cleanup_queue mutex should not be poisoned");
             queue.retain(|id| id != spill_id);
             Ok(())
         } else {
@@ -370,7 +385,10 @@ impl LargeScaleManager {
 
     /// Get list of all spilled data IDs
     pub fn list_spilled_data(&self) -> Vec<String> {
-        let registry = self.spilled_data.read().unwrap();
+        let registry = self
+            .spilled_data
+            .read()
+            .expect("spilled_data RwLock should not be poisoned");
         registry.keys().cloned().collect()
     }
 
@@ -381,7 +399,10 @@ impl LargeScaleManager {
 
     /// Get spilled data statistics
     pub fn get_spill_stats(&self) -> SpillStats {
-        let registry = self.spilled_data.read().unwrap();
+        let registry = self
+            .spilled_data
+            .read()
+            .expect("spilled_data RwLock should not be poisoned");
         let total_spilled_size: usize = registry.values().map(|s| s.size()).sum();
         let spilled_count = registry.len();
 
@@ -394,8 +415,14 @@ impl LargeScaleManager {
 
     /// Perform manual cleanup of old spilled data
     pub fn cleanup_spilled_data(&self, max_age_seconds: u64) -> usize {
-        let mut registry = self.spilled_data.write().unwrap();
-        let mut queue = self.cleanup_queue.lock().unwrap();
+        let mut registry = self
+            .spilled_data
+            .write()
+            .expect("spilled_data RwLock should not be poisoned");
+        let mut queue = self
+            .cleanup_queue
+            .lock()
+            .expect("cleanup_queue mutex should not be poisoned");
 
         let mut cleaned_up = 0;
         let mut to_remove = Vec::new();
@@ -419,8 +446,14 @@ impl LargeScaleManager {
 
     /// Force cleanup of all spilled data
     pub fn force_cleanup_all(&self) {
-        let mut registry = self.spilled_data.write().unwrap();
-        let mut queue = self.cleanup_queue.lock().unwrap();
+        let mut registry = self
+            .spilled_data
+            .write()
+            .expect("spilled_data RwLock should not be poisoned");
+        let mut queue = self
+            .cleanup_queue
+            .lock()
+            .expect("cleanup_queue mutex should not be poisoned");
 
         registry.clear();
         queue.clear();
@@ -441,8 +474,12 @@ impl LargeScaleManager {
                 thread::sleep(cleanup_interval);
 
                 // Perform cleanup
-                let mut registry = spilled_data.write().unwrap();
-                let mut queue = cleanup_queue.lock().unwrap();
+                let mut registry = spilled_data
+                    .write()
+                    .expect("spilled_data RwLock should not be poisoned");
+                let mut queue = cleanup_queue
+                    .lock()
+                    .expect("cleanup_queue mutex should not be poisoned");
 
                 let mut to_remove = Vec::new();
 
@@ -549,7 +586,9 @@ lazy_static::lazy_static! {
 
 /// Initialize the global large-scale manager
 pub fn init_global_manager(config: LargeScaleConfig) -> Result<()> {
-    let mut manager = GLOBAL_MANAGER.write().unwrap();
+    let mut manager = GLOBAL_MANAGER
+        .write()
+        .expect("GLOBAL_MANAGER RwLock should not be poisoned");
     if manager.is_some() {
         return Err(NumRs2Error::InvalidOperation(
             "Global large-scale manager already initialized".to_string(),
@@ -565,7 +604,9 @@ pub fn with_global_manager<F, R>(f: F) -> Result<R>
 where
     F: FnOnce(&LargeScaleManager) -> R,
 {
-    let manager = GLOBAL_MANAGER.read().unwrap();
+    let manager = GLOBAL_MANAGER
+        .read()
+        .expect("GLOBAL_MANAGER RwLock should not be poisoned");
     let manager_ref = manager.as_ref().ok_or_else(|| {
         NumRs2Error::InvalidOperation(
             "Global large-scale manager not initialized. Call init_global_manager() first."
@@ -585,7 +626,9 @@ pub fn with_global_manager_mut<F, R>(f: F) -> Result<R>
 where
     F: FnOnce(&mut LargeScaleManager) -> Result<R>,
 {
-    let mut manager = GLOBAL_MANAGER.write().unwrap();
+    let mut manager = GLOBAL_MANAGER
+        .write()
+        .expect("GLOBAL_MANAGER RwLock should not be poisoned");
     let manager_ref = manager.as_mut().ok_or_else(|| {
         NumRs2Error::InvalidOperation(
             "Global large-scale manager not initialized. Call init_global_manager() first."
@@ -719,12 +762,12 @@ mod tests {
 
         // Create test file
         let test_data = b"Test spilled data";
-        std::fs::write(&spill_path, test_data).unwrap();
+        std::fs::write(&spill_path, test_data).expect("writing test data should succeed");
 
         let mut spilled = SpilledData::new(spill_path.clone(), test_data.len());
 
         // Test loading
-        let loaded = spilled.load().unwrap();
+        let loaded = spilled.load().expect("loading spilled data should succeed");
         assert_eq!(loaded, test_data);
 
         // Test cleanup eligibility (should not be eligible for cleanup immediately)

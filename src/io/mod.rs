@@ -6,11 +6,37 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-mod npy_npz;
+pub mod npy_npz;
 pub mod text;
+
+// Optional I/O format modules (feature-gated)
+#[cfg(feature = "bson")]
+pub mod bson_format;
+#[cfg(feature = "matlab")]
+pub mod matlab;
+#[cfg(feature = "messagepack")]
+pub mod messagepack;
+#[cfg(feature = "netcdf")]
+pub mod netcdf;
+#[cfg(feature = "parquet")]
+pub mod parquet;
 
 pub use npy_npz::*;
 pub use text::*;
+
+// Re-export format-specific modules when features are enabled
+#[cfg(feature = "bson")]
+pub use bson_format::{from_bson_document, from_bson_file, to_bson_document, to_bson_file};
+#[cfg(feature = "matlab")]
+pub use matlab::{read_mat, write_mat};
+#[cfg(feature = "messagepack")]
+pub use messagepack::{
+    from_messagepack, from_messagepack_bytes, to_messagepack, to_messagepack_bytes,
+};
+#[cfg(feature = "netcdf")]
+pub use netcdf::{read_netcdf, write_netcdf};
+#[cfg(feature = "parquet")]
+pub use parquet::{read_parquet, write_parquet};
 
 /// Module for input/output operations with NumRS arrays.
 ///
@@ -33,7 +59,7 @@ pub enum SerializeFormat {
     Json,
     /// CSV format
     Csv,
-    /// Binary format
+    /// Binary format (using oxicode)
     Binary,
     /// NumPy NPY format (*.npy)
     Npy,
@@ -41,6 +67,21 @@ pub enum SerializeFormat {
     Npz,
     /// Python pickle format (*.pkl)
     Pickle,
+    /// Apache Parquet format (*.parquet) - requires "parquet" feature
+    #[cfg(feature = "parquet")]
+    Parquet,
+    /// MessagePack format (*.msgpack) - requires "messagepack" feature
+    #[cfg(feature = "messagepack")]
+    MessagePack,
+    /// BSON format (*.bson) - requires "bson" feature
+    #[cfg(feature = "bson")]
+    Bson,
+    /// NetCDF-3 format (*.nc) - requires "netcdf" feature
+    #[cfg(feature = "netcdf")]
+    NetCdf,
+    /// MATLAB .mat format (*.mat) - requires "matlab" feature
+    #[cfg(feature = "matlab")]
+    Matlab,
 }
 
 impl<T: Clone + Serialize> Array<T> {
@@ -61,7 +102,7 @@ impl<T: Clone + Serialize> Array<T> {
     /// use numrs2::io::SerializeFormat;
     ///
     /// let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-    /// let json = array.to_string(SerializeFormat::Json).unwrap();
+    /// let json = array.to_string(SerializeFormat::Json).expect("Failed to serialize to JSON");
     /// ```
     pub fn to_string(&self, format: SerializeFormat) -> Result<String> {
         let serialized = SerializedArray {
@@ -103,6 +144,31 @@ impl<T: Clone + Serialize> Array<T> {
                 "Pickle format serialization to string not supported (use to_file instead)"
                     .to_string(),
             )),
+            #[cfg(feature = "parquet")]
+            SerializeFormat::Parquet => Err(NumRs2Error::SerializationError(
+                "Parquet format serialization to string not supported (use to_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "messagepack")]
+            SerializeFormat::MessagePack => Err(NumRs2Error::SerializationError(
+                "MessagePack format serialization to string not supported (use to_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "bson")]
+            SerializeFormat::Bson => Err(NumRs2Error::SerializationError(
+                "BSON format serialization to string not supported (use to_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "netcdf")]
+            SerializeFormat::NetCdf => Err(NumRs2Error::SerializationError(
+                "NetCDF format serialization to string not supported (use to_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "matlab")]
+            SerializeFormat::Matlab => Err(NumRs2Error::SerializationError(
+                "MATLAB format serialization to string not supported (use to_file instead)"
+                    .to_string(),
+            )),
         }
     }
 
@@ -126,7 +192,7 @@ impl<T: Clone + Serialize> Array<T> {
     ///
     /// let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
     /// // Uncomment to actually write to file:
-    /// // array.to_file(Path::new("array.json"), SerializeFormat::Json).unwrap();
+    /// // array.to_file(Path::new("array.json"), SerializeFormat::Json).expect("Failed to write to file");
     /// ```
     pub fn to_file<P: AsRef<Path>>(&self, path: P, format: SerializeFormat) -> Result<()> {
         let file = File::create(path)
@@ -183,6 +249,37 @@ impl<T: Clone + Serialize> Array<T> {
                         ))
                     })?;
             }
+            #[cfg(feature = "parquet")]
+            SerializeFormat::Parquet => {
+                return Err(NumRs2Error::SerializationError(
+                    "Parquet format not yet implemented for Array serialization".to_string(),
+                ));
+            }
+            #[cfg(feature = "messagepack")]
+            SerializeFormat::MessagePack => {
+                let bytes = to_messagepack_bytes(self)?;
+                writer
+                    .write_all(&bytes)
+                    .map_err(|e| NumRs2Error::IOError(format!("Failed to write to file: {}", e)))?;
+            }
+            #[cfg(feature = "bson")]
+            SerializeFormat::Bson => {
+                return Err(NumRs2Error::SerializationError(
+                    "BSON format: use to_bson_file() function instead".to_string(),
+                ));
+            }
+            #[cfg(feature = "netcdf")]
+            SerializeFormat::NetCdf => {
+                return Err(NumRs2Error::SerializationError(
+                    "NetCDF format: use write_netcdf() function instead".to_string(),
+                ));
+            }
+            #[cfg(feature = "matlab")]
+            SerializeFormat::Matlab => {
+                return Err(NumRs2Error::SerializationError(
+                    "MATLAB format: use write_mat() function instead".to_string(),
+                ));
+            }
         }
 
         Ok(())
@@ -200,7 +297,7 @@ impl<T: Clone + Serialize> Array<T> {
     /// use numrs2::prelude::*;
     ///
     /// let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-    /// let rows = array.to_row_vectors().unwrap();
+    /// let rows = array.to_row_vectors().expect("Failed to convert to row vectors");
     /// assert_eq!(rows, vec![vec![1, 2], vec![3, 4]]);
     /// ```
     pub fn to_row_vectors(&self) -> Result<Vec<Vec<T>>> {
@@ -254,7 +351,7 @@ where
     /// use numrs2::io::SerializeFormat;
     ///
     /// let json = r#"{"shape":[2,2],"data":[1,2,3,4]}"#;
-    /// let array = Array::<i32>::from_string(json, SerializeFormat::Json).unwrap();
+    /// let array = Array::<i32>::from_string(json, SerializeFormat::Json).expect("Failed to deserialize from JSON");
     /// assert_eq!(array.shape(), vec![2, 2]);
     /// assert_eq!(array.to_vec(), vec![1, 2, 3, 4]);
     /// ```
@@ -305,6 +402,31 @@ where
                 "Pickle format deserialization from string not supported (use from_file instead)"
                     .to_string(),
             )),
+            #[cfg(feature = "parquet")]
+            SerializeFormat::Parquet => Err(NumRs2Error::DeserializationError(
+                "Parquet format deserialization from string not supported (use from_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "messagepack")]
+            SerializeFormat::MessagePack => Err(NumRs2Error::DeserializationError(
+                "MessagePack format deserialization from string not supported (use from_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "bson")]
+            SerializeFormat::Bson => Err(NumRs2Error::DeserializationError(
+                "BSON format deserialization from string not supported (use from_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "netcdf")]
+            SerializeFormat::NetCdf => Err(NumRs2Error::DeserializationError(
+                "NetCDF format deserialization from string not supported (use from_file instead)"
+                    .to_string(),
+            )),
+            #[cfg(feature = "matlab")]
+            SerializeFormat::Matlab => Err(NumRs2Error::DeserializationError(
+                "MATLAB format deserialization from string not supported (use from_file instead)"
+                    .to_string(),
+            )),
         }
     }
 
@@ -327,7 +449,7 @@ where
     /// use std::path::Path;
     ///
     /// // Uncomment to actually read from file:
-    /// // let array = Array::<i32>::from_file(Path::new("array.json"), SerializeFormat::Json).unwrap();
+    /// // let array = Array::<i32>::from_file(Path::new("array.json"), SerializeFormat::Json).expect("Failed to read from file");
     /// ```
     pub fn from_file<P: AsRef<Path>>(path: P, format: SerializeFormat) -> Result<Self> {
         let file = File::open(path)
@@ -431,6 +553,32 @@ where
 
                 Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
             }
+            #[cfg(feature = "parquet")]
+            SerializeFormat::Parquet => Err(NumRs2Error::DeserializationError(
+                "Parquet format not yet implemented for Array deserialization".to_string(),
+            )),
+            #[cfg(feature = "messagepack")]
+            SerializeFormat::MessagePack => {
+                use std::io::Read;
+                let mut bytes = Vec::new();
+                let mut reader = reader;
+                reader
+                    .read_to_end(&mut bytes)
+                    .map_err(|e| NumRs2Error::IOError(format!("Failed to read file: {}", e)))?;
+                from_messagepack_bytes(&bytes)
+            }
+            #[cfg(feature = "bson")]
+            SerializeFormat::Bson => Err(NumRs2Error::DeserializationError(
+                "BSON format: use from_bson_file() function instead".to_string(),
+            )),
+            #[cfg(feature = "netcdf")]
+            SerializeFormat::NetCdf => Err(NumRs2Error::DeserializationError(
+                "NetCDF format: use read_netcdf() function instead".to_string(),
+            )),
+            #[cfg(feature = "matlab")]
+            SerializeFormat::Matlab => Err(NumRs2Error::DeserializationError(
+                "MATLAB format: use read_mat() function instead".to_string(),
+            )),
         }
     }
 }
@@ -455,7 +603,7 @@ where
 /// use numrs2::io::vec_to_array;
 ///
 /// let vec = vec![1, 2, 3, 4];
-/// let array = vec_to_array(vec, Some(&[2, 2])).unwrap();
+/// let array = vec_to_array(vec, Some(&[2, 2])).expect("Failed to convert vec to array");
 /// assert_eq!(array.shape(), vec![2, 2]);
 /// ```
 pub fn vec_to_array<T: Clone>(vec: Vec<T>, shape: Option<&[usize]>) -> Result<Array<T>> {
@@ -483,7 +631,7 @@ pub fn vec_to_array<T: Clone>(vec: Vec<T>, shape: Option<&[usize]>) -> Result<Ar
 /// use numrs2::io::vec2d_to_array;
 ///
 /// let vec = vec![vec![1, 2], vec![3, 4]];
-/// let array = vec2d_to_array(vec).unwrap();
+/// let array = vec2d_to_array(vec).expect("Failed to convert 2D vec to array");
 /// assert_eq!(array.shape(), vec![2, 2]);
 /// ```
 pub fn vec2d_to_array<T: Clone>(vec: Vec<Vec<T>>) -> Result<Array<T>> {
@@ -533,7 +681,7 @@ pub fn vec2d_to_array<T: Clone>(vec: Vec<Vec<T>>) -> Result<Array<T>> {
 /// use numrs2::io::array_to_vec2d;
 ///
 /// let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-/// let vec = array_to_vec2d(&array).unwrap();
+/// let vec = array_to_vec2d(&array).expect("Failed to convert array to 2D vec");
 /// assert_eq!(vec, vec![vec![1, 2], vec![3, 4]]);
 /// ```
 pub fn array_to_vec2d<T: Clone>(array: &Array<T>) -> Result<Vec<Vec<T>>> {
@@ -569,11 +717,14 @@ mod tests {
     #[test]
     fn test_json_serialization() {
         let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-        let json = array.to_string(SerializeFormat::Json).unwrap();
+        let json = array
+            .to_string(SerializeFormat::Json)
+            .expect("Failed to serialize to JSON");
         let expected = r#"{"shape":[2,2],"data":[1,2,3,4]}"#;
         assert_eq!(json, expected);
 
-        let deserialized = Array::<i32>::from_string(&json, SerializeFormat::Json).unwrap();
+        let deserialized = Array::<i32>::from_string(&json, SerializeFormat::Json)
+            .expect("Failed to deserialize from JSON");
         assert_eq!(deserialized.shape(), vec![2, 2]);
         assert_eq!(deserialized.to_vec(), vec![1, 2, 3, 4]);
     }
@@ -581,7 +732,7 @@ mod tests {
     #[test]
     fn test_vec_to_array() {
         let vec = vec![1, 2, 3, 4];
-        let array = vec_to_array(vec, Some(&[2, 2])).unwrap();
+        let array = vec_to_array(vec, Some(&[2, 2])).expect("Failed to convert vec to array");
         assert_eq!(array.shape(), vec![2, 2]);
         assert_eq!(array.to_vec(), vec![1, 2, 3, 4]);
     }
@@ -589,7 +740,7 @@ mod tests {
     #[test]
     fn test_vec2d_to_array() {
         let vec = vec![vec![1, 2], vec![3, 4]];
-        let array = vec2d_to_array(vec).unwrap();
+        let array = vec2d_to_array(vec).expect("Failed to convert 2D vec to array");
         assert_eq!(array.shape(), vec![2, 2]);
         assert_eq!(array.to_vec(), vec![1, 2, 3, 4]);
     }
@@ -597,14 +748,16 @@ mod tests {
     #[test]
     fn test_array_to_vec2d() {
         let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-        let vec = array_to_vec2d(&array).unwrap();
+        let vec = array_to_vec2d(&array).expect("Failed to convert array to 2D vec");
         assert_eq!(vec, vec![vec![1, 2], vec![3, 4]]);
     }
 
     #[test]
     fn test_csv_serialization() {
         let array = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-        let rows = array.to_row_vectors().unwrap();
+        let rows = array
+            .to_row_vectors()
+            .expect("Failed to convert to row vectors");
         assert_eq!(rows, vec![vec![1, 2], vec![3, 4]]);
     }
 }

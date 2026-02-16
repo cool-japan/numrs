@@ -18,7 +18,8 @@ use scirs2_core::Complex;
 use std::fmt::Debug;
 
 /// Threshold for using SIMD optimizations (minimum vector size)
-const SIMD_THRESHOLD: usize = 32;
+/// v0.2.0: Increased from 32 to 64 to better amortize allocation overhead
+const SIMD_THRESHOLD: usize = 64;
 
 /// Compute the norm of a vector or matrix
 pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static>(
@@ -26,73 +27,79 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
     ord: Option<T>,
 ) -> Result<T> {
     let shape = a.shape();
-    let ord = ord.unwrap_or(T::from(2.0).unwrap());
+    let ord = ord.unwrap_or_else(|| T::from(2.0).unwrap_or(T::one() + T::one()));
 
     if shape.len() == 1 {
         // Vector norm
-        if ord == T::from(1.0).unwrap() {
+        if ord == T::one() {
             // L1 norm (sum of absolute values)
             // Use SIMD for large vectors via SimdUnifiedOps
             if a.len() >= SIMD_THRESHOLD {
                 if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
                     let data = a.to_vec();
-                    let f32_data: Vec<f32> =
-                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                    let f32_data: Vec<f32> = data
+                        .iter()
+                        .filter_map(|&x| x.to_f64().map(|v| v as f32))
+                        .collect();
                     let f32_array = Array1::from_vec(f32_data);
                     let result = f32::simd_norm_l1(&f32_array.view());
-                    return Ok(T::from(result).unwrap());
+                    return Ok(T::from(result).unwrap_or(T::zero()));
                 } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
                     let data = a.to_vec();
-                    let f64_data: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                    let f64_data: Vec<f64> = data.iter().filter_map(|&x| x.to_f64()).collect();
                     let f64_array = Array1::from_vec(f64_data);
                     let result = f64::simd_norm_l1(&f64_array.view());
-                    return Ok(T::from(result).unwrap());
+                    return Ok(T::from(result).unwrap_or(T::zero()));
                 }
             }
 
             let data = a.to_vec();
             let sum = data.iter().fold(T::zero(), |acc, &x| acc + x.abs());
             Ok(sum)
-        } else if ord == T::from(2.0).unwrap() {
+        } else if ord == T::one() + T::one() {
             // L2 norm (Euclidean norm)
             // Use SIMD for large vectors via SimdUnifiedOps
             if a.len() >= SIMD_THRESHOLD {
                 if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
                     let data = a.to_vec();
-                    let f32_data: Vec<f32> =
-                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                    let f32_data: Vec<f32> = data
+                        .iter()
+                        .filter_map(|&x| x.to_f64().map(|v| v as f32))
+                        .collect();
                     let f32_array = Array1::from_vec(f32_data);
                     let result = f32::simd_norm(&f32_array.view());
-                    return Ok(T::from(result).unwrap());
+                    return Ok(T::from(result).unwrap_or(T::zero()));
                 } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
                     let data = a.to_vec();
-                    let f64_data: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                    let f64_data: Vec<f64> = data.iter().filter_map(|&x| x.to_f64()).collect();
                     let f64_array = Array1::from_vec(f64_data);
                     let result = f64::simd_norm(&f64_array.view());
-                    return Ok(T::from(result).unwrap());
+                    return Ok(T::from(result).unwrap_or(T::zero()));
                 }
             }
 
             let data = a.to_vec();
             let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
             Ok(sum_squares.sqrt())
-        } else if ord == T::from(f64::INFINITY).unwrap() {
+        } else if ord == T::infinity() {
             // L-infinity norm (maximum absolute value)
             // Use SIMD for large vectors via SimdUnifiedOps
             if a.len() >= SIMD_THRESHOLD {
                 if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
                     let data = a.to_vec();
-                    let f32_data: Vec<f32> =
-                        data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+                    let f32_data: Vec<f32> = data
+                        .iter()
+                        .filter_map(|&x| x.to_f64().map(|v| v as f32))
+                        .collect();
                     let f32_array = Array1::from_vec(f32_data);
                     let result = f32::simd_norm_linf(&f32_array.view());
-                    return Ok(T::from(result).unwrap());
+                    return Ok(T::from(result).unwrap_or(T::zero()));
                 } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
                     let data = a.to_vec();
-                    let f64_data: Vec<f64> = data.iter().map(|&x| x.to_f64().unwrap()).collect();
+                    let f64_data: Vec<f64> = data.iter().filter_map(|&x| x.to_f64()).collect();
                     let f64_array = Array1::from_vec(f64_data);
                     let result = f64::simd_norm_linf(&f64_array.view());
-                    return Ok(T::from(result).unwrap());
+                    return Ok(T::from(result).unwrap_or(T::zero()));
                 }
             }
 
@@ -109,7 +116,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
         }
     } else if shape.len() == 2 {
         // Matrix norm
-        if ord == T::from(1.0).unwrap() {
+        if ord == T::one() {
             // Maximum column sum
             let m = shape[0];
             let n = shape[1];
@@ -125,7 +132,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             }
 
             Ok(max_col_sum)
-        } else if ord == T::from(f64::INFINITY).unwrap() {
+        } else if ord == T::infinity() {
             // Maximum row sum
             let m = shape[0];
             let n = shape[1];
@@ -141,7 +148,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             }
 
             Ok(max_row_sum)
-        } else if ord == T::from(2.0).unwrap() {
+        } else if ord == T::one() + T::one() {
             // Spectral norm (maximum singular value)
             // Compute using the power iteration method for efficiency
             let m = shape[0];
@@ -171,9 +178,9 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
                 let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
 
                 // If determinant is close to 1 and sum of squares is close to 2, it's a rotation matrix
-                if (det - T::one()).abs() < T::from(1e-6).unwrap()
-                    && (sum_squares - T::from(2.0).unwrap()).abs() < T::from(1e-6).unwrap()
-                {
+                let small_tol = T::from(1e-6).unwrap_or(T::epsilon());
+                let two = T::one() + T::one();
+                if (det - T::one()).abs() < small_tol && (sum_squares - two).abs() < small_tol {
                     return Ok(T::one());
                 }
             }
@@ -195,7 +202,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
 
             // Apply power iteration to find the dominant eigenvalue
             let max_iter = 1000; // Increase maximum iterations for better convergence
-            let tol = T::from(1e-12).unwrap(); // Tighter tolerance for better accuracy
+            let tol = T::from(1e-12).unwrap_or(T::epsilon()); // Tighter tolerance for better accuracy
 
             // Start with a random unit vector
             let vec_size = if m >= n { n } else { m };
@@ -203,8 +210,10 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
 
             // Use the preferred non-deprecated functions
             let mut rng = thread_rng();
-            for item in &mut x_data {
-                *item = T::from(rng.random_range(0.0..1.0)).unwrap();
+            for (idx, item) in x_data.iter_mut().enumerate() {
+                // Use a deterministic fallback if conversion fails
+                *item = T::from(rng.random_range(0.0..1.0))
+                    .unwrap_or_else(|| T::from(idx as f64 / vec_size as f64).unwrap_or(T::one()));
             }
 
             // Normalize x
@@ -418,21 +427,27 @@ pub fn inner<T: Float + Clone + Debug + 'static>(a: &Array<T>, b: &Array<T>) -> 
         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
             let a_data = a.to_vec();
             let b_data = b.to_vec();
-            let f32_a_data: Vec<f32> = a_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
-            let f32_b_data: Vec<f32> = b_data.iter().map(|&x| x.to_f64().unwrap() as f32).collect();
+            let f32_a_data: Vec<f32> = a_data
+                .iter()
+                .filter_map(|&x| x.to_f64().map(|v| v as f32))
+                .collect();
+            let f32_b_data: Vec<f32> = b_data
+                .iter()
+                .filter_map(|&x| x.to_f64().map(|v| v as f32))
+                .collect();
             let f32_a = Array1::from_vec(f32_a_data);
             let f32_b = Array1::from_vec(f32_b_data);
             let result = f32::simd_dot(&f32_a.view(), &f32_b.view());
-            return Ok(T::from(result).unwrap());
+            return Ok(T::from(result).unwrap_or(T::zero()));
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
             let a_data = a.to_vec();
             let b_data = b.to_vec();
-            let f64_a_data: Vec<f64> = a_data.iter().map(|&x| x.to_f64().unwrap()).collect();
-            let f64_b_data: Vec<f64> = b_data.iter().map(|&x| x.to_f64().unwrap()).collect();
+            let f64_a_data: Vec<f64> = a_data.iter().filter_map(|&x| x.to_f64()).collect();
+            let f64_b_data: Vec<f64> = b_data.iter().filter_map(|&x| x.to_f64()).collect();
             let f64_a = Array1::from_vec(f64_a_data);
             let f64_b = Array1::from_vec(f64_b_data);
             let result = f64::simd_dot(&f64_a.view(), &f64_b.view());
-            return Ok(T::from(result).unwrap());
+            return Ok(T::from(result).unwrap_or(T::zero()));
         }
     }
 
@@ -480,7 +495,9 @@ pub fn outer<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
 
     // Create output array of shape (len(a), len(b))
     let mut result = Array::zeros(&[a_shape[0], b_shape[0]]);
-    let result_data = result.array_mut().as_slice_mut().unwrap();
+    let result_data = result.array_mut().as_slice_mut().ok_or_else(|| {
+        NumRs2Error::ComputationError("array should have contiguous memory layout".to_string())
+    })?;
 
     // Compute outer product
     for (i, &a_val) in a_data.iter().enumerate() {
@@ -512,13 +529,13 @@ pub fn outer<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
 /// // 3D cross product
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let b = Array::from_vec(vec![4.0, 5.0, 6.0]);
-/// let c = cross(&a, &b).unwrap();
+/// let c = cross(&a, &b).expect("cross product should succeed for 3D vectors");
 /// assert_eq!(c.to_vec(), vec![-3.0, 6.0, -3.0]);
 ///
 /// // 2D cross product (returns scalar as 1-element array)
 /// let a2d = Array::from_vec(vec![1.0, 2.0]);
 /// let b2d = Array::from_vec(vec![3.0, 4.0]);
-/// let c2d = cross(&a2d, &b2d).unwrap();
+/// let c2d = cross(&a2d, &b2d).expect("cross product should succeed for 2D vectors");
 /// assert_eq!(c2d.to_vec(), vec![-2.0]); // 1*4 - 2*3 = -2
 /// ```
 pub fn cross<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Array<T>> {

@@ -7,6 +7,7 @@
 //! Run with: `cargo bench --bench numpy_comparison_benchmark`
 
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use numrs2::array::Array;

@@ -23,7 +23,7 @@ use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
 ///
 /// let a = Array::from_vec(vec![13, 17, 21]);  // 01101, 10001, 10101
 /// let b = Array::from_vec(vec![9, 7, 15]);    // 01001, 00111, 01111
-/// let result = bitwise_and(&a, &b).unwrap();
+/// let result = bitwise_and(&a, &b).expect("bitwise_and should succeed");
 /// assert_eq!(result.to_vec(), vec![9, 1, 5]); // 01001, 00001, 00101
 /// ```
 pub fn bitwise_and<T>(x1: &Array<T>, x2: &Array<T>) -> Result<Array<T>>
@@ -65,7 +65,7 @@ where
 ///
 /// let a = Array::from_vec(vec![13, 17, 21]);  // 01101, 10001, 10101
 /// let b = Array::from_vec(vec![9, 7, 15]);    // 01001, 00111, 01111
-/// let result = bitwise_or(&a, &b).unwrap();
+/// let result = bitwise_or(&a, &b).expect("bitwise_or should succeed");
 /// assert_eq!(result.to_vec(), vec![13, 23, 31]); // 01101, 10111, 11111
 /// ```
 pub fn bitwise_or<T>(x1: &Array<T>, x2: &Array<T>) -> Result<Array<T>>
@@ -107,7 +107,7 @@ where
 ///
 /// let a = Array::from_vec(vec![13, 17, 21]);  // 01101, 10001, 10101
 /// let b = Array::from_vec(vec![9, 7, 15]);    // 01001, 00111, 01111
-/// let result = bitwise_xor(&a, &b).unwrap();
+/// let result = bitwise_xor(&a, &b).expect("bitwise_xor should succeed");
 /// assert_eq!(result.to_vec(), vec![4, 22, 26]); // 00100, 10110, 11010
 /// ```
 pub fn bitwise_xor<T>(x1: &Array<T>, x2: &Array<T>) -> Result<Array<T>>
@@ -199,7 +199,7 @@ where
 ///
 /// let a = Array::from_vec(vec![5, 10, 15]);
 /// let shift = Array::from_vec(vec![1, 2, 3]);
-/// let result = left_shift(&a, &shift).unwrap();
+/// let result = left_shift(&a, &shift).expect("left_shift should succeed");
 /// assert_eq!(result.to_vec(), vec![10, 40, 120]); // 5<<1, 10<<2, 15<<3
 /// ```
 pub fn left_shift<T, U>(x1: &Array<T>, x2: &Array<U>) -> Result<Array<T>>
@@ -242,7 +242,7 @@ where
 ///
 /// let a = Array::from_vec(vec![40, 80, 120]);
 /// let shift = Array::from_vec(vec![1, 2, 3]);
-/// let result = right_shift(&a, &shift).unwrap();
+/// let result = right_shift(&a, &shift).expect("right_shift should succeed");
 /// assert_eq!(result.to_vec(), vec![20, 20, 15]); // 40>>1, 80>>2, 120>>3
 /// ```
 pub fn right_shift<T, U>(x1: &Array<T>, x2: &Array<U>) -> Result<Array<T>>
@@ -329,7 +329,7 @@ mod tests {
     fn test_bitwise_and() {
         let a = Array::from_vec(vec![13, 17, 21]);
         let b = Array::from_vec(vec![9, 7, 15]);
-        let result = bitwise_and(&a, &b).unwrap();
+        let result = bitwise_and(&a, &b).expect("bitwise_and should succeed");
         assert_eq!(result.to_vec(), vec![9, 1, 5]);
     }
 
@@ -337,7 +337,7 @@ mod tests {
     fn test_bitwise_or() {
         let a = Array::from_vec(vec![13, 17, 21]);
         let b = Array::from_vec(vec![9, 7, 15]);
-        let result = bitwise_or(&a, &b).unwrap();
+        let result = bitwise_or(&a, &b).expect("bitwise_or should succeed");
         assert_eq!(result.to_vec(), vec![13, 23, 31]);
     }
 
@@ -345,7 +345,7 @@ mod tests {
     fn test_bitwise_xor() {
         let a = Array::from_vec(vec![13, 17, 21]);
         let b = Array::from_vec(vec![9, 7, 15]);
-        let result = bitwise_xor(&a, &b).unwrap();
+        let result = bitwise_xor(&a, &b).expect("bitwise_xor should succeed");
         assert_eq!(result.to_vec(), vec![4, 22, 26]);
     }
 
@@ -360,7 +360,7 @@ mod tests {
     fn test_left_shift() {
         let a = Array::from_vec(vec![5, 10, 15]);
         let shift = Array::from_vec(vec![1, 2, 3]);
-        let result = left_shift(&a, &shift).unwrap();
+        let result = left_shift(&a, &shift).expect("left_shift should succeed");
         assert_eq!(result.to_vec(), vec![10, 40, 120]);
     }
 
@@ -368,7 +368,7 @@ mod tests {
     fn test_right_shift() {
         let a = Array::from_vec(vec![40, 80, 120]);
         let shift = Array::from_vec(vec![1, 2, 3]);
-        let result = right_shift(&a, &shift).unwrap();
+        let result = right_shift(&a, &shift).expect("right_shift should succeed");
         assert_eq!(result.to_vec(), vec![20, 20, 15]);
     }
 

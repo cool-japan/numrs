@@ -54,7 +54,7 @@ where
 
     // Apply scaling if maximum is very large
     let mut scaling_factor = <T as num_traits::One>::one();
-    if max_val > <T as num_traits::NumCast>::from(1e6).unwrap() {
+    if max_val > <T as num_traits::NumCast>::from(1e6).expect("1e6 should convert to float type") {
         scaling_factor = <T as num_traits::One>::one() / max_val;
 
         for i in 0..m {
@@ -139,7 +139,10 @@ where
 
     // Set very small values in R to zero for numerical stability
     let eps = T::epsilon();
-    let tol = eps * <T as num_traits::NumCast>::from(std::cmp::max(m, n)).unwrap() * max_val;
+    let tol = eps
+        * <T as num_traits::NumCast>::from(std::cmp::max(m, n))
+            .expect("matrix dimension should convert to float type")
+        * max_val;
 
     for i in 0..r_array.shape()[0] {
         for j in 0..r_array.shape()[1] {
@@ -159,15 +162,19 @@ where
         let product = qt.matmul(&q_array)?;
 
         // Use a more robust tolerance that scales with matrix size and condition
-        let matrix_size = <T as num_traits::NumCast>::from(std::cmp::max(m, n)).unwrap();
+        let matrix_size = <T as num_traits::NumCast>::from(std::cmp::max(m, n))
+            .expect("matrix dimension should convert to float type");
 
         // Estimate condition number of original matrix for better tolerance
         let _a_norm = max_val; // Unused but kept for future expansion
-        let correction_factor = <T as num_traits::NumCast>::from(1.0).unwrap();
+        let correction_factor =
+            <T as num_traits::NumCast>::from(1.0).expect("1.0 should convert to float type");
 
         // More sophisticated tolerance that accounts for matrix properties
-        let ortho_tol =
-            eps * matrix_size * correction_factor * <T as num_traits::NumCast>::from(10.0).unwrap();
+        let ortho_tol = eps
+            * matrix_size
+            * correction_factor
+            * <T as num_traits::NumCast>::from(10.0).expect("10.0 should convert to float type");
 
         // Check that Q^T * Q is close to the identity matrix
         // Product should be n x n (or min(m,n) x min(m,n))
@@ -197,7 +204,8 @@ where
 
         // Calculate average deviation for more comprehensive assessment
         if num_elements > 0 {
-            avg_deviation /= <T as num_traits::NumCast>::from(num_elements).unwrap();
+            avg_deviation /= <T as num_traits::NumCast>::from(num_elements)
+                .expect("num_elements should convert to float type");
         }
 
         // 2. If orthogonality is poor, attempt to improve it through reorthogonalization
@@ -206,7 +214,11 @@ where
                      max_deviation, avg_deviation);
 
             // In real applications, we would perform reorthogonalization here
-            if max_deviation > ortho_tol * <T as num_traits::NumCast>::from(10.0).unwrap() {
+            if max_deviation
+                > ortho_tol
+                    * <T as num_traits::NumCast>::from(10.0)
+                        .expect("10.0 should convert to float type")
+            {
                 // For severe orthogonality issues, we perform explicit reorthogonalization
 
                 // Clone Q to preserve original result
@@ -305,8 +317,10 @@ where
             }
         }
 
-        let acceptable_error =
-            eps * max_val * <T as num_traits::NumCast>::from(std::cmp::max(m, n)).unwrap();
+        let acceptable_error = eps
+            * max_val
+            * <T as num_traits::NumCast>::from(std::cmp::max(m, n))
+                .expect("matrix dimension should convert to float type");
         if max_diff > acceptable_error {
             eprintln!("Warning: QR decomposition may be numerically unstable. Max reconstruction difference: {}", max_diff);
         }
@@ -391,7 +405,11 @@ where
                         let r_val = r.get(&[i + k, j])?;
                         r.set(
                             &[i + k, j],
-                            r_val - <T as num_traits::NumCast>::from(2.0).unwrap() * v[i] * vtr,
+                            r_val
+                                - <T as num_traits::NumCast>::from(2.0)
+                                    .expect("2.0 should convert to float type")
+                                    * v[i]
+                                    * vtr,
                         )?;
                     }
                 }
@@ -409,7 +427,8 @@ where
                         q.set(
                             &[i, j],
                             q_val
-                                - <T as num_traits::NumCast>::from(2.0).unwrap()
+                                - <T as num_traits::NumCast>::from(2.0)
+                                    .expect("2.0 should convert to float type")
                                     * q_row_dot_v
                                     * v[j - k],
                         )?;
@@ -436,7 +455,9 @@ where
 {
     let mut result = Array::zeros(&[n, n]);
     for i in 0..n {
-        result.set(&[i, i], T::one()).unwrap();
+        result
+            .set(&[i, i], T::one())
+            .expect("diagonal index should be valid");
     }
     result
 }

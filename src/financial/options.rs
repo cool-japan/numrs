@@ -13,8 +13,10 @@ where
     T: Float,
 {
     // Approximation using error function
-    let sqrt_2 = T::from(2.0).unwrap().sqrt();
-    (T::one() + erf_approx(x / sqrt_2)) / T::from(2.0).unwrap()
+    let sqrt_2 = T::from(2.0)
+        .expect("Failed to convert 2.0 to type T")
+        .sqrt();
+    (T::one() + erf_approx(x / sqrt_2)) / T::from(2.0).expect("Failed to convert 2.0 to type T")
 }
 
 /// Approximate error function implementation
@@ -23,12 +25,12 @@ where
     T: Float,
 {
     // Abramowitz and Stegun approximation
-    let a1 = T::from(0.254829592).unwrap();
-    let a2 = T::from(-0.284496736).unwrap();
-    let a3 = T::from(1.421413741).unwrap();
-    let a4 = T::from(-1.453152027).unwrap();
-    let a5 = T::from(1.061405429).unwrap();
-    let p = T::from(0.3275911).unwrap();
+    let a1 = T::from(0.254829592).expect("Failed to convert erf coefficient a1");
+    let a2 = T::from(-0.284496736).expect("Failed to convert erf coefficient a2");
+    let a3 = T::from(1.421413741).expect("Failed to convert erf coefficient a3");
+    let a4 = T::from(-1.453152027).expect("Failed to convert erf coefficient a4");
+    let a5 = T::from(1.061405429).expect("Failed to convert erf coefficient a5");
+    let p = T::from(0.3275911).expect("Failed to convert erf coefficient p");
 
     let sign = if x >= T::zero() { T::one() } else { -T::one() };
     let x = x.abs();
@@ -61,8 +63,8 @@ where
 /// ```
 /// use numrs2::prelude::*;
 ///
-/// let call_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "call").unwrap();
-/// let put_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "put").unwrap();
+/// let call_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "call").expect("black_scholes call failed");
+/// let put_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "put").expect("black_scholes put failed");
 /// ```
 pub fn black_scholes<T>(
     spot_price: T,
@@ -91,7 +93,9 @@ where
     let vol_sqrt_t = volatility * sqrt_t;
 
     let d1 = ((spot_price / strike_price).ln()
-        + (risk_free_rate + volatility * volatility / T::from(2.0).unwrap()) * time_to_expiry)
+        + (risk_free_rate
+            + volatility * volatility / T::from(2.0).expect("Failed to convert 2.0 to type T"))
+            * time_to_expiry)
         / vol_sqrt_t;
 
     let d2 = d1 - vol_sqrt_t;
@@ -150,7 +154,9 @@ where
     let vol_sqrt_t = volatility * sqrt_t;
 
     let d1 = ((spot_price / strike_price).ln()
-        + (risk_free_rate + volatility * volatility / T::from(2.0).unwrap()) * time_to_expiry)
+        + (risk_free_rate
+            + volatility * volatility / T::from(2.0).expect("Failed to convert 2.0 to type T"))
+            * time_to_expiry)
         / vol_sqrt_t;
 
     let d2 = d1 - vol_sqrt_t;
@@ -165,7 +171,8 @@ where
         "call" => {
             let delta = nd1;
             let gamma = phi_d1 / (spot_price * vol_sqrt_t);
-            let theta = -(spot_price * phi_d1 * volatility) / (T::from(2.0).unwrap() * sqrt_t)
+            let theta = -(spot_price * phi_d1 * volatility)
+                / (T::from(2.0).expect("Failed to convert 2.0 to type T") * sqrt_t)
                 - risk_free_rate * strike_price * discount_factor * nd2;
             let vega = spot_price * phi_d1 * sqrt_t;
             let rho = strike_price * time_to_expiry * discount_factor * nd2;
@@ -175,7 +182,8 @@ where
         "put" => {
             let delta = nd1 - T::one();
             let gamma = phi_d1 / (spot_price * vol_sqrt_t);
-            let theta = -(spot_price * phi_d1 * volatility) / (T::from(2.0).unwrap() * sqrt_t)
+            let theta = -(spot_price * phi_d1 * volatility)
+                / (T::from(2.0).expect("Failed to convert 2.0 to type T") * sqrt_t)
                 + risk_free_rate * strike_price * discount_factor * norm_cdf(-d2);
             let vega = spot_price * phi_d1 * sqrt_t;
             let rho = -strike_price * time_to_expiry * discount_factor * norm_cdf(-d2);
@@ -193,8 +201,10 @@ fn norm_pdf<T>(x: T) -> T
 where
     T: Float,
 {
-    let sqrt_2pi = T::from(2.0 * PI).unwrap().sqrt();
-    (-x * x / T::from(2.0).unwrap()).exp() / sqrt_2pi
+    let sqrt_2pi = T::from(2.0 * PI)
+        .expect("Failed to convert 2*PI to type T")
+        .sqrt();
+    (-x * x / T::from(2.0).expect("Failed to convert 2.0 to type T")).exp() / sqrt_2pi
 }
 
 /// Calculate implied volatility using Newton-Raphson method
@@ -224,8 +234,9 @@ pub fn implied_volatility<T>(
 where
     T: Float + Debug,
 {
-    let mut vol = initial_vol.unwrap_or_else(|| T::from(0.2).unwrap());
-    let tolerance = T::from(1e-6).unwrap();
+    let mut vol =
+        initial_vol.unwrap_or_else(|| T::from(0.2).expect("Failed to convert 0.2 to type T"));
+    let tolerance = T::from(1e-6).expect("Failed to convert 1e-6 to type T");
     let max_iterations = 100;
 
     for _ in 0..max_iterations {
@@ -258,7 +269,7 @@ where
 
         // Ensure volatility stays positive
         if vol <= T::zero() {
-            vol = T::from(0.001).unwrap();
+            vol = T::from(0.001).expect("Failed to convert 0.001 to type T");
         }
     }
 
@@ -304,7 +315,7 @@ where
         ));
     }
 
-    let dt = time_to_expiry / T::from(steps).unwrap();
+    let dt = time_to_expiry / T::from(steps).expect("Failed to convert steps to type T");
     let up = (volatility * dt.sqrt()).exp();
     let down = T::one() / up;
     let r_factor = (risk_free_rate * dt).exp();
@@ -314,7 +325,11 @@ where
     let mut option_values = vec![T::zero(); steps + 1];
 
     for i in 0..=steps {
-        let stock_price = spot_price * up.powf(T::from(2 * i).unwrap() - T::from(steps).unwrap());
+        let stock_price = spot_price
+            * up.powf(
+                T::from(2 * i).expect("Failed to convert 2*i to type T")
+                    - T::from(steps).expect("Failed to convert steps to type T"),
+            );
 
         let intrinsic = match option_type.to_lowercase().as_str() {
             "call" => (stock_price - strike_price).max(T::zero()),
@@ -338,8 +353,11 @@ where
 
             if exercise_style.to_lowercase() == "american" {
                 // For American options, check early exercise
-                let stock_price =
-                    spot_price * up.powf(T::from(2 * i).unwrap() - T::from(step).unwrap());
+                let stock_price = spot_price
+                    * up.powf(
+                        T::from(2 * i).expect("Failed to convert 2*i to type T")
+                            - T::from(step).expect("Failed to convert step to type T"),
+                    );
                 let intrinsic = match option_type.to_lowercase().as_str() {
                     "call" => (stock_price - strike_price).max(T::zero()),
                     "put" => (strike_price - stock_price).max(T::zero()),
@@ -363,14 +381,16 @@ mod tests {
 
     #[test]
     fn test_black_scholes_call() {
-        let call_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "call").unwrap();
+        let call_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "call")
+            .expect("black_scholes call calculation should succeed");
         assert!(call_price > 0.0);
         assert!(call_price < 100.0); // Call price should be less than stock price
     }
 
     #[test]
     fn test_black_scholes_put() {
-        let put_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "put").unwrap();
+        let put_price = black_scholes(100.0, 105.0, 0.25, 0.05, 0.2, "put")
+            .expect("black_scholes put calculation should succeed");
         assert!(put_price > 0.0);
         assert!(put_price < 105.0); // Put price should be less than strike price
     }
@@ -383,8 +403,10 @@ mod tests {
         let r = 0.05;
         let vol = 0.2;
 
-        let call = black_scholes(s, k, t, r, vol, "call").unwrap();
-        let put = black_scholes(s, k, t, r, vol, "put").unwrap();
+        let call = black_scholes(s, k, t, r, vol, "call")
+            .expect("black_scholes call calculation should succeed");
+        let put = black_scholes(s, k, t, r, vol, "put")
+            .expect("black_scholes put calculation should succeed");
 
         // Put-Call Parity: C - P = S - K*e^(-r*T)
         let parity_left = call - put;
@@ -401,8 +423,10 @@ mod tests {
         let r = 0.05;
         let vol = 0.2;
 
-        let bs_call = black_scholes(s, k, t, r, vol, "call").unwrap();
-        let bin_call = binomial_option_price(s, k, t, r, vol, 1000, "call", "european").unwrap();
+        let bs_call = black_scholes(s, k, t, r, vol, "call")
+            .expect("black_scholes call calculation should succeed");
+        let bin_call = binomial_option_price(s, k, t, r, vol, 1000, "call", "european")
+            .expect("binomial_option_price calculation should succeed");
 
         // Binomial should converge to Black-Scholes with many steps
         assert_relative_eq!(bs_call, bin_call, epsilon = 0.1);
@@ -411,7 +435,8 @@ mod tests {
     #[test]
     fn test_greeks() {
         let (delta, gamma, _theta, vega, _rho) =
-            black_scholes_greeks(100.0, 100.0, 1.0, 0.05, 0.2, "call").unwrap();
+            black_scholes_greeks(100.0, 100.0, 1.0, 0.05, 0.2, "call")
+                .expect("black_scholes_greeks calculation should succeed");
 
         // Basic sanity checks
         assert!(delta > 0.0 && delta < 1.0); // Call delta should be between 0 and 1

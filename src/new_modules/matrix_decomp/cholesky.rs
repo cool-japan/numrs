@@ -56,7 +56,7 @@ where
 
             // Enforce symmetry by weighted averaging with bias toward the diagonal
             // This helps preserve positive-definiteness better than simple averaging
-            let alpha = T::from(0.6).unwrap(); // Bias weight toward diagonal
+            let alpha = T::from(0.6).expect("0.6 should convert to float type"); // Bias weight toward diagonal
             let weight_diag = if num_traits::Float::abs(a_ij) > num_traits::Float::abs(a_ji) {
                 alpha
             } else {
@@ -71,7 +71,7 @@ where
 
     // If the matrix has substantial asymmetry, issue a warning
     let epsilon = T::epsilon();
-    let matrix_size = <T as num_traits::NumCast>::from(n).unwrap();
+    let matrix_size = <T as num_traits::NumCast>::from(n).expect("n should convert to float type");
     let tol = epsilon * matrix_size;
 
     // Get an estimate of the matrix norm for scaling the tolerance
@@ -221,10 +221,13 @@ where
             // Start with a perturbation based on matrix properties and approximate eigenvalue
             let base_perturbation = if is_likely_indefinite {
                 // If matrix seems indefinite, start with a larger perturbation
-                -min_eigenvalue_approx + epsilon * matrix_norm * T::from(100.0).unwrap()
+                -min_eigenvalue_approx
+                    + epsilon
+                        * matrix_norm
+                        * T::from(100.0).expect("100.0 should convert to float type")
             } else {
                 // Otherwise use a smaller initial perturbation
-                epsilon * matrix_norm * T::from(10.0).unwrap()
+                epsilon * matrix_norm * T::from(10.0).expect("10.0 should convert to float type")
             };
 
             let mut perturbation = base_perturbation;
@@ -299,11 +302,11 @@ where
                         }
 
                         // Try a smaller perturbation in the next iteration
-                        perturbation /= T::from(10.0).unwrap();
+                        perturbation /= T::from(10.0).expect("10.0 should convert to float type");
                     }
                     Err(_) => {
                         // Increase perturbation for next attempt
-                        perturbation *= T::from(10.0).unwrap();
+                        perturbation *= T::from(10.0).expect("10.0 should convert to float type");
 
                         // Reset matrix with new perturbation
                         perturbed_a = scaled_a.clone();
@@ -447,7 +450,7 @@ where
         for j in (i + 1)..n {
             let a_ij = a.get(&[i, j])?;
             let a_ji = a.get(&[j, i])?;
-            let avg = (a_ij + a_ji) * T::from(0.5).unwrap();
+            let avg = (a_ij + a_ji) * T::from(0.5).expect("0.5 should convert to float type");
             symmetric_a.set(&[i, j], avg)?;
             symmetric_a.set(&[j, i], avg)?;
         }

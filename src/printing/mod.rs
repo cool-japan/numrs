@@ -97,7 +97,9 @@ pub fn set_printoptions(
     linewidth: Option<usize>,
     suppress: Option<bool>,
 ) {
-    let mut options = PRINT_OPTIONS.write().unwrap();
+    let mut options = PRINT_OPTIONS
+        .write()
+        .expect("PRINT_OPTIONS RwLock poisoned: failed to acquire write lock");
 
     if let Some(p) = precision {
         options.precision = p;
@@ -132,7 +134,10 @@ pub fn set_printoptions(
 /// assert_eq!(options.precision, 4);
 /// ```
 pub fn get_printoptions() -> PrintOptions {
-    PRINT_OPTIONS.read().unwrap().clone()
+    PRINT_OPTIONS
+        .read()
+        .expect("PRINT_OPTIONS RwLock poisoned: failed to acquire read lock")
+        .clone()
 }
 
 /// Reset printing options to default values.
@@ -149,13 +154,17 @@ pub fn get_printoptions() -> PrintOptions {
 /// assert_eq!(options.threshold, 1000); // Back to default
 /// ```
 pub fn reset_printoptions() {
-    let mut options = PRINT_OPTIONS.write().unwrap();
+    let mut options = PRINT_OPTIONS
+        .write()
+        .expect("PRINT_OPTIONS RwLock poisoned: failed to acquire write lock");
     *options = PrintOptions::default();
 }
 
 /// Format a single floating point value according to current print options
 pub fn format_float(value: f64) -> String {
-    let options = PRINT_OPTIONS.read().unwrap();
+    let options = PRINT_OPTIONS
+        .read()
+        .expect("PRINT_OPTIONS RwLock poisoned: failed to acquire read lock");
 
     if options.suppress && value.abs() < 10_f64.powi(-(options.precision as i32)) {
         return "0".to_string();
@@ -176,7 +185,9 @@ pub fn format_float(value: f64) -> String {
 
 /// Format a single integer value according to current print options
 pub fn format_int<T: std::fmt::Display>(value: T) -> String {
-    let options = PRINT_OPTIONS.read().unwrap();
+    let options = PRINT_OPTIONS
+        .read()
+        .expect("PRINT_OPTIONS RwLock poisoned: failed to acquire read lock");
 
     match options.sign {
         '+' => format!("{:+}", value),
@@ -223,7 +234,9 @@ where
     let result = format!("{}", array);
 
     // Restore original options
-    let mut options = PRINT_OPTIONS.write().unwrap();
+    let mut options = PRINT_OPTIONS
+        .write()
+        .expect("PRINT_OPTIONS RwLock poisoned: failed to acquire write lock");
     *options = original_options;
 
     result
@@ -250,7 +263,9 @@ mod tests {
         assert!(options.suppress);
 
         // Restore original options
-        let mut global_options = PRINT_OPTIONS.write().unwrap();
+        let mut global_options = PRINT_OPTIONS
+            .write()
+            .expect("PRINT_OPTIONS lock should not be poisoned in test");
         *global_options = original;
     }
 
@@ -308,7 +323,9 @@ mod tests {
         assert!(formatted.contains("1.23"));
 
         // Restore original options
-        let mut global_options = PRINT_OPTIONS.write().unwrap();
+        let mut global_options = PRINT_OPTIONS
+            .write()
+            .expect("PRINT_OPTIONS lock should not be poisoned in test");
         *global_options = original;
     }
 
@@ -322,7 +339,9 @@ mod tests {
         assert_eq!(formatted, "0");
 
         // Restore original options
-        let mut global_options = PRINT_OPTIONS.write().unwrap();
+        let mut global_options = PRINT_OPTIONS
+            .write()
+            .expect("PRINT_OPTIONS lock should not be poisoned in test");
         *global_options = original;
     }
 
@@ -333,14 +352,18 @@ mod tests {
 
         // Test positive sign
         {
-            let mut options = PRINT_OPTIONS.write().unwrap();
+            let mut options = PRINT_OPTIONS
+                .write()
+                .expect("PRINT_OPTIONS lock should not be poisoned in test");
             options.sign = '+';
         }
         let formatted = format_float(1.23);
         assert!(formatted.starts_with('+'));
 
         // Restore original options
-        let mut global_options = PRINT_OPTIONS.write().unwrap();
+        let mut global_options = PRINT_OPTIONS
+            .write()
+            .expect("PRINT_OPTIONS lock should not be poisoned in test");
         *global_options = original;
     }
 }

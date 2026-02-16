@@ -76,13 +76,16 @@ impl NonCentralChiSquared {
         // by B. E. Cooper (1968)
 
         // 1. Generate a normal random variable with mean sqrt(nonc) and variance 1
-        let normal = Normal::new(self.nonc.sqrt(), 1.0).unwrap();
+        let normal = Normal::new(self.nonc.sqrt(), 1.0)
+            .expect("noncentral_chisquare: normal distribution should be valid for sqrt(nonc)");
         let z = normal.rvs(1).expect("normal sampling failed")[0];
 
         // 2. Generate a chi-squared random variable with df-1 degrees of freedom
         let chi_squared = if self.df > 1.0 {
             let mut rng = thread_rng();
-            ChiSquared::new(self.df - 1.0).unwrap().sample(&mut rng)
+            ChiSquared::new(self.df - 1.0)
+                .expect("noncentral_chisquare: chi-squared should be valid for df-1")
+                .sample(&mut rng)
         } else {
             0.0
         };
@@ -139,11 +142,13 @@ impl NonCentralF {
         // 2. Generate a chi-squared random variable Y with df2 degrees of freedom
         // 3. Return (X/df1)/(Y/df2)
 
-        let nc_chi2 = NonCentralChiSquared::new(self.df1, self.nonc).unwrap();
+        let nc_chi2 = NonCentralChiSquared::new(self.df1, self.nonc)
+            .expect("noncentral_f: NonCentralChiSquared should be valid for df1 and nonc");
         let x = nc_chi2.sample();
 
         let mut rng = thread_rng();
-        let chi2 = ChiSquared::new(self.df2).unwrap();
+        let chi2 =
+            ChiSquared::new(self.df2).expect("noncentral_f: chi-squared should be valid for df2");
         let y = chi2.sample(&mut rng);
 
         (x / self.df1) / (y / self.df2)
@@ -194,7 +199,8 @@ impl VonMises {
         } else {
             1.0
         };
-        let normal = Normal::new(self.mu, variance_scaling).unwrap();
+        let normal = Normal::new(self.mu, variance_scaling)
+            .expect("vonmises: normal distribution should be valid for mu and variance_scaling");
         let sample = normal.rvs(1).expect("normal sampling failed")[0];
 
         // Wrap to [-π, π] range
@@ -240,7 +246,8 @@ impl Maxwell {
         // If X, Y, Z are independent normal random variables with mean 0 and variance σ^2,
         // then sqrt(X^2 + Y^2 + Z^2) follows a Maxwell-Boltzmann distribution with scale σ.
 
-        let normal = Normal::new(0.0, self.scale).unwrap();
+        let normal = Normal::new(0.0, self.scale)
+            .expect("maxwell: normal distribution should be valid for mean=0 and scale");
         let samples = normal.rvs(3).expect("normal sampling failed");
 
         let x = samples[0];
@@ -288,7 +295,8 @@ impl Wald {
         // "Random variate generation for exponentially and normally distributed random variables"
         // by J. R. Michael, W. R. Schucany, and R. W. Haas (1976)
 
-        let normal = Normal::new(0.0, 1.0).unwrap();
+        let normal =
+            Normal::new(0.0, 1.0).expect("wald: standard normal N(0,1) should always be valid");
         let y = normal.rvs(1).expect("normal sampling failed")[0];
         let y_squared = y * y;
 
@@ -547,7 +555,7 @@ mod tests {
 
     #[test]
     fn test_vonmises_basic() {
-        let dist = VonMises::new(0.0, 1.0).unwrap();
+        let dist = VonMises::new(0.0, 1.0).expect("test: vonmises distribution should be valid");
         // Generate a few samples to check they're in range
         for _ in 0..10 {
             let sample = dist.sample();
@@ -561,7 +569,8 @@ mod tests {
 
     #[test]
     fn test_noncentral_chisquare() {
-        let arr = noncentral_chisquare(2.0, 1.0, &[10]).unwrap();
+        let arr = noncentral_chisquare(2.0, 1.0, &[10])
+            .expect("test: noncentral_chisquare should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // All values should be positive
@@ -572,7 +581,7 @@ mod tests {
 
     #[test]
     fn test_noncentral_f() {
-        let arr = noncentral_f(2.0, 3.0, 1.0, &[10]).unwrap();
+        let arr = noncentral_f(2.0, 3.0, 1.0, &[10]).expect("test: noncentral_f should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // All values should be positive
@@ -583,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_vonmises() {
-        let arr = vonmises(0.0, 1.0, &[10]).unwrap();
+        let arr = vonmises(0.0, 1.0, &[10]).expect("test: vonmises should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // Just verify we can generate values without panicking
@@ -593,7 +602,7 @@ mod tests {
 
     #[test]
     fn test_maxwell() {
-        let arr = maxwell(1.0, &[10]).unwrap();
+        let arr = maxwell(1.0, &[10]).expect("test: maxwell should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // All values should be positive
@@ -604,7 +613,7 @@ mod tests {
 
     #[test]
     fn test_wald() {
-        let arr = wald(1.0, 1.0, &[10]).unwrap();
+        let arr = wald(1.0, 1.0, &[10]).expect("test: wald should succeed");
         assert_eq!(arr.shape(), vec![10]);
 
         // All values should be positive

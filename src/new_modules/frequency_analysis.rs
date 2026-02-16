@@ -117,7 +117,8 @@ impl FrequencyAnalyzer {
                     fft_data[k].norm_sqr()
                 } else {
                     // Other components are doubled (since we only keep positive frequencies)
-                    <T as NumCast>::from(2.0).unwrap() * fft_data[k].norm_sqr()
+                    <T as NumCast>::from(2.0).expect("2.0 should convert to float type")
+                        * fft_data[k].norm_sqr()
                 };
 
                 psd_accumulator[k] = psd_accumulator[k] + power;
@@ -430,7 +431,8 @@ impl FrequencyAnalyzer {
             let power = if k == 0 || (n.is_multiple_of(2) && k == n / 2) {
                 fft_data[k].norm_sqr()
             } else {
-                <T as NumCast>::from(2.0).unwrap() * fft_data[k].norm_sqr()
+                <T as NumCast>::from(2.0).expect("2.0 should convert to float type")
+                    * fft_data[k].norm_sqr()
             };
 
             let scaled_power = match scaling {
@@ -722,7 +724,7 @@ mod tests {
             false,
             PSDScaling::Density,
         )
-        .unwrap();
+        .expect("Welch PSD estimation should succeed");
 
         // Check that we get reasonable frequency resolution
         assert_eq!(result.frequencies.shape()[0], 129); // 256/2 + 1
@@ -747,8 +749,8 @@ mod tests {
         }
 
         let input = Array::from_vec(signal);
-        let result =
-            FrequencyAnalyzer::periodogram(&input, Some("hann"), PSDScaling::Density).unwrap();
+        let result = FrequencyAnalyzer::periodogram(&input, Some("hann"), PSDScaling::Density)
+            .expect("Periodogram computation should succeed");
 
         assert_eq!(result.frequencies.shape()[0], 65); // 128/2 + 1
         assert_eq!(result.psd.shape()[0], 65);
@@ -760,9 +762,9 @@ mod tests {
         let max_idx = psd_data
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
-            .unwrap();
+            .expect("PSD data should have at least one element");
 
         // Peak should be around 5 Hz (allowing for discretization)
         let peak_freq = freq_data[max_idx];
@@ -788,7 +790,7 @@ mod tests {
 
         let result =
             FrequencyAnalyzer::coherence(&input1, &input2, Some(64), Some(32), "hann", Some(64))
-                .unwrap();
+                .expect("Coherence computation should succeed");
 
         assert_eq!(result.frequencies.shape()[0], 33); // 64/2 + 1
         assert_eq!(result.coherence.shape()[0], 33);
@@ -805,25 +807,28 @@ mod tests {
         let n = 64;
 
         // Test Hann window
-        let hann = FrequencyAnalyzer::generate_window_function::<f64>(n, "hann").unwrap();
+        let hann = FrequencyAnalyzer::generate_window_function::<f64>(n, "hann")
+            .expect("Hann window generation should succeed");
         assert_eq!(hann.len(), n);
         assert_relative_eq!(hann[0], 0.0, epsilon = 1e-10);
         assert_relative_eq!(hann[n - 1], 0.0, epsilon = 1e-10);
 
         // Test Hamming window
-        let hamming = FrequencyAnalyzer::generate_window_function::<f64>(n, "hamming").unwrap();
+        let hamming = FrequencyAnalyzer::generate_window_function::<f64>(n, "hamming")
+            .expect("Hamming window generation should succeed");
         assert_eq!(hamming.len(), n);
 
         // Test rectangular window
-        let rectangular =
-            FrequencyAnalyzer::generate_window_function::<f64>(n, "rectangular").unwrap();
+        let rectangular = FrequencyAnalyzer::generate_window_function::<f64>(n, "rectangular")
+            .expect("Rectangular window generation should succeed");
         assert_eq!(rectangular.len(), n);
         for &val in &rectangular {
             assert_relative_eq!(val, 1.0, epsilon = 1e-10);
         }
 
         // Test Blackman window
-        let blackman = FrequencyAnalyzer::generate_window_function::<f64>(n, "blackman").unwrap();
+        let blackman = FrequencyAnalyzer::generate_window_function::<f64>(n, "blackman")
+            .expect("Blackman window generation should succeed");
         assert_eq!(blackman.len(), n);
         assert_relative_eq!(blackman[0], 0.0, epsilon = 1e-10);
         assert_relative_eq!(blackman[n - 1], 0.0, epsilon = 1e-10);
@@ -855,7 +860,7 @@ mod tests {
             "hann",
             Some(64),
         )
-        .unwrap();
+        .expect("Cross spectral density computation should succeed");
 
         assert_eq!(result.frequencies.shape()[0], 33); // 64/2 + 1
         assert_eq!(result.cross_psd.shape()[0], 33);
@@ -877,7 +882,8 @@ mod tests {
         }
 
         let input = Array::from_vec(signal);
-        let result = FrequencyAnalyzer::multitaper(&input, 0.1, 3).unwrap();
+        let result = FrequencyAnalyzer::multitaper(&input, 0.1, 3)
+            .expect("Multitaper estimation should succeed");
 
         assert_eq!(result.frequencies.shape()[0], 65); // 128/2 + 1
         assert_eq!(result.psd.shape()[0], 65);

@@ -261,7 +261,7 @@ impl FFT {
     /// use numrs2::prelude::*;
     ///
     /// // Create frequency axis for 8-point FFT with 0.1s spacing (10 Hz sample rate)
-    /// let freqs = FFT::fftfreq(8, 0.1).unwrap();
+    /// let freqs = FFT::fftfreq(8, 0.1).expect("fftfreq should succeed");
     /// // Frequencies are [0, 1.25, 2.5, 3.75, -5, -3.75, -2.5, -1.25]
     /// assert_eq!(freqs.size(), 8);
     /// ```
@@ -311,7 +311,7 @@ impl FFT {
     /// use numrs2::prelude::*;
     ///
     /// // Create frequency axis for 8-point real FFT with 0.1s spacing (10 Hz sample rate)
-    /// let freqs = FFT::rfftfreq(8, 0.1).unwrap();
+    /// let freqs = FFT::rfftfreq(8, 0.1).expect("rfftfreq should succeed");
     /// // Frequencies are [0, 1.25, 2.5, 3.75, 5]
     /// assert_eq!(freqs.size(), 5);
     /// ```
@@ -356,7 +356,7 @@ impl FFT {
     /// }
     ///
     /// let input = Array::from_vec(spectrum);
-    /// let shifted = FFT::fftshift(&input).unwrap();
+    /// let shifted = FFT::fftshift(&input).expect("fftshift should succeed");
     ///
     /// // After shifting, the DC component (0.0) should be in the middle
     /// // For a signal of length 8, the order goes from [0,1,2,3,4,5,6,7]
@@ -449,7 +449,7 @@ impl FFT {
     /// spectrum.push(Complex64::new(3.0, 0.0));
     ///
     /// let input = Array::from_vec(spectrum);
-    /// let shifted_back = FFT::ifftshift(&input).unwrap();
+    /// let shifted_back = FFT::ifftshift(&input).expect("ifftshift should succeed");
     ///
     /// // After shifting back, the DC component (0.0) should return to the beginning
     /// assert_eq!(shifted_back.to_vec()[0], Complex64::new(0.0, 0.0));
@@ -530,7 +530,7 @@ impl FFT {
     /// let signal = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0]);
     ///
     /// // Real FFT is more efficient than regular FFT for real inputs
-    /// let rfft_result = FFT::rfft(&signal).unwrap();
+    /// let rfft_result = FFT::rfft(&signal).expect("rfft should succeed");
     ///
     /// // Result contains only positive frequencies (n/2+1 values)
     /// assert_eq!(rfft_result.size(), 3);
@@ -584,10 +584,10 @@ impl FFT {
     /// let signal = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0]);
     ///
     /// // Apply RFFT
-    /// let rfft_result = FFT::rfft(&signal).unwrap();
+    /// let rfft_result = FFT::rfft(&signal).expect("rfft should succeed");
     ///
     /// // Apply IRFFT (with original size)
-    /// let irfft_result = FFT::irfft(&rfft_result, 4).unwrap();
+    /// let irfft_result = FFT::irfft(&rfft_result, 4).expect("irfft should succeed");
     ///
     /// // Original signal should be recovered
     /// assert_eq!(irfft_result.size(), 4);
@@ -1014,7 +1014,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0]);
 
         // FFT of this should be [1.0, 1.0, 1.0, 1.0]
-        let fft_result = FFT::fft(&x).unwrap();
+        let fft_result = FFT::fft(&x).expect("FFT should succeed");
         let fft_data = fft_result.to_vec();
 
         assert_eq!(fft_data.len(), 4);
@@ -1031,10 +1031,10 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
 
         // Apply FFT
-        let fft_result = FFT::fft(&x).unwrap();
+        let fft_result = FFT::fft(&x).expect("FFT should succeed");
 
         // Apply inverse FFT
-        let ifft_result = FFT::ifft(&fft_result).unwrap();
+        let ifft_result = FFT::ifft(&fft_result).expect("IFFT should succeed");
         let ifft_data = ifft_result.to_vec();
 
         // Original signal should be recovered
@@ -1058,7 +1058,7 @@ mod tests {
         let x = Array::from_vec(signal);
 
         // Compute power spectrum
-        let power = FFT::power_spectrum(&x).unwrap();
+        let power = FFT::power_spectrum(&x).expect("power_spectrum should succeed");
         let power_data = power.to_vec();
 
         // Check that the peak is at the correct frequency
@@ -1084,7 +1084,7 @@ mod tests {
         let x = Array::from_vec(signal);
 
         // Test Hann window
-        let hann = FFT::apply_window(&x, "hann").unwrap();
+        let hann = FFT::apply_window(&x, "hann").expect("apply_window hann should succeed");
         let hann_data = hann.to_vec();
 
         // Hann window should be zero at endpoints and symmetric
@@ -1096,7 +1096,8 @@ mod tests {
         }
 
         // Test Hamming window
-        let hamming = FFT::apply_window(&x, "hamming").unwrap();
+        let hamming =
+            FFT::apply_window(&x, "hamming").expect("apply_window hamming should succeed");
         let hamming_data = hamming.to_vec();
 
         // Hamming window should be symmetric
@@ -1111,7 +1112,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0; 16]).reshape(&[4, 4]);
 
         // FFT2 of a constant array should have a single non-zero value at [0,0]
-        let fft2_result = FFT::fft2(&x).unwrap();
+        let fft2_result = FFT::fft2(&x).expect("FFT2 should succeed");
         let fft2_data = fft2_result.to_vec();
 
         #[allow(clippy::needless_range_loop)]
@@ -1131,7 +1132,7 @@ mod tests {
         let n = 8;
         let d = 0.1; // 10 Hz sampling rate
 
-        let freqs = FFT::fftfreq(n, d).unwrap();
+        let freqs = FFT::fftfreq(n, d).expect("fftfreq should succeed");
         let freqs_data = freqs.to_vec();
 
         // Expected frequencies: [0, 1.25, 2.5, 3.75, -5, -3.75, -2.5, -1.25]
@@ -1152,7 +1153,7 @@ mod tests {
         let n = 8;
         let d = 0.1; // 10 Hz sampling rate
 
-        let freqs = FFT::rfftfreq(n, d).unwrap();
+        let freqs = FFT::rfftfreq(n, d).expect("rfftfreq should succeed");
         let freqs_data = freqs.to_vec();
 
         // Expected frequencies: [0, 1.25, 2.5, 3.75, 5]
@@ -1169,7 +1170,7 @@ mod tests {
         // Test fftshift for 1D array
         let x = Array::from_vec(vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
 
-        let shifted = FFT::fftshift(&x).unwrap();
+        let shifted = FFT::fftshift(&x).expect("fftshift should succeed");
         let shifted_data = shifted.to_vec();
 
         // Expected order: [4, 5, 6, 7, 0, 1, 2, 3]
@@ -1177,7 +1178,7 @@ mod tests {
         assert_eq!(shifted_data, vec![4.0, 5.0, 6.0, 7.0, 0.0, 1.0, 2.0, 3.0]);
 
         // Test inverse fftshift
-        let unshifted = FFT::ifftshift(&shifted).unwrap();
+        let unshifted = FFT::ifftshift(&shifted).expect("ifftshift should succeed");
         let unshifted_data = unshifted.to_vec();
 
         // Should get back the original array
@@ -1190,7 +1191,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
 
         // RFFT should return n/2+1 complex values
-        let rfft_result = FFT::rfft(&x).unwrap();
+        let rfft_result = FFT::rfft(&x).expect("RFFT should succeed");
         let rfft_data = rfft_result.to_vec();
 
         // Expected size is n/2+1
@@ -1200,7 +1201,7 @@ mod tests {
         assert_relative_eq!(rfft_data[0].re, 1.0, epsilon = 1e-10);
 
         // Test inverse RFFT
-        let irfft_result = FFT::irfft(&rfft_result, 8).unwrap();
+        let irfft_result = FFT::irfft(&rfft_result, 8).expect("IRFFT should succeed");
         let irfft_data = irfft_result.to_vec();
 
         // Original signal should be recovered
@@ -1217,7 +1218,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0; 16]).reshape(&[4, 4]);
 
         // RFFT2 should return n rows and n/2+1 columns
-        let rfft2_result = FFT::rfft2(&x).unwrap();
+        let rfft2_result = FFT::rfft2(&x).expect("RFFT2 should succeed");
         let rfft2_shape = rfft2_result.shape();
 
         // Expected shape is [n_rows, n_cols/2+1]
@@ -1239,7 +1240,7 @@ mod tests {
         assert_eq!(max_idx, 0); // DC should be at index 0
 
         // Test inverse RFFT2
-        let irfft2_result = FFT::irfft2(&rfft2_result, &[4, 4]).unwrap();
+        let irfft2_result = FFT::irfft2(&rfft2_result, &[4, 4]).expect("IRFFT2 should succeed");
         let irfft2_shape = irfft2_result.shape();
 
         // Original shape should be recovered

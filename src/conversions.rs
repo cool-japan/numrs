@@ -21,7 +21,7 @@ use std::ops::{Add, Div, Mul, Sub};
 ///
 /// // Convert between primitive types
 /// let x: i32 = 42;
-/// let y: f64 = x.convert_to().unwrap();
+/// let y: f64 = x.convert_to().expect("i32 to f64 conversion always succeeds");
 /// assert_eq!(y, 42.0);
 ///
 /// // Handle potential conversion errors
@@ -61,7 +61,7 @@ pub trait ConvertibleTo<T>: Sized {
 ///
 /// // Successful conversion
 /// let int_val: i32 = 42;
-/// let float_val: f64 = int_val.convert_to().unwrap();
+/// let float_val: f64 = int_val.convert_to().expect("i32 to f64 conversion always succeeds");
 /// assert_eq!(float_val, 42.0);
 ///
 /// // Failed conversion (value too large)
@@ -109,7 +109,7 @@ impl<T> Array<T> {
     ///
     /// // Convert integers to floating point
     /// let array = Array::from_vec(vec![1, 2, 3]);
-    /// let float_array = array.astype::<f64>().unwrap();
+    /// let float_array = array.astype::<f64>().expect("i32 to f64 conversion always succeeds");
     /// assert_eq!(float_array.to_vec(), vec![1.0, 2.0, 3.0]);
     ///
     /// // Conversion that fails due to range limitations
@@ -154,12 +154,12 @@ impl<T> Array<T> {
     ///
     /// // Upcast from u8 to u16 (always safe)
     /// let array = Array::from_vec(vec![255_u8, 127_u8, 64_u8]);
-    /// let upcast = array.upcast::<u16>().unwrap();
+    /// let upcast = array.upcast::<u16>().expect("u8 to u16 upcast always succeeds");
     /// assert_eq!(upcast.to_vec(), vec![255_u16, 127_u16, 64_u16]);
     ///
     /// // Upcast from i32 to f64 (always safe)
     /// let int_array = Array::from_vec(vec![42_i32, -17_i32]);
-    /// let float_array = int_array.upcast::<f64>().unwrap();
+    /// let float_array = int_array.upcast::<f64>().expect("i32 to f64 upcast always succeeds");
     /// assert_eq!(float_array.to_vec(), vec![42.0, -17.0]);
     /// ```
     pub fn upcast<U>(&self) -> Result<Array<U>>
@@ -195,7 +195,7 @@ impl<T> Array<T> {
     ///
     /// // Successful downcast (all values fit in target type)
     /// let array = Array::from_vec(vec![100_i32, 50_i32, 25_i32]);
-    /// let downcast = array.downcast::<i8>().unwrap();
+    /// let downcast = array.downcast::<i8>().expect("small values fit in i8");
     /// assert_eq!(downcast.to_vec(), vec![100_i8, 50_i8, 25_i8]);
     ///
     /// // Failed downcast (value too large for target type)
@@ -248,10 +248,10 @@ impl<T> Array<T> {
     ///
     /// // Convert a real array to complex
     /// let array = Array::from_vec(vec![1.0, 2.0, 3.0]);
-    /// let complex = array.to_complex::<f64>().unwrap();
+    /// let complex = array.to_complex::<f64>().expect("f64 to Complex<f64> conversion always succeeds");
     ///
     /// // Verify real and imaginary parts
-    /// let first = complex.get(&[0]).unwrap();
+    /// let first = complex.get(&[0]).expect("index 0 is valid for 3-element array");
     /// assert_eq!(first.re, 1.0);
     /// assert_eq!(first.im, 0.0);
     /// ```
@@ -297,7 +297,7 @@ impl<T> Array<T> {
 /// let float_array = Array::from_vec(vec![0.5, 1.5, 2.5]);
 ///
 /// // Perform mixed-type addition, automatically promoting to f64
-/// let result = int_array.add_mixed::<f64, f64>(&float_array).unwrap();
+/// let result = int_array.add_mixed::<f64, f64>(&float_array).expect("same-shape arrays add successfully");
 /// assert_eq!(result.to_vec(), vec![1.5, 3.5, 5.5]);
 /// ```
 impl<T> Array<T>
@@ -332,7 +332,7 @@ where
     /// let float_array = Array::from_vec(vec![0.5, 1.5, 2.5]);
     ///
     /// // Add int and float arrays, promoting to f64
-    /// let result = int_array.add_mixed::<f64, _>(&float_array).unwrap();
+    /// let result = int_array.add_mixed::<f64, _>(&float_array).expect("same-shape arrays add successfully");
     /// assert_eq!(result.to_vec(), vec![1.5, 3.5, 5.5]);
     /// ```
     pub fn add_mixed<V, U>(&self, other: &Array<U>) -> Result<Array<V>>
@@ -377,7 +377,7 @@ where
     /// let float_array = Array::from_vec(vec![0.5, 1.5, 2.5]);
     ///
     /// // Subtract float from int array, promoting to f64
-    /// let result = int_array.subtract_mixed::<f64, _>(&float_array).unwrap();
+    /// let result = int_array.subtract_mixed::<f64, _>(&float_array).expect("same-shape arrays subtract successfully");
     /// assert_eq!(result.to_vec(), vec![2.5, 2.5, 2.5]);
     /// ```
     pub fn subtract_mixed<V, U>(&self, other: &Array<U>) -> Result<Array<V>>
@@ -422,7 +422,7 @@ where
     /// let float_array = Array::from_vec(vec![0.5, 1.5, 2.5]);
     ///
     /// // Multiply int and float arrays, promoting to f64
-    /// let result = int_array.multiply_mixed::<f64, _>(&float_array).unwrap();
+    /// let result = int_array.multiply_mixed::<f64, _>(&float_array).expect("same-shape arrays multiply successfully");
     /// assert_eq!(result.to_vec(), vec![0.5, 3.0, 7.5]);
     /// ```
     pub fn multiply_mixed<V, U>(&self, other: &Array<U>) -> Result<Array<V>>
@@ -468,7 +468,7 @@ where
     /// let float_array = Array::from_vec(vec![2.0, 3.0, 4.0]);
     ///
     /// // Divide int by float array, promoting to f64
-    /// let result = int_array.divide_mixed::<f64, _>(&float_array).unwrap();
+    /// let result = int_array.divide_mixed::<f64, _>(&float_array).expect("same-shape arrays divide successfully");
     /// assert_eq!(result.to_vec(), vec![2.0, 2.0, 2.0]);
     /// ```
     pub fn divide_mixed<V, U>(&self, other: &Array<U>) -> Result<Array<V>>
@@ -523,7 +523,7 @@ where
     /// let view = array.view();
     ///
     /// // Convert the view from integers to floating point
-    /// let float_array = view.astype::<f64>().unwrap();
+    /// let float_array = view.astype::<f64>().expect("i32 to f64 conversion always succeeds");
     /// assert_eq!(float_array.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
     /// ```
     pub fn astype<U>(&self) -> Result<Array<U>>
@@ -558,10 +558,10 @@ where
     /// let view = array.view();
     ///
     /// // Convert the view to complex numbers
-    /// let complex = view.to_complex::<f64>().unwrap();
+    /// let complex = view.to_complex::<f64>().expect("f64 to Complex<f64> conversion always succeeds");
     ///
     /// // First element should have real part 1.0 and imaginary part 0.0
-    /// let first = complex.get(&[0]).unwrap();
+    /// let first = complex.get(&[0]).expect("index 0 is valid for 3-element array");
     /// assert_eq!(first.re, 1.0);
     /// assert_eq!(first.im, 0.0);
     /// ```

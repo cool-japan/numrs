@@ -39,23 +39,23 @@ pub type UniqueTuple<T> = (Array<T>, Array<usize>, Array<usize>, Array<usize>);
 ///
 /// // Simple use case
 /// let a = Array::from_vec(vec![1, 2, 3, 2, 1, 4]).reshape(&[6]);
-/// let result = unique(&a, None, None, None, None).unwrap();
+/// let result = unique(&a, None, None, None, None).expect("unique should succeed");
 /// assert_eq!(result.values.to_vec(), vec![1, 2, 3, 4]);
 ///
 /// // With indices of first occurrences
-/// let result = unique(&a, None, Some(true), None, None).unwrap();
-/// let (values, indices) = result.values_indices().unwrap();
+/// let result = unique(&a, None, Some(true), None, None).expect("unique should succeed");
+/// let (values, indices) = result.values_indices().expect("values_indices should succeed");
 /// assert_eq!(values.to_vec(), vec![1, 2, 3, 4]);
 /// assert_eq!(indices.to_vec(), vec![0, 1, 2, 5]); // Positions where each unique value first appears
 ///
 /// // With counts
-/// let result = unique(&a, None, None, None, Some(true)).unwrap();
-/// let (values, counts) = result.values_counts().unwrap();
+/// let result = unique(&a, None, None, None, Some(true)).expect("unique should succeed");
+/// let (values, counts) = result.values_counts().expect("values_counts should succeed");
 /// assert_eq!(counts.to_vec(), vec![2, 2, 1, 1]); // 1 appears twice, 2 appears twice, etc.
 ///
 /// // Along a specific axis (for 2D arrays)
 /// let b = Array::from_vec(vec![1, 2, 3, 2, 1, 4]).reshape(&[2, 3]);
-/// let result = unique(&b, Some(0), None, None, None).unwrap();
+/// let result = unique(&b, Some(0), None, None, None).expect("unique should succeed");
 /// // Unique rows
 /// ```
 pub fn unique<T>(
@@ -124,7 +124,7 @@ where
     }
 
     // Process along a specific axis
-    let axis_val = axis.unwrap();
+    let axis_val = axis.expect("axis must be Some at this point since we returned early for None");
     if axis_val >= a.ndim() {
         return Err(NumRs2Error::DimensionMismatch(format!(
             "Axis {} out of bounds for array of dimension {}",
@@ -184,7 +184,9 @@ where
             inverse[i] = idx;
         } else {
             // This subarray has been seen before
-            let idx = *index_map.get(hash_rep).unwrap();
+            let idx = *index_map
+                .get(hash_rep)
+                .expect("hash_rep must exist in index_map since it was found in seen");
             inverse[i] = idx;
         }
     }

@@ -35,9 +35,9 @@
 //!     .max_iter(100)
 //!     .tol(1e-4)
 //!     .fit(&data)
-//!     .unwrap();
+//!     .expect("kmeans fit should succeed");
 //!
-//! let labels = kmeans.predict(&data).unwrap();
+//! let labels = kmeans.predict(&data).expect("kmeans predict should succeed");
 //! let centroids = kmeans.centroids();
 //! ```
 
@@ -181,7 +181,8 @@ where
             // Average to get centroids
             for k in 0..self.k {
                 if counts[k] > 0 {
-                    let count_t = T::from(counts[k]).unwrap();
+                    let count_t =
+                        T::from(counts[k]).expect("Failed to convert cluster count to type T");
                     for j in 0..n_features {
                         let sum = new_centroids.get(&[k, j])?;
                         new_centroids.set(&[k, j], sum / count_t)?;
@@ -343,12 +344,15 @@ where
             }
 
             // Choose next centroid with probability proportional to distance squared
-            let threshold = rng.gen::<f64>() * total_dist.to_f64().unwrap();
+            let threshold = rng.gen::<f64>()
+                * total_dist
+                    .to_f64()
+                    .expect("Failed to convert total distance to f64");
             let mut cumsum = 0.0;
             let mut chosen_idx = 0;
 
             for (idx, &dist) in distances.iter().enumerate() {
-                cumsum += dist.to_f64().unwrap();
+                cumsum += dist.to_f64().unwrap_or(0.0);
                 if cumsum >= threshold {
                     chosen_idx = idx;
                     break;
@@ -430,7 +434,7 @@ pub struct Dendrogram<T> {
 ///     8.0, 8.0,
 /// ]).reshape(&[4, 2]);
 ///
-/// let dendro = hierarchical(&data, LinkageMethod::Average).unwrap();
+/// let dendro = hierarchical(&data, LinkageMethod::Average).expect("hierarchical should succeed");
 /// ```
 pub fn hierarchical<T>(x: &Array<T>, method: LinkageMethod) -> Result<Dendrogram<T>>
 where
@@ -471,10 +475,10 @@ where
 
         // Record the merge
         linkage.push([
-            T::from(cluster_i).unwrap(),
-            T::from(cluster_j).unwrap(),
+            T::from(cluster_i).expect("Failed to convert cluster_i to type T"),
+            T::from(cluster_j).expect("Failed to convert cluster_j to type T"),
             min_dist,
-            T::from(size_i + size_j).unwrap(),
+            T::from(size_i + size_j).expect("Failed to convert cluster size to type T"),
         ]);
 
         // Update cluster information
@@ -564,8 +568,12 @@ where
     // Apply merges
     let mut next_label = n;
     for merge in dendro.linkage.iter().take(n_merges) {
-        let c1 = merge[0].to_usize().unwrap();
-        let c2 = merge[1].to_usize().unwrap();
+        let c1 = merge[0]
+            .to_usize()
+            .expect("Failed to convert cluster index to usize");
+        let c2 = merge[1]
+            .to_usize()
+            .expect("Failed to convert cluster index to usize");
 
         // Relabel all points in clusters c1 and c2 to next_label
         for label in &mut labels {
@@ -587,7 +595,9 @@ where
     }
 
     for label in &mut labels {
-        *label = *label_map.get(label).unwrap();
+        *label = *label_map
+            .get(label)
+            .expect("Label should exist in label_map");
     }
 
     Ok(labels)
@@ -609,9 +619,11 @@ mod tests {
             .max_iter(100)
             .tol(1e-4)
             .fit(&data)
-            .unwrap();
+            .expect("kmeans fit should succeed");
 
-        let labels = kmeans.predict(&data).unwrap();
+        let labels = kmeans
+            .predict(&data)
+            .expect("kmeans predict should succeed");
 
         // Check that we got 2 clusters
         let mut unique_labels = labels.clone();
@@ -628,7 +640,9 @@ mod tests {
     fn test_kmeans_init_random() {
         let data = Array::from_vec(vec![1.0, 2.0, 2.0, 3.0, 8.0, 9.0, 9.0, 10.0]).reshape(&[4, 2]);
 
-        let kmeans = KMeans::new(2, KMeansInit::Random).fit(&data).unwrap();
+        let kmeans = KMeans::new(2, KMeansInit::Random)
+            .fit(&data)
+            .expect("kmeans random init should succeed");
 
         assert!(kmeans.centroids().is_some());
         assert!(kmeans.inertia().is_some());
@@ -642,7 +656,7 @@ mod tests {
         let kmeans = KMeans::new(2, KMeansInit::KMeansPlusPlus)
             .tol(1e-6)
             .fit(&data)
-            .unwrap();
+            .expect("kmeans convergence test should succeed");
 
         // Should converge quickly for well-separated clusters
         assert!(kmeans.n_iter() < 10);
@@ -652,7 +666,8 @@ mod tests {
     fn test_hierarchical_clustering() {
         let data = Array::from_vec(vec![1.0, 2.0, 1.5, 1.8, 5.0, 8.0, 8.0, 8.0]).reshape(&[4, 2]);
 
-        let dendro = hierarchical(&data, LinkageMethod::Average).unwrap();
+        let dendro =
+            hierarchical(&data, LinkageMethod::Average).expect("hierarchical should succeed");
 
         // Should have n-1 merges for n points
         assert_eq!(dendro.linkage.len(), 3);
@@ -663,8 +678,9 @@ mod tests {
     fn test_fcluster() {
         let data = Array::from_vec(vec![1.0, 2.0, 1.5, 1.8, 5.0, 8.0, 8.0, 8.0]).reshape(&[4, 2]);
 
-        let dendro = hierarchical(&data, LinkageMethod::Average).unwrap();
-        let labels = fcluster(&dendro, 2).unwrap();
+        let dendro =
+            hierarchical(&data, LinkageMethod::Average).expect("hierarchical should succeed");
+        let labels = fcluster(&dendro, 2).expect("fcluster should succeed");
 
         // Should have 2 clusters
         let mut unique = labels.clone();

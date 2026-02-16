@@ -88,7 +88,8 @@ pub fn angle<T: Float>(array: &Array<Complex<T>>, deg: bool) -> Array<T> {
     array.map(|c| {
         let phase = c.arg(); // Returns angle in radians
         if deg {
-            phase * T::from(180.0).unwrap() / T::from(std::f64::consts::PI).unwrap()
+            phase * T::from(180.0).expect("180.0 is representable as Float")
+                / T::from(std::f64::consts::PI).expect("PI is representable as Float")
         } else {
             phase
         }
@@ -189,7 +190,8 @@ pub fn absolute<T: Float>(array: &Array<Complex<T>>) -> Array<T> {
 ///
 /// let magnitudes = Array::from_vec(vec![1.0, 2.0, 3.0]);
 /// let angles = Array::from_vec(vec![0.0, 90.0, 180.0]);
-/// let complex_array = from_polar(&magnitudes, &angles, true).unwrap();
+/// let complex_array = from_polar(&magnitudes, &angles, true)
+///     .expect("from_polar should succeed with matching shapes");
 /// ```
 pub fn from_polar<T: Float>(
     magnitude: &Array<T>,
@@ -211,7 +213,8 @@ pub fn from_polar<T: Float>(
         .zip(angle_data)
         .map(|(r, theta)| {
             let theta_rad = if deg {
-                theta * T::from(std::f64::consts::PI).unwrap() / T::from(180.0).unwrap()
+                theta * T::from(std::f64::consts::PI).expect("PI is representable as Float")
+                    / T::from(180.0).expect("180.0 is representable as Float")
             } else {
                 theta
             };

@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn test_to_arrow_f64() {
         let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
-        let arrow_arr = to_arrow(&arr).unwrap();
+        let arrow_arr = to_arrow(&arr).expect("to_arrow should succeed");
 
         assert_eq!(arrow_arr.len(), 4);
         assert_eq!(arrow_arr.data_type(), &DataType::Float64);
@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn test_to_arrow_i32() {
         let arr = Array::from_vec(vec![1i32, 2, 3, 4]);
-        let arrow_arr = to_arrow(&arr).unwrap();
+        let arrow_arr = to_arrow(&arr).expect("to_arrow should succeed");
 
         assert_eq!(arrow_arr.len(), 4);
         assert_eq!(arrow_arr.data_type(), &DataType::Int32);
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn test_to_arrow_bool() {
         let arr = Array::from_vec(vec![true, false, true, false]);
-        let arrow_arr = to_arrow(&arr).unwrap();
+        let arrow_arr = to_arrow(&arr).expect("to_arrow should succeed");
 
         assert_eq!(arrow_arr.len(), 4);
         assert_eq!(arrow_arr.data_type(), &DataType::Boolean);
@@ -478,8 +478,9 @@ mod tests {
     #[test]
     fn test_from_arrow_f64() {
         let original = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
-        let arrow_arr = to_arrow(&original).unwrap();
-        let restored: Array<f64> = from_arrow(arrow_arr.as_ref()).unwrap();
+        let arrow_arr = to_arrow(&original).expect("to_arrow should succeed");
+        let restored: Array<f64> =
+            from_arrow(arrow_arr.as_ref()).expect("from_arrow should succeed");
 
         let orig_vec = original.to_vec();
         let rest_vec = restored.to_vec();
@@ -493,8 +494,9 @@ mod tests {
     #[test]
     fn test_from_arrow_i32() {
         let original = Array::from_vec(vec![1i32, 2, 3, 4]);
-        let arrow_arr = to_arrow(&original).unwrap();
-        let restored: Array<i32> = from_arrow(arrow_arr.as_ref()).unwrap();
+        let arrow_arr = to_arrow(&original).expect("to_arrow should succeed");
+        let restored: Array<i32> =
+            from_arrow(arrow_arr.as_ref()).expect("from_arrow should succeed");
 
         assert_eq!(original.to_vec(), restored.to_vec());
     }
@@ -502,8 +504,9 @@ mod tests {
     #[test]
     fn test_from_arrow_bool() {
         let original = Array::from_vec(vec![true, false, true, false]);
-        let arrow_arr = to_arrow(&original).unwrap();
-        let restored: Array<bool> = from_arrow(arrow_arr.as_ref()).unwrap();
+        let arrow_arr = to_arrow(&original).expect("to_arrow should succeed");
+        let restored: Array<bool> =
+            from_arrow(arrow_arr.as_ref()).expect("from_arrow should succeed");
 
         assert_eq!(original.to_vec(), restored.to_vec());
     }
@@ -520,11 +523,12 @@ mod tests {
             Field::new("col2", DataType::Float64, false),
         ]);
 
-        let mut writer = IpcStreamWriter::new(buffer, &schema).unwrap();
+        let mut writer =
+            IpcStreamWriter::new(buffer, &schema).expect("IpcStreamWriter creation should succeed");
         writer
             .write_batch(&[("col1", &arr1), ("col2", &arr2)])
-            .unwrap();
-        writer.finish().unwrap();
+            .expect("write_batch should succeed");
+        writer.finish().expect("finish should succeed");
 
         // Read back (note: This test is simplified and may need adjustment)
         // In practice, you'd use the buffer bytes for reading
@@ -532,16 +536,16 @@ mod tests {
 
     #[test]
     fn test_feather_write_read_single_column() {
-        let tmp_file = NamedTempFile::new().unwrap();
+        let tmp_file = NamedTempFile::new().expect("temp file creation should succeed");
         let path = tmp_file.path();
 
         let original = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
 
         // Write
-        write_feather(path, &[("data", &original)]).unwrap();
+        write_feather(path, &[("data", &original)]).expect("write_feather should succeed");
 
         // Read
-        let restored: Array<f64> = read_feather(path, "data").unwrap();
+        let restored: Array<f64> = read_feather(path, "data").expect("read_feather should succeed");
 
         let orig_vec = original.to_vec();
         let rest_vec = restored.to_vec();
@@ -554,18 +558,20 @@ mod tests {
 
     #[test]
     fn test_feather_write_read_multiple_columns() {
-        let tmp_file = NamedTempFile::new().unwrap();
+        let tmp_file = NamedTempFile::new().expect("temp file creation should succeed");
         let path = tmp_file.path();
 
         let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
         let y = Array::from_vec(vec![4.0, 5.0, 6.0]);
 
         // Write
-        write_feather(path, &[("x", &x), ("y", &y)]).unwrap();
+        write_feather(path, &[("x", &x), ("y", &y)]).expect("write_feather should succeed");
 
         // Read individual columns
-        let x_restored: Array<f64> = read_feather(path, "x").unwrap();
-        let y_restored: Array<f64> = read_feather(path, "y").unwrap();
+        let x_restored: Array<f64> =
+            read_feather(path, "x").expect("read_feather x should succeed");
+        let y_restored: Array<f64> =
+            read_feather(path, "y").expect("read_feather y should succeed");
 
         assert_eq!(x.to_vec(), x_restored.to_vec());
         assert_eq!(y.to_vec(), y_restored.to_vec());
@@ -573,17 +579,18 @@ mod tests {
 
     #[test]
     fn test_feather_read_all() {
-        let tmp_file = NamedTempFile::new().unwrap();
+        let tmp_file = NamedTempFile::new().expect("temp file creation should succeed");
         let path = tmp_file.path();
 
         let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
         let y = Array::from_vec(vec![4.0, 5.0, 6.0]);
 
         // Write
-        write_feather(path, &[("x", &x), ("y", &y)]).unwrap();
+        write_feather(path, &[("x", &x), ("y", &y)]).expect("write_feather should succeed");
 
         // Read all
-        let columns: Vec<(String, Array<f64>)> = read_feather_all(path).unwrap();
+        let columns: Vec<(String, Array<f64>)> =
+            read_feather_all(path).expect("read_feather_all should succeed");
 
         assert_eq!(columns.len(), 2);
         assert_eq!(columns[0].0, "x");
@@ -594,37 +601,39 @@ mod tests {
 
     #[test]
     fn test_feather_integer_types() {
-        let tmp_file = NamedTempFile::new().unwrap();
+        let tmp_file = NamedTempFile::new().expect("temp file creation should succeed");
         let path = tmp_file.path();
 
         let data = Array::from_vec(vec![10i32, 20, 30, 40]);
 
-        write_feather(path, &[("integers", &data)]).unwrap();
-        let restored: Array<i32> = read_feather(path, "integers").unwrap();
+        write_feather(path, &[("integers", &data)]).expect("write_feather should succeed");
+        let restored: Array<i32> =
+            read_feather(path, "integers").expect("read_feather should succeed");
 
         assert_eq!(data.to_vec(), restored.to_vec());
     }
 
     #[test]
     fn test_feather_bool_type() {
-        let tmp_file = NamedTempFile::new().unwrap();
+        let tmp_file = NamedTempFile::new().expect("temp file creation should succeed");
         let path = tmp_file.path();
 
         let data = Array::from_vec(vec![true, false, true, true, false]);
 
-        write_feather(path, &[("booleans", &data)]).unwrap();
-        let restored: Array<bool> = read_feather(path, "booleans").unwrap();
+        write_feather(path, &[("booleans", &data)]).expect("write_feather should succeed");
+        let restored: Array<bool> =
+            read_feather(path, "booleans").expect("read_feather should succeed");
 
         assert_eq!(data.to_vec(), restored.to_vec());
     }
 
     #[test]
     fn test_feather_column_not_found() {
-        let tmp_file = NamedTempFile::new().unwrap();
+        let tmp_file = NamedTempFile::new().expect("temp file creation should succeed");
         let path = tmp_file.path();
 
         let data = Array::from_vec(vec![1.0, 2.0, 3.0]);
-        write_feather(path, &[("x", &data)]).unwrap();
+        write_feather(path, &[("x", &data)]).expect("write_feather should succeed");
 
         let result: Result<Array<f64>, _> = read_feather(path, "nonexistent");
         assert!(result.is_err());

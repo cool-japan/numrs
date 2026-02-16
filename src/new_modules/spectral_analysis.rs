@@ -160,7 +160,7 @@ impl SpectralAnalyzer {
         T: Float + Clone,
     {
         let peak_height = spectrum[peak_idx];
-        let half_height = peak_height / T::from(2.0).unwrap();
+        let half_height = peak_height / T::from(2.0).expect("2.0 should convert to float type");
 
         // Find left half-maximum point
         let mut left_idx = peak_idx;
@@ -228,7 +228,9 @@ impl SpectralAnalyzer {
 
             // Look for harmonics
             for h in 2..=max_harmonics {
-                let harmonic_freq = candidate_f0 * <T as NumCast>::from(h as f64).unwrap();
+                let harmonic_freq = candidate_f0
+                    * <T as NumCast>::from(h as f64)
+                        .expect("harmonic number should convert to float type");
 
                 // Find closest peak to this harmonic frequency
                 let mut closest_idx = None;
@@ -245,7 +247,10 @@ impl SpectralAnalyzer {
                 if let Some(idx) = closest_idx {
                     harmonics.push(peak_freqs[idx]);
                     amplitudes.push(peak_heights[idx]);
-                    score = score + peak_heights[idx] / <T as NumCast>::from(h as f64).unwrap();
+                    score = score
+                        + peak_heights[idx]
+                            / <T as NumCast>::from(h as f64)
+                                .expect("harmonic number should convert to float type");
                 }
             }
 
@@ -711,7 +716,7 @@ mod tests {
             None,
             None,
         )
-        .unwrap();
+        .expect("Peak detection should succeed");
 
         let peak_freqs = peaks.peak_frequencies.to_vec();
         let peak_heights = peaks.peak_heights.to_vec();
@@ -747,7 +752,7 @@ mod tests {
             5,   // max harmonics
             5.0, // tolerance
         )
-        .unwrap();
+        .expect("Harmonic analysis should succeed");
 
         // Should detect 100 Hz as fundamental
         assert_relative_eq!(result.fundamental_frequency, 100.0, epsilon = 1.0);
@@ -770,7 +775,8 @@ mod tests {
         let spectrum = Array::from_vec(vec![1.0, 2.0, 3.0, 2.0, 1.0]);
         let freqs = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        let centroid = SpectralAnalyzer::spectral_centroid(&spectrum, &freqs).unwrap();
+        let centroid = SpectralAnalyzer::spectral_centroid(&spectrum, &freqs)
+            .expect("Spectral centroid should succeed");
 
         // Weighted average: (1*1 + 2*2 + 3*3 + 2*4 + 1*5) / (1+2+3+2+1) = 27/9 = 3.0
         assert_relative_eq!(centroid, 3.0, epsilon = 1e-10);
@@ -784,7 +790,8 @@ mod tests {
         // Total energy = 10, 85% = 8.5
         // Cumulative: 1, 3, 6, 10
         // 85% threshold (8.5) is reached at the last bin
-        let rolloff = SpectralAnalyzer::spectral_rolloff(&spectrum, &freqs, 0.85).unwrap();
+        let rolloff = SpectralAnalyzer::spectral_rolloff(&spectrum, &freqs, 0.85)
+            .expect("Spectral rolloff should succeed");
 
         assert_relative_eq!(rolloff, 40.0, epsilon = 1e-10);
     }
@@ -794,7 +801,8 @@ mod tests {
         let spectrum = Array::from_vec(vec![1.0, 1.0, 1.0]);
         let freqs = Array::from_vec(vec![1.0, 2.0, 3.0]);
 
-        let bandwidth = SpectralAnalyzer::spectral_bandwidth(&spectrum, &freqs).unwrap();
+        let bandwidth = SpectralAnalyzer::spectral_bandwidth(&spectrum, &freqs)
+            .expect("Spectral bandwidth should succeed");
 
         // For uniform spectrum, centroid = 2.0
         // Variance = (1*(1-2)^2 + 1*(2-2)^2 + 1*(3-2)^2) / 3 = 2/3
@@ -806,12 +814,14 @@ mod tests {
     fn test_spectral_flatness() {
         // Test with uniform spectrum (should be close to 1.0)
         let uniform_spectrum = Array::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
-        let flatness = SpectralAnalyzer::spectral_flatness(&uniform_spectrum).unwrap();
+        let flatness = SpectralAnalyzer::spectral_flatness(&uniform_spectrum)
+            .expect("Spectral flatness should succeed");
         assert_relative_eq!(flatness, 1.0, epsilon = 1e-2);
 
         // Test with peaked spectrum (should be less than 1.0)
         let peaked_spectrum = Array::from_vec(vec![0.1, 10.0, 0.1, 0.1]);
-        let flatness_peaked = SpectralAnalyzer::spectral_flatness(&peaked_spectrum).unwrap();
+        let flatness_peaked = SpectralAnalyzer::spectral_flatness(&peaked_spectrum)
+            .expect("Spectral flatness should succeed");
         assert!(flatness_peaked < 0.5);
     }
 
@@ -828,7 +838,8 @@ mod tests {
         }
 
         let signal_array = Array::from_vec(complex_signal);
-        let inst_freq = SpectralAnalyzer::instantaneous_frequency(&signal_array).unwrap();
+        let inst_freq = SpectralAnalyzer::instantaneous_frequency(&signal_array)
+            .expect("Instantaneous frequency should succeed");
         let inst_freq_data = inst_freq.to_vec();
 
         // All instantaneous frequencies should be close to the original frequency
@@ -858,7 +869,7 @@ mod tests {
             "hann",
             false, // no zero padding
         )
-        .unwrap();
+        .expect("STFT computation should succeed");
 
         // Check dimensions
         let stft_shape = stft_result.stft.shape();

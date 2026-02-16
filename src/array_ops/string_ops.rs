@@ -136,11 +136,11 @@ pub type StringArray = Array<StringElement>;
 ///
 /// // Create Unicode string array
 /// let strings = vec!["hello", "world", "test"];
-/// let arr = array_from_strings(&strings, "U", Some(&[3])).unwrap();
+/// let arr = array_from_strings(&strings, "U", Some(&[3])).expect("operation should succeed");
 /// assert_eq!(arr.shape(), vec![3]);
 ///
 /// // Create fixed-length string array
-/// let arr = array_from_strings(&strings, "S10", Some(&[3])).unwrap();
+/// let arr = array_from_strings(&strings, "S10", Some(&[3])).expect("operation should succeed");
 /// assert_eq!(arr.shape(), vec![3]);
 /// ```
 pub fn array_from_strings<S: AsRef<str>>(
@@ -1060,14 +1060,17 @@ mod tests {
     fn test_string_element_creation() {
         // Test Unicode string
         let unicode = StringElement::unicode("hello");
-        assert_eq!(unicode.to_string().unwrap(), "hello");
-        assert_eq!(unicode.len().unwrap(), 5);
-        assert!(!unicode.is_empty().unwrap());
+        assert_eq!(
+            unicode.to_string().expect("operation should succeed"),
+            "hello"
+        );
+        assert_eq!(unicode.len().expect("operation should succeed"), 5);
+        assert!(!unicode.is_empty().expect("operation should succeed"));
 
         // Test fixed-length string
         let fixed = StringElement::fixed("test", 10);
-        assert_eq!(fixed.to_string().unwrap(), "test");
-        assert_eq!(fixed.len().unwrap(), 4);
+        assert_eq!(fixed.to_string().expect("operation should succeed"), "test");
+        assert_eq!(fixed.len().expect("operation should succeed"), 4);
         assert_eq!(fixed.capacity(), 10);
     }
 
@@ -1076,38 +1079,76 @@ mod tests {
         let strings = vec!["hello", "world", "test"];
 
         // Test Unicode array
-        let unicode_arr = array_from_strings(&strings, "U", Some(&[3])).unwrap();
+        let unicode_arr =
+            array_from_strings(&strings, "U", Some(&[3])).expect("operation should succeed");
         assert_eq!(unicode_arr.shape(), vec![3]);
-        assert_eq!(unicode_arr.get(&[0]).unwrap().to_string().unwrap(), "hello");
+        assert_eq!(
+            unicode_arr
+                .get(&[0])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
+            "hello"
+        );
 
         // Test fixed-length array
-        let fixed_arr = array_from_strings(&strings, "S10", Some(&[3])).unwrap();
+        let fixed_arr =
+            array_from_strings(&strings, "S10", Some(&[3])).expect("operation should succeed");
         assert_eq!(fixed_arr.shape(), vec![3]);
-        assert_eq!(fixed_arr.get(&[1]).unwrap().to_string().unwrap(), "world");
+        assert_eq!(
+            fixed_arr
+                .get(&[1])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
+            "world"
+        );
     }
 
     #[test]
     fn test_string_operations() {
         let strings1 = vec!["hello", "world"];
         let strings2 = vec![" ", "!"];
-        let arr1 = array_from_strings(&strings1, "U", None).unwrap();
-        let arr2 = array_from_strings(&strings2, "U", None).unwrap();
+        let arr1 = array_from_strings(&strings1, "U", None).expect("operation should succeed");
+        let arr2 = array_from_strings(&strings2, "U", None).expect("operation should succeed");
 
         // Test add operation
-        let result = add(&arr1, &arr2).unwrap();
-        assert_eq!(result.get(&[0]).unwrap().to_string().unwrap(), "hello ");
-        assert_eq!(result.get(&[1]).unwrap().to_string().unwrap(), "world!");
+        let result = add(&arr1, &arr2).expect("operation should succeed");
+        assert_eq!(
+            result
+                .get(&[0])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
+            "hello "
+        );
+        assert_eq!(
+            result
+                .get(&[1])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
+            "world!"
+        );
 
         // Test case operations
-        let upper_result = upper(&arr1).unwrap();
+        let upper_result = upper(&arr1).expect("operation should succeed");
         assert_eq!(
-            upper_result.get(&[0]).unwrap().to_string().unwrap(),
+            upper_result
+                .get(&[0])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
             "HELLO"
         );
 
-        let lower_result = lower(&upper_result).unwrap();
+        let lower_result = lower(&upper_result).expect("operation should succeed");
         assert_eq!(
-            lower_result.get(&[0]).unwrap().to_string().unwrap(),
+            lower_result
+                .get(&[0])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
             "hello"
         );
     }
@@ -1116,70 +1157,87 @@ mod tests {
     fn test_string_comparisons() {
         let strings1 = vec!["apple", "banana"];
         let strings2 = vec!["apple", "cherry"];
-        let arr1 = array_from_strings(&strings1, "U", None).unwrap();
-        let arr2 = array_from_strings(&strings2, "U", None).unwrap();
+        let arr1 = array_from_strings(&strings1, "U", None).expect("operation should succeed");
+        let arr2 = array_from_strings(&strings2, "U", None).expect("operation should succeed");
 
-        let eq_result = compare::equal(&arr1, &arr2).unwrap();
+        let eq_result = compare::equal(&arr1, &arr2).expect("operation should succeed");
         assert_eq!(eq_result.to_vec(), vec![true, false]);
 
-        let less_result = compare::less(&arr1, &arr2).unwrap();
+        let less_result = compare::less(&arr1, &arr2).expect("operation should succeed");
         assert_eq!(less_result.to_vec(), vec![false, true]);
     }
 
     #[test]
     fn test_character_type_checks() {
         let strings = vec!["abc", "123", "ABC", "Hello World"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr = array_from_strings(&strings, "U", None).expect("operation should succeed");
 
-        let alpha_result = chartype::isalpha(&arr).unwrap();
+        let alpha_result = chartype::isalpha(&arr).expect("operation should succeed");
         assert_eq!(alpha_result.to_vec(), vec![true, false, true, false]);
 
-        let digit_result = chartype::isdigit(&arr).unwrap();
+        let digit_result = chartype::isdigit(&arr).expect("operation should succeed");
         assert_eq!(digit_result.to_vec(), vec![false, true, false, false]);
 
-        let upper_result = chartype::isupper(&arr).unwrap();
+        let upper_result = chartype::isupper(&arr).expect("operation should succeed");
         assert_eq!(upper_result.to_vec(), vec![false, false, true, false]);
     }
 
     #[test]
     fn test_string_manipulation() {
         let strings = vec!["  hello  ", "WORLD", "Test"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr = array_from_strings(&strings, "U", None).expect("operation should succeed");
 
         // Test strip
-        let strip_result = strip(&arr, None).unwrap();
+        let strip_result = strip(&arr, None).expect("operation should succeed");
         assert_eq!(
-            strip_result.get(&[0]).unwrap().to_string().unwrap(),
+            strip_result
+                .get(&[0])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
             "hello"
         );
 
         // Test replace
-        let replace_result = replace(&arr, "Test", "Example", None).unwrap();
+        let replace_result =
+            replace(&arr, "Test", "Example", None).expect("operation should succeed");
         assert_eq!(
-            replace_result.get(&[2]).unwrap().to_string().unwrap(),
+            replace_result
+                .get(&[2])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
             "Example"
         );
 
         // Test capitalize
-        let cap_result = capitalize(&arr).unwrap();
-        assert_eq!(cap_result.get(&[1]).unwrap().to_string().unwrap(), "World");
+        let cap_result = capitalize(&arr).expect("operation should succeed");
+        assert_eq!(
+            cap_result
+                .get(&[1])
+                .expect("operation should succeed")
+                .to_string()
+                .expect("operation should succeed"),
+            "World"
+        );
     }
 
     #[test]
     fn test_find_operations() {
         let strings = vec!["hello world", "python programming", "rust language"];
-        let arr = array_from_strings(&strings, "U", None).unwrap();
+        let arr = array_from_strings(&strings, "U", None).expect("operation should succeed");
 
         // Test find
-        let find_result = find(&arr, "o", None, None).unwrap();
+        let find_result = find(&arr, "o", None, None).expect("operation should succeed");
         assert_eq!(find_result.to_vec(), vec![4, 4, -1]); // First 'o' positions
 
         // Test count
-        let count_result = count(&arr, "o", None, None).unwrap();
+        let count_result = count(&arr, "o", None, None).expect("operation should succeed");
         assert_eq!(count_result.to_vec(), vec![2, 2, 0]); // Count of 'o' characters
 
         // Test startswith
-        let starts_result = startswith(&arr, "hello", None, None).unwrap();
+        let starts_result =
+            startswith(&arr, "hello", None, None).expect("operation should succeed");
         assert_eq!(starts_result.to_vec(), vec![true, false, false]);
     }
 }

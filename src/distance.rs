@@ -26,15 +26,15 @@
 //! // Euclidean distance between two vectors
 //! let x: Array<f64> = Array::from_vec(vec![1.0, 2.0, 3.0]);
 //! let y: Array<f64> = Array::from_vec(vec![4.0, 5.0, 6.0]);
-//! let dist: f64 = euclidean(&x, &y).unwrap();
+//! let dist: f64 = euclidean(&x, &y).expect("euclidean should succeed");
 //! assert!((dist - 5.196152422706632).abs() < 1e-10);
 //!
 //! // Cosine similarity
-//! let sim: f64 = cosine(&x, &y).unwrap();
+//! let sim: f64 = cosine(&x, &y).expect("cosine should succeed");
 //!
 //! // Pairwise distances
 //! let points: Array<f64> = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
-//! let dists = pdist(&points, DistanceMetric::Euclidean).unwrap();
+//! let dists = pdist(&points, DistanceMetric::Euclidean).expect("pdist should succeed");
 //! ```
 
 use crate::array::Array;
@@ -77,7 +77,7 @@ pub enum DistanceMetric {
 ///
 /// let x: Array<f64> = Array::from_vec(vec![0.0, 0.0]);
 /// let y: Array<f64> = Array::from_vec(vec![3.0, 4.0]);
-/// let dist: f64 = euclidean(&x, &y).unwrap();
+/// let dist: f64 = euclidean(&x, &y).expect("euclidean should succeed");
 /// assert!((dist - 5.0).abs() < 1e-10);
 /// ```
 pub fn euclidean<T>(x: &Array<T>, y: &Array<T>) -> Result<T>
@@ -161,12 +161,12 @@ where
 /// let y: Array<f64> = Array::from_vec(vec![4.0, 5.0, 6.0]);
 ///
 /// // p=1 gives Manhattan distance
-/// let l1: f64 = minkowski(&x, &y, 1.0).unwrap();
+/// let l1: f64 = minkowski(&x, &y, 1.0).expect("minkowski p=1 should succeed");
 /// assert!((l1 - 9.0).abs() < 1e-10);
 ///
 /// // p=2 gives Euclidean distance
-/// let l2: f64 = minkowski(&x, &y, 2.0).unwrap();
-/// assert!((l2 - euclidean(&x, &y).unwrap()).abs() < 1e-10);
+/// let l2: f64 = minkowski(&x, &y, 2.0).expect("minkowski p=2 should succeed");
+/// assert!((l2 - euclidean(&x, &y).expect("euclidean should succeed")).abs() < 1e-10);
 /// ```
 pub fn minkowski<T>(x: &Array<T>, y: &Array<T>, p: f64) -> Result<T>
 where
@@ -183,8 +183,9 @@ where
     let x_vec = x.to_vec();
     let y_vec = y.to_vec();
 
-    let p_t = T::from(p).unwrap();
-    let inv_p = T::from(1.0 / p).unwrap();
+    let p_t = T::from(p).expect("Minkowski p parameter must be convertible to target type");
+    let inv_p =
+        T::from(1.0 / p).expect("Inverse of Minkowski p must be convertible to target type");
 
     let sum: T = x_vec
         .iter()
@@ -247,7 +248,7 @@ where
 
     let x_vec = x.to_vec();
     let y_vec = y.to_vec();
-    let n = T::from(x_vec.len()).unwrap();
+    let n = T::from(x_vec.len()).expect("Vector length must be convertible to target type");
 
     // Compute means
     let mean_x: T = x_vec.iter().copied().fold(T::zero(), |acc, x| acc + x) / n;
@@ -292,7 +293,11 @@ pub fn hamming<T>(x: &Array<T>, y: &Array<T>) -> Result<T>
 where
     T: Float + Debug,
 {
-    hamming_threshold(x, y, T::from(1e-10).unwrap())
+    hamming_threshold(
+        x,
+        y,
+        T::from(1e-10).expect("Threshold 1e-10 must be convertible to target type"),
+    )
 }
 
 /// Hamming distance with custom threshold
@@ -311,8 +316,10 @@ where
         .filter(|(&xi, &yi)| (xi - yi).abs() > threshold)
         .count();
 
-    let n = T::from(x_vec.len()).unwrap();
-    Ok(T::from(n_different).unwrap() / n)
+    let n = T::from(x_vec.len()).expect("Vector length must be convertible to target type");
+    Ok(T::from(n_different)
+        .expect("Count of different elements must be convertible to target type")
+        / n)
 }
 
 // ============================================================================
@@ -342,7 +349,7 @@ where
 ///     5.0, 6.0,
 /// ]).reshape(&[3, 2]);
 ///
-/// let dists = pdist(&points, DistanceMetric::Euclidean).unwrap();
+/// let dists = pdist(&points, DistanceMetric::Euclidean).expect("pdist should succeed");
 /// assert_eq!(dists.size(), 3); // 3 choose 2 = 3 pairwise distances
 /// ```
 pub fn pdist<T>(x: &Array<T>, metric: DistanceMetric) -> Result<Array<T>>
@@ -489,7 +496,7 @@ mod tests {
     fn test_euclidean_distance() {
         let x = Array::from_vec(vec![0.0, 0.0]);
         let y = Array::from_vec(vec![3.0, 4.0]);
-        let dist = euclidean(&x, &y).unwrap();
+        let dist = euclidean(&x, &y).expect("euclidean distance should succeed");
         assert!((dist - 5.0).abs() < 1e-10, "Expected 5.0, got {}", dist);
     }
 
@@ -497,7 +504,7 @@ mod tests {
     fn test_manhattan_distance() {
         let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
         let y = Array::from_vec(vec![4.0, 5.0, 6.0]);
-        let dist = manhattan(&x, &y).unwrap();
+        let dist = manhattan(&x, &y).expect("manhattan distance should succeed");
         assert!((dist - 9.0).abs() < 1e-10);
     }
 
@@ -505,7 +512,7 @@ mod tests {
     fn test_chebyshev_distance() {
         let x = Array::from_vec(vec![1.0, 2.0, 3.0]);
         let y = Array::from_vec(vec![4.0, 6.0, 5.0]);
-        let dist = chebyshev(&x, &y).unwrap();
+        let dist = chebyshev(&x, &y).expect("chebyshev distance should succeed");
         assert!((dist - 4.0).abs() < 1e-10); // max(3, 4, 2) = 4
     }
 
@@ -515,13 +522,13 @@ mod tests {
         let y = Array::from_vec(vec![4.0, 5.0, 6.0]);
 
         // p=1 should equal Manhattan
-        let l1 = minkowski(&x, &y, 1.0).unwrap();
-        let manhattan_dist = manhattan(&x, &y).unwrap();
+        let l1 = minkowski(&x, &y, 1.0).expect("minkowski p=1 should succeed");
+        let manhattan_dist = manhattan(&x, &y).expect("manhattan should succeed");
         assert!((l1 - manhattan_dist).abs() < 1e-10);
 
         // p=2 should equal Euclidean
-        let l2 = minkowski(&x, &y, 2.0).unwrap();
-        let euclidean_dist = euclidean(&x, &y).unwrap();
+        let l2 = minkowski(&x, &y, 2.0).expect("minkowski p=2 should succeed");
+        let euclidean_dist = euclidean(&x, &y).expect("euclidean should succeed");
         assert!((l2 - euclidean_dist).abs() < 1e-10);
     }
 
@@ -530,13 +537,13 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 0.0, 0.0]);
         let y = Array::from_vec(vec![0.0, 1.0, 0.0]);
 
-        let dist = cosine(&x, &y).unwrap();
+        let dist = cosine(&x, &y).expect("cosine distance should succeed");
         assert!((dist - 1.0).abs() < 1e-10); // Orthogonal vectors
 
         // Parallel vectors
         let x2 = Array::from_vec(vec![1.0, 2.0, 3.0]);
         let y2 = Array::from_vec(vec![2.0, 4.0, 6.0]);
-        let dist2 = cosine(&x2, &y2).unwrap();
+        let dist2 = cosine(&x2, &y2).expect("cosine distance for parallel vectors should succeed");
         assert!(dist2.abs() < 1e-10); // Same direction
     }
 
@@ -545,7 +552,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let y = Array::from_vec(vec![2.0, 4.0, 6.0, 8.0, 10.0]);
 
-        let dist = correlation(&x, &y).unwrap();
+        let dist = correlation(&x, &y).expect("correlation distance should succeed");
         assert!(dist.abs() < 1e-10); // Perfect positive correlation
     }
 
@@ -554,7 +561,7 @@ mod tests {
         let x = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
         let y = Array::from_vec(vec![1.0, 2.0, 5.0, 6.0]);
 
-        let dist = hamming(&x, &y).unwrap();
+        let dist = hamming(&x, &y).expect("hamming distance should succeed");
         assert!((dist - 0.5).abs() < 1e-10); // 2 out of 4 differ
     }
 
@@ -562,14 +569,14 @@ mod tests {
     fn test_pdist() {
         let points = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
 
-        let dists = pdist(&points, DistanceMetric::Euclidean).unwrap();
+        let dists = pdist(&points, DistanceMetric::Euclidean).expect("pdist should succeed");
 
         // 3 points give 3 pairwise distances
         assert_eq!(dists.size(), 3);
 
         // All distances should be positive
         for i in 0..dists.size() {
-            assert!(dists.get(&[i]).unwrap() > 0.0);
+            assert!(dists.get(&[i]).expect("get element should succeed") > 0.0);
         }
     }
 
@@ -579,7 +586,7 @@ mod tests {
 
         let xb = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 
-        let dists = cdist(&xa, &xb, DistanceMetric::Euclidean).unwrap();
+        let dists = cdist(&xa, &xb, DistanceMetric::Euclidean).expect("cdist should succeed");
 
         // Shape should be (2, 2)
         assert_eq!(dists.shape(), vec![2, 2]);
@@ -587,7 +594,7 @@ mod tests {
         // All distances should be positive
         for i in 0..2 {
             for j in 0..2 {
-                assert!(dists.get(&[i, j]).unwrap() > 0.0);
+                assert!(dists.get(&[i, j]).expect("get element should succeed") > 0.0);
             }
         }
     }

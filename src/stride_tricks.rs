@@ -32,7 +32,7 @@ use std::fmt::Debug;
 /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
 ///
 /// // Create a view with stride 2 in both dimensions (every other element)
-/// let strided = set_strides(&array, &[2, 2]).unwrap();
+/// let strided = set_strides(&array, &[2, 2]).expect("set_strides should succeed");
 /// assert_eq!(strided.shape(), vec![2, 2]);
 /// ```
 ///
@@ -115,7 +115,7 @@ where
 /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
 ///
 /// // Create a view with shape [2, 2] and strides that skip elements
-/// let strided = as_strided(&array, &[2, 2], &[2, 2]).unwrap();
+/// let strided = as_strided(&array, &[2, 2], &[2, 2]).expect("as_strided should succeed");
 /// assert_eq!(strided.shape(), vec![2, 2]);
 /// ```
 ///
@@ -267,7 +267,7 @@ where
 /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
 ///
 /// // Create a 2x2 sliding window view of the array
-/// let windows = sliding_window_view(&array, &[2, 2], None).unwrap();
+/// let windows = sliding_window_view(&array, &[2, 2], None).expect("sliding_window_view should succeed");
 /// assert_eq!(windows.shape(), vec![2, 2, 2, 2]);
 /// ```
 pub fn sliding_window_view<T>(
@@ -442,7 +442,7 @@ where
 /// let a = Array::from_vec(vec![1, 2, 3]).reshape(&[1, 3]);
 /// let b = Array::from_vec(vec![4, 5, 6]).reshape(&[3, 1]);
 ///
-/// let result = broadcast_arrays(&[&a, &b]).unwrap();
+/// let result = broadcast_arrays(&[&a, &b]).expect("broadcast_arrays should succeed");
 /// assert_eq!(result.len(), 2);
 /// assert_eq!(result[0].shape(), result[1].shape());
 /// ```
@@ -493,7 +493,7 @@ where
 /// let array = Array::from_vec(vec![1, 2, 3]).reshape(&[1, 3]);
 ///
 /// // Broadcast to shape [3, 3]
-/// let result = broadcast_to(&array, &[3, 3]).unwrap();
+/// let result = broadcast_to(&array, &[3, 3]).expect("broadcast_to should succeed");
 /// assert_eq!(result.shape(), vec![3, 3]);
 /// ```
 pub fn broadcast_to<T>(array: &Array<T>, shape: &[usize]) -> Result<Array<T>>

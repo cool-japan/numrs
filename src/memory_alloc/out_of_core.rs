@@ -193,7 +193,10 @@ impl<T: Copy> DataChunk<T> {
             self.load_from_disk()?;
         }
         self.update_access();
-        Ok(self.data.as_ref().unwrap())
+        Ok(self
+            .data
+            .as_ref()
+            .expect("data should be loaded at this point"))
     }
 
     /// Get a mutable reference to the data, loading from disk if necessary
@@ -203,7 +206,10 @@ impl<T: Copy> DataChunk<T> {
         }
         self.update_access();
         self.metadata.dirty = true;
-        Ok(self.data.as_mut().unwrap())
+        Ok(self
+            .data
+            .as_mut()
+            .expect("data should be loaded at this point"))
     }
 
     /// Update access statistics
@@ -384,11 +390,15 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
 
             let chunk = DataChunk::new_in_memory(chunk_index, chunk_data.to_vec());
             let memory_usage = chunk.metadata.element_count * std::mem::size_of::<T>();
-            array.chunks.write().unwrap().insert(chunk_index, chunk);
+            array
+                .chunks
+                .write()
+                .expect("chunks RwLock should not be poisoned")
+                .insert(chunk_index, chunk);
             array
                 .cache_manager
                 .lock()
-                .unwrap()
+                .expect("cache_manager mutex should not be poisoned")
                 .chunk_loaded(chunk_index, array.config.cache_strategy);
             array.memory_tracker.record_allocation(memory_usage);
         }
@@ -475,7 +485,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
         self.ensure_chunk_loaded(chunk_index)?;
 
         // Access the data
-        let chunks = self.chunks.read().unwrap();
+        let chunks = self
+            .chunks
+            .read()
+            .expect("chunks RwLock should not be poisoned");
         let chunk = chunks
             .get(&chunk_index)
             .ok_or_else(|| NumRs2Error::InvalidOperation("Chunk not found".to_string()))?;
@@ -494,7 +507,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
         }
 
         // Record access
-        let mut cache_manager = self.cache_manager.lock().unwrap();
+        let mut cache_manager = self
+            .cache_manager
+            .lock()
+            .expect("cache_manager mutex should not be poisoned");
         cache_manager.record_access(chunk_index, self.config.cache_strategy);
 
         Ok(data[chunk_offset])
@@ -523,7 +539,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
 
         // Modify the data
         {
-            let mut chunks = self.chunks.write().unwrap();
+            let mut chunks = self
+                .chunks
+                .write()
+                .expect("chunks RwLock should not be poisoned");
             let chunk = chunks
                 .get_mut(&chunk_index)
                 .ok_or_else(|| NumRs2Error::InvalidOperation("Chunk not found".to_string()))?;
@@ -542,7 +561,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
         }
 
         // Record access
-        let mut cache_manager = self.cache_manager.lock().unwrap();
+        let mut cache_manager = self
+            .cache_manager
+            .lock()
+            .expect("cache_manager mutex should not be poisoned");
         cache_manager.record_access(chunk_index, self.config.cache_strategy);
 
         Ok(())
@@ -552,11 +574,17 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
     fn ensure_chunk_loaded(&self, chunk_index: usize) -> Result<()> {
         // Check if chunk is already in memory
         {
-            let chunks = self.chunks.read().unwrap();
+            let chunks = self
+                .chunks
+                .read()
+                .expect("chunks RwLock should not be poisoned");
             if let Some(chunk) = chunks.get(&chunk_index) {
                 if chunk.metadata.in_memory {
                     // Mark as recently accessed to prevent immediate eviction
-                    let mut cache_manager = self.cache_manager.lock().unwrap();
+                    let mut cache_manager = self
+                        .cache_manager
+                        .lock()
+                        .expect("cache_manager mutex should not be poisoned");
                     cache_manager.record_access(chunk_index, self.config.cache_strategy);
                     return Ok(());
                 }
@@ -568,13 +596,16 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
 
         // Load the chunk
         {
-            let mut chunks = self.chunks.write().unwrap();
+            let mut chunks = self
+                .chunks
+                .write()
+                .expect("chunks RwLock should not be poisoned");
             if let Some(chunk) = chunks.get_mut(&chunk_index) {
                 if !chunk.metadata.in_memory {
                     chunk.load_from_disk()?;
                     self.cache_manager
                         .lock()
-                        .unwrap()
+                        .expect("cache_manager mutex should not be poisoned")
                         .chunk_loaded(chunk_index, self.config.cache_strategy);
 
                     // Track memory usage
@@ -595,7 +626,7 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
                 chunks.insert(chunk_index, chunk);
                 self.cache_manager
                     .lock()
-                    .unwrap()
+                    .expect("cache_manager mutex should not be poisoned")
                     .chunk_loaded(chunk_index, self.config.cache_strategy);
                 self.memory_tracker.record_allocation(memory_usage);
             }
@@ -603,7 +634,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
 
         // Mark the chunk as recently accessed to prevent immediate eviction
         {
-            let mut cache_manager = self.cache_manager.lock().unwrap();
+            let mut cache_manager = self
+                .cache_manager
+                .lock()
+                .expect("cache_manager mutex should not be poisoned");
             cache_manager.record_access(chunk_index, self.config.cache_strategy);
         }
 
@@ -622,7 +656,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
 
     /// Evict chunks from memory if we exceed the cache limit, protecting a specific chunk
     fn evict_chunks_if_needed_protected(&self, protected_chunk: Option<usize>) -> Result<()> {
-        let mut cache_manager = self.cache_manager.lock().unwrap();
+        let mut cache_manager = self
+            .cache_manager
+            .lock()
+            .expect("cache_manager mutex should not be poisoned");
 
         while cache_manager.chunks_in_memory >= self.config.max_chunks_in_memory {
             if let Some(evict_chunk_index) =
@@ -636,7 +673,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
                 }
                 // Spill the chunk to disk
                 {
-                    let mut chunks = self.chunks.write().unwrap();
+                    let mut chunks = self
+                        .chunks
+                        .write()
+                        .expect("chunks RwLock should not be poisoned");
                     if let Some(chunk) = chunks.get_mut(&evict_chunk_index) {
                         if chunk.metadata.in_memory {
                             chunk.sync_if_dirty(&self.config.storage_path)?;
@@ -677,7 +717,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
             let next_chunk = current_chunk + i;
             if next_chunk < num_chunks {
                 // Only prefetch if we have room in cache
-                let cache_manager = self.cache_manager.lock().unwrap();
+                let cache_manager = self
+                    .cache_manager
+                    .lock()
+                    .expect("cache_manager mutex should not be poisoned");
                 if cache_manager.chunks_in_memory < self.config.max_chunks_in_memory {
                     drop(cache_manager);
                     let _ = self.ensure_chunk_loaded(next_chunk);
@@ -696,7 +739,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
             // Ensure chunk is loaded
             self.ensure_chunk_loaded(chunk_index)?;
 
-            let chunks = self.chunks.read().unwrap();
+            let chunks = self
+                .chunks
+                .read()
+                .expect("chunks RwLock should not be poisoned");
             if let Some(chunk) = chunks.get(&chunk_index) {
                 if let Some(ref data) = chunk.data {
                     all_data.extend_from_slice(data);
@@ -712,7 +758,10 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
 
     /// Sync all dirty chunks to disk
     pub fn sync_all(&self) -> Result<()> {
-        let mut chunks = self.chunks.write().unwrap();
+        let mut chunks = self
+            .chunks
+            .write()
+            .expect("chunks RwLock should not be poisoned");
         for chunk in chunks.values_mut() {
             chunk.sync_if_dirty(&self.config.storage_path)?;
         }
@@ -726,8 +775,14 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
 
     /// Get cache statistics
     pub fn get_cache_stats(&self) -> CacheStats {
-        let _cache_manager = self.cache_manager.lock().unwrap();
-        let chunks = self.chunks.read().unwrap();
+        let _cache_manager = self
+            .cache_manager
+            .lock()
+            .expect("cache_manager mutex should not be poisoned");
+        let chunks = self
+            .chunks
+            .read()
+            .expect("chunks RwLock should not be poisoned");
 
         let chunks_in_memory = chunks.values().filter(|c| c.metadata.in_memory).count();
         let chunks_on_disk = chunks
@@ -752,7 +807,10 @@ impl<T: Copy + Send + Sync + Default + 'static> Drop for OutOfCoreArray<T> {
         let _ = self.sync_all();
 
         // Clean up chunk files
-        let chunks = self.chunks.read().unwrap();
+        let chunks = self
+            .chunks
+            .read()
+            .expect("chunks RwLock should not be poisoned");
         for chunk in chunks.values() {
             if let Some(ref path) = chunk.metadata.disk_path {
                 let _ = std::fs::remove_file(path);

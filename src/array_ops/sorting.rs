@@ -30,15 +30,15 @@ use scirs2_core::Complex;
 ///
 /// // Partition a 1D array
 /// let a = Array::from_vec(vec![9.0, 4.0, 1.0, 7.0, 5.0, 3.0, 8.0, 2.0, 6.0]);
-/// let partitioned = partition(&a, 3, None).unwrap();
+/// let partitioned = partition(&a, 3, None).expect("operation should succeed");
 /// // The 4th element (index 3) is now 4.0, all elements before are <= 4.0,
 /// // and all elements after are >= 4.0
-/// assert_eq!(partitioned.get(&[3]).unwrap(), 4.0);
+/// assert_eq!(partitioned.get(&[3]).expect("operation should succeed"), 4.0);
 /// for i in 0..3 {
-///     assert!(partitioned.get(&[i]).unwrap() <= 4.0);
+///     assert!(partitioned.get(&[i]).expect("operation should succeed") <= 4.0);
 /// }
 /// for i in 4..9 {
-///     assert!(partitioned.get(&[i]).unwrap() >= 4.0);
+///     assert!(partitioned.get(&[i]).expect("operation should succeed") >= 4.0);
 /// }
 /// ```
 pub fn partition<T: Clone + PartialOrd>(
@@ -247,11 +247,11 @@ fn partition_around_pivot<T: Clone + PartialOrd>(
 ///
 /// // Find insertion points for values
 /// let v = Array::from_vec(vec![0.0, 1.0, 2.0, 4.0, 8.0, 10.0]);
-/// let indices = searchsorted(&a, &v, Some("left"), None).unwrap();
+/// let indices = searchsorted(&a, &v, Some("left"), None).expect("operation should succeed");
 /// assert_eq!(indices.to_vec(), vec![0, 0, 1, 2, 4, 5]);
 ///
 /// // Use 'right' side
-/// let indices = searchsorted(&a, &v, Some("right"), None).unwrap();
+/// let indices = searchsorted(&a, &v, Some("right"), None).expect("operation should succeed");
 /// assert_eq!(indices.to_vec(), vec![0, 1, 1, 2, 4, 5]);
 /// ```
 pub fn searchsorted<T: Clone + PartialOrd>(
@@ -400,7 +400,7 @@ fn binary_search_right<T: PartialOrd>(arr: &[T], value: &T) -> usize {
 /// use numrs2::array_ops::sorting::sort;
 ///
 /// let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
-/// let sorted = sort(&a, Some("mergesort")).unwrap();
+/// let sorted = sort(&a, Some("mergesort")).expect("operation should succeed");
 /// assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
 /// ```
 pub fn sort<T: Clone + PartialOrd>(array: &Array<T>, kind: Option<&str>) -> Result<Array<T>> {
@@ -496,7 +496,7 @@ fn heapify<T: Clone + PartialOrd>(arr: &mut [T], n: usize, i: usize) {
 ///     Complex::new(0.0, 1.0),  // magnitude 1.0
 ///     Complex::new(2.0, 0.0),  // magnitude 2.0
 /// ]);
-/// let sorted = sort_complex(&a).unwrap();
+/// let sorted = sort_complex(&a).expect("operation should succeed");
 /// // Should be sorted by magnitude: [1+0i, 0+1i, 2+0i, 3+4i]
 /// ```
 pub fn sort_complex<T>(array: &Array<Complex<T>>) -> Result<Array<Complex<T>>>
@@ -563,15 +563,15 @@ where
 ///
 /// // Basic bincount
 /// let x = Array::from_vec(vec![0, 1, 1, 3, 2, 1, 7]);
-/// let counts: Array<i32> = bincount(&x, None, None).unwrap();
+/// let counts: Array<i32> = bincount(&x, None, None).expect("operation should succeed");
 /// // counts = [1, 3, 1, 1, 0, 0, 0, 1] (8 elements, up to max value 7)
 /// assert_eq!(counts.shape(), vec![8]);
-/// assert_eq!(counts.get(&[1]).unwrap(), 3); // value 1 appears 3 times
+/// assert_eq!(counts.get(&[1]).expect("operation should succeed"), 3); // value 1 appears 3 times
 ///
 /// // With weights
 /// let weights = Array::from_vec(vec![0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 2.0]);
-/// let weighted_counts: Array<f64> = bincount(&x, Some(&weights), None).unwrap();
-/// assert_eq!(weighted_counts.get(&[1]).unwrap(), 1.5); // sum of weights where x=1
+/// let weighted_counts: Array<f64> = bincount(&x, Some(&weights), None).expect("operation should succeed");
+/// assert_eq!(weighted_counts.get(&[1]).expect("operation should succeed"), 1.5); // sum of weights where x=1
 /// ```
 pub fn bincount<T, W>(
     x: &Array<T>,
@@ -665,7 +665,7 @@ where
 ///
 /// let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]);
 /// let bins = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
-/// let indices = digitize(&x, &bins, false).unwrap();
+/// let indices = digitize(&x, &bins, false).expect("operation should succeed");
 /// // indices = [1, 4, 3, 2]
 /// // 0.2 is in bin 1 [0.0, 1.0)
 /// // 6.4 is in bin 4 [4.0, 10.0)
@@ -763,7 +763,7 @@ where
 ///     2, 2, 1, 1, 3,  // Primary sort key  
 /// ]).reshape(&[2, 5]);
 ///
-/// let indices = lexsort(&keys).unwrap();
+/// let indices = lexsort(&keys).expect("operation should succeed");
 /// // Elements will be sorted first by second row: [1,1,2,2,3]
 /// // Then by first row within ties: [(1,0),(0,1),(0,2),(1,2),(1,3)]
 /// assert_eq!(indices.to_vec(), vec![3, 2, 1, 0, 4]);
@@ -791,7 +791,10 @@ pub fn lexsort<T: Clone + PartialOrd + Zero>(keys: &Array<T>) -> Result<Array<us
     // This works because stable_sort_by preserves the order of equal elements
     for key_idx in 0..n_keys {
         let key_row_data: Vec<T> = (0..n_items)
-            .map(|i| keys.get(&[key_idx, i]).unwrap())
+            .map(|i| {
+                keys.get(&[key_idx, i])
+                    .expect("key_idx and i should be within bounds as validated by shape")
+            })
             .collect();
 
         // Stable sort preserves relative order of equal elements
@@ -826,7 +829,7 @@ pub fn lexsort<T: Clone + PartialOrd + Zero>(keys: &Array<T>) -> Result<Array<us
 /// use numrs2::array_ops::sorting::msort;
 ///
 /// let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
-/// let sorted = msort(&a).unwrap();
+/// let sorted = msort(&a).expect("operation should succeed");
 /// assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
 /// ```
 pub fn msort<T: Clone + PartialOrd>(array: &Array<T>) -> Result<Array<T>> {
@@ -897,19 +900,19 @@ mod tests {
     #[test]
     fn test_partition_1d() {
         let a = Array::from_vec(vec![9, 4, 1, 7, 5, 3, 8, 2, 6]);
-        let partitioned = partition(&a, 3, None).unwrap();
+        let partitioned = partition(&a, 3, None).expect("operation should succeed");
 
         // The 4th element (index 3) should be in its sorted position
-        let kth_element = partitioned.get(&[3]).unwrap();
+        let kth_element = partitioned.get(&[3]).expect("operation should succeed");
 
         // Check that all elements before index 3 are <= kth_element
         for i in 0..3 {
-            assert!(partitioned.get(&[i]).unwrap() <= kth_element);
+            assert!(partitioned.get(&[i]).expect("operation should succeed") <= kth_element);
         }
 
         // Check that all elements after index 3 are >= kth_element
         for i in 4..9 {
-            assert!(partitioned.get(&[i]).unwrap() >= kth_element);
+            assert!(partitioned.get(&[i]).expect("operation should succeed") >= kth_element);
         }
     }
 
@@ -917,7 +920,7 @@ mod tests {
     fn test_searchsorted_left() {
         let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
         let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
-        let indices = searchsorted(&a, &v, Some("left"), None).unwrap();
+        let indices = searchsorted(&a, &v, Some("left"), None).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![0, 0, 1, 2, 4, 5]);
     }
 
@@ -925,7 +928,7 @@ mod tests {
     fn test_searchsorted_right() {
         let a = Array::from_vec(vec![1, 3, 5, 7, 9]);
         let v = Array::from_vec(vec![0, 1, 2, 4, 8, 10]);
-        let indices = searchsorted(&a, &v, Some("right"), None).unwrap();
+        let indices = searchsorted(&a, &v, Some("right"), None).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![0, 1, 1, 2, 4, 5]);
     }
 
@@ -934,10 +937,12 @@ mod tests {
         let a = Array::from_vec(vec![1, 1, 1, 3, 3, 5]);
         let v = Array::from_vec(vec![1, 3]);
 
-        let indices_left = searchsorted(&a, &v, Some("left"), None).unwrap();
+        let indices_left =
+            searchsorted(&a, &v, Some("left"), None).expect("operation should succeed");
         assert_eq!(indices_left.to_vec(), vec![0, 3]); // First occurrence
 
-        let indices_right = searchsorted(&a, &v, Some("right"), None).unwrap();
+        let indices_right =
+            searchsorted(&a, &v, Some("right"), None).expect("operation should succeed");
         assert_eq!(indices_right.to_vec(), vec![3, 5]); // After last occurrence
     }
 
@@ -960,18 +965,19 @@ mod tests {
     fn test_bincount() {
         // Basic bincount
         let x = Array::from_vec(vec![0, 1, 1, 3, 2, 1, 7]);
-        let counts: Array<i32> = bincount(&x, None, None).unwrap();
+        let counts: Array<i32> = bincount(&x, None, None).expect("operation should succeed");
         assert_eq!(counts.shape(), vec![8]);
         assert_eq!(counts.to_vec(), vec![1, 3, 1, 1, 0, 0, 0, 1]);
 
         // With minlength
-        let counts: Array<i32> = bincount(&x, None, Some(10)).unwrap();
+        let counts: Array<i32> = bincount(&x, None, Some(10)).expect("operation should succeed");
         assert_eq!(counts.shape(), vec![10]);
         assert_eq!(counts.to_vec(), vec![1, 3, 1, 1, 0, 0, 0, 1, 0, 0]);
 
         // With weights
         let weights = Array::from_vec(vec![0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 2.0]);
-        let weighted_counts: Array<f64> = bincount(&x, Some(&weights), None).unwrap();
+        let weighted_counts: Array<f64> =
+            bincount(&x, Some(&weights), None).expect("operation should succeed");
         assert_eq!(weighted_counts.shape(), vec![8]);
         assert_eq!(
             weighted_counts.to_vec(),
@@ -980,7 +986,8 @@ mod tests {
 
         // Empty array
         let empty: Array<i32> = Array::from_vec(vec![]);
-        let counts: Array<i32> = bincount(&empty, None::<&Array<i32>>, Some(5)).unwrap();
+        let counts: Array<i32> =
+            bincount(&empty, None::<&Array<i32>>, Some(5)).expect("operation should succeed");
         assert_eq!(counts.to_vec(), vec![0, 0, 0, 0, 0]);
     }
 
@@ -989,33 +996,33 @@ mod tests {
         // Basic digitize with increasing bins
         let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]);
         let bins = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
+        let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
 
         // Test boundary values
         let x = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
+        let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![0, 1, 2, 3, 4]);
 
         // Test with right=true
-        let indices = digitize(&x, &bins, true).unwrap();
+        let indices = digitize(&x, &bins, true).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![1, 2, 3, 4, 5]);
 
         // Test values outside bounds
         let x = Array::from_vec(vec![-1.0, 15.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
+        let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![0, 5]);
 
         // Test decreasing bins
         let bins_dec = Array::from_vec(vec![10.0, 4.0, 2.5, 1.0, 0.0]);
         let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]);
-        let indices = digitize(&x, &bins_dec, false).unwrap();
+        let indices = digitize(&x, &bins_dec, false).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![4, 1, 2, 3]);
 
         // Test 2D array
         let x = Array::from_vec(vec![0.2, 6.4, 3.0, 1.6]).reshape(&[2, 2]);
         let bins = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
-        let indices = digitize(&x, &bins, false).unwrap();
+        let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.shape(), vec![2, 2]);
         assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
     }
@@ -1024,22 +1031,22 @@ mod tests {
     fn test_msort() {
         // Test basic merge sort
         let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
-        let sorted = msort(&a).unwrap();
+        let sorted = msort(&a).expect("operation should succeed");
         assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
 
         // Test empty array
         let empty: Array<i32> = Array::from_vec(vec![]);
-        let sorted_empty = msort(&empty).unwrap();
+        let sorted_empty = msort(&empty).expect("operation should succeed");
         assert_eq!(sorted_empty.to_vec(), Vec::<i32>::new());
 
         // Test single element
         let single = Array::from_vec(vec![42]);
-        let sorted_single = msort(&single).unwrap();
+        let sorted_single = msort(&single).expect("operation should succeed");
         assert_eq!(sorted_single.to_vec(), vec![42]);
 
         // Test with floating point numbers
         let float_arr = Array::from_vec(vec![3.14, 2.71, 1.41, 1.73]);
-        let sorted_float = msort(&float_arr).unwrap();
+        let sorted_float = msort(&float_arr).expect("operation should succeed");
         assert_eq!(sorted_float.to_vec(), vec![1.41, 1.73, 2.71, 3.14]);
     }
 
@@ -1052,7 +1059,7 @@ mod tests {
             Complex::new(0.0, 1.0), // magnitude 1.0
             Complex::new(2.0, 0.0), // magnitude 2.0
         ]);
-        let sorted = sort_complex(&a).unwrap();
+        let sorted = sort_complex(&a).expect("operation should succeed");
 
         // Check that magnitudes are in ascending order
         let magnitudes: Vec<f64> = sorted.to_vec().iter().map(|c| c.norm()).collect();
@@ -1067,7 +1074,7 @@ mod tests {
             Complex::new(-1.0, 0.0), // arg = π
             Complex::new(0.0, -1.0), // arg = -π/2 or 3π/2
         ]);
-        let sorted_b = sort_complex(&b).unwrap();
+        let sorted_b = sort_complex(&b).expect("operation should succeed");
 
         // All should have magnitude 1, sorted by argument
         for val in sorted_b.to_vec() {
@@ -1079,19 +1086,19 @@ mod tests {
     fn test_generic_sort() {
         // Test quicksort
         let a = Array::from_vec(vec![3, 1, 4, 1, 5, 9, 2, 6]);
-        let sorted = sort(&a, Some("quicksort")).unwrap();
+        let sorted = sort(&a, Some("quicksort")).expect("operation should succeed");
         assert_eq!(sorted.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
 
         // Test mergesort
-        let sorted_merge = sort(&a, Some("mergesort")).unwrap();
+        let sorted_merge = sort(&a, Some("mergesort")).expect("operation should succeed");
         assert_eq!(sorted_merge.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
 
         // Test heapsort
-        let sorted_heap = sort(&a, Some("heapsort")).unwrap();
+        let sorted_heap = sort(&a, Some("heapsort")).expect("operation should succeed");
         assert_eq!(sorted_heap.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
 
         // Test default (quicksort)
-        let sorted_default = sort(&a, None).unwrap();
+        let sorted_default = sort(&a, None).expect("operation should succeed");
         assert_eq!(sorted_default.to_vec(), vec![1, 1, 2, 3, 4, 5, 6, 9]);
 
         // Test invalid sort kind
@@ -1108,7 +1115,7 @@ mod tests {
         ])
         .reshape(&[2, 5]);
 
-        let indices = lexsort(&keys).unwrap();
+        let indices = lexsort(&keys).expect("operation should succeed");
         // Should sort by primary key (row 1) first: [1,1,2,2,3]
         // Then by secondary key (row 0) within ties
         assert_eq!(indices.to_vec(), vec![3, 2, 1, 0, 4]);

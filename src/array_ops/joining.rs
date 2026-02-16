@@ -322,13 +322,13 @@ pub fn c_<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
 /// let b = Array::from_vec(vec![4, 5, 6]);
-/// let stacked = vstack(&[&a, &b]).unwrap();
+/// let stacked = vstack(&[&a, &b]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![2, 3]);
 /// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
 ///
 /// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
 /// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
-/// let stacked = vstack(&[&c, &d]).unwrap();
+/// let stacked = vstack(&[&c, &d]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![4, 2]);
 /// ```
 pub fn vstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
@@ -372,13 +372,13 @@ pub fn vstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
 /// let b = Array::from_vec(vec![4, 5, 6]);
-/// let stacked = hstack(&[&a, &b]).unwrap();
+/// let stacked = hstack(&[&a, &b]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![6]);
 /// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
 ///
 /// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
 /// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
-/// let stacked = hstack(&[&c, &d]).unwrap();
+/// let stacked = hstack(&[&c, &d]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![2, 4]);
 /// ```
 pub fn hstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
@@ -419,12 +419,12 @@ pub fn hstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
 /// let b = Array::from_vec(vec![4, 5, 6]);
-/// let stacked = dstack(&[&a, &b]).unwrap();
+/// let stacked = dstack(&[&a, &b]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![1, 3, 2]);
 ///
 /// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
 /// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
-/// let stacked = dstack(&[&c, &d]).unwrap();
+/// let stacked = dstack(&[&c, &d]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![2, 2, 2]);
 /// ```
 pub fn dstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
@@ -477,7 +477,7 @@ pub fn dstack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]);
 /// let b = Array::from_vec(vec![4, 5, 6]);
-/// let stacked = row_stack(&[&a, &b]).unwrap();
+/// let stacked = row_stack(&[&a, &b]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![2, 3]);
 /// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
 /// ```
@@ -507,14 +507,14 @@ pub fn row_stack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// // Stack 1-D arrays as columns
 /// let a = Array::from_vec(vec![1, 2, 3]);
 /// let b = Array::from_vec(vec![4, 5, 6]);
-/// let stacked = column_stack(&[&a, &b]).unwrap();
+/// let stacked = column_stack(&[&a, &b]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![3, 2]);
 /// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
 ///
 /// // 2-D arrays are stacked horizontally
 /// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
 /// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
-/// let stacked = column_stack(&[&c, &d]).unwrap();
+/// let stacked = column_stack(&[&c, &d]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![2, 4]);
 /// assert_eq!(stacked.to_vec(), vec![1, 3, 2, 4, 5, 7, 6, 8]);
 /// ```
@@ -611,7 +611,7 @@ pub fn bmat_from_string<T: Clone>(_description: &str) -> Result<Array<T>> {
 ///     vec![&a, &b],
 ///     vec![&c, &d],
 /// ];
-/// let result = bmat_from_arrays(&blocks).unwrap();
+/// let result = bmat_from_arrays(&blocks).expect("operation should succeed");
 ///
 /// // Result is a 4x4 matrix:
 /// // [ 1  2  5  6]
@@ -758,7 +758,7 @@ pub fn bmat_from_arrays<T: Clone>(obj: &[Vec<&Array<T>>]) -> Result<Array<T>> {
 ///     vec![&a, &b],
 ///     vec![&c, &d],
 /// ];
-/// let result = bmat(&blocks).unwrap();
+/// let result = bmat(&blocks).expect("operation should succeed");
 /// assert_eq!(result.shape(), vec![4, 4]);
 /// ```
 pub fn bmat<T: Clone>(obj: &[Vec<&Array<T>>]) -> Result<Array<T>> {

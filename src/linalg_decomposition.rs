@@ -44,7 +44,7 @@ use std::fmt::Debug;
 /// use numrs2::linalg::decomposition::matrix_rank;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let rank = matrix_rank(&a, None).unwrap();
+/// let rank = matrix_rank(&a, None).expect("matrix_rank should succeed");
 /// assert_eq!(rank, 2);
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
@@ -105,7 +105,7 @@ pub fn matrix_rank<T: Float + Clone + Debug>(a: &Array<T>, tol: Option<T>) -> Re
 /// use numrs2::linalg::decomposition::qr;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let (q, r) = qr(&a).unwrap();
+/// let (q, r) = qr(&a).expect("qr should succeed");
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn qr<
@@ -144,7 +144,7 @@ pub fn qr<
 /// use numrs2::linalg::decomposition::qr;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let (q, r) = qr(&a).unwrap();
+/// let (q, r) = qr(&a).expect("qr should succeed");
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
 pub fn qr<
@@ -182,7 +182,7 @@ pub fn qr<
 ///
 /// // Create a positive definite matrix
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
-/// let l = cholesky(&a).unwrap();
+/// let l = cholesky(&a).expect("cholesky should succeed");
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn cholesky<
@@ -221,7 +221,7 @@ pub fn cholesky<
 ///
 /// // Create a positive definite matrix
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
-/// let l = cholesky(&a).unwrap();
+/// let l = cholesky(&a).expect("cholesky should succeed");
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
 pub fn cholesky<
@@ -261,7 +261,7 @@ pub fn cholesky<
 /// use numrs2::linalg::decomposition::eig;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
-/// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
+/// let (eigenvals, eigenvecs) = eig(&a, None).expect("eig should succeed");
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn eig<
@@ -286,7 +286,7 @@ pub fn eig<
         return Ok((eigenvalues, eigenvectors));
     }
 
-    let sort_option = sort.unwrap();
+    let sort_option = sort.expect("sort option already checked for None");
 
     if sort_option != "asc" && sort_option != "desc" {
         return Err(NumRs2Error::InvalidOperation(format!(
@@ -311,9 +311,13 @@ pub fn eig<
         let b_abs = num_traits::Float::abs(evals_data[j]);
 
         if sort_option == "asc" {
-            a_abs.partial_cmp(&b_abs).unwrap()
+            a_abs
+                .partial_cmp(&b_abs)
+                .unwrap_or(std::cmp::Ordering::Equal)
         } else {
-            b_abs.partial_cmp(&a_abs).unwrap()
+            b_abs
+                .partial_cmp(&a_abs)
+                .unwrap_or(std::cmp::Ordering::Equal)
         }
     });
 
@@ -366,7 +370,7 @@ pub fn eig<
 /// use numrs2::linalg::decomposition::eig;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
-/// let (eigenvals, eigenvecs) = eig(&a, None).unwrap();
+/// let (eigenvals, eigenvecs) = eig(&a, None).expect("eig should succeed");
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
 pub fn eig<
@@ -389,7 +393,7 @@ pub fn eig<
         return Ok((eigenvalues, eigenvectors));
     }
 
-    let sort_option = sort.unwrap();
+    let sort_option = sort.expect("sort option already checked for None");
 
     if sort_option != "asc" && sort_option != "desc" {
         return Err(NumRs2Error::InvalidOperation(format!(
@@ -414,9 +418,13 @@ pub fn eig<
         let b_abs = num_traits::Float::abs(evals_data[j]);
 
         if sort_option == "asc" {
-            a_abs.partial_cmp(&b_abs).unwrap()
+            a_abs
+                .partial_cmp(&b_abs)
+                .unwrap_or(std::cmp::Ordering::Equal)
         } else {
-            b_abs.partial_cmp(&a_abs).unwrap()
+            b_abs
+                .partial_cmp(&a_abs)
+                .unwrap_or(std::cmp::Ordering::Equal)
         }
     });
 
@@ -470,7 +478,7 @@ pub fn eig<
 /// use numrs2::linalg::decomposition::svd;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let (u, s, vt) = svd(&a).unwrap();
+/// let (u, s, vt) = svd(&a).expect("svd should succeed");
 /// ```
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub fn svd<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>, Array<T>)> {
@@ -517,7 +525,7 @@ pub fn svd<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>
 /// use numrs2::linalg::decomposition::svd;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let (u, s, vt) = svd(&a).unwrap();
+/// let (u, s, vt) = svd(&a).expect("svd should succeed");
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
 pub fn svd<
@@ -557,7 +565,7 @@ pub fn svd<
 /// use numrs2::linalg::decomposition::matrix_rank;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let rank = matrix_rank(&a, None).unwrap();
+/// let rank = matrix_rank(&a, None).expect("matrix_rank should succeed");
 /// assert_eq!(rank, 2);
 /// ```
 #[cfg(not(feature = "matrix_decomp"))]
@@ -600,7 +608,7 @@ pub fn matrix_rank<
                 .iter()
                 .fold(T::zero(), |max, &val| if val > max { val } else { max });
 
-            T::from(max_dim).unwrap() * eps * max_s
+            T::from(max_dim).unwrap_or_else(|| T::one()) * eps * max_s
         }
     };
 

@@ -18,7 +18,7 @@ use crate::error::Result;
 ///
 /// let a = Array::from_vec(vec![1, 2, 3]).reshape(&[1, 3]);
 /// let b = Array::from_vec(vec![10, 20, 30]).reshape(&[3, 1]);
-/// let broadcasts = broadcast_arrays(&[&a, &b]).unwrap();
+/// let broadcasts = broadcast_arrays(&[&a, &b]).expect("operation should succeed");
 /// assert_eq!(broadcasts[0].shape(), vec![3, 3]);
 /// assert_eq!(broadcasts[1].shape(), vec![3, 3]);
 /// ```
@@ -65,7 +65,7 @@ pub fn broadcast_arrays<T: Clone>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>>
 /// let a = Array::from_vec(vec![1, 2, 3]).reshape(&[1, 3]);
 ///
 /// // Broadcast to 2x3
-/// let b = broadcast_to(&a, &[2, 3]).unwrap();
+/// let b = broadcast_to(&a, &[2, 3]).expect("operation should succeed");
 /// assert_eq!(b.shape(), vec![2, 3]);
 /// ```
 pub fn broadcast_to<T: Clone>(array: &Array<T>, shape: &[usize]) -> Result<Array<T>> {

@@ -4,6 +4,7 @@
 //! to track performance and identify bottlenecks.
 
 #![allow(deprecated)]
+#![allow(clippy::result_large_err)]
 
 #[macro_use]
 extern crate criterion;

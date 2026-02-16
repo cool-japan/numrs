@@ -224,11 +224,10 @@ where
             }
             None => {
                 // Find minimum of all elements
-                let first = self
-                    .array()
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| panic!("Empty array"));
+                let first =
+                    self.array().first().cloned().expect(
+                        "min_axis called on empty array: this should have been caught earlier",
+                    );
 
                 let min = self.array().fold(first, |acc, x| {
                     let val = x.clone();
@@ -309,11 +308,10 @@ where
             }
             None => {
                 // Find maximum of all elements
-                let first = self
-                    .array()
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| panic!("Empty array"));
+                let first =
+                    self.array().first().cloned().expect(
+                        "max_axis called on empty array: this should have been caught earlier",
+                    );
 
                 let max = self.array().fold(first, |acc, x| {
                     let val = x.clone();
@@ -429,7 +427,10 @@ where
                 sum = sum + arr_data[idx].clone();
 
                 // Update the array
-                let result_data = result.array_mut().as_slice_mut().unwrap();
+                let result_data = result
+                    .array_mut()
+                    .as_slice_mut()
+                    .expect("Array must be contiguous for cumsum_axis");
                 result_data[idx] = sum.clone();
             }
         }
@@ -480,7 +481,10 @@ where
                 prod = prod * arr_data[idx].clone();
 
                 // Update the array
-                let result_data = result.array_mut().as_slice_mut().unwrap();
+                let result_data = result
+                    .array_mut()
+                    .as_slice_mut()
+                    .expect("Array must be contiguous for cumprod_axis");
                 result_data[idx] = prod.clone();
             }
         }
@@ -533,15 +537,19 @@ where
                 1
             };
 
+            let slice = self
+                .array()
+                .as_slice()
+                .expect("Array must be contiguous for argmin_axis");
             for elem in 0..elements_per_sequence {
                 // Initialize with first element
-                let mut min_val = self.array().as_slice().unwrap()[base_idx + elem].clone();
+                let mut min_val = slice[base_idx + elem].clone();
                 let mut min_idx = 0;
 
                 // Find the minimum value and its index
                 for i in 1..axis_len {
                     let idx = base_idx + i * stride + elem;
-                    let val = self.array().as_slice().unwrap()[idx].clone();
+                    let val = slice[idx].clone();
 
                     if val < min_val {
                         min_val = val;
@@ -603,15 +611,19 @@ where
                 1
             };
 
+            let slice = self
+                .array()
+                .as_slice()
+                .expect("Array must be contiguous for argmax_axis");
             for elem in 0..elements_per_sequence {
                 // Initialize with first element
-                let mut max_val = self.array().as_slice().unwrap()[base_idx + elem].clone();
+                let mut max_val = slice[base_idx + elem].clone();
                 let mut max_idx = 0;
 
                 // Find the maximum value and its index
                 for i in 1..axis_len {
                     let idx = base_idx + i * stride + elem;
-                    let val = self.array().as_slice().unwrap()[idx].clone();
+                    let val = slice[idx].clone();
 
                     if val > max_val {
                         max_val = val;
@@ -702,7 +714,7 @@ where
                     .array()
                     .first()
                     .cloned()
-                    .unwrap_or_else(|| panic!("Mean calculation failed"));
+                    .expect("var_axis: mean calculation should return at least one element");
 
                 // Calculate sum of squared differences
                 let squared_diff_sum = self.array().fold(T::zero(), |acc, x| {
@@ -759,7 +771,7 @@ where
 /// // Apply sum function along axis 0
 /// let result = apply_along_axis(&arr, 0, |slice| {
 ///     slice.to_vec().iter().sum::<f64>()
-/// }).unwrap();
+/// }).expect("apply_along_axis should succeed");
 ///
 /// assert_eq!(result.shape(), vec![3]);
 /// assert_eq!(result.to_vec(), vec![5.0, 7.0, 9.0]);
@@ -852,7 +864,7 @@ where
 /// // Apply sum function over axes 0 and 1
 /// let result = apply_over_axes(&arr, &[0, 1], |a, ax| {
 ///     a.sum_axis(ax)
-/// }).unwrap();
+/// }).expect("apply_over_axes should succeed");
 ///
 /// assert_eq!(result.shape(), vec![1, 1, 2]);
 /// assert_eq!(result.to_vec(), vec![16.0, 20.0]);

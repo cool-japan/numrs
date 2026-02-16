@@ -145,7 +145,10 @@ impl PerformanceTuner {
 
     /// Record an allocation event
     pub fn record_allocation(&self, size: usize, duration: Duration) {
-        let mut metrics = self.current_metrics.lock().unwrap();
+        let mut metrics = self
+            .current_metrics
+            .lock()
+            .expect("current_metrics mutex should not be poisoned");
         metrics.total_allocations += 1;
         metrics.total_bytes_allocated += size as u64;
         metrics.current_memory_usage += size as u64;
@@ -169,7 +172,10 @@ impl PerformanceTuner {
 
     /// Record a deallocation event
     pub fn record_deallocation(&self, size: usize, duration: Duration) {
-        let mut metrics = self.current_metrics.lock().unwrap();
+        let mut metrics = self
+            .current_metrics
+            .lock()
+            .expect("current_metrics mutex should not be poisoned");
         metrics.total_deallocations += 1;
         metrics.total_bytes_deallocated += size as u64;
         metrics.current_memory_usage = metrics.current_memory_usage.saturating_sub(size as u64);
@@ -190,14 +196,20 @@ impl PerformanceTuner {
 
     /// Record an allocation failure
     pub fn record_allocation_failure(&self) {
-        let mut metrics = self.current_metrics.lock().unwrap();
+        let mut metrics = self
+            .current_metrics
+            .lock()
+            .expect("current_metrics mutex should not be poisoned");
         metrics.allocation_failures += 1;
         metrics.last_updated = Instant::now();
     }
 
     /// Get current performance metrics
     pub fn get_current_metrics(&self) -> PerformanceMetrics {
-        self.current_metrics.lock().unwrap().clone()
+        self.current_metrics
+            .lock()
+            .expect("current_metrics mutex should not be poisoned")
+            .clone()
     }
 
     /// Take a metrics snapshot and add to history
@@ -577,7 +589,10 @@ impl PerformanceTuner {
 
     /// Reset all metrics and history
     pub fn reset(&mut self) {
-        *self.current_metrics.lock().unwrap() = PerformanceMetrics::default();
+        *self
+            .current_metrics
+            .lock()
+            .expect("current_metrics mutex should not be poisoned") = PerformanceMetrics::default();
         self.metrics_history.clear();
         self.benchmark_cache.clear();
     }
@@ -699,12 +714,12 @@ mod tests {
         // First benchmark
         let result1 = tuner
             .benchmark_allocator(&allocator, "TestAllocator", config.clone())
-            .unwrap();
+            .expect("benchmark_allocator should succeed");
 
         // Second benchmark should be cached
         let result2 = tuner
             .benchmark_allocator(&allocator, "TestAllocator", config)
-            .unwrap();
+            .expect("benchmark_allocator should succeed");
 
         assert_eq!(result1.allocator_name, result2.allocator_name);
         assert_eq!(

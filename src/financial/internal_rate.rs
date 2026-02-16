@@ -37,7 +37,7 @@ use std::fmt::Debug;
 ///
 /// // Calculate IRR for an investment
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0, 600.0]);
-/// let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
+/// let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100)).expect("irr calculation failed");
 /// assert!((result - 0.249_f64).abs() < 0.01); // Approximately 24.9%
 /// ```
 pub fn irr<T>(
@@ -74,8 +74,8 @@ where
         ));
     }
 
-    let guess = guess.unwrap_or_else(|| T::from(0.1).unwrap());
-    let tol = tol.unwrap_or_else(|| T::from(1e-6).unwrap());
+    let guess = guess.unwrap_or_else(|| T::from(0.1).expect("Failed to convert 0.1 to type T"));
+    let tol = tol.unwrap_or_else(|| T::from(1e-6).expect("Failed to convert 1e-6 to type T"));
     let maxiter = maxiter.unwrap_or(100);
 
     // Newton-Raphson method
@@ -84,7 +84,7 @@ where
     for iteration in 0..maxiter {
         let (npv_val, npv_derivative) = irr_function_and_derivative(&cash_flows, rate);
 
-        if npv_derivative.abs() < T::from(1e-15).unwrap() {
+        if npv_derivative.abs() < T::from(1e-15).expect("Failed to convert 1e-15 to type T") {
             return Err(NumRs2Error::ComputationError(
                 "IRR calculation failed: derivative too small".to_string(),
             ));
@@ -99,13 +99,15 @@ where
         rate = new_rate;
 
         // Prevent extremely negative rates that could cause numerical issues
-        if rate < T::from(-0.999).unwrap() {
-            rate = T::from(-0.99).unwrap();
+        if rate < T::from(-0.999).expect("Failed to convert -0.999 to type T") {
+            rate = T::from(-0.99).expect("Failed to convert -0.99 to type T");
         }
 
         // If rate becomes too large, restart with a different guess
-        if rate > T::from(10.0).unwrap() && iteration < maxiter / 2 {
-            rate = T::from(0.5).unwrap();
+        if rate > T::from(10.0).expect("Failed to convert 10.0 to type T")
+            && iteration < maxiter / 2
+        {
+            rate = T::from(0.5).expect("Failed to convert 0.5 to type T");
         }
     }
 
@@ -129,7 +131,7 @@ where
             npv_val = npv_val + cash_flow;
             // Derivative contribution is 0 for the initial cash flow
         } else {
-            let period = T::from(i).unwrap();
+            let period = T::from(i).expect("Failed to convert period index to type T");
             let discount_factor = one_plus_rate.powf(period);
 
             // NPV contribution
@@ -167,7 +169,7 @@ where
 ///     -1000.0, 300.0, 400.0, 500.0,  // Project 1
 ///     -1200.0, 400.0, 500.0, 600.0   // Project 2
 /// ]).reshape(&[2, 4]);
-/// let result = irr_multiple_series(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
+/// let result = irr_multiple_series(&cash_flows, Some(0.1), Some(1e-6), Some(100)).expect("irr_multiple_series calculation failed");
 /// assert_eq!(result.shape(), vec![2]);
 /// ```
 pub fn irr_multiple_series<T>(
@@ -226,7 +228,7 @@ where
 /// use numrs2::prelude::*;
 ///
 /// let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
-/// let result = mirr(&cash_flows, 0.10, 0.12).unwrap();
+/// let result = mirr(&cash_flows, 0.10, 0.12).expect("mirr calculation failed");
 /// assert!(result > 0.0 && result < 1.0); // Should be a reasonable rate
 /// ```
 pub fn mirr<T>(values: &Array<T>, finance_rate: T, reinvest_rate: T) -> Result<T>
@@ -248,7 +250,7 @@ where
     }
 
     let n = cash_flows.len();
-    let n_float = T::from(n - 1).unwrap();
+    let n_float = T::from(n - 1).expect("Failed to convert n-1 to type T");
 
     // Calculate present value of negative cash flows (financing)
     let mut pv_negative = T::zero();
@@ -259,7 +261,7 @@ where
     let one_plus_reinvest = T::one() + reinvest_rate;
 
     for (i, &cash_flow) in cash_flows.iter().enumerate() {
-        let period = T::from(i).unwrap();
+        let period = T::from(i).expect("Failed to convert period index to type T");
 
         if cash_flow < T::zero() {
             // Negative cash flow - discount to present value
@@ -296,7 +298,8 @@ mod tests {
     fn test_irr_basic() {
         // Test basic IRR calculation
         let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0, 600.0]);
-        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100))
+            .expect("irr calculation should succeed");
         assert_relative_eq!(result, 0.248883, epsilon = 1e-5);
     }
 
@@ -304,7 +307,8 @@ mod tests {
     fn test_irr_simple_case() {
         // Simple case: invest $100, get back $110 next period
         let cash_flows = Array::from_vec(vec![-100.0, 110.0]);
-        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100))
+            .expect("irr calculation should succeed");
         assert_relative_eq!(result, 0.1, epsilon = 1e-6);
     }
 
@@ -312,7 +316,8 @@ mod tests {
     fn test_irr_break_even() {
         // Break-even case: IRR should be 0
         let cash_flows = Array::from_vec(vec![-100.0, 50.0, 50.0]);
-        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100))
+            .expect("irr calculation should succeed");
         assert_relative_eq!(result, 0.0, epsilon = 1e-6);
     }
 
@@ -320,7 +325,8 @@ mod tests {
     fn test_irr_high_return() {
         // High return case
         let cash_flows = Array::from_vec(vec![-100.0, 200.0]);
-        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = irr(&cash_flows, Some(0.1), Some(1e-6), Some(100))
+            .expect("irr calculation should succeed");
         assert_relative_eq!(result, 1.0, epsilon = 1e-6); // 100% return
     }
 
@@ -331,7 +337,8 @@ mod tests {
             -100.0, 110.0, 0.0, 0.0, // Project 2 (simple case)
         ])
         .reshape(&[2, 4]);
-        let result = irr_multiple_series(&cash_flows, Some(0.1), Some(1e-6), Some(100)).unwrap();
+        let result = irr_multiple_series(&cash_flows, Some(0.1), Some(1e-6), Some(100))
+            .expect("irr_multiple_series calculation should succeed");
         assert_eq!(result.shape(), vec![2]);
 
         let values = result.to_vec();
@@ -342,7 +349,7 @@ mod tests {
     #[test]
     fn test_mirr_basic() {
         let cash_flows = Array::from_vec(vec![-1000.0, 300.0, 400.0, 500.0]);
-        let result = mirr(&cash_flows, 0.10, 0.12).unwrap();
+        let result = mirr(&cash_flows, 0.10, 0.12).expect("mirr calculation should succeed");
         assert!(result > 0.0 && result < 1.0); // Should be a reasonable rate
     }
 

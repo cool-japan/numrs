@@ -19,6 +19,7 @@ use super::avx512_enhanced::Avx2EnhancedOps;
 use super::neon_enhanced::NeonEnhancedOps;
 
 /// Unified SIMD dispatcher that automatically selects optimal implementations
+#[repr(align(64))]
 pub struct UnifiedSimdDispatcher {
     features: CpuFeatures,
     implementation: SimdImplementation,
@@ -127,7 +128,7 @@ impl UnifiedSimdDispatcher {
             SimdImplementation::AVX512 => (input.map(|x| x.sin()), input.map(|x| x.cos())),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => {
-                let sin_result = EnhancedSimdOps::vectorized_sin_f32(input);
+                let sin_result = EnhancedSimdOps::vectorized_sin_f32_simd(input);
                 let cos_result = input.map(|x| x.cos());
                 (sin_result, cos_result)
             }
@@ -143,7 +144,7 @@ impl UnifiedSimdDispatcher {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
             SimdImplementation::AVX512 => input.sum(),
             #[cfg(target_arch = "x86_64")]
-            SimdImplementation::AVX2 => EnhancedSimdOps::kahan_sum_f32(input),
+            SimdImplementation::AVX2 => EnhancedSimdOps::simd_kahan_sum_f32(input),
             #[cfg(target_arch = "aarch64")]
             SimdImplementation::NEON => NeonEnhancedOps::neon_sum_f32(input),
             _ => input.sum(),
@@ -226,25 +227,19 @@ impl UnifiedSimdDispatcher {
 
     /// Memory-optimized copy operation
     pub fn optimized_copy_f32(&self, src: &Array<f32>) -> Result<Array<f32>> {
-        let mut dst = Array::zeros(&src.shape());
-
-        match self.implementation {
+        let dst = match self.implementation {
             #[cfg(target_arch = "x86_64")]
-            SimdImplementation::AVX2 => {
-                EnhancedSimdOps::optimized_copy_f32(src, &mut dst)?;
-            }
+            SimdImplementation::AVX2 => EnhancedSimdOps::simd_copy_f32(src),
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => {
-                EnhancedSimdOps::optimized_copy_f32(src, &mut dst)?;
-            }
+            SimdImplementation::AVX512 => EnhancedSimdOps::simd_copy_f32(src),
             #[cfg(target_arch = "aarch64")]
             SimdImplementation::NEON => {
+                let mut dst = Array::zeros(&src.shape());
                 NeonEnhancedOps::neon_copy_f32(src, &mut dst)?;
+                dst
             }
-            _ => {
-                dst = src.clone();
-            }
-        }
+            _ => src.clone(),
+        };
 
         Ok(dst)
     }
@@ -415,7 +410,8 @@ mod tests {
         let sum = optimized::sum_f32(&a);
         assert_relative_eq!(sum, 10.0, epsilon = 1e-6);
 
-        let dot = optimized::dot_f32(&a, &b).unwrap();
+        let dot =
+            optimized::dot_f32(&a, &b).expect("dot_f32 should succeed with equal-length vectors");
         assert_relative_eq!(dot, 70.0, epsilon = 1e-6);
 
         let exp_input = Array::from_vec(vec![0.0, 1.0]);
@@ -475,7 +471,8 @@ mod tests {
         let b_r = Array::from_vec(vec![5.0, 6.0]);
         let b_i = Array::from_vec(vec![7.0, 8.0]);
 
-        let (c_r, c_i) = optimized::complex_multiply_f32(&a_r, &a_i, &b_r, &b_i).unwrap();
+        let (c_r, c_i) = optimized::complex_multiply_f32(&a_r, &a_i, &b_r, &b_i)
+            .expect("complex_multiply_f32 should succeed with equal-sized complex vectors");
 
         // (1+3i) * (5+7i) = -16 + 22i
         assert_relative_eq!(c_r.to_vec()[0], -16.0, epsilon = 1e-6);

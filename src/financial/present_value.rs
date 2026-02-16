@@ -35,7 +35,7 @@ use std::fmt::Debug;
 /// use numrs2::prelude::*;
 ///
 /// // Calculate present value of $100 payments for 10 periods at 5% interest
-/// let result = pv(0.05, 10.0, 100.0, 0.0, 0).unwrap();
+/// let result = pv(0.05, 10.0, 100.0, 0.0, 0).expect("pv calculation failed");
 /// assert!((result - (-772.173_f64)).abs() < 0.001);
 /// ```
 pub fn pv<T>(rate: T, nper: T, pmt: T, fv: T, when: i32) -> Result<T>
@@ -85,7 +85,7 @@ where
 /// let pmts = Array::from_vec(vec![100.0, 200.0, 300.0]);
 /// let fvs = Array::from_vec(vec![0.0, 0.0, 0.0]);
 ///
-/// let result = pv_array(&rates, &npers, &pmts, &fvs, 0).unwrap();
+/// let result = pv_array(&rates, &npers, &pmts, &fvs, 0).expect("pv_array calculation failed");
 /// assert_eq!(result.shape(), vec![3]);
 /// ```
 pub fn pv_array<T>(
@@ -128,28 +128,28 @@ mod tests {
     #[test]
     fn test_pv_basic() {
         // Test basic present value calculation
-        let result = pv(0.05, 10.0, 100.0, 0.0, 0).unwrap();
+        let result = pv(0.05, 10.0, 100.0, 0.0, 0).expect("pv calculation should succeed");
         assert_relative_eq!(result, -772.1734, epsilon = 1e-4);
     }
 
     #[test]
     fn test_pv_with_future_value() {
         // Test present value with future value
-        let result = pv(0.05, 10.0, 100.0, 1000.0, 0).unwrap();
+        let result = pv(0.05, 10.0, 100.0, 1000.0, 0).expect("pv calculation should succeed");
         assert_relative_eq!(result, -1386.087, epsilon = 1e-3);
     }
 
     #[test]
     fn test_pv_beginning_of_period() {
         // Test present value with payments at beginning of period
-        let result = pv(0.05, 10.0, 100.0, 0.0, 1).unwrap();
+        let result = pv(0.05, 10.0, 100.0, 0.0, 1).expect("pv calculation should succeed");
         assert_relative_eq!(result, -810.782, epsilon = 1e-3);
     }
 
     #[test]
     fn test_pv_zero_rate() {
         // Test present value with zero interest rate
-        let result = pv(0.0, 10.0, 100.0, 0.0, 0).unwrap();
+        let result = pv(0.0, 10.0, 100.0, 0.0, 0).expect("pv calculation should succeed");
         assert_relative_eq!(result, -1000.0, epsilon = 1e-9);
     }
 
@@ -160,7 +160,8 @@ mod tests {
         let pmts = Array::from_vec(vec![100.0, 200.0]);
         let fvs = Array::from_vec(vec![0.0, 0.0]);
 
-        let result = pv_array(&rates, &npers, &pmts, &fvs, 0).unwrap();
+        let result =
+            pv_array(&rates, &npers, &pmts, &fvs, 0).expect("pv_array calculation should succeed");
         assert_eq!(result.shape(), vec![2]);
 
         let values = result.to_vec();

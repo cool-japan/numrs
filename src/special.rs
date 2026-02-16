@@ -294,14 +294,14 @@ mod tests {
     #[test]
     fn test_hypergeometric_1f1() {
         // Test 1F1(0, b, x) = 1
-        let result: f64 = hyp1f1(0.0, 2.0, 0.5).unwrap();
+        let result: f64 = hyp1f1(0.0, 2.0, 0.5).expect("hyp1f1 should succeed");
         assert!((result - 1.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_hypergeometric_2f1() {
         // Test 2F1(a, b, c, 0) = 1
-        let result: f64 = hyp2f1(1.0, 2.0, 3.0, 0.0).unwrap();
+        let result: f64 = hyp2f1(1.0, 2.0, 3.0, 0.0).expect("hyp2f1 should succeed");
         assert!((result - 1.0).abs() < 1e-10);
     }
 }

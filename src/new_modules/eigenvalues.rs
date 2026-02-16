@@ -343,7 +343,7 @@ mod tests {
             Array::from_vec(vec![2.0, -1.0, 0.0, -1.0, 2.0, -1.0, 0.0, -1.0, 2.0]).reshape(&[3, 3]);
 
         // Compute eigenvalues
-        let eigenvalues = eigvalsh(&a, "lower").unwrap();
+        let eigenvalues = eigvalsh(&a, "lower").expect("eigvalsh should succeed");
 
         // Check the dimensions
         assert_eq!(eigenvalues.shape(), vec![3]);
@@ -366,7 +366,7 @@ mod tests {
         let a = Array::from_vec(vec![1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0]).reshape(&[3, 3]);
 
         // Compute eigenvalues and eigenvectors
-        let (eigenvalues, eigenvectors) = eigh(&a, "lower").unwrap();
+        let (eigenvalues, eigenvectors) = eigh(&a, "lower").expect("eigh should succeed");
 
         // Check the dimensions
         assert_eq!(eigenvalues.shape(), vec![3]);
@@ -397,7 +397,7 @@ mod tests {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]).reshape(&[3, 3]);
 
         // Compute eigenvalues
-        let eigenvalues = eigvals(&a).unwrap();
+        let eigenvalues = eigvals(&a).expect("eigvals should succeed for general matrix");
 
         // Check the dimensions
         assert_eq!(eigenvalues.shape(), vec![3]);
@@ -425,7 +425,7 @@ mod tests {
             .reshape(&[2, 2]);
 
         // Compute eigenvalues
-        let eigenvalues = eigvals(&a).unwrap();
+        let eigenvalues = eigvals(&a).expect("eigvals should succeed for rotation matrix");
 
         // Check the dimensions
         assert_eq!(eigenvalues.shape(), vec![2]);
@@ -447,14 +447,18 @@ mod tests {
             Array::from_vec(vec![2.0, -1.0, 0.0, -1.0, 2.0, -1.0, 0.0, -1.0, 2.0]).reshape(&[3, 3]);
 
         // Test the positive definite check
-        let is_pd = a.is_positive_definite().unwrap();
+        let is_pd = a
+            .is_positive_definite()
+            .expect("is_positive_definite should succeed");
         assert!(is_pd);
 
         // Create a matrix that's not positive definite (eigenvalues: -1, 1, 2)
         let b = Array::from_vec(vec![1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0]).reshape(&[3, 3]);
 
         // Test the positive definite check
-        let is_pd = b.is_positive_definite().unwrap();
+        let is_pd = b
+            .is_positive_definite()
+            .expect("is_positive_definite should succeed");
         assert!(!is_pd);
     }
 }

@@ -1157,7 +1157,8 @@ mod tests {
         let high = 2.0;
 
         // Generate truncated normal samples (reduced size for performance)
-        let samples = truncated_normal(mean, std, low, high, &[100]).unwrap();
+        let samples = truncated_normal(mean, std, low, high, &[100])
+            .expect("test: truncated_normal should succeed");
         let data = samples.to_vec();
 
         // Check bounds
@@ -1180,7 +1181,7 @@ mod tests {
         let kappa = 2.0;
 
         // Generate von Mises samples
-        let samples = vonmises(mu, kappa, &[1000]).unwrap();
+        let samples = vonmises(mu, kappa, &[1000]).expect("test: vonmises should succeed");
         let data = samples.to_vec();
 
         // Check bounds (should be in [-π, π))
@@ -1213,7 +1214,7 @@ mod tests {
         let n = 10;
 
         // Generate Latin Hypercube samples
-        let samples = latin_hypercube::<f64>(dim, n).unwrap();
+        let samples = latin_hypercube::<f64>(dim, n).expect("test: latin_hypercube should succeed");
         let data = samples.to_vec();
 
         // Check that each dimension has one sample in each stratum
@@ -1242,14 +1243,18 @@ mod tests {
         let stds = vec![1.0, 1.0];
 
         // Generate mixture samples (reduced size for performance)
-        let samples = mixture_of_normals(&weights, &means, &stds, &[100]).unwrap();
+        let samples = mixture_of_normals(&weights, &means, &stds, &[100])
+            .expect("test: mixture_of_normals should succeed");
 
         let data = samples.to_vec();
 
         // Check that distribution is bimodal
         // Sort the data for percentile calculation
         let mut sorted_data = data.clone();
-        sorted_data.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_data.sort_by(|a, b| {
+            a.partial_cmp(b)
+                .expect("test: f64 comparison should succeed for non-NaN values")
+        });
 
         // Calculate 25th and 75th percentiles
         let p25 = sorted_data[(0.25 * sorted_data.len() as f64) as usize];
