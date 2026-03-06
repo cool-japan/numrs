@@ -4,20 +4,20 @@
 
 This document outlines the development status and roadmap for NumRS2, a high-performance numerical computing library for Rust.
 
-## Current Status (January 2026) - v0.2.0
+## Current Status (March 2026) - v0.3.0
 
-**COOLJAPAN Ecosystem Compliance Release**: NumRS2 v0.2.0 is now available!
+**COOLJAPAN Ecosystem Compliance Release**: NumRS2 v0.3.0 is now available!
 
 ### Release Metrics
-- **Version**: 0.5.0 Development (v0.5.x Tier 3 Features Complete - February 12, 2026)
-- **Total Code**: ~286,880 lines of Rust code (219,292 code + 22,090 comments + 45,498 blanks; 653 files)
-- **Test Coverage**: 2564 library tests passing + 732+ doctests passing
+- **Version**: 0.3.0 (v0.3.0 Release - March 6, 2026)
+- **Total Code**: ~288,603 lines of Rust code (220,757 code + 22,299 comments + 45,547 blanks; 669 files)
+- **Test Coverage**: 4098+ library tests passing + doctests passing
 - **Quality**: Zero compilation warnings, zero errors, zero production unwrap() calls
 - **SIMD Operations**: 128+ vectorized functions (AVX2, AVX512, ARM NEON)
-- **Dependencies**: SciRS2 v0.1.5, OxiBLAS v0.1.2+ (pure Rust, stable releases)
-- **Special Functions**: scirs2-special v0.1.6-dev (local, betainc_regularized fix)
+- **Dependencies**: SciRS2 v0.3.0, OxiBLAS v0.1.2+ (pure Rust, stable releases)
+- **Special Functions**: scirs2-special v0.3.0
 - **Performance**: Critical O(n²) → O(1) bug fixed (1,000,000x speedup for large arrays), NSGA-III handles 8 objectives in 78.4s
-- **Latest Enhancement**: v0.5.x Tier 3 complete - Wavelets, Graph Algorithms, Information Theory, Control Systems, Physical Constants (Feb 12, 2026)
+- **Latest Enhancement**: v0.3.0 release - SciRS2 0.3.0 integration, survival analysis, causal inference, bioinformatics, combinatorics (March 6, 2026)
 
 ### Core Features (Complete)
 - ✅ N-dimensional array operations with NumPy compatibility
@@ -39,7 +39,7 @@ This document outlines the development status and roadmap for NumRS2, a high-per
 - ✅ GPU acceleration (optional)
 
 ### SciRS2 Ecosystem Integration (Complete)
-All modules integrated using SciRS2 v0.1.5:
+All modules integrated using SciRS2 v0.3.0:
 - ✅ scirs2-core: SIMD, parallel, random, array operations
 - ✅ scirs2-linalg: Linear algebra with OxiBLAS
 - ✅ scirs2-stats: Statistical functions
@@ -74,6 +74,17 @@ All modules integrated using SciRS2 v0.1.5:
 - ✅ **Cache Alignment**: Critical structures aligned for 20-50% parallel performance improvement (AlignedBox, AlignedVec helpers) - Feb 11
 - ✅ **GPU Batching Operations**: Automatic operation batching with dynamic optimization (~1,231 lines, 15 tests) - Feb 11
 - ✅ **Documentation Excellence**: Complete NN Guide (1,800+ lines), multi-objective examples (2,072 lines), benchmarks (1,524 lines) - Feb 11
+
+### v0.3.0 Features (March 6, 2026) - COMPLETED
+- ✅ **SciRS2 0.3.0 Integration**: All scirs2-* deps updated to v0.3.0
+- ✅ **im2col Convolution**: conv2d_batched and conv_transpose2d_batched via scirs2-linalg im2col
+- ✅ **Survival Analysis**: Kaplan-Meier, Nelson-Aalen, Cox Proportional Hazards, log-rank test (14 tests)
+- ✅ **Causal Inference**: Difference-in-Differences, 2SLS/IV, propensity score, IPW-ATE (11 tests)
+- ✅ **Bioinformatics**: Needleman-Wunsch, Smith-Waterman, edit distance, phylogenetics (25 tests)
+- ✅ **Combinatorics**: Fibonacci, Catalan, Bell, Stirling, primes, partitions, permutations (37 tests)
+- ✅ **NPZ Compression**: DEFLATE compression enabled for .npz files (OxiARC 0.2.1 fix)
+- ✅ **Cyclic Spline Solver**: O(n) Sherman-Morrison replaces O(n²) Gaussian elimination
+- ✅ **Code Refactoring**: test_problems.rs, nsga2.rs, higher_order.rs, exponential_smoothing.rs split into proper module directories
 
 ### v0.3.x Features (February 11, 2026) - COMPLETED
 - ✅ **Transformer Neural Networks**: Multi-head attention, positional encoding (sinusoidal/learned), encoder/decoder stacks (~1,400 lines, 15+ tests) - Test fixes completed Feb 12, 2026
@@ -290,4 +301,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
 
 ---
 
-**NumRS2 v0.2.0** - Production-ready numerical computing for Rust (COOLJAPAN Ecosystem)
+**NumRS2 v0.3.0** - Production-ready numerical computing for Rust with SciRS2 v0.3.0 integration (COOLJAPAN Ecosystem)

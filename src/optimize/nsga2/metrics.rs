@@ -51,13 +51,16 @@ fn min_distance_to_front<T: Float + std::iter::Sum>(point: &[T], front: &[Vec<T>
     front
         .iter()
         .map(|front_point| euclidean_distance(point, front_point))
-        .fold(T::infinity(), |min_dist, dist| {
-            if dist < min_dist {
-                dist
-            } else {
-                min_dist
-            }
-        })
+        .fold(
+            T::infinity(),
+            |min_dist, dist| {
+                if dist < min_dist {
+                    dist
+                } else {
+                    min_dist
+                }
+            },
+        )
 }
 
 // =============================================================================
@@ -245,9 +248,7 @@ pub fn calculate_gd<T: Float + std::fmt::Display + std::iter::Sum>(
         ));
     }
 
-    let p_val = p.unwrap_or_else(|| {
-        T::from(2.0).expect("Default p=2.0 should convert to Float")
-    });
+    let p_val = p.unwrap_or_else(|| T::from(2.0).expect("Default p=2.0 should convert to Float"));
 
     if p_val <= T::zero() {
         return Err(NumRs2Error::ValueError(
@@ -340,7 +341,9 @@ pub fn calculate_gd<T: Float + std::fmt::Display + std::iter::Sum>(
 /// let spacing = calculate_spacing(&front).expect("Spacing calculation should succeed");
 /// assert!(spacing >= 0.0);
 /// ```
-pub fn calculate_spacing<T: Float + std::fmt::Display + std::iter::Sum>(front: &[Vec<T>]) -> Result<T> {
+pub fn calculate_spacing<T: Float + std::fmt::Display + std::iter::Sum>(
+    front: &[Vec<T>],
+) -> Result<T> {
     if front.len() < 2 {
         return Err(NumRs2Error::ValueError(
             "Spacing requires at least 2 points".to_string(),
@@ -479,6 +482,18 @@ fn find_extreme_points<T: Float + Clone>(front: &[Vec<T>]) -> Vec<Vec<T>> {
 /// let spread = calculate_spread(&front, None).expect("Spread calculation should succeed");
 /// assert!(spread >= 0.0);
 /// ```
+/// Public wrapper for `find_extreme_points` used in tests
+#[cfg(test)]
+pub fn find_extreme_points_pub<T: Float + Clone>(front: &[Vec<T>]) -> Vec<Vec<T>> {
+    find_extreme_points(front)
+}
+
+/// Public wrapper for `min_distance_to_front` used in tests
+#[cfg(test)]
+pub fn min_distance_to_front_pub<T: Float + std::iter::Sum>(point: &[T], front: &[Vec<T>]) -> T {
+    min_distance_to_front(point, front)
+}
+
 pub fn calculate_spread<T: Float + std::fmt::Display + std::iter::Sum>(
     front: &[Vec<T>],
     extreme_points: Option<&[Vec<T>]>,
@@ -537,7 +552,8 @@ pub fn calculate_spread<T: Float + std::fmt::Display + std::iter::Sum>(
 
     // Calculate spread
     let numerator = d_f + d_l + sum_deviations;
-    let denominator = d_f + d_l
+    let denominator = d_f
+        + d_l
         + d_mean
             * T::from(n - 1).ok_or_else(|| {
                 NumRs2Error::ConversionError("Failed to convert n-1 to Float".to_string())

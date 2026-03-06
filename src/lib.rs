@@ -4,7 +4,7 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.2.0** - Ecosystem Compliance Release (2026-01-30): Replaced numpy with scirs2-numpy
+//! **Version 0.3.0** - SciRS2 Ecosystem Update Release (2026-03-06): Updated all scirs2-* dependencies to v0.3.0
 //! for COOLJAPAN ecosystem compliance, removed openblas linking flags for pure Rust OxiBLAS backend.
 //! Production-ready SIMD optimizations, scipy-equivalent numerical computing, complete NumPy compatibility.
 //! Features 86 AVX2-vectorized functions + 42 ARM NEON operations, comprehensive interpolation with

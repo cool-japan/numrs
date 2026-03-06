@@ -38,7 +38,7 @@ use std::fmt::{self, Debug};
 ///
 /// **Tuning:** For workloads with mostly small arrays, increase to 128.
 /// For workloads with mostly large arrays, decrease to 32 (if zero-copy views are implemented).
-const SIMD_THRESHOLD: usize = 64; // v0.2.0: Increased from 8 to 64 for better performance
+const SIMD_THRESHOLD: usize = 64; // v0.3.0: Increased from 8 to 64 for better performance
 
 // =============================================================================
 // CONVERSION HELPERS

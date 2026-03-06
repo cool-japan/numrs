@@ -159,42 +159,40 @@ fn detect_x86_cache_info() -> CacheInfo {
         associativity: 8,
     };
 
-    unsafe {
-        // Check if CPUID leaf 0x80000006 is available (cache info)
-        let cpuid_result = __cpuid(0x80000000);
-        if cpuid_result.eax >= 0x80000006 {
-            let cache_result = __cpuid(0x80000006);
+    // Check if CPUID leaf 0x80000006 is available (cache info)
+    let cpuid_result = __cpuid(0x80000000);
+    if cpuid_result.eax >= 0x80000006 {
+        let cache_result = __cpuid(0x80000006);
 
-            // L1 data cache info from ECX register
-            info.l1_size = ((cache_result.ecx >> 24) & 0xFF) as usize * 1024;
-            info.line_size = (cache_result.ecx & 0xFF) as usize;
-            info.associativity = ((cache_result.ecx >> 16) & 0xFF) as usize;
+        // L1 data cache info from ECX register
+        info.l1_size = ((cache_result.ecx >> 24) & 0xFF) as usize * 1024;
+        info.line_size = (cache_result.ecx & 0xFF) as usize;
+        info.associativity = ((cache_result.ecx >> 16) & 0xFF) as usize;
 
-            // L2 cache info from ECX register
-            info.l2_size = ((cache_result.ecx >> 16) & 0xFFFF) as usize * 1024;
+        // L2 cache info from ECX register
+        info.l2_size = ((cache_result.ecx >> 16) & 0xFFFF) as usize * 1024;
 
-            // L3 cache info from EDX register
-            info.l3_size = ((cache_result.edx >> 18) & 0x3FFF) as usize * 512 * 1024;
-        }
+        // L3 cache info from EDX register
+        info.l3_size = ((cache_result.edx >> 18) & 0x3FFF) as usize * 512 * 1024;
+    }
 
-        // Intel-specific cache detection
-        let vendor_result = __cpuid(0);
-        if vendor_result.ebx == 0x756e6547 && // "Genu"
-           vendor_result.edx == 0x49656e69 && // "ineI"
-           vendor_result.ecx == 0x6c65746e
-        {
-            // "ntel"
-            detect_intel_cache_info(&mut info);
-        }
+    // Intel-specific cache detection
+    let vendor_result = __cpuid(0);
+    if vendor_result.ebx == 0x756e6547 && // "Genu"
+       vendor_result.edx == 0x49656e69 && // "ineI"
+       vendor_result.ecx == 0x6c65746e
+    {
+        // "ntel"
+        detect_intel_cache_info(&mut info);
+    }
 
-        // AMD-specific cache detection
-        if vendor_result.ebx == 0x68747541 && // "Auth"
-           vendor_result.edx == 0x69746e65 && // "enti"
-           vendor_result.ecx == 0x444d4163
-        {
-            // "cAMD"
-            detect_amd_cache_info(&mut info);
-        }
+    // AMD-specific cache detection
+    if vendor_result.ebx == 0x68747541 && // "Auth"
+       vendor_result.edx == 0x69746e65 && // "enti"
+       vendor_result.ecx == 0x444d4163
+    {
+        // "cAMD"
+        detect_amd_cache_info(&mut info);
     }
 
     info
@@ -248,18 +246,16 @@ fn detect_intel_cache_info(info: &mut CacheInfo) {
 #[cfg(target_arch = "x86_64")]
 fn detect_amd_cache_info(info: &mut CacheInfo) {
     // AMD cache detection via CPUID leaves 0x80000005 and 0x80000006
-    unsafe {
-        // L1 cache info
-        let l1_info = __cpuid(0x80000005);
-        info.l1_size = ((l1_info.ecx >> 24) & 0xFF) as usize * 1024;
-        info.line_size = (l1_info.ecx & 0xFF) as usize;
-        info.associativity = ((l1_info.ecx >> 16) & 0xFF) as usize;
+    // L1 cache info
+    let l1_info = __cpuid(0x80000005);
+    info.l1_size = ((l1_info.ecx >> 24) & 0xFF) as usize * 1024;
+    info.line_size = (l1_info.ecx & 0xFF) as usize;
+    info.associativity = ((l1_info.ecx >> 16) & 0xFF) as usize;
 
-        // L2/L3 cache info
-        let l23_info = __cpuid(0x80000006);
-        info.l2_size = ((l23_info.ecx >> 16) & 0xFFFF) as usize * 1024;
-        info.l3_size = ((l23_info.edx >> 18) & 0x3FFF) as usize * 512 * 1024;
-    }
+    // L2/L3 cache info
+    let l23_info = __cpuid(0x80000006);
+    info.l2_size = ((l23_info.ecx >> 16) & 0xFFFF) as usize * 1024;
+    info.l3_size = ((l23_info.edx >> 18) & 0x3FFF) as usize * 512 * 1024;
 }
 
 #[cfg(target_arch = "x86_64")]

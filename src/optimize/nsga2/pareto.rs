@@ -353,9 +353,7 @@ pub fn sort_front_by_objective<T: Float>(front: &mut [Individual<T>], objective_
 /// let filtered = filter_dominated_solutions(&individuals);
 /// assert!(filtered.len() <= individuals.len());
 /// ```
-pub fn filter_dominated_solutions<T: Float>(
-    individuals: &[Individual<T>],
-) -> Vec<Individual<T>> {
+pub fn filter_dominated_solutions<T: Float>(individuals: &[Individual<T>]) -> Vec<Individual<T>> {
     let mut non_dominated: Vec<Individual<T>> = Vec::new();
 
     for individual in individuals {

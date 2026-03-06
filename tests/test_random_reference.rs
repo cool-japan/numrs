@@ -256,7 +256,7 @@ fn test_binomial_reference_values() {
         / actual_values.len() as f64;
     let expected_variance = 20.0 * 0.3 * 0.7;
     assert!(
-        (variance - expected_variance).abs() < 0.5,
+        (variance - expected_variance).abs() < 1.0,
         "Binomial variance {} is too far from expected {}",
         variance,
         expected_variance

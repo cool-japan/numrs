@@ -127,3 +127,21 @@ pub mod information_theory;
 
 // Physical Constants
 pub mod constants;
+
+// Survival Analysis
+pub mod survival;
+
+// Causal Inference
+pub mod causal;
+
+// Bioinformatics
+pub mod bioinformatics;
+
+// Combinatorics
+pub mod combinatorics;
+
+// String Algorithms
+pub mod string_algorithms;
+
+// Streaming/Online Statistics
+pub mod streaming_stats;

@@ -14,7 +14,7 @@ use scirs2_core::ndarray::Array1;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 
 /// Threshold for using SIMD optimizations (minimum array size)
-/// v0.2.0: Increased from 32 to 64 to better amortize allocation overhead
+/// v0.3.0: Increased from 32 to 64 to better amortize allocation overhead
 pub(crate) const SIMD_THRESHOLD: usize = 64;
 
 /// Check if SIMD optimization should be used for this array

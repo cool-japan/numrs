@@ -29,7 +29,7 @@ pub fn set_panic_hook() {
 /// Returns the version of the NumRS2 library.
 ///
 /// # Returns
-/// Version string (e.g., "0.2.0")
+/// Version string (e.g., "0.3.0")
 ///
 /// # Example
 /// ```javascript
@@ -309,7 +309,7 @@ mod tests {
     fn test_version() {
         let ver = version();
         assert!(!ver.is_empty());
-        assert!(ver.contains("0.2"));
+        assert!(ver.contains("0.3"));
     }
 
     #[test]

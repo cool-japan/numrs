@@ -16,7 +16,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! numrs2 = { version = "0.2.0", features = ["wasm"] }
+//! numrs2 = { version = "0.3.0", features = ["wasm"] }
 //! ```
 //!
 //! # Building
@@ -97,7 +97,7 @@ pub fn init_wasm() {
 ///
 /// ```javascript
 /// import { get_version } from './pkg/numrs2.js';
-/// console.log(get_version()); // "0.2.0"
+/// console.log(get_version()); // "0.3.0"
 /// ```
 #[wasm_bindgen]
 pub fn get_version() -> String {
@@ -137,7 +137,7 @@ mod tests {
     fn test_version() {
         let version = get_version();
         assert!(!version.is_empty());
-        assert!(version.contains("0.2"));
+        assert!(version.contains("0.3"));
     }
 
     #[test]

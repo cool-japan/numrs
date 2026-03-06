@@ -18,7 +18,7 @@ use scirs2_core::Complex;
 use std::fmt::Debug;
 
 /// Threshold for using SIMD optimizations (minimum vector size)
-/// v0.2.0: Increased from 32 to 64 to better amortize allocation overhead
+/// v0.3.0: Increased from 32 to 64 to better amortize allocation overhead
 const SIMD_THRESHOLD: usize = 64;
 
 /// Compute the norm of a vector or matrix

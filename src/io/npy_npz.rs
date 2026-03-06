@@ -659,12 +659,12 @@ pub fn save_npz_arrays<T: Clone, W: Write + Seek>(
     // Create ZIP writer using OxiARC (takes ownership of writer)
     let mut zip_writer = ZipWriter::new(writer);
 
-    // Determine compression level
-    // NOTE: Using Store (no compression) because OxiARC v0.2.0 has deflate multi-file bug
-    // The bug is FIXED in OxiARC development version but not yet published to crates.io
-    // TODO: Switch to ZipCompressionLevel::Normal when compressed=true after OxiARC v0.2.1+ is published
-    let _compressed = compressed; // Silence unused parameter warning
-    let compression = ZipCompressionLevel::Store;
+    // Use compression based on parameter (OxiARC v0.2.1+ supports multi-file DEFLATE)
+    let compression = if compressed {
+        ZipCompressionLevel::Normal
+    } else {
+        ZipCompressionLevel::Store
+    };
 
     // Save each array to the NPZ archive
     for (name, array) in arrays.iter() {

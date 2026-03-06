@@ -396,6 +396,104 @@ where
         })
     }
 
+    /// Solve cyclic tridiagonal system using the Sherman-Morrison method — O(n)
+    ///
+    /// The system Ax = b has the structure:
+    ///
+    /// ```text
+    /// | d[0]   u[0]  0    ...  0    α   | | x[0]   |   | b[0]   |
+    /// | l[0]   d[1]  u[1] ...  0    0   | | x[1]   |   | b[1]   |
+    /// | 0      l[1]  d[2] ...  0    0   | | x[2]   | = | b[2]   |
+    /// | ...                             | | ...    |   | ...    |
+    /// | β      0     0    ...  l[n-2] d[n-1] | | x[n-1] |   | b[n-1] |
+    /// ```
+    ///
+    /// where α = `corner_upper` (top-right) and β = `corner_lower` (bottom-left).
+    ///
+    /// Arguments:
+    /// - `lower`: sub-diagonal, length n-1  (entry i couples row i+1 to column i)
+    /// - `diag`:  main diagonal, length n
+    /// - `upper`: super-diagonal, length n-1 (entry i couples row i to column i+1)
+    /// - `corner_upper`: top-right corner element A[0, n-1] = α
+    /// - `corner_lower`: bottom-left corner element A[n-1, 0] = β
+    /// - `rhs`: right-hand side, length n
+    fn solve_cyclic_tridiagonal(
+        lower: &[T],     // l[0..n-2], length n-1
+        diag: &[T],      // d[0..n-1], length n
+        upper: &[T],     // u[0..n-2], length n-1
+        corner_upper: T, // α = A[0, n-1]
+        corner_lower: T, // β = A[n-1, 0]
+        rhs: &[T],       // b[0..n-1], length n
+    ) -> Result<Vec<T>> {
+        let n = diag.len();
+        if n < 3 {
+            return Err(NumRs2Error::ValueError(
+                "Cyclic tridiagonal system requires at least 3 equations".to_string(),
+            ));
+        }
+        if lower.len() != n - 1 || upper.len() != n - 1 || rhs.len() != n {
+            return Err(NumRs2Error::ValueError(
+                "Cyclic tridiagonal system dimensions mismatch".to_string(),
+            ));
+        }
+
+        let alpha = corner_upper;
+        let beta = corner_lower;
+
+        // γ is chosen as -d[0] to minimise cancellation when modifying d'[0].
+        // Any non-zero value works; -d[0] keeps d'[0] = 2*d[0] (well-conditioned).
+        if diag[0].abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
+            return Err(NumRs2Error::ComputationError(
+                "Cyclic tridiagonal system: diag[0] is near zero, cannot form γ".to_string(),
+            ));
+        }
+        let gamma = -diag[0];
+
+        // Build modified diagonal:
+        //   d'[0]   = d[0] - γ  = 2·d[0]
+        //   d'[n-1] = d[n-1] - α·β / γ
+        let mut diag_mod = diag.to_vec();
+        diag_mod[0] = diag[0] - gamma;
+        diag_mod[n - 1] = diag[n - 1] - alpha * beta / gamma;
+
+        // The modified system A' is a standard (non-cyclic) tridiagonal with the
+        // same lower/upper diagonals as A but with the corner elements removed.
+
+        // Step 1: Solve A'·x' = b
+        let x_prime = Self::solve_tridiagonal(lower, &diag_mod, upper, rhs)?;
+
+        // Step 2: Build v = [γ, 0, ..., 0, α]  and solve A'·z = v
+        let mut v = vec![T::zero(); n];
+        v[0] = gamma;
+        v[n - 1] = alpha;
+        let z = Self::solve_tridiagonal(lower, &diag_mod, upper, &v)?;
+
+        // Step 3: Sherman-Morrison correction
+        //   q = [1, 0, ..., 0, β/γ]
+        //   x = x' - (q·x') / (1 + q·z) · z
+        let q_last = beta / gamma;
+        let q_dot_x = x_prime[0] + q_last * x_prime[n - 1];
+        let q_dot_z = z[0] + q_last * z[n - 1];
+
+        let denom = T::one() + q_dot_z;
+        if denom.abs() < T::from(1e-14).expect("1e-14 is representable as Float") {
+            return Err(NumRs2Error::ComputationError(
+                "Cyclic tridiagonal system is singular (Sherman-Morrison denominator ≈ 0)"
+                    .to_string(),
+            ));
+        }
+
+        let factor = q_dot_x / denom;
+
+        let x: Vec<T> = x_prime
+            .iter()
+            .zip(z.iter())
+            .map(|(&xi, &zi)| xi - factor * zi)
+            .collect();
+
+        Ok(x)
+    }
+
     /// Solve tridiagonal system using Thomas algorithm
     /// Returns solution vector x where A*x = d
     /// A is tridiagonal with lower diagonal a, main diagonal b, upper diagonal c
@@ -665,77 +763,21 @@ where
                 lower[m - 2] = h[m - 2];
                 diag[m - 1] = two * (h[m - 2] + h[m - 1]);
 
-                // Solve cyclic tridiagonal system directly
-                // For now, use a simple approach: build full matrix and solve with Gaussian elimination
-                // TODO: Optimize with proper cyclic Thomas algorithm later
+                // Solve cyclic tridiagonal system using Sherman-Morrison O(n) algorithm.
+                //
+                // The cyclic corners are both equal to h[m-1]:
+                //   top-right  A[0,   m-1] = h[m-1]
+                //   bottom-left A[m-1, 0  ] = h[m-1]
+                let corner = h[m - 1];
 
-                // Build full cyclic matrix using ndarray
-                use scirs2_core::ndarray::Array2;
+                // solve_cyclic_tridiagonal expects lower/upper of length n-1 (= m-1),
+                // which matches the vectors built above.
+                let c_inner =
+                    Self::solve_cyclic_tridiagonal(&lower, &diag, &upper, corner, corner, &rhs)?;
 
-                let mut mat = Array2::<T>::zeros((m, m));
-
-                // Fill tridiagonal part
-                for i in 0..m {
-                    mat[[i, i]] = diag[i];
-                }
-                for i in 0..m - 1 {
-                    mat[[i + 1, i]] = lower[i];
-                    mat[[i, i + 1]] = upper[i];
-                }
-
-                // Add cyclic corners
-                mat[[0, m - 1]] = h[m - 1]; // alpha: top-right corner
-                mat[[m - 1, 0]] = h[m - 1]; // beta: bottom-left corner
-
-                // Solve using Gaussian elimination with partial pivoting
-                let mut aug = Array2::<T>::zeros((m, m + 1));
-                for i in 0..m {
-                    for j in 0..m {
-                        aug[[i, j]] = mat[[i, j]];
-                    }
-                    aug[[i, m]] = rhs[i];
-                }
-
-                // Forward elimination with partial pivoting
-                for k in 0..m {
-                    // Find pivot
-                    let mut max_idx = k;
-                    let mut max_val = aug[[k, k]].abs();
-                    for i in (k + 1)..m {
-                        if aug[[i, k]].abs() > max_val {
-                            max_val = aug[[i, k]].abs();
-                            max_idx = i;
-                        }
-                    }
-
-                    // Swap rows if needed
-                    if max_idx != k {
-                        for j in 0..=m {
-                            let tmp = aug[[k, j]];
-                            aug[[k, j]] = aug[[max_idx, j]];
-                            aug[[max_idx, j]] = tmp;
-                        }
-                    }
-
-                    // Eliminate column
-                    for i in (k + 1)..m {
-                        let factor = aug[[i, k]] / aug[[k, k]];
-                        for j in k..=m {
-                            aug[[i, j]] = aug[[i, j]] - factor * aug[[k, j]];
-                        }
-                    }
-                }
-
-                // Back substitution
+                // c_inner has length m = n-1; enforce periodicity c[n-1] = c[0].
                 let mut c = vec![T::zero(); n];
-                c[m - 1] = aug[[m - 1, m]] / aug[[m - 1, m - 1]];
-                for i in (0..m - 1).rev() {
-                    let mut sum = aug[[i, m]];
-                    for j in (i + 1)..m {
-                        sum = sum - aug[[i, j]] * c[j];
-                    }
-                    c[i] = sum / aug[[i, i]];
-                }
+                c[..m].copy_from_slice(&c_inner);
                 c[n - 1] = c[0]; // Enforce periodicity: c_n = c_0
 
                 // Compute b and d coefficients

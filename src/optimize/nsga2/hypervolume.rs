@@ -24,10 +24,7 @@ use std::cmp::Ordering;
 /// - Reference point dimension doesn't match objective space dimension
 /// - Reference point doesn't dominate all points
 /// - Front is empty
-pub fn calculate_hypervolume<T: Float>(
-    front: &[Vec<T>],
-    reference_point: &[T],
-) -> Result<T> {
+pub fn calculate_hypervolume<T: Float>(front: &[Vec<T>], reference_point: &[T]) -> Result<T> {
     if front.is_empty() {
         return Err(NumRs2Error::ValueError(
             "Pareto front cannot be empty".to_string(),
@@ -71,10 +68,7 @@ pub fn calculate_hypervolume<T: Float>(
 
 /// Calculate 2D hypervolume using sweep-line algorithm
 fn hypervolume_2d<T: Float>(front: &[Vec<T>], reference_point: &[T]) -> Result<T> {
-    let mut points: Vec<(T, T)> = front
-        .iter()
-        .map(|p| (p[0], p[1]))
-        .collect();
+    let mut points: Vec<(T, T)> = front.iter().map(|p| (p[0], p[1])).collect();
 
     // Sort by first objective
     points.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
@@ -199,11 +193,7 @@ fn hypervolume_wfg<T: Float>(front: &[Vec<T>], reference_point: &[T]) -> Result<
         .iter()
         .enumerate()
         .filter(|(i, point)| {
-            *i != max_idx
-                && point
-                    .iter()
-                    .zip(new_reference.iter())
-                    .all(|(p, r)| p < r)
+            *i != max_idx && point.iter().zip(new_reference.iter()).all(|(p, r)| p < r)
         })
         .map(|(_, point)| point.clone())
         .collect();

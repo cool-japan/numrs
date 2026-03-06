@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-06
+
+### Changed
+- **SciRS2 Ecosystem Update**: Updated all scirs2-* dependencies to v0.3.0
+  - scirs2-core v0.3.0: Latest core with enhanced SIMD, parallel, random operations
+  - scirs2-linalg v0.3.0: Linear algebra improvements with OxiBLAS
+  - scirs2-stats v0.3.0: Statistical functions enhancements
+  - scirs2-fft v0.3.0: FFT operations improvements
+  - scirs2-ndimage v0.3.0: N-dimensional image processing updates
+  - scirs2-spatial v0.3.0: Spatial algorithms with improved KD-trees
+  - scirs2-special v0.3.0: Special functions updates
+  - scirs2-numpy v0.3.0: Python bindings compatibility updates
+- **NPZ Compression**: Enabled DEFLATE compression for .npz files (OxiARC v0.2.1+ multi-file bug fixed)
+- **Cyclic Spline Solver**: Replaced O(n²) Gaussian elimination with Sherman-Morrison O(n) cyclic Thomas algorithm
+
+### Fixed
+- Fixed WASM version assertion tests to use "0.3" instead of "0.2"
+
 ## [0.2.0] - 2026-01-30
 
 ### Changed

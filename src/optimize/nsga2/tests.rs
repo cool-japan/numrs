@@ -3,11 +3,13 @@
 use super::*;
 use approx::assert_relative_eq;
 
+type ObjectiveFns = Vec<Box<dyn Fn(&[f64]) -> f64>>;
+
 #[test]
 fn test_nsga2_simple_biobjective() {
     // Simple bi-objective: minimize f1 = x^2, f2 = (x-2)^2
     // Pareto front: x in [0, 2]
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0] * x[0]),
         Box::new(|x: &[f64]| (x[0] - 2.0).powi(2)),
     ];
@@ -78,7 +80,7 @@ fn test_nsga2_crowding_distance() {
 
 #[test]
 fn test_nsga2_invalid_objectives() {
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![Box::new(|x: &[f64]| x[0])];
+    let objectives: ObjectiveFns = vec![Box::new(|x: &[f64]| x[0])];
 
     let bounds = vec![(0.0, 1.0)];
 
@@ -88,7 +90,7 @@ fn test_nsga2_invalid_objectives() {
 
 #[test]
 fn test_nsga2_invalid_pop_size() {
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> =
+    let objectives: ObjectiveFns =
         vec![Box::new(|x: &[f64]| x[0]), Box::new(|x: &[f64]| 1.0 - x[0])];
 
     let bounds = vec![(0.0, 1.0)];
@@ -104,7 +106,7 @@ fn test_nsga2_invalid_pop_size() {
 
 #[test]
 fn test_nsga2_three_objectives() {
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0]),
         Box::new(|x: &[f64]| x[1]),
         Box::new(|x: &[f64]| (x[0] - 1.0).powi(2) + (x[1] - 1.0).powi(2)),
@@ -127,11 +129,7 @@ fn test_nsga2_three_objectives() {
 #[test]
 fn test_hypervolume_2d_simple() {
     // Simple 2D case with known result
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
     let reference = vec![4.0, 4.0];
 
     let hv = calculate_hypervolume(&front, &reference).expect("Hypervolume should succeed");
@@ -157,10 +155,7 @@ fn test_hypervolume_2d_single_point() {
 
 #[test]
 fn test_hypervolume_3d_simple() {
-    let front = vec![
-        vec![1.0, 1.0, 1.0],
-        vec![2.0, 2.0, 2.0],
-    ];
+    let front = vec![vec![1.0, 1.0, 1.0], vec![2.0, 2.0, 2.0]];
     let reference = vec![3.0, 3.0, 3.0];
 
     let hv = calculate_hypervolume(&front, &reference).expect("Hypervolume should succeed");
@@ -171,10 +166,7 @@ fn test_hypervolume_3d_simple() {
 
 #[test]
 fn test_hypervolume_4d() {
-    let front = vec![
-        vec![1.0, 1.0, 1.0, 1.0],
-        vec![2.0, 2.0, 2.0, 2.0],
-    ];
+    let front = vec![vec![1.0, 1.0, 1.0, 1.0], vec![2.0, 2.0, 2.0, 2.0]];
     let reference = vec![3.0, 3.0, 3.0, 3.0];
 
     let hv = calculate_hypervolume(&front, &reference).expect("Hypervolume should succeed");
@@ -195,10 +187,7 @@ fn test_hypervolume_empty_front() {
 #[test]
 fn test_hypervolume_invalid_reference_point() {
     // Reference point doesn't dominate all points
-    let front = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
     let reference = vec![1.5, 1.5]; // Doesn't dominate (2.0, 1.0)
 
     let result = calculate_hypervolume(&front, &reference);
@@ -216,7 +205,7 @@ fn test_hypervolume_dimension_mismatch() {
 
 #[test]
 fn test_nsga2_with_hypervolume() {
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0] * x[0]),
         Box::new(|x: &[f64]| (x[0] - 2.0).powi(2)),
     ];
@@ -242,15 +231,8 @@ fn test_nsga2_with_hypervolume() {
 #[test]
 fn test_hypervolume_monotonicity() {
     // Adding a dominated point should not decrease hypervolume
-    let front1 = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0],
-    ];
-    let front2 = vec![
-        vec![1.0, 2.0],
-        vec![1.5, 1.5],
-        vec![2.0, 1.0],
-    ];
+    let front1 = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
+    let front2 = vec![vec![1.0, 2.0], vec![1.5, 1.5], vec![2.0, 1.0]];
     let reference = vec![3.0, 3.0];
 
     let hv1 = calculate_hypervolume(&front1, &reference).expect("HV1 should succeed");
@@ -263,11 +245,7 @@ fn test_hypervolume_monotonicity() {
 #[test]
 fn test_hypervolume_2d_collinear_points() {
     // Test with collinear points (shouldn't break the algorithm)
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
     let reference = vec![4.0, 4.0];
 
     let hv = calculate_hypervolume(&front, &reference).expect("Hypervolume should succeed");
@@ -278,10 +256,7 @@ fn test_hypervolume_2d_collinear_points() {
 #[test]
 fn test_is_pareto_optimal_true() {
     let solution = vec![1.0, 2.0];
-    let front = vec![
-        vec![2.0, 1.0],
-        vec![1.5, 1.5],
-    ];
+    let front = vec![vec![2.0, 1.0], vec![1.5, 1.5]];
 
     assert!(is_pareto_optimal(&solution, &front));
 }
@@ -290,7 +265,7 @@ fn test_is_pareto_optimal_true() {
 fn test_is_pareto_optimal_false() {
     let solution = vec![2.0, 2.0];
     let front = vec![
-        vec![1.0, 1.0],  // Dominates solution
+        vec![1.0, 1.0], // Dominates solution
         vec![1.5, 1.5],
     ];
 
@@ -307,11 +282,7 @@ fn test_is_pareto_optimal_empty_front() {
 
 #[test]
 fn test_validate_pareto_front_valid() {
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     assert!(validate_pareto_front(&front).is_ok());
 }
@@ -320,7 +291,7 @@ fn test_validate_pareto_front_valid() {
 fn test_validate_pareto_front_invalid_dominated() {
     let front = vec![
         vec![1.0, 2.0],
-        vec![2.0, 3.0],  // Dominated by (1.0, 2.0)
+        vec![2.0, 3.0], // Dominated by (1.0, 2.0)
     ];
 
     assert!(validate_pareto_front(&front).is_err());
@@ -337,7 +308,7 @@ fn test_validate_pareto_front_empty() {
 fn test_validate_pareto_front_dimension_mismatch() {
     let front = vec![
         vec![1.0, 2.0],
-        vec![2.0, 1.0, 0.5],  // Different dimension
+        vec![2.0, 1.0, 0.5], // Different dimension
     ];
 
     assert!(validate_pareto_front(&front).is_err());
@@ -353,10 +324,10 @@ fn test_validate_pareto_front_single_solution() {
 #[test]
 fn test_extract_non_dominated_simple() {
     let solutions = vec![
-        vec![1.0, 3.0],  // Non-dominated
-        vec![2.0, 2.0],  // Non-dominated
-        vec![3.0, 1.0],  // Non-dominated
-        vec![2.5, 2.5],  // Dominated by (2.0, 2.0)
+        vec![1.0, 3.0], // Non-dominated
+        vec![2.0, 2.0], // Non-dominated
+        vec![3.0, 1.0], // Non-dominated
+        vec![2.5, 2.5], // Dominated by (2.0, 2.0)
     ];
 
     let front = extract_non_dominated(&solutions);
@@ -369,9 +340,9 @@ fn test_extract_non_dominated_simple() {
 #[test]
 fn test_extract_non_dominated_all_dominated() {
     let solutions = vec![
-        vec![1.0, 1.0],  // Non-dominated
-        vec![2.0, 2.0],  // Dominated
-        vec![3.0, 3.0],  // Dominated
+        vec![1.0, 1.0], // Non-dominated
+        vec![2.0, 2.0], // Dominated
+        vec![3.0, 3.0], // Dominated
     ];
 
     let front = extract_non_dominated(&solutions);
@@ -381,11 +352,7 @@ fn test_extract_non_dominated_all_dominated() {
 
 #[test]
 fn test_extract_non_dominated_none_dominated() {
-    let solutions = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let solutions = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let front = extract_non_dominated(&solutions);
     assert_eq!(front.len(), 3);
@@ -411,10 +378,10 @@ fn test_extract_non_dominated_single() {
 #[test]
 fn test_extract_non_dominated_three_objectives() {
     let solutions = vec![
-        vec![1.0, 2.0, 3.0],  // Non-dominated
-        vec![2.0, 1.0, 3.0],  // Non-dominated
-        vec![2.0, 2.0, 2.0],  // Non-dominated
-        vec![3.0, 3.0, 3.0],  // Dominated
+        vec![1.0, 2.0, 3.0], // Non-dominated
+        vec![2.0, 1.0, 3.0], // Non-dominated
+        vec![2.0, 2.0, 2.0], // Non-dominated
+        vec![3.0, 3.0, 3.0], // Dominated
     ];
 
     let front = extract_non_dominated(&solutions);
@@ -443,11 +410,7 @@ fn test_euclidean_distance_same_point() {
 #[test]
 fn test_calculate_spacing_uniform() {
     // Perfectly uniform distribution
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let spacing = calculate_spacing(&front).expect("Spacing should succeed");
     assert!(spacing >= 0.0);
@@ -458,11 +421,7 @@ fn test_calculate_spacing_uniform() {
 #[test]
 fn test_calculate_spacing_clustered() {
     // Clustered points (should have higher spacing)
-    let front = vec![
-        vec![1.0, 1.0],
-        vec![1.1, 1.1],
-        vec![5.0, 5.0],
-    ];
+    let front = vec![vec![1.0, 1.0], vec![1.1, 1.1], vec![5.0, 5.0]];
 
     let spacing = calculate_spacing(&front).expect("Spacing should succeed");
     assert!(spacing > 0.0);
@@ -477,20 +436,14 @@ fn test_calculate_spacing_too_few_points() {
 
 #[test]
 fn test_calculate_spacing_dimension_mismatch() {
-    let front = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0, 0.5],
-    ];
+    let front = vec![vec![1.0, 2.0], vec![2.0, 1.0, 0.5]];
 
     assert!(calculate_spacing(&front).is_err());
 }
 
 #[test]
 fn test_calculate_spacing_two_points() {
-    let front = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
 
     let spacing = calculate_spacing(&front).expect("Spacing should succeed");
     assert_relative_eq!(spacing, 0.0, epsilon = 1e-6);
@@ -498,11 +451,7 @@ fn test_calculate_spacing_two_points() {
 
 #[test]
 fn test_find_extreme_points() {
-    let front = vec![
-        vec![1.0, 5.0],
-        vec![3.0, 2.0],
-        vec![5.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 5.0], vec![3.0, 2.0], vec![5.0, 1.0]];
 
     let extremes = metrics::find_extreme_points_pub(&front);
     assert_eq!(extremes.len(), 2);
@@ -520,11 +469,7 @@ fn test_find_extreme_points_empty() {
 
 #[test]
 fn test_calculate_spread_uniform() {
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let spread = calculate_spread(&front, None).expect("Spread should succeed");
     assert!(spread >= 0.0);
@@ -532,16 +477,9 @@ fn test_calculate_spread_uniform() {
 
 #[test]
 fn test_calculate_spread_with_extremes() {
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
-    let extremes = vec![
-        vec![0.0, 4.0],
-        vec![4.0, 0.0],
-    ];
+    let extremes = vec![vec![0.0, 4.0], vec![4.0, 0.0]];
 
     let spread = calculate_spread(&front, Some(&extremes)).expect("Spread should succeed");
     assert!(spread >= 0.0);
@@ -556,20 +494,14 @@ fn test_calculate_spread_too_few_points() {
 
 #[test]
 fn test_calculate_spread_dimension_mismatch() {
-    let front = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0, 0.5],
-    ];
+    let front = vec![vec![1.0, 2.0], vec![2.0, 1.0, 0.5]];
 
     assert!(calculate_spread(&front, None).is_err());
 }
 
 #[test]
 fn test_calculate_spread_two_points() {
-    let front = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
 
     let spread = calculate_spread(&front, None).expect("Spread should succeed");
     assert!(spread >= 0.0);
@@ -594,10 +526,7 @@ fn test_diversity_metrics_three_objectives() {
 #[test]
 fn test_min_distance_to_front() {
     let point = vec![1.5, 1.5];
-    let front = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
 
     let dist = metrics::min_distance_to_front_pub(&point, &front);
     // Distance to (1.0, 2.0) = sqrt((0.5)^2 + (0.5)^2) = sqrt(0.5) ~ 0.707
@@ -607,10 +536,7 @@ fn test_min_distance_to_front() {
 #[test]
 fn test_min_distance_to_front_exact_match() {
     let point = vec![1.0, 2.0];
-    let front = vec![
-        vec![1.0, 2.0],
-        vec![2.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
 
     let dist = metrics::min_distance_to_front_pub(&point, &front);
     assert_relative_eq!(dist, 0.0, epsilon = 1e-6);
@@ -619,11 +545,7 @@ fn test_min_distance_to_front_exact_match() {
 #[test]
 fn test_calculate_igd_perfect_convergence() {
     // Identical fronts should have IGD = 0
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let igd = calculate_igd(&front, &front).expect("IGD should succeed");
     assert_relative_eq!(igd, 0.0, epsilon = 1e-6);
@@ -631,16 +553,9 @@ fn test_calculate_igd_perfect_convergence() {
 
 #[test]
 fn test_calculate_igd_partial_convergence() {
-    let obtained = vec![
-        vec![1.5, 2.5],
-        vec![2.5, 1.5],
-    ];
+    let obtained = vec![vec![1.5, 2.5], vec![2.5, 1.5]];
 
-    let reference = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let reference = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let igd = calculate_igd(&obtained, &reference).expect("IGD should succeed");
     assert!(igd > 0.0);
@@ -674,11 +589,7 @@ fn test_calculate_igd_dimension_mismatch() {
 #[test]
 fn test_calculate_gd_perfect_convergence() {
     // Identical fronts should have GD = 0
-    let front = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let front = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let gd = calculate_gd(&front, &front, None).expect("GD should succeed");
     assert_relative_eq!(gd, 0.0, epsilon = 1e-6);
@@ -686,16 +597,9 @@ fn test_calculate_gd_perfect_convergence() {
 
 #[test]
 fn test_calculate_gd_partial_convergence() {
-    let obtained = vec![
-        vec![1.5, 2.5],
-        vec![2.5, 1.5],
-    ];
+    let obtained = vec![vec![1.5, 2.5], vec![2.5, 1.5]];
 
-    let reference = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let reference = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let gd = calculate_gd(&obtained, &reference, None).expect("GD should succeed");
     assert!(gd > 0.0);
@@ -704,16 +608,9 @@ fn test_calculate_gd_partial_convergence() {
 
 #[test]
 fn test_calculate_gd_with_custom_p() {
-    let obtained = vec![
-        vec![1.5, 2.5],
-        vec![2.5, 1.5],
-    ];
+    let obtained = vec![vec![1.5, 2.5], vec![2.5, 1.5]];
 
-    let reference = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let reference = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let gd1 = calculate_gd(&obtained, &reference, Some(1.0)).expect("GD p=1 should succeed");
     let gd2 = calculate_gd(&obtained, &reference, Some(2.0)).expect("GD p=2 should succeed");
@@ -780,15 +677,9 @@ fn test_convergence_metrics_three_objectives() {
 #[test]
 fn test_igd_vs_gd_relationship() {
     // Test that IGD and GD measure different aspects
-    let obtained = vec![
-        vec![1.5, 2.5],
-    ];
+    let obtained = vec![vec![1.5, 2.5]];
 
-    let reference = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let reference = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let igd = calculate_igd(&obtained, &reference).expect("IGD should succeed");
     let gd = calculate_gd(&obtained, &reference, None).expect("GD should succeed");
@@ -1086,7 +977,7 @@ fn test_filter_dominated_solutions_empty() {
 // Quality metrics integration tests
 #[test]
 fn test_nsga2_with_quality_metrics() {
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0] * x[0]),
         Box::new(|x: &[f64]| (x[0] - 2.0).powi(2)),
     ];
@@ -1115,7 +1006,7 @@ fn test_nsga2_with_quality_metrics() {
 
 #[test]
 fn test_nsga2_with_reference_front() {
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0] * x[0]),
         Box::new(|x: &[f64]| (x[0] - 2.0).powi(2)),
     ];
@@ -1158,7 +1049,7 @@ fn test_nsga2_with_reference_front() {
 #[test]
 fn test_nsga2_backward_compatibility() {
     // Test that NSGA-II works without quality metrics config
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0] * x[0]),
         Box::new(|x: &[f64]| (x[0] - 2.0).powi(2)),
     ];
@@ -1183,7 +1074,7 @@ fn test_nsga2_backward_compatibility() {
 #[test]
 fn test_nsga2_selective_metrics() {
     // Test enabling only specific metrics
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0] * x[0]),
         Box::new(|x: &[f64]| (x[0] - 2.0).powi(2)),
     ];
@@ -1212,7 +1103,7 @@ fn test_nsga2_selective_metrics() {
 
 #[test]
 fn test_nsga2_quality_metrics_three_objectives() {
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0]),
         Box::new(|x: &[f64]| x[1]),
         Box::new(|x: &[f64]| (x[0] - 1.0).powi(2) + (x[1] - 1.0).powi(2)),
@@ -1280,11 +1171,7 @@ fn test_quality_metrics_comparison() {
         vec![5.0, 1.0],
     ];
 
-    let bad_front = vec![
-        vec![1.0, 5.0],
-        vec![1.1, 4.9],
-        vec![5.0, 1.0],
-    ];
+    let bad_front = vec![vec![1.0, 5.0], vec![1.1, 4.9], vec![5.0, 1.0]];
 
     let good_spacing = calculate_spacing(&good_front).expect("Good spacing should succeed");
     let bad_spacing = calculate_spacing(&bad_front).expect("Bad spacing should succeed");
@@ -1296,11 +1183,7 @@ fn test_quality_metrics_comparison() {
 #[test]
 fn test_all_metrics_combined() {
     // Comprehensive test of all metrics together
-    let obtained = vec![
-        vec![1.0, 3.0],
-        vec![2.0, 2.0],
-        vec![3.0, 1.0],
-    ];
+    let obtained = vec![vec![1.0, 3.0], vec![2.0, 2.0], vec![3.0, 1.0]];
 
     let reference = vec![
         vec![1.0, 3.0],
@@ -1332,7 +1215,7 @@ fn test_all_metrics_combined() {
 #[test]
 fn test_nsga2_with_all_quality_features() {
     // Test with hypervolume + quality metrics
-    let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
+    let objectives: ObjectiveFns = vec![
         Box::new(|x: &[f64]| x[0] * x[0]),
         Box::new(|x: &[f64]| (x[0] - 2.0).powi(2)),
     ];
