@@ -58,7 +58,7 @@
 use crate::array::Array;
 use crate::new_modules::probabilistic::{validate_positive, ProbabilisticError, Result};
 use scirs2_core::ndarray::Array1;
-use scirs2_core::random::{thread_rng, Rng};
+use scirs2_core::random::{thread_rng, Rng, RngExt};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -95,8 +95,8 @@ impl ProposalDistribution for GaussianProposal {
     fn propose<R: Rng>(&self, current: &[f64], rng: &mut R) -> Result<Vec<f64>> {
         let mut proposal = current.to_vec();
         for x in &mut proposal {
-            let u1: f64 = rng.gen();
-            let u2: f64 = rng.gen();
+            let u1: f64 = rng.random();
+            let u2: f64 = rng.random();
             let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
             *x += self.step_size * z;
         }
@@ -204,7 +204,7 @@ where
             let log_alpha = proposed_log_prob - current_log_prob + log_proposal_ratio;
 
             // Accept/reject
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             if u.ln() < log_alpha {
                 current_state = proposed_state;
                 current_log_prob = proposed_log_prob;
@@ -570,8 +570,8 @@ where
             // Sample momentum from N(0, I)
             let mut momentum = vec![0.0; dim];
             for p in &mut momentum {
-                let u1: f64 = rng.gen();
-                let u2: f64 = rng.gen();
+                let u1: f64 = rng.random();
+                let u2: f64 = rng.random();
                 *p = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
             }
 
@@ -583,7 +583,7 @@ where
 
             // Metropolis acceptance
             let log_alpha = current_h - proposed_h; // Note: negative because H = -log π + K
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
 
             if u.ln() < log_alpha && proposed_h.is_finite() {
                 current_state = proposed_state;
@@ -636,8 +636,8 @@ impl MeanFieldVariational {
         let mut sample = Vec::with_capacity(self.means.len());
 
         for i in 0..self.means.len() {
-            let u1: f64 = rng.gen();
-            let u2: f64 = rng.gen();
+            let u1: f64 = rng.random();
+            let u2: f64 = rng.random();
             let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
             let std = self.log_stds[i].exp();
             sample.push(self.means[i] + std * z);
@@ -741,8 +741,8 @@ where
             // Sample using reparameterization: θ = μ + σε
             let mut epsilon = Vec::with_capacity(dim);
             for _ in 0..dim {
-                let u1: f64 = rng.gen();
-                let u2: f64 = rng.gen();
+                let u1: f64 = rng.random();
+                let u2: f64 = rng.random();
                 epsilon.push((-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos());
             }
 

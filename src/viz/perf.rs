@@ -5,6 +5,7 @@
 
 use super::*;
 use plotters::prelude::*;
+use plotters::style::Color;
 use scirs2_core::ndarray::Array1;
 use std::collections::HashMap;
 use std::path::Path;

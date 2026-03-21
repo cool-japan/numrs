@@ -33,7 +33,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::optimize::{compute_norm, OptimizeResult};
 use num_traits::Float;
-use scirs2_core::random::{thread_rng, Distribution, Rng, Uniform};
+use scirs2_core::random::{thread_rng, Distribution, Rng, RngExt, Uniform};
 use std::cmp::Ordering;
 
 /// Selection strategy for choosing parents
@@ -180,7 +180,7 @@ where
             let parent2 = select_individual(&population, &config.selection, &mut rng)?;
 
             // Crossover
-            let mut offspring = if T::from(rng.gen::<f64>()).ok_or_else(|| {
+            let mut offspring = if T::from(rng.random::<f64>()).ok_or_else(|| {
                 NumRs2Error::ConversionError("Float conversion failed".to_string())
             })? < config.crossover_rate
             {
@@ -195,7 +195,7 @@ where
             };
 
             // Mutation
-            if T::from(rng.gen::<f64>()).ok_or_else(|| {
+            if T::from(rng.random::<f64>()).ok_or_else(|| {
                 NumRs2Error::ConversionError("Float conversion failed".to_string())
             })? < config.mutation_rate
             {
@@ -357,11 +357,11 @@ fn tournament_selection<'a, T: Float>(
     tournament_size: usize,
     rng: &mut impl Rng,
 ) -> Result<&'a Individual<T>> {
-    let mut best_idx = (rng.gen::<f64>() * population.len() as f64) as usize % population.len();
+    let mut best_idx = (rng.random::<f64>() * population.len() as f64) as usize % population.len();
     let mut best_fitness = population[best_idx].fitness;
 
     for _ in 1..tournament_size {
-        let idx = (rng.gen::<f64>() * population.len() as f64) as usize % population.len();
+        let idx = (rng.random::<f64>() * population.len() as f64) as usize % population.len();
         if population[idx].fitness < best_fitness {
             best_idx = idx;
             best_fitness = population[idx].fitness;
@@ -389,7 +389,7 @@ fn roulette_wheel_selection<'a, T: Float + std::iter::Sum>(
 
     let total_fitness: T = fitnesses.iter().copied().sum();
 
-    let rand_val = T::from(rng.gen::<f64>()).ok_or_else(|| {
+    let rand_val = T::from(rng.random::<f64>()).ok_or_else(|| {
         NumRs2Error::ConversionError("Random value conversion failed".to_string())
     })?;
     let mut threshold = rand_val * total_fitness;
@@ -412,7 +412,7 @@ fn rank_based_selection<'a, T: Float>(
     let n = population.len();
     let total_rank = n * (n + 1) / 2;
 
-    let rand_val = rng.gen::<f64>();
+    let rand_val = rng.random::<f64>();
     let threshold = rand_val * total_rank as f64;
 
     let mut cumulative = 0.0;
@@ -437,15 +437,15 @@ fn crossover<T: Float>(
 
     match crossover_type {
         CrossoverType::SinglePoint => {
-            let point = (rng.gen::<f64>() * (n - 1) as f64) as usize + 1;
+            let point = (rng.random::<f64>() * (n - 1) as f64) as usize + 1;
             let mut offspring = Vec::with_capacity(n);
             offspring.extend_from_slice(&parent1[..point]);
             offspring.extend_from_slice(&parent2[point..]);
             Ok(offspring)
         }
         CrossoverType::TwoPoint => {
-            let mut point1 = (rng.gen::<f64>() * n as f64) as usize;
-            let mut point2 = (rng.gen::<f64>() * n as f64) as usize;
+            let mut point1 = (rng.random::<f64>() * n as f64) as usize;
+            let mut point2 = (rng.random::<f64>() * n as f64) as usize;
 
             if point1 > point2 {
                 std::mem::swap(&mut point1, &mut point2);
@@ -464,7 +464,7 @@ fn crossover<T: Float>(
             })?;
 
             for i in 0..n {
-                let rand_val = T::from(rng.gen::<f64>()).ok_or_else(|| {
+                let rand_val = T::from(rng.random::<f64>()).ok_or_else(|| {
                     NumRs2Error::ConversionError("Random value conversion failed".to_string())
                 })?;
 
@@ -494,8 +494,8 @@ fn mutate<T: Float>(
                 let range = upper - lower;
 
                 // Box-Muller transform for Gaussian random
-                let u1 = rng.gen::<f64>();
-                let u2 = rng.gen::<f64>();
+                let u1 = rng.random::<f64>();
+                let u2 = rng.random::<f64>();
                 let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
 
                 let perturbation = T::from(z).ok_or_else(|| {
@@ -511,7 +511,7 @@ fn mutate<T: Float>(
                 let (lower, upper) = bounds[i];
                 let range = upper - lower;
 
-                let rand_val = T::from(rng.gen::<f64>()).ok_or_else(|| {
+                let rand_val = T::from(rng.random::<f64>()).ok_or_else(|| {
                     NumRs2Error::ConversionError("Random value conversion failed".to_string())
                 })?;
 

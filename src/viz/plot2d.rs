@@ -22,6 +22,7 @@
 
 use super::*;
 use plotters::prelude::*;
+use plotters::style::Color;
 use scirs2_core::ndarray::{Array1, ArrayView1};
 use std::path::Path;
 

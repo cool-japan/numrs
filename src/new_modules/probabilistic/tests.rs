@@ -442,8 +442,8 @@ fn test_end_to_end_bayesian_regression() {
 }
 
 // Helper function for standard normal sampling
-fn sample_standard_normal<R: scirs2_core::random::Rng>(rng: &mut R) -> f64 {
-    let u1: f64 = rng.gen();
-    let u2: f64 = rng.gen();
-    (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
+fn sample_standard_normal<R: scirs2_core::random::Rng + scirs2_core::RngExt>(rng: &mut R) -> f64 {
+    let u1: f64 = rng.random();
+    let u2: f64 = rng.random();
+    (-2.0_f64 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
 }

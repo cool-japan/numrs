@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 authors = ["COOLJAPAN OU (Team KitaSan)"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -49,13 +49,13 @@ ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without extern
 # ===================================================================
 # ALL external functionality (ndarray, rand, rayon, BLAS) goes through scirs2-core
 # Using crates.io versions for stable 0.3.0 release
-scirs2-core = { version = "0.3.0", features = ["random", "array", "simd", "parallel", "linalg"] }
-scirs2-stats = { version = "0.3.0" }
-scirs2-linalg = { version = "0.3.0" }
-scirs2-ndimage = { version = "0.3.0" }
-scirs2-spatial = { version = "0.3.0", features = ["parallel"] }
-scirs2-special = { version = "0.3.0" }
-scirs2-fft = { version = "0.3.0" }
+scirs2-core = { version = "0.3.4", features = ["random", "array", "simd", "parallel", "linalg"] }
+scirs2-stats = { version = "0.3.4" }
+scirs2-linalg = { version = "0.3.4" }
+scirs2-ndimage = { version = "0.3.4" }
+scirs2-spatial = { version = "0.3.4", features = ["parallel"] }
+scirs2-special = { version = "0.3.4" }
+scirs2-fft = { version = "0.3.4" }
 
 # ===================================================================
 # ALLOWED DEPENDENCIES (Non-conflicting)
@@ -69,9 +69,9 @@ lazy_static = "1.5.0"  # For static initialization patterns
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 csv = "1.4.0"
-oxicode = { version = "0.1.1", features = ["serde"] }
+oxicode = { version = "0.2", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
-oxiarc-archive = { version = "0.2.1" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
+oxiarc-archive = { version = "0.2.5" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
 # NPZ format support with pure Rust compression (DEFLATE via OxiARC)
 serde-pickle = "1.2.0" # Python pickle format support
 memmap2 = "0.9.10"      # Memory-mapped file I/O
@@ -98,13 +98,13 @@ chrono = { version = "0.4.44", default-features = false, features = ["std", "clo
 # ❌ ndarray-linalg = "*"      # FORBIDDEN - Use oxiblas-ndarray (pure Rust)
 
 # Optional GPU acceleration dependencies
-wgpu = { version = "28.0.0", optional = true }
+wgpu = { version = "29.0.0", optional = true }
 bytemuck = { version = "1.25.0", features = ["derive"], optional = true }
 futures-intrusive = { version = "0.5.0", optional = true }
 tokio = { version = "1.50.0", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
 
 # Optional Python bindings dependencies
-pyo3 = { version = "0.27.2", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.28.2", features = ["extension-module"], optional = true }
 scirs2-numpy = { workspace = true, optional = true }
 
 # Optional Apache Arrow dependencies (via SciRS2 workspace)
@@ -133,8 +133,8 @@ wee_alloc = { version = "0.4.5", optional = true }  # Small allocator for WASM
 plotters = { version = "0.3.7", optional = true }  # High-performance plotting library
 plotters-backend = { version = "0.3.7", optional = true }  # Plotters backend API
 plotters-svg = { version = "0.3.7", optional = true }  # SVG backend for plotters
-resvg = { version = "0.46.0", optional = true }  # SVG rendering library
-usvg = { version = "0.46.0", optional = true }  # SVG simplification library
+resvg = { version = "0.47.0", optional = true }  # SVG rendering library
+usvg = { version = "0.47.0", optional = true }  # SVG simplification library
 tiny-skia = { version = "0.12.0", optional = true }  # Tiny Skia subset for rendering
 rgb = { version = "0.8.53", optional = true }  # RGB color types
 
@@ -147,7 +147,7 @@ rgb = { version = "0.8.53", optional = true }  # RGB color types
 # For now, we add getrandom to regular deps with wasm features
 
 # Force getrandom v0.3 with WASM support enabled
-getrandom = { version = "0.3", default-features = false, features = ["wasm_js"] }
+getrandom = { version = "0.4", default-features = false, features = ["wasm_js"] }
 # Also add v0.2 with renamed package for transitive deps using older rand
 getrandom_02 = { package = "getrandom", version = "=0.2.17", default-features = false, features = ["js"] }
 # uuid also needs WASM support enabled
@@ -156,7 +156,7 @@ uuid = { version = "1.22", features = ["js"] }  # Enable JS random for WASM
 [dev-dependencies]
 criterion = "0.8.2"  # Benchmarking library
 approx = "0.5.1"     # Approximate floating-point comparisons for tests
-tempfile = "3.26.0"   # Temporary files for testing I/O functionality
+tempfile = "3.27.0"   # Temporary files for testing I/O functionality
 proptest = "1.10.0"   # Property-based testing for mathematical invariants
 serial_test = "3.4.0"  # For tests that require serial execution (global state)
 wasm-bindgen-test = "0.3.64"  # Testing framework for WebAssembly
@@ -317,22 +317,22 @@ harness = false
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.3.0" }
-scirs2-stats = { version = "0.3.0" }
-scirs2-linalg = { version = "0.3.0" }
-scirs2-ndimage = { version = "0.3.0" }
-scirs2-spatial = { version = "0.3.0" }
-scirs2-special = { version = "0.3.0" }
-scirs2-fft = { version = "0.3.0" }
-scirs2-numpy = { version = "0.3.0" }
+scirs2-core = { version = "0.3.4" }
+scirs2-stats = { version = "0.3.4" }
+scirs2-linalg = { version = "0.3.4" }
+scirs2-ndimage = { version = "0.3.4" }
+scirs2-spatial = { version = "0.3.4" }
+scirs2-special = { version = "0.3.4" }
+scirs2-fft = { version = "0.3.4" }
+scirs2-numpy = { version = "0.3.4" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
-arrow = "57.3.0"
-arrow-array = "57.3.0"
-arrow-buffer = "57.3.0"
-arrow-cast = "57.3.0"
-arrow-schema = "57.3.0"
-parquet = "57.3.0"  # Apache Parquet (pure Rust)
+arrow = "58.0.0"
+arrow-array = "58.0.0"
+arrow-buffer = "58.0.0"
+arrow-cast = "58.0.0"
+arrow-schema = "58.0.0"
+parquet = "58.0.0"  # Apache Parquet (pure Rust)
 
 
 # ===================================================================

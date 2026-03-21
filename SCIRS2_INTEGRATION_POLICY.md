@@ -7,7 +7,7 @@
 ## Table of Contents
 
 1. [Core Ecosystem Principles](#core-ecosystem-principles)
-2. [Pure Rust Migration (v0.1.1)](#pure-rust-migration-v011)
+2. [Pure Rust Migration (v0.3.0)](#pure-rust-migration-v011)
 3. [Dependency Abstraction Policy](#dependency-abstraction-policy)
 4. [Technical Policies](#technical-policies)
 5. [NumRS2-Specific Implementation](#numrs2-specific-implementation)
@@ -43,9 +43,9 @@ External Libraries (ndarray, rand, OxiBLAS, etc.)
 
 ---
 
-## Pure Rust Migration (v0.1.1)
+## Pure Rust Migration (v0.3.0)
 
-**Major architectural changes in v0.1.1 (December 2025):**
+**Major architectural changes in v0.3.0 (December 2025):**
 
 ### OxiBLAS Migration - Pure Rust BLAS/LAPACK
 
@@ -57,9 +57,9 @@ External Libraries (ndarray, rand, OxiBLAS, etc.)
 - ❌ `netlib-src` - Netlib reference implementation
 
 **ADDED Dependencies (via scirs2-core):**
-- ✅ `oxiblas-ndarray` v0.1.2+ - Pure Rust ndarray integration
-- ✅ `oxiblas-blas` v0.1.2+ - Pure Rust BLAS implementation
-- ✅ `oxiblas-lapack` v0.1.2+ - Pure Rust LAPACK implementation (supports Complex<f64>)
+- ✅ `oxiblas-ndarray` v0.3.0+ - Pure Rust ndarray integration
+- ✅ `oxiblas-blas` v0.3.0+ - Pure Rust BLAS implementation
+- ✅ `oxiblas-lapack` v0.3.0+ - Pure Rust LAPACK implementation (supports Complex<f64>)
 
 **Benefits:**
 - 🚀 **Zero System Dependencies** - No need to install OpenBLAS, MKL, or system BLAS
@@ -74,7 +74,7 @@ External Libraries (ndarray, rand, OxiBLAS, etc.)
 - ❌ `bincode` - Generic binary serialization
 
 **ADDED Dependencies (COOLJAPAN Policy):**
-- ✅ `oxicode` v0.1.1+ - SIMD-optimized binary serialization
+- ✅ `oxicode` v0.3.0+ - SIMD-optimized binary serialization
 - ✅ `oxicode_derive` - Derive macros for custom types
 
 **Benefits:**
@@ -107,15 +107,15 @@ rand = { workspace = true }              # ❌ Use scirs2-core instead
 rand_distr = { workspace = true }        # ❌ Use scirs2-core instead
 ndarray = { workspace = true }           # ❌ Use scirs2-core instead
 ndarray-rand = { workspace = true }      # ❌ Use scirs2-core instead
-ndarray-linalg = { workspace = true }    # ❌ REMOVED v0.1.1 - scirs2-linalg independent
+ndarray-linalg = { workspace = true }    # ❌ REMOVED v0.3.0 - scirs2-linalg independent
 num-traits = { workspace = true }        # ❌ Use scirs2-core instead
 num-complex = { workspace = true }       # ❌ Use scirs2-core instead
 nalgebra = { workspace = true }          # ❌ Use scirs2-core instead
 rayon = { workspace = true }             # ❌ Use scirs2-core instead
-bincode = { workspace = true }           # ❌ REMOVED v0.1.1 - Use oxicode instead
-openblas-src = { workspace = true }      # ❌ REMOVED v0.1.1 - Use OxiBLAS instead
-blas-src = { workspace = true }          # ❌ REMOVED v0.1.1 - Use OxiBLAS instead
-lapack-src = { workspace = true }        # ❌ REMOVED v0.1.1 - Use OxiBLAS instead
+bincode = { workspace = true }           # ❌ REMOVED v0.3.0 - Use oxicode instead
+openblas-src = { workspace = true }      # ❌ REMOVED v0.3.0 - Use OxiBLAS instead
+blas-src = { workspace = true }          # ❌ REMOVED v0.3.0 - Use OxiBLAS instead
+lapack-src = { workspace = true }        # ❌ REMOVED v0.3.0 - Use OxiBLAS instead
 ```
 
 #### Required Core Dependencies:
@@ -164,7 +164,7 @@ use scirs2_core::random::*;           // Complete rand + rand_distr functionalit
 use scirs2_core::ndarray::*;          // Complete ndarray ecosystem
 // Includes: Array, Array1, Array2, ArrayView, array!, s!, azip! macros
 // Includes: ndarray-rand, ndarray-stats, ndarray-npy when array feature enabled
-// NOTE: ndarray-linalg removed v0.1.1 - scirs2-linalg provides independent implementation
+// NOTE: ndarray-linalg removed v0.3.0 - scirs2-linalg provides independent implementation
 
 // === Numerical Traits ===
 use scirs2_core::numeric::*;          // num-traits, num-complex, num-integer
@@ -194,8 +194,8 @@ use scirs2_core::linalg::*;           // Linear algebra (via OxiBLAS)
 | `num-traits` | `scirs2_core::numeric` | All traits |
 | `num-complex` | `scirs2_core::numeric` | Complex numbers |
 | `rayon` | `scirs2_core::parallel_ops` | Parallel processing |
-| `oxiblas-*` | `scirs2_core::linalg` | Pure Rust BLAS/LAPACK (v0.1.2+) |
-| ~~`bincode`~~ | N/A | **REPLACED** by `oxicode` v0.1.1+ |
+| `oxiblas-*` | `scirs2_core::linalg` | Pure Rust BLAS/LAPACK (v0.3.0+) |
+| ~~`bincode`~~ | N/A | **REPLACED** by `oxicode` v0.3.0+ |
 | `oxicode` | Direct usage | COOLJAPAN Policy - SIMD serialization |
 
 ---
@@ -248,16 +248,16 @@ let results: Vec<f64> = (0..n)
 **Mandatory Rules:**
 1. **ALL BLAS operations go through `scirs2-core`**
 2. **NEVER add direct BLAS dependencies** (openblas-src, blas-src, etc.)
-3. **Backend: OxiBLAS (Pure Rust)** - v0.1.2+ via scirs2-core
+3. **Backend: OxiBLAS (Pure Rust)** - v0.3.0+ via scirs2-core
 
-**v0.1.1+ (Current):**
+**v0.3.0+ (Current):**
 - ✅ **All Platforms: OxiBLAS (Pure Rust BLAS/LAPACK)** - Default and recommended
   - No system dependencies required
   - Cross-compilation friendly
   - Complete Rust ecosystem integration
   - SIMD optimized (AVX2/NEON)
 
-**Legacy (Removed in v0.1.1):**
+**Legacy (Removed in v0.3.0):**
 - ❌ ~~OpenBLAS~~ **REMOVED**
 - ❌ ~~Accelerate Framework~~ **REMOVED**
 - ❌ ~~Intel MKL~~ **REMOVED**
@@ -406,9 +406,9 @@ scirs2-spatial = { workspace = true }
 # ===================================================================
 # ALLOWED DEPENDENCIES (Non-conflicting)
 # ===================================================================
-num-traits = "0.2.19"  # Numeric traits (compatible with SciRS2)
+num-traits = "0.3.0"  # Numeric traits (compatible with SciRS2)
 thiserror = "2.0.17"   # Error handling
-oxicode = { version = "0.1.1", features = ["serde"] }  # COOLJAPAN Policy
+oxicode = { version = "0.3.0", features = ["serde"] }  # COOLJAPAN Policy
 
 # ===================================================================
 # FORBIDDEN (Removed per SCIRS2 POLICY)
@@ -428,14 +428,14 @@ oxicode = { version = "0.1.1", features = ["serde"] }  # COOLJAPAN Policy
 
 ```toml
 [workspace.dependencies]
-scirs2-core = { version = "0.1.1" }
-scirs2-stats = { version = "0.1.1" }
-scirs2-linalg = { version = "0.1.1" }
-scirs2-fft = { version = "0.1.1" }
-scirs2-signal = { version = "0.1.1" }
-scirs2-special = { version = "0.1.1" }
-scirs2-ndimage = { version = "0.1.1" }
-scirs2-spatial = { version = "0.1.1" }
+scirs2-core = { version = "0.3.0" }
+scirs2-stats = { version = "0.3.0" }
+scirs2-linalg = { version = "0.3.0" }
+scirs2-fft = { version = "0.3.0" }
+scirs2-signal = { version = "0.3.0" }
+scirs2-special = { version = "0.3.0" }
+scirs2-ndimage = { version = "0.3.0" }
+scirs2-spatial = { version = "0.3.0" }
 ```
 
 ---
@@ -484,23 +484,23 @@ By following the SciRS2 ecosystem policies, NumRS2 gains:
 
 ---
 
-## Current Status (v0.1.1)
+## Current Status (v0.3.0)
 
 ### Policy Compliance
 - ✅ **100% Compliant** - All code uses SciRS2 abstractions
 - ✅ **Zero Direct Dependencies** - All external libs through scirs2-core
-- ✅ **Pure Rust** - OxiBLAS v0.1.2, Oxicode v0.1.1
+- ✅ **Pure Rust** - OxiBLAS v0.3.0, Oxicode v0.3.0
 - ✅ **Production Ready** - 1,111+ tests passing
 
 ### SciRS2 Integration
-- ✅ scirs2-core v0.1.1 - Foundation (random, ndarray, SIMD, parallel, linalg via OxiBLAS)
-- ✅ scirs2-stats v0.1.1 - Statistical operations
-- ✅ scirs2-linalg v0.1.1 - Linear algebra (independent implementation)
-- ✅ scirs2-fft v0.1.1 - FFT operations
-- ✅ scirs2-signal v0.1.1 - Signal processing
-- ✅ scirs2-special v0.1.1 - Special functions
-- ✅ scirs2-ndimage v0.1.1 - N-dimensional image processing
-- ✅ scirs2-spatial v0.1.1 - Spatial algorithms
+- ✅ scirs2-core v0.3.0 - Foundation (random, ndarray, SIMD, parallel, linalg via OxiBLAS)
+- ✅ scirs2-stats v0.3.0 - Statistical operations
+- ✅ scirs2-linalg v0.3.0 - Linear algebra (independent implementation)
+- ✅ scirs2-fft v0.3.0 - FFT operations
+- ✅ scirs2-signal v0.3.0 - Signal processing
+- ✅ scirs2-special v0.3.0 - Special functions
+- ✅ scirs2-ndimage v0.3.0 - N-dimensional image processing
+- ✅ scirs2-spatial v0.3.0 - Spatial algorithms
 
 ---
 
@@ -514,8 +514,8 @@ For complete technical policies, see the SciRS2 repository SCIRS2_POLICY.md
 
 ---
 
-**Document Version**: 3.0 - Pure Rust Era (v0.1.1)
-**Effective Date**: SciRS2 v0.1.1 (December 2025)
+**Document Version**: 3.0 - Pure Rust Era (v0.3.0)
+**Effective Date**: SciRS2 v0.3.0 (December 2025)
 **Last Updated**: 2025-12-30
 **Status**: Active - Mandatory Compliance
 **Parent Policy**: SciRS2 SCIRS2_POLICY.md v3.0.0

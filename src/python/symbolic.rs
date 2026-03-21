@@ -2,10 +2,11 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyAnyMethods;
 
 /// Create a symbolic variable
 #[pyfunction]
-fn symbol(_name: String) -> PyResult<PyObject> {
+fn symbol(_name: String) -> PyResult<Py<PyAny>> {
     Err(PyValueError::new_err(
         "Symbolic computation not yet available in Python bindings - see NumRS2 Rust API",
     ))
@@ -13,7 +14,7 @@ fn symbol(_name: String) -> PyResult<PyObject> {
 
 /// Differentiate a symbolic expression
 #[pyfunction]
-fn diff(_expr: PyObject, _var: PyObject) -> PyResult<PyObject> {
+fn diff(_expr: Py<PyAny>, _var: Py<PyAny>) -> PyResult<Py<PyAny>> {
     Err(PyValueError::new_err(
         "Symbolic differentiation not yet available in Python bindings - see NumRS2 Rust API",
     ))
@@ -21,7 +22,7 @@ fn diff(_expr: PyObject, _var: PyObject) -> PyResult<PyObject> {
 
 /// Simplify a symbolic expression
 #[pyfunction]
-fn simplify(_expr: PyObject) -> PyResult<PyObject> {
+fn simplify(_expr: Py<PyAny>) -> PyResult<Py<PyAny>> {
     Err(PyValueError::new_err(
         "Symbolic simplification not yet available in Python bindings - see NumRS2 Rust API",
     ))

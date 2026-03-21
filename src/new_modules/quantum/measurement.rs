@@ -14,7 +14,7 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::quantum::statevector::StateVector;
 use num_traits::Float;
-use scirs2_core::random::{Rng, SeedableRng, StdRng};
+use scirs2_core::random::{Rng, RngExt, SeedableRng, StdRng};
 use scirs2_core::Complex;
 use std::collections::HashMap;
 use std::fmt::Debug;

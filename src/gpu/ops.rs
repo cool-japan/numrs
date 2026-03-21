@@ -204,7 +204,7 @@ pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(
             .device()
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 MatMul Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
+                bind_group_layouts: &[Some(&bind_group_layout)],
                 immediate_size: 0,
             });
 
@@ -349,7 +349,7 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
                 .device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("NumRS2 Transpose Pipeline Layout"),
-                    bind_group_layouts: &[&bind_group_layout],
+                    bind_group_layouts: &[Some(&bind_group_layout)],
                     immediate_size: 0,
                 });
 
@@ -504,7 +504,7 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
             .device()
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Element-wise Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
+                bind_group_layouts: &[Some(&bind_group_layout)],
                 immediate_size: 0,
             });
 
@@ -683,7 +683,7 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
             .device()
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Reduction Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
+                bind_group_layouts: &[Some(&bind_group_layout)],
                 immediate_size: 0,
             });
 
@@ -871,7 +871,7 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
             .device()
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Reduction Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
+                bind_group_layouts: &[Some(&bind_group_layout)],
                 immediate_size: 0,
             });
 
@@ -1056,7 +1056,7 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
             .device()
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("NumRS2 Unary Element-wise Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
+                bind_group_layouts: &[Some(&bind_group_layout)],
                 immediate_size: 0,
             });
 

@@ -33,7 +33,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::optimize::OptimizeResult;
 use num_traits::Float;
-use scirs2_core::random::{thread_rng, Distribution, Rng, Uniform};
+use scirs2_core::random::{thread_rng, Distribution, Rng, RngExt, Uniform};
 use std::cmp::Ordering;
 
 /// Mutation strategy for DE
@@ -351,7 +351,7 @@ fn mutate<T: Float>(
         let max_attempts = count * 100;
 
         while indices.len() < count && attempts < max_attempts {
-            let idx = (rng.gen::<f64>() * n as f64) as usize % n;
+            let idx = (rng.random::<f64>() * n as f64) as usize % n;
             if idx != exclude && !indices.contains(&idx) {
                 indices.push(idx);
             }
@@ -434,10 +434,10 @@ fn crossover<T: Float>(
     match crossover_type {
         CrossoverType::Binomial => {
             // Ensure at least one component from mutant
-            let j_rand = (rng.gen::<f64>() * dim as f64) as usize % dim;
+            let j_rand = (rng.random::<f64>() * dim as f64) as usize % dim;
 
             for j in 0..dim {
-                let rand_val = T::from(rng.gen::<f64>()).ok_or_else(|| {
+                let rand_val = T::from(rng.random::<f64>()).ok_or_else(|| {
                     NumRs2Error::ConversionError("Random value conversion failed".to_string())
                 })?;
 
@@ -449,7 +449,7 @@ fn crossover<T: Float>(
             }
         }
         CrossoverType::Exponential => {
-            let j_start = (rng.gen::<f64>() * dim as f64) as usize % dim;
+            let j_start = (rng.random::<f64>() * dim as f64) as usize % dim;
             let mut j = j_start;
             let mut l = 0;
 
@@ -458,7 +458,7 @@ fn crossover<T: Float>(
                 j = (j + 1) % dim;
                 l += 1;
 
-                let rand_val = T::from(rng.gen::<f64>()).ok_or_else(|| {
+                let rand_val = T::from(rng.random::<f64>()).ok_or_else(|| {
                     NumRs2Error::ConversionError("Random value conversion failed".to_string())
                 })?;
 
@@ -498,10 +498,10 @@ fn update_adaptive_parameters<T: Float>(
     let f_lower = 0.1;
     let f_upper = 0.9;
 
-    let rand1 = rng.gen::<f64>();
-    let rand2 = rng.gen::<f64>();
-    let rand3 = rng.gen::<f64>();
-    let rand4 = rng.gen::<f64>();
+    let rand1 = rng.random::<f64>();
+    let rand2 = rng.random::<f64>();
+    let rand3 = rng.random::<f64>();
+    let rand4 = rng.random::<f64>();
 
     let new_f = if rand2 < tau1 {
         T::from(f_lower + rand1 * f_upper).ok_or_else(|| {

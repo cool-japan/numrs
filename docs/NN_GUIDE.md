@@ -1,6 +1,6 @@
 # Neural Network Module Guide
 
-**NumRS2 v0.2.0 Neural Network Primitives**
+**NumRS2 v0.3.0 Neural Network Primitives**
 
 This guide provides comprehensive documentation for NumRS2's neural network (`nn`) module, including architecture overview, usage patterns, performance optimization, and best practices.
 
@@ -116,8 +116,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.2.0"
-scirs2-core = "0.1.1"
+numrs2 = "0.3.0"
+scirs2-core = "0.3.0"
 ```
 
 ### Basic Example
@@ -1467,7 +1467,7 @@ pub enum DataFormat { NCHW, NHWC }
 
 ## Version History
 
-- **v0.2.0**: Initial neural network module release
+- **v0.3.0**: Initial neural network module release
   - Complete activation functions
   - Convolution and pooling operations
   - Attention mechanisms

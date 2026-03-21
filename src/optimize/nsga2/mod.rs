@@ -182,7 +182,7 @@ mod tests;
 
 use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
-use scirs2_core::random::{thread_rng, Distribution, Rng, Uniform};
+use scirs2_core::random::{thread_rng, Distribution, Rng, RngExt, Uniform};
 use std::cmp::Ordering;
 
 // Re-export from submodules for a flat public API
@@ -362,7 +362,7 @@ where
             let parent2 = tournament_selection(&population, &mut rng)?;
 
             // Simulated Binary Crossover (SBX)
-            let (mut child1, mut child2) = if T::from(rng.gen::<f64>()).ok_or_else(|| {
+            let (mut child1, mut child2) = if T::from(rng.random::<f64>()).ok_or_else(|| {
                 NumRs2Error::ConversionError("Random value conversion failed".to_string())
             })? < config.crossover_rate
             {
@@ -378,14 +378,14 @@ where
             };
 
             // Polynomial mutation
-            if T::from(rng.gen::<f64>()).ok_or_else(|| {
+            if T::from(rng.random::<f64>()).ok_or_else(|| {
                 NumRs2Error::ConversionError("Random value conversion failed".to_string())
             })? < config.mutation_rate
             {
                 polynomial_mutation(&mut child1, bounds, config.eta_m, &mut rng)?;
             }
 
-            if T::from(rng.gen::<f64>()).ok_or_else(|| {
+            if T::from(rng.random::<f64>()).ok_or_else(|| {
                 NumRs2Error::ConversionError("Random value conversion failed".to_string())
             })? < config.mutation_rate
             {
@@ -659,8 +659,8 @@ fn tournament_selection<'a, T: Float>(
 ) -> Result<&'a Individual<T>> {
     let n = population.len();
 
-    let i1 = (rng.gen::<f64>() * n as f64) as usize % n;
-    let i2 = (rng.gen::<f64>() * n as f64) as usize % n;
+    let i1 = (rng.random::<f64>() * n as f64) as usize % n;
+    let i2 = (rng.random::<f64>() * n as f64) as usize % n;
 
     if compare_individuals(&population[i1], &population[i2]) == Ordering::Less {
         Ok(&population[i1])
@@ -701,7 +701,7 @@ fn sbx_crossover<T: Float>(
         let p1 = parent1[i];
         let p2 = parent2[i];
 
-        let rand_val = T::from(rng.gen::<f64>()).ok_or_else(|| {
+        let rand_val = T::from(rng.random::<f64>()).ok_or_else(|| {
             NumRs2Error::ConversionError("Random value conversion failed".to_string())
         })?;
 
@@ -762,7 +762,7 @@ fn polynomial_mutation<T: Float>(
         let (lower, upper) = bounds[i];
         let x = individual[i];
 
-        let rand_val = T::from(rng.gen::<f64>()).ok_or_else(|| {
+        let rand_val = T::from(rng.random::<f64>()).ok_or_else(|| {
             NumRs2Error::ConversionError("Random value conversion failed".to_string())
         })?;
 

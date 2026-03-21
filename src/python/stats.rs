@@ -253,7 +253,7 @@ fn rand(size: Vec<usize>) -> PyResult<PyArray> {
     let total_size: usize = size.iter().product();
     let mut rng = thread_rng();
 
-    let data: Vec<f64> = (0..total_size).map(|_| rng.gen::<f64>()).collect();
+    let data: Vec<f64> = (0..total_size).map(|_| rng.random::<f64>()).collect();
 
     Ok(PyArray {
         inner: crate::array::Array::from_vec(data).reshape(&size),

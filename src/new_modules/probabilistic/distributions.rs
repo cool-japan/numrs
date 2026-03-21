@@ -55,7 +55,7 @@ use crate::new_modules::probabilistic::{
     validate_non_negative, validate_positive, ProbabilisticError, Result,
 };
 use scirs2_core::ndarray::Array1;
-use scirs2_core::random::{Distribution, Rng};
+use scirs2_core::random::{Distribution, Rng, RngExt};
 use std::f64::consts::PI;
 
 /// Beta distribution Beta(α, β)
@@ -292,7 +292,7 @@ impl GammaDistribution {
     pub fn sample<R: Rng>(&self, rng: &mut R) -> Result<f64> {
         // For α < 1, use the transformation Gamma(α,β) = Gamma(α+1,β) * U^(1/α)
         let (alpha_adj, correction) = if self.alpha < 1.0 {
-            (self.alpha + 1.0, rng.gen::<f64>().powf(1.0 / self.alpha))
+            (self.alpha + 1.0, rng.random::<f64>().powf(1.0 / self.alpha))
         } else {
             (self.alpha, 1.0)
         };
@@ -309,7 +309,7 @@ impl GammaDistribution {
                 continue;
             }
 
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             let z2 = z * z;
 
             // Acceptance test
@@ -631,7 +631,7 @@ impl VonMisesDistribution {
     pub fn sample<R: Rng>(&self, rng: &mut R) -> Result<f64> {
         if self.kappa < 1e-6 {
             // For small kappa, distribution is nearly uniform
-            return Ok(rng.gen::<f64>() * 2.0 * PI);
+            return Ok(rng.random::<f64>() * 2.0 * PI);
         }
 
         // Best-Fisher algorithm
@@ -640,9 +640,9 @@ impl VonMisesDistribution {
         let r = (1.0 + rho * rho) / (2.0 * rho);
 
         loop {
-            let u1: f64 = rng.gen();
-            let u2: f64 = rng.gen();
-            let u3: f64 = rng.gen();
+            let u1: f64 = rng.random();
+            let u2: f64 = rng.random();
+            let u3: f64 = rng.random();
 
             // Guard against division by zero
             if u2 < 1e-10 {
@@ -661,7 +661,7 @@ impl VonMisesDistribution {
 
             // Best-Fisher acceptance criterion (fixed typo: c.ln() - c.ln() -> c.ln() - c)
             if c * (2.0 - c) - u3 > 0.0 || (c > 0.0 && c.ln() - c + 1.0 - u3 >= 0.0) {
-                let theta = self.mu + f.acos() * if rng.gen::<bool>() { 1.0 } else { -1.0 };
+                let theta = self.mu + f.acos() * if rng.random::<bool>() { 1.0 } else { -1.0 };
                 return Ok(theta.rem_euclid(2.0 * PI));
             }
         }
@@ -724,8 +724,8 @@ fn gamma_ln_stirling(x: f64) -> f64 {
 /// Uses Box-Muller transform with SCIRS2-compliant RNG
 fn sample_standard_normal<R: Rng>(rng: &mut R) -> f64 {
     // Box-Muller transform
-    let u1: f64 = rng.gen();
-    let u2: f64 = rng.gen();
+    let u1: f64 = rng.random();
+    let u2: f64 = rng.random();
 
     let r = (-2.0 * u1.ln()).sqrt();
     let theta = 2.0 * PI * u2;

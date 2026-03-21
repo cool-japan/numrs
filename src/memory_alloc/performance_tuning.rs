@@ -256,11 +256,10 @@ impl PerformanceTuner {
         let mut recommendations = Vec::new();
 
         // Calculate average allocation size
-        let avg_allocation_size = if metrics.total_allocations > 0 {
-            metrics.total_bytes_allocated / metrics.total_allocations
-        } else {
-            0
-        };
+        let avg_allocation_size = metrics
+            .total_bytes_allocated
+            .checked_div(metrics.total_allocations)
+            .unwrap_or(0);
 
         // Recommend arena allocation for small, frequent allocations
         if avg_allocation_size < 1024 && metrics.total_allocations > 1000 {
@@ -558,11 +557,10 @@ impl PerformanceTuner {
         };
         report.push_str(&format!("  Failure rate: {:.3}%\n", failure_rate));
 
-        let avg_allocation_size = if current.total_allocations > 0 {
-            current.total_bytes_allocated / current.total_allocations
-        } else {
-            0
-        };
+        let avg_allocation_size = current
+            .total_bytes_allocated
+            .checked_div(current.total_allocations)
+            .unwrap_or(0);
         report.push_str(&format!(
             "  Average allocation size: {} bytes\n",
             avg_allocation_size

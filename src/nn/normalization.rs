@@ -174,7 +174,7 @@ where
     let scale = T::one() / (T::one() - p);
 
     let mask: Array1<T> = Array1::from_shape_fn(x.len(), |_| {
-        if rng.gen::<f64>() > threshold {
+        if rng.random::<f64>() > threshold {
             scale
         } else {
             T::zero()
@@ -207,7 +207,7 @@ where
     let scale = T::one() / (T::one() - p);
 
     let mask: Array2<T> = Array2::from_shape_fn(x.raw_dim(), |_| {
-        if rng.gen::<f64>() > threshold {
+        if rng.random::<f64>() > threshold {
             scale
         } else {
             T::zero()
@@ -251,7 +251,7 @@ where
     // For 2D, treat columns as channels
     let mut result = x.to_owned();
     for j in 0..x.ncols() {
-        if rng.gen::<f64>() <= threshold {
+        if rng.random::<f64>() <= threshold {
             // Drop entire channel
             for i in 0..x.nrows() {
                 result[[i, j]] = T::zero();

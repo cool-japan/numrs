@@ -424,11 +424,12 @@ impl ParallelScheduler {
 
                         // Update average execution time (simple moving average)
                         let total_tasks = stats.tasks_completed + stats.tasks_failed;
-                        if total_tasks > 0 {
-                            let old_time_nanos = stats.average_execution_time.as_nanos() as u64;
-                            let new_time_nanos = execution_time.as_nanos() as u64;
-                            let avg_nanos =
-                                (old_time_nanos * (total_tasks - 1) + new_time_nanos) / total_tasks;
+                        let old_time_nanos = stats.average_execution_time.as_nanos() as u64;
+                        let new_time_nanos = execution_time.as_nanos() as u64;
+                        if let Some(avg_nanos) = (old_time_nanos * (total_tasks - 1)
+                            + new_time_nanos)
+                            .checked_div(total_tasks)
+                        {
                             stats.average_execution_time = Duration::from_nanos(avg_nanos);
                         }
                     }

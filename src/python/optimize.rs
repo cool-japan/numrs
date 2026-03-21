@@ -3,15 +3,16 @@
 use crate::python::array::PyArray;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyAnyMethods;
 
 /// Minimize a scalar function using BFGS algorithm
 #[pyfunction]
 fn minimize(
-    _fun: PyObject,
+    _fun: Py<PyAny>,
     _x0: &PyArray,
     _method: Option<String>,
     _tol: Option<f64>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     Err(PyValueError::new_err(
         "minimize function not yet implemented - see NumRS2 Rust API for optimization",
     ))
@@ -19,7 +20,7 @@ fn minimize(
 
 /// Find roots of a scalar function
 #[pyfunction]
-fn root_scalar(_fun: PyObject, _bracket: (f64, f64), _method: Option<String>) -> PyResult<f64> {
+fn root_scalar(_fun: Py<PyAny>, _bracket: (f64, f64), _method: Option<String>) -> PyResult<f64> {
     Err(PyValueError::new_err(
         "root_scalar function not yet implemented - see NumRS2 Rust API for root finding",
     ))

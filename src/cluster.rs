@@ -344,7 +344,7 @@ where
             }
 
             // Choose next centroid with probability proportional to distance squared
-            let threshold = rng.gen::<f64>()
+            let threshold = rng.random::<f64>()
                 * total_dist
                     .to_f64()
                     .expect("Failed to convert total distance to f64");
@@ -461,10 +461,8 @@ where
     let mut active_clusters: Vec<usize> = (0..n).collect();
     let mut cluster_sizes = vec![1usize; n];
     let mut linkage = Vec::new();
-    let mut next_cluster_id = n;
-
     // Hierarchical clustering loop
-    for _ in 0..(n - 1) {
+    for (next_cluster_id, _) in (n..).zip(0..(n - 1)) {
         // Find the pair of clusters with minimum distance
         let (i, j, min_dist) = find_min_distance(&active_clusters, &distances, n)?;
 
@@ -487,7 +485,6 @@ where
         active_clusters.push(next_cluster_id);
 
         cluster_sizes.push(size_i + size_j);
-        next_cluster_id += 1;
     }
 
     Ok(Dendrogram {
@@ -566,8 +563,7 @@ where
     }
 
     // Apply merges
-    let mut next_label = n;
-    for merge in dendro.linkage.iter().take(n_merges) {
+    for (next_label, merge) in (n..).zip(dendro.linkage.iter().take(n_merges)) {
         let c1 = merge[0]
             .to_usize()
             .expect("Failed to convert cluster index to usize");
@@ -581,7 +577,6 @@ where
                 *label = next_label;
             }
         }
-        next_label += 1;
     }
 
     // Renumber labels to be 0..n_clusters-1

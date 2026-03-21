@@ -33,7 +33,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::optimize::OptimizeResult;
 use num_traits::Float;
-use scirs2_core::random::{thread_rng, Distribution, Rng, Uniform};
+use scirs2_core::random::{thread_rng, Distribution, Rng, RngExt, Uniform};
 
 /// Inertia weight strategy
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -227,10 +227,10 @@ where
             // Update velocity and position
             for j in 0..dim {
                 // Random coefficients
-                let r1 = T::from(rng.gen::<f64>()).ok_or_else(|| {
+                let r1 = T::from(rng.random::<f64>()).ok_or_else(|| {
                     NumRs2Error::ConversionError("Random value conversion failed".to_string())
                 })?;
-                let r2 = T::from(rng.gen::<f64>()).ok_or_else(|| {
+                let r2 = T::from(rng.random::<f64>()).ok_or_else(|| {
                     NumRs2Error::ConversionError("Random value conversion failed".to_string())
                 })?;
 

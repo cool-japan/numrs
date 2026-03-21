@@ -84,7 +84,7 @@ impl StdBitGenerator {
     /// Create a new bit generator with a random seed
     pub fn new_random() -> Self {
         let mut rng = thread_rng();
-        let seed = rng.gen::<u64>();
+        let seed = rng.random::<u64>();
         Self::new(seed)
     }
 }
@@ -140,7 +140,7 @@ impl PCG64BitGenerator {
     /// Create a new PCG64 bit generator with a random seed
     pub fn new_random() -> Self {
         let mut rng = thread_rng();
-        let seed = rng.gen::<u64>();
+        let seed = rng.random::<u64>();
         Self::new(seed)
     }
 

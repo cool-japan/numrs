@@ -187,7 +187,7 @@ impl VonMises {
         // Special case for kappa = 0 (uniform distribution)
         if self.kappa < 1e-10 {
             let mut rng = thread_rng();
-            let u = rng.gen::<f64>();
+            let u = rng.random::<f64>();
             return self.mu + 2.0 * PI * (u - 0.5);
         }
 
@@ -309,7 +309,7 @@ impl Wald {
 
         // Generate a uniform random variable for acceptance/rejection
         let mut rng = thread_rng();
-        let u = rng.gen::<f64>();
+        let u = rng.random::<f64>();
 
         if u <= mu / (mu + x1) {
             x1

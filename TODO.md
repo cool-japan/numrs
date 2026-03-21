@@ -4,20 +4,21 @@
 
 This document outlines the development status and roadmap for NumRS2, a high-performance numerical computing library for Rust.
 
-## Current Status (March 2026) - v0.3.0
+## Current Status (March 2026) - v0.3.1
 
-**COOLJAPAN Ecosystem Compliance Release**: NumRS2 v0.3.0 is now available!
+**Patch Release**: NumRS2 v0.3.1 is now available!
 
 ### Release Metrics
-- **Version**: 0.3.0 (v0.3.0 Release - March 6, 2026)
-- **Total Code**: ~288,603 lines of Rust code (220,757 code + 22,299 comments + 45,547 blanks; 669 files)
-- **Test Coverage**: 4098+ library tests passing + doctests passing
+- **Version**: 0.3.1 (v0.3.1 Patch - March 21, 2026)
+- **Total Code**: ~290,582 lines of Rust code (222,275 code + 22,459 comments + 45,848 blanks; 671 files)
+- **Test Coverage**: 4,704+ library tests passing + doctests passing
+- **Public API**: 2,709+ public functions/structs/enums/traits; zero unimplemented stubs
 - **Quality**: Zero compilation warnings, zero errors, zero production unwrap() calls
 - **SIMD Operations**: 128+ vectorized functions (AVX2, AVX512, ARM NEON)
-- **Dependencies**: SciRS2 v0.3.0, OxiBLAS v0.1.2+ (pure Rust, stable releases)
-- **Special Functions**: scirs2-special v0.3.0
+- **Dependencies**: SciRS2 v0.3.4, OxiBLAS v0.3.0+ (pure Rust, stable releases)
+- **Special Functions**: scirs2-special v0.3.4
 - **Performance**: Critical O(n²) → O(1) bug fixed (1,000,000x speedup for large arrays), NSGA-III handles 8 objectives in 78.4s
-- **Latest Enhancement**: v0.3.0 release - SciRS2 0.3.0 integration, survival analysis, causal inference, bioinformatics, combinatorics (March 6, 2026)
+- **Latest Enhancement**: v0.3.1 patch - All clippy warnings resolved (Color trait ambiguity, enumerate/zip idioms, checked_div) (March 21, 2026)
 
 ### Core Features (Complete)
 - ✅ N-dimensional array operations with NumPy compatibility
@@ -50,7 +51,7 @@ All modules integrated using SciRS2 v0.3.0:
 - ✅ scirs2-spatial: Spatial algorithms and KD-trees
 - ✅ scirs2-numpy: Python bindings (optional)
 
-### v0.2.0 New Features (Completed)
+### v0.3.0 New Features (Completed)
 - ✅ **Neural Networks**: Layer implementations, activation functions, normalization (dropout, batch norm, layer norm)
 - ✅ **Symbolic Computation**: Expression parsing, differentiation, integration, simplification, linear algebra
 - ✅ **Advanced Optimization**: Differential Evolution, Genetic Algorithms, Particle Swarm, Simulated Annealing, SQP, Interior Point, NSGA-II
@@ -61,10 +62,10 @@ All modules integrated using SciRS2 v0.3.0:
 - ✅ **Python Bindings**: Comprehensive PyO3 integration with NumPy compatibility
 - ✅ **Comprehensive Benchmarks**: 8 benchmark suites (linalg, stats, fft, array ops, optimization, SIMD, parallel, memory)
 
-### v0.2.0 Enhanced (February 9-11, 2026) - NEW
+### v0.3.0 Enhanced (February 9-11, 2026) - NEW
 - ✅ **GPU Compute Shaders**: Advanced shader system with caching, kernel composition, async transfers (~1,570 lines, 34 tests)
 - ✅ **Extended Statistics**: 7 new distributions (Beta, Gamma, Student's t, Cauchy, Laplace, Logistic, Pareto) with PDF/CDF/PPF (~1,860 lines, 50 tests)
-- ✅ **Statistical Functions Fix**: Fixed Beta and Student's t CDF/PPF via upstream betainc_regularized bug fix (scirs2-special v0.1.6-dev)
+- ✅ **Statistical Functions Fix**: Fixed Beta and Student's t CDF/PPF via upstream betainc_regularized bug fix (scirs2-special v0.3.0-dev)
 - ✅ **Parallel Enhancements**: Work-stealing thread pool, NUMA awareness, parallel algorithms (map/reduce/filter/sort/pipeline) (~2,500 lines, 42 tests)
 - ✅ **Performance Optimization**: Fixed critical O(n²) expression template bug (~1000x speedup for large arrays)
 - ✅ **Comprehensive Examples**: 6 new tutorials (distributed, optimization, statistics, time series, signal processing, ML pipeline) (~4,200 lines)
@@ -128,12 +129,12 @@ All modules integrated using SciRS2 v0.3.0:
 
 ## Future Enhancements
 
-### v0.2.0 Completed
+### v0.3.0 Completed
 - ✅ COOLJAPAN ecosystem compliance (pure Rust, no C/Fortran dependencies)
 - ✅ Replaced numpy dependency with scirs2-numpy
 - ✅ Removed OpenBLAS linker flags (now using OxiBLAS)
 - ✅ Eliminated all production unwrap() calls (no-unwrap policy)
-- ✅ Updated to SciRS2 v0.1.5
+- ✅ Updated to SciRS2 v0.3.0
 - ✅ Comprehensive benchmarks (8 benchmark suites)
 - ✅ Extended Python bindings with NumPy compatibility
 - ✅ Symbolic computation support (differentiation, integration, simplification)
@@ -160,8 +161,16 @@ All modules integrated using SciRS2 v0.3.0:
 - ✅ **GPU batching operations** - Automatic batching with dynamic optimization for 80% GPU occupancy (Feb 11, 2026)
 - ✅ **NN documentation guide** - Complete 1,800+ line guide with examples, formulas, SIMD strategies (Feb 11, 2026)
 
-### Short-term Goals (v0.2.x - Patches)
-- [ ] Complete WASM support (awaiting scirs2-spatial v0.1.6 with feature-gated tokio)
+### v0.3.1 (March 21, 2026) - COMPLETED
+- ✅ **Clippy Fixes**: Resolved all 24 clippy warnings for MSRV compatibility
+  - Fixed `Color` trait ambiguity in viz modules (matrix.rs, perf.rs, plot2d.rs, plot3d.rs, stats.rs)
+  - Replaced explicit counter loops with `enumerate`/`zip` pattern in cluster.rs
+  - Replaced manual checked division with `.checked_div()` in performance_tuning.rs, access_patterns.rs, scheduler.rs
+- ✅ **SciRS2 Ecosystem Update**: Updated all scirs2-* deps to v0.3.4
+- ✅ **Test Coverage**: 4,704+ tests passing (up from 4,098+)
+
+### Short-term Goals (v0.3.2 - Patches)
+- [ ] Complete WASM support (awaiting scirs2-spatial with feature-gated tokio)
 - ✅ Additional distribution functions (beta, gamma, student-t extensions) - COMPLETED Feb 9, 2026
 - ✅ Enhanced GPU acceleration (compute shaders, buffer management) - COMPLETED Feb 9, 2026
 - ✅ Performance optimizations (fixed O(n²) bug, memory improvements) - COMPLETED Feb 9, 2026
@@ -176,7 +185,7 @@ All modules integrated using SciRS2 v0.3.0:
 - ✅ Probabilistic programming support - MCMC (Metropolis-Hastings, HMC, Gibbs), Variational Inference, 77 tests
 - ✅ Time series analysis module - ARIMA/SARIMA, VAR/VECM, ACF/PACF, Kalman filtering, 57 tests
 - ✅ Graph neural network primitives - GCN, GAT, GraphSAGE, MPNN, GIN (1,698 lines, 40 tests)
-- ✅ Enhanced GPU compute capabilities - Already completed in v0.2.0 (compute shaders, batching)
+- ✅ Enhanced GPU compute capabilities - Already completed in v0.3.0 (compute shaders, batching)
 
 ### v0.4.x Completed (February 12, 2026)
 - ✅ **Reinforcement Learning Framework** - Complete RL implementation with DQN, Actor-Critic, PPO agents (2,645 lines, 21 test modules)
@@ -186,7 +195,7 @@ All modules integrated using SciRS2 v0.3.0:
 - ✅ **Enhanced Distributed Training** - Model/data parallelism, distributed optimizers, fault tolerance (5,541 lines)
 - ✅ **Total v0.4.x Addition** - 36 files, ~17,000 lines of production code, 283+ comprehensive tests
 - ✅ **Pure Rust Implementation** - Zero C/Fortran dependencies, full COOLJAPAN ecosystem compliance
-- ✅ **SciRS2 Integration** - All modules built on scirs2-core v0.1.5 foundation
+- ✅ **SciRS2 Integration** - All modules built on scirs2-core v0.3.0 foundation
 
 ### Long-term Goals (v0.4.x+) - COMPLETED February 12, 2026
 - ✅ Reinforcement learning primitives (DQN, Actor-Critic, PPO, experience replay, environments)
@@ -272,13 +281,13 @@ All modules integrated using SciRS2 v0.3.0:
   - Unit conversions: SI units, CGS units, natural units
   - CODATA 2018/2022 recommended values with uncertainties
 
-## Known Limitations (v0.2.0)
+## Known Limitations (v0.3.0)
 
 ### WebAssembly Support (Partial)
 - **Status**: WASM bindings implemented but full compilation blocked
-- **Blocker**: Upstream dependency `scirs2-spatial v0.1.5` → `tokio` (doesn't support wasm32-unknown-unknown)
+- **Blocker**: Upstream dependency `scirs2-spatial v0.3.0` → `tokio` (doesn't support wasm32-unknown-unknown)
 - **Workaround**: Use `wasm32-wasip1` target for server-side WASM runtimes (Wasmtime, WasmEdge)
-- **Resolution**: Awaiting scirs2-spatial v0.1.6 with feature-gated tokio dependency
+- **Resolution**: Awaiting scirs2-spatial v0.3.0 with feature-gated tokio dependency
 - **See**: `/tmp/NUMRS2_WASM_STATUS.md` for detailed analysis
 
 ### Browser WASM
@@ -301,4 +310,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
 
 ---
 
-**NumRS2 v0.3.0** - Production-ready numerical computing for Rust with SciRS2 v0.3.0 integration (COOLJAPAN Ecosystem)
+**NumRS2 v0.3.1** - Production-ready numerical computing for Rust with SciRS2 v0.3.4 integration (COOLJAPAN Ecosystem)

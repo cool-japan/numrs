@@ -51,7 +51,7 @@
 
 use crate::array::Array;
 use crate::new_modules::probabilistic::{validate_probability, ProbabilisticError, Result};
-use scirs2_core::random::{thread_rng, Rng};
+use scirs2_core::random::{thread_rng, Rng, RngExt};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -228,7 +228,7 @@ impl BayesianNetwork {
                 })?;
 
             // Categorical sampling
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             let mut cumsum = 0.0;
             let mut state = 0;
 
@@ -423,7 +423,7 @@ impl HiddenMarkovModel {
         let mut observations = Vec::with_capacity(length);
 
         // Sample initial state
-        let u: f64 = rng.gen();
+        let u: f64 = rng.random();
         let mut cumsum = 0.0;
         let mut state = 0;
         for (i, &p) in self.initial.iter().enumerate() {
@@ -436,7 +436,7 @@ impl HiddenMarkovModel {
         states.push(state);
 
         // Sample initial observation
-        let u: f64 = rng.gen();
+        let u: f64 = rng.random();
         let mut cumsum = 0.0;
         let mut obs = 0;
         for (k, &p) in self.emission[state].iter().enumerate() {
@@ -451,7 +451,7 @@ impl HiddenMarkovModel {
         // Generate sequence
         for _ in 1..length {
             // Sample next state
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             let mut cumsum = 0.0;
             let mut next_state = 0;
             for (j, &p) in self.transition[state].iter().enumerate() {
@@ -465,7 +465,7 @@ impl HiddenMarkovModel {
             states.push(state);
 
             // Sample observation
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             let mut cumsum = 0.0;
             let mut obs = 0;
             for (k, &p) in self.emission[state].iter().enumerate() {

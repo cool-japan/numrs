@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-21
+
+### Fixed
+- **Clippy Warnings**: Resolved all 24 clippy warnings for MSRV compatibility
+  - Fixed `Color` trait ambiguity in viz modules (`matrix.rs`, `perf.rs`, `plot2d.rs`, `plot3d.rs`, `stats.rs`) by adding explicit `use plotters::style::Color` imports
+  - Replaced explicit counter loops with idiomatic `enumerate`/`zip` pattern in `src/cluster.rs`
+  - Replaced manual checked division patterns with `.checked_div()` in `performance_tuning.rs`, `access_patterns.rs`, and `scheduler.rs`
+
 ## [0.3.0] - 2026-03-06
 
 ### Changed
@@ -19,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - scirs2-spatial v0.3.0: Spatial algorithms with improved KD-trees
   - scirs2-special v0.3.0: Special functions updates
   - scirs2-numpy v0.3.0: Python bindings compatibility updates
-- **NPZ Compression**: Enabled DEFLATE compression for .npz files (OxiARC v0.2.1+ multi-file bug fixed)
+- **NPZ Compression**: Enabled DEFLATE compression for .npz files (OxiARC v0.3.0+ multi-file bug fixed)
 - **Cyclic Spline Solver**: Replaced O(n²) Gaussian elimination with Sherman-Morrison O(n) cyclic Thomas algorithm
 
 ### Fixed
@@ -29,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **COOLJAPAN Ecosystem Compliance**: Full compliance with COOLJAPAN pure Rust policies
-  - Replaced `numpy` dependency with `scirs2-numpy` (v0.1.3) for Python bindings
+  - Replaced `numpy` dependency with `scirs2-numpy` (v0.3.0) for Python bindings
   - Removed OpenBLAS linker flags from `.cargo/config.toml` (now using OxiBLAS pure Rust backend)
   - Removed `cdylib` crate-type (Python extension builds handled by maturin)
 
@@ -38,8 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Python symbol resolution issues in test builds
 
 ### Dependencies
-- **scirs2-numpy**: v0.1.3 (replaces direct numpy dependency)
-- **SciRS2 Ecosystem**: scirs2-* v0.1.3 (latest stable releases)
+- **scirs2-numpy**: v0.3.0 (replaces direct numpy dependency)
+- **SciRS2 Ecosystem**: scirs2-* v0.3.0 (latest stable releases)
 - All Python bindings now go through SciRS2 ecosystem
 
 ## [0.1.1] - 2025-12-30
@@ -106,14 +114,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Higher-order derivatives (Hessian, Taylor series)
 
 - **SciRS2 Ecosystem Integration**: Built on the SciRS2 scientific computing foundation
-  - scirs2-core v0.1.1: SIMD, parallel, random, array operations
-  - scirs2-linalg v0.1.1: Linear algebra with OxiBLAS
-  - scirs2-stats v0.1.1: Statistical functions
-  - scirs2-fft v0.1.1: FFT operations
-  - scirs2-signal v0.1.1: Signal processing
-  - scirs2-special v0.1.1: Special functions
-  - scirs2-ndimage v0.1.1: N-dimensional image processing
-  - scirs2-spatial v0.1.1: Spatial algorithms
+  - scirs2-core v0.3.0: SIMD, parallel, random, array operations
+  - scirs2-linalg v0.3.0: Linear algebra with OxiBLAS
+  - scirs2-stats v0.3.0: Statistical functions
+  - scirs2-fft v0.3.0: FFT operations
+  - scirs2-signal v0.3.0: Signal processing
+  - scirs2-special v0.3.0: Special functions
+  - scirs2-ndimage v0.3.0: N-dimensional image processing
+  - scirs2-spatial v0.3.0: Spatial algorithms
 
 ### Technical Details
 - **Total Rust Code**: ~155,000 lines of production-ready code
@@ -123,9 +131,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pure Rust**: No C/C++ dependencies, built on OxiBLAS (pure Rust BLAS/LAPACK)
 
 ### Dependencies
-- **SciRS2 Ecosystem**: scirs2-* v0.1.1 (stable releases)
-- **OxiBLAS**: v0.1.2 (pure Rust BLAS/LAPACK implementation)
-- **Oxicode**: v0.1.1 (pure Rust serialization)
+- **SciRS2 Ecosystem**: scirs2-* v0.3.0 (stable releases)
+- **OxiBLAS**: v0.3.0 (pure Rust BLAS/LAPACK implementation)
+- **Oxicode**: v0.3.0 (pure Rust serialization)
 - All dependencies use stable, production-ready versions
 
 This initial release provides a comprehensive NumPy-like experience in Rust with production-ready quality, extensive test coverage, and pure Rust dependencies for maximum portability and safety.

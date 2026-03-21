@@ -5,6 +5,7 @@
 
 use super::*;
 use plotters::prelude::*;
+use plotters::style::Color;
 use scirs2_core::ndarray::{Array1, Array2};
 use std::path::Path;
 

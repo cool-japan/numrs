@@ -167,22 +167,22 @@ where
         let mut rng = thread_rng();
 
         let w_q = Array2::from_shape_fn((d_model, d_model), |_| {
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             T::from(u * 2.0 - 1.0).expect("Conversion should succeed for f64 to Float") * scale
         });
 
         let w_k = Array2::from_shape_fn((d_model, d_model), |_| {
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             T::from(u * 2.0 - 1.0).expect("Conversion should succeed for f64 to Float") * scale
         });
 
         let w_v = Array2::from_shape_fn((d_model, d_model), |_| {
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             T::from(u * 2.0 - 1.0).expect("Conversion should succeed for f64 to Float") * scale
         });
 
         let w_o = Array2::from_shape_fn((d_model, d_model), |_| {
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             T::from(u * 2.0 - 1.0).expect("Conversion should succeed for f64 to Float") * scale
         });
 
@@ -430,7 +430,7 @@ where
         let scale = T::one() / (T::one() - self.dropout_p);
 
         let mask = Array2::from_shape_fn(x.raw_dim(), |_| {
-            if rng.gen::<f64>() > threshold {
+            if rng.random::<f64>() > threshold {
                 scale
             } else {
                 T::zero()
@@ -568,7 +568,7 @@ where
             .ok_or_else(|| NumRs2Error::ConversionError("Failed to convert scale".to_string()))?;
 
         let pe = Array2::from_shape_fn((max_len, d_model), |_| {
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             T::from(u * 2.0 - 1.0).expect("Conversion should succeed for f64 to Float") * scale
         });
 
@@ -687,14 +687,14 @@ where
             .sqrt();
 
         let w1 = Array2::from_shape_fn((d_model, d_ff), |_| {
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             T::from(u * 2.0 - 1.0).expect("Conversion should succeed for f64 to Float") * scale1
         });
 
         let b1 = Array1::zeros(d_ff);
 
         let w2 = Array2::from_shape_fn((d_ff, d_model), |_| {
-            let u: f64 = rng.gen();
+            let u: f64 = rng.random();
             T::from(u * 2.0 - 1.0).expect("Conversion should succeed for f64 to Float") * scale2
         });
 
@@ -798,7 +798,7 @@ where
         let scale = T::one() / (T::one() - self.dropout_p);
 
         let mask = Array2::from_shape_fn(x.raw_dim(), |_| {
-            if rng.gen::<f64>() > threshold {
+            if rng.random::<f64>() > threshold {
                 scale
             } else {
                 T::zero()

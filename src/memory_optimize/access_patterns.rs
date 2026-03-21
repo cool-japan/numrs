@@ -193,11 +193,7 @@ impl CacheConfig {
     /// Calculate the number of elements that fit in one cache line
     pub fn elements_per_line<T>(&self) -> usize {
         let elem_size = std::mem::size_of::<T>();
-        if elem_size == 0 {
-            0
-        } else {
-            self.line_size / elem_size
-        }
+        self.line_size.checked_div(elem_size).unwrap_or(0)
     }
 
     /// Calculate the optimal block size (number of elements) for this cache level
@@ -728,11 +724,9 @@ where
     // Use L1 cache block size (based on larger type)
     let cache = CacheConfig::l1_default();
     let elem_size = std::mem::size_of::<T>().max(std::mem::size_of::<U>());
-    let block_size = if elem_size > 0 {
-        (cache.size_bytes * 3 / 4) / elem_size
-    } else {
-        len
-    };
+    let block_size = (cache.size_bytes * 3 / 4)
+        .checked_div(elem_size)
+        .unwrap_or(len);
 
     for block in BlockedIterator::new(len, block_size) {
         for i in block.start..block.end {
