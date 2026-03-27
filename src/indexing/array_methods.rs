@@ -207,42 +207,49 @@ impl<T: Clone + num_traits::Zero> Array<T> {
     /// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     ///
     /// // Take elements at indices 0, 2, 4
-    /// let result = a.take(&Array::from_vec(vec![0, 2, 4]), None).expect("take should succeed");
+    /// let result = a.take(&Array::from_vec(vec![0usize, 2, 4]), None).expect("take should succeed");
     /// assert_eq!(result.to_vec(), vec![1, 3, 5]);
     ///
     /// // With a 2D array
     /// let b = a.reshape(&[5, 2]);
     ///
     /// // Take rows at indices 0, 2, 4
-    /// let rows = b.take(&Array::from_vec(vec![0, 2, 4]), Some(0)).expect("take rows should succeed");
+    /// let rows = b.take(&Array::from_vec(vec![0usize, 2, 4]), Some(0)).expect("take rows should succeed");
     /// assert_eq!(rows.shape(), vec![3, 2]);
     ///
     /// // Take columns at index 1
-    /// let cols = b.take(&Array::from_vec(vec![1]), Some(1)).expect("take cols should succeed");
+    /// let cols = b.take(&Array::from_vec(vec![1usize]), Some(1)).expect("take cols should succeed");
     /// assert_eq!(cols.shape(), vec![5, 1]);
     /// ```
-    pub fn take(&self, indices: &Self, axis: Option<usize>) -> Result<Self>
+    pub fn take(&self, indices: &Array<usize>, axis: Option<usize>) -> Result<Self>
     where
         T: Clone + ToString,
     {
-        // Validate indices are integers
         let indices_slice = indices.array().as_slice().ok_or_else(|| {
             NumRs2Error::InvalidOperation("indices array should be contiguous".to_string())
         })?;
 
-        for i in 0..indices.size() {
-            if let Ok(idx) = indices_slice[i].to_string().parse::<usize>() {
-                if idx >= self.size() {
-                    return Err(NumRs2Error::IndexOutOfBounds(format!(
-                        "Index {} is out of bounds for axis with size {}",
-                        idx,
-                        self.size()
+        // Validate indices
+        let check_size = match axis {
+            None => self.size(),
+            Some(ax) => {
+                if ax >= self.ndim() {
+                    return Err(NumRs2Error::DimensionMismatch(format!(
+                        "Axis {} is out of bounds for array with {} dimensions",
+                        ax,
+                        self.ndim()
                     )));
                 }
-            } else {
-                return Err(NumRs2Error::InvalidOperation(
-                    "Indices must be integers".to_string(),
-                ));
+                self.shape()[ax]
+            }
+        };
+
+        for &idx in indices_slice {
+            if idx >= check_size {
+                return Err(NumRs2Error::IndexOutOfBounds(format!(
+                    "Index {} is out of bounds for axis with size {}",
+                    idx, check_size
+                )));
             }
         }
 
@@ -252,35 +259,13 @@ impl<T: Clone + num_traits::Zero> Array<T> {
                 let flat_data = self.to_vec();
                 let mut result = Vec::with_capacity(indices.size());
 
-                for i in 0..indices.size() {
-                    // Parse index since we can't directly cast
-                    let idx_str = indices_slice[i].to_string();
-                    let idx = idx_str.parse::<usize>().map_err(|_| {
-                        NumRs2Error::InvalidOperation("index should be parseable".to_string())
-                    })?;
-
-                    if idx >= flat_data.len() {
-                        return Err(NumRs2Error::IndexOutOfBounds(format!(
-                            "Index {} is out of bounds for axis with size {}",
-                            idx,
-                            flat_data.len()
-                        )));
-                    }
-
+                for &idx in indices_slice {
                     result.push(flat_data[idx].clone());
                 }
 
                 Ok(Self::from_vec(result))
             }
             Some(ax) => {
-                if ax >= self.ndim() {
-                    return Err(NumRs2Error::DimensionMismatch(format!(
-                        "Axis {} is out of bounds for array with {} dimensions",
-                        ax,
-                        self.ndim()
-                    )));
-                }
-
                 let shape = self.shape();
                 let axis_dim = shape[ax];
 
@@ -290,23 +275,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
 
                 let mut result_data = Vec::with_capacity(self.size() / axis_dim * indices.size());
 
-                // This is a simplified implementation - a more efficient approach would
-                // use strided views rather than extracting slices for each index
-
-                for i in 0..indices.size() {
-                    // Parse index since we can't directly cast
-                    let idx_str = indices_slice[i].to_string();
-                    let idx = idx_str.parse::<usize>().map_err(|_| {
-                        NumRs2Error::InvalidOperation("index should be parseable".to_string())
-                    })?;
-
-                    if idx >= axis_dim {
-                        return Err(NumRs2Error::IndexOutOfBounds(format!(
-                            "Index {} is out of bounds for axis {} with size {}",
-                            idx, ax, axis_dim
-                        )));
-                    }
-
+                for &idx in indices_slice {
                     // Create index specs to select along the axis
                     let mut index_specs = vec![IndexSpec::All; self.ndim()];
                     index_specs[ax] = IndexSpec::Index(idx);

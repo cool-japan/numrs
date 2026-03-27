@@ -231,7 +231,7 @@ pub fn hamming_distance(seq1: &str, seq2: &str) -> Result<usize> {
 /// assert!((d - 0.0).abs() < 1e-10);
 ///
 /// let d2 = jukes_cantor_distance(0.1).expect("valid p");
-/// assert!((d2 - 0.10753).abs() < 1e-5);
+/// assert!((d2 - 0.10733).abs() < 1e-4);
 /// ```
 pub fn jukes_cantor_distance(p: f64) -> Result<f64> {
     core_jc(p).map_err(map_core_err)

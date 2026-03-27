@@ -43,7 +43,7 @@
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::fibonacci;
+/// use numrs2::new_modules::combinatorics::fibonacci;
 /// assert_eq!(fibonacci(0), Some(0));
 /// assert_eq!(fibonacci(1), Some(1));
 /// assert_eq!(fibonacci(10), Some(55));
@@ -71,7 +71,7 @@ pub fn fibonacci(n: u64) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::fibonacci_sequence;
+/// use numrs2::new_modules::combinatorics::fibonacci_sequence;
 /// assert_eq!(fibonacci_sequence(8), vec![0, 1, 1, 2, 3, 5, 8, 13]);
 /// ```
 pub fn fibonacci_sequence(n: usize) -> Vec<u64> {
@@ -102,7 +102,7 @@ pub fn fibonacci_sequence(n: usize) -> Vec<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::catalan_number;
+/// use numrs2::new_modules::combinatorics::catalan_number;
 /// assert_eq!(catalan_number(0), Some(1));
 /// assert_eq!(catalan_number(5), Some(42));
 /// ```
@@ -128,7 +128,7 @@ pub fn catalan_number(n: u64) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::bell_number;
+/// use numrs2::new_modules::combinatorics::bell_number;
 /// assert_eq!(bell_number(0), Some(1));
 /// assert_eq!(bell_number(4), Some(15));
 /// ```
@@ -164,7 +164,7 @@ pub fn bell_number(n: u32) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::stirling_second;
+/// use numrs2::new_modules::combinatorics::stirling_second;
 /// assert_eq!(stirling_second(4, 2), Some(7));
 /// assert_eq!(stirling_second(5, 3), Some(25));
 /// ```
@@ -204,7 +204,7 @@ pub fn stirling_second(n: u32, k: u32) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::factorial;
+/// use numrs2::new_modules::combinatorics::factorial;
 /// assert_eq!(factorial(0), Some(1));
 /// assert_eq!(factorial(10), Some(3628800));
 /// assert!(factorial(21).is_none());
@@ -226,7 +226,7 @@ pub fn factorial(n: u64) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::permutation_count;
+/// use numrs2::new_modules::combinatorics::permutation_count;
 /// assert_eq!(permutation_count(5, 3), Some(60));
 /// assert_eq!(permutation_count(0, 0), Some(1));
 /// assert_eq!(permutation_count(3, 5), None); // k > n
@@ -251,7 +251,7 @@ pub fn permutation_count(n: u64, k: u64) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::combination_count;
+/// use numrs2::new_modules::combinatorics::combination_count;
 /// assert_eq!(combination_count(5, 2), Some(10));
 /// assert_eq!(combination_count(10, 0), Some(1));
 /// assert_eq!(combination_count(3, 5), Some(0)); // k > n → 0
@@ -289,7 +289,7 @@ pub fn combination_count(n: u64, k: u64) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::next_permutation;
+/// use numrs2::new_modules::combinatorics::next_permutation;
 /// let mut p = vec![0usize, 1, 2];
 /// assert!(next_permutation(&mut p));
 /// assert_eq!(p, [0, 2, 1]);
@@ -329,7 +329,7 @@ pub fn next_permutation(perm: &mut [usize]) -> bool {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::all_permutations;
+/// use numrs2::new_modules::combinatorics::all_permutations;
 /// assert_eq!(all_permutations(3).len(), 6);
 /// ```
 pub fn all_permutations(n: usize) -> Vec<Vec<usize>> {
@@ -353,7 +353,7 @@ pub fn all_permutations(n: usize) -> Vec<Vec<usize>> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::all_combinations;
+/// use numrs2::new_modules::combinatorics::all_combinations;
 /// let combs = all_combinations(4, 2);
 /// assert_eq!(combs.len(), 6);
 /// assert_eq!(combs[0], vec![0, 1]);
@@ -405,7 +405,7 @@ pub fn all_combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::partition_count;
+/// use numrs2::new_modules::combinatorics::partition_count;
 /// assert_eq!(partition_count(0), Some(1));
 /// assert_eq!(partition_count(5), Some(7));
 /// assert_eq!(partition_count(10), Some(42));
@@ -455,7 +455,7 @@ pub fn partition_count(n: usize) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::enumerate_partitions;
+/// use numrs2::new_modules::combinatorics::enumerate_partitions;
 /// let parts = enumerate_partitions(4);
 /// // [4], [3,1], [2,2], [2,1,1], [1,1,1,1]
 /// assert_eq!(parts.len(), 5);
@@ -502,7 +502,7 @@ fn enumerate_partitions_helper(
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::gcd;
+/// use numrs2::new_modules::combinatorics::gcd;
 /// assert_eq!(gcd(48, 18), 6);
 /// assert_eq!(gcd(0, 7), 7);
 /// ```
@@ -522,7 +522,7 @@ pub fn gcd(mut a: u64, mut b: u64) -> u64 {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::lcm;
+/// use numrs2::new_modules::combinatorics::lcm;
 /// assert_eq!(lcm(4, 6), Some(12));
 /// assert_eq!(lcm(0, 5), Some(0));
 /// ```
@@ -542,7 +542,7 @@ pub fn lcm(a: u64, b: u64) -> Option<u64> {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::is_prime;
+/// use numrs2::new_modules::combinatorics::is_prime;
 /// assert!(is_prime(2));
 /// assert!(is_prime(97));
 /// assert!(!is_prime(1));
@@ -576,10 +576,10 @@ pub fn is_prime(n: u64) -> bool {
 /// # Examples
 ///
 /// ```rust
-/// use numrs::new_modules::combinatorics::prime_factors;
+/// use numrs2::new_modules::combinatorics::prime_factors;
 /// assert_eq!(prime_factors(12), vec![2, 2, 3]);
 /// assert_eq!(prime_factors(13), vec![13]);
-/// assert_eq!(prime_factors(1), vec![]);
+/// assert_eq!(prime_factors(1), Vec::<u64>::new());
 /// ```
 pub fn prime_factors(mut n: u64) -> Vec<u64> {
     let mut factors = Vec::new();

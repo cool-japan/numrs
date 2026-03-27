@@ -340,26 +340,26 @@ pub fn putmask<T: Clone + ToString, U: Clone + ToString>(
 ///
 /// // Take elements from a flattened array
 /// let a = Array::from_vec(vec![10, 20, 30, 40, 50]);
-/// let indices = Array::from_vec(vec![0, 2, 4]);
+/// let indices = Array::from_vec(vec![0usize, 2, 4]);
 /// let result = take(&a, &indices, None, None).expect("take should succeed with valid indices");
 /// assert_eq!(result.to_vec(), vec![10, 30, 50]);
 ///
 /// // Take elements along a specific axis
 /// let b = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-/// let indices = Array::from_vec(vec![0, 2]);
+/// let indices = Array::from_vec(vec![0usize, 2]);
 /// let result = take(&b, &indices, Some(1), None).expect("take should succeed along axis");
 /// assert_eq!(result.shape(), vec![2, 2]);
 /// assert_eq!(result.to_vec(), vec![1, 3, 4, 6]);
 ///
 /// // Test with wrap mode
 /// let c = Array::from_vec(vec![10, 20, 30]);
-/// let indices = Array::from_vec(vec![0, 1, 2, 3, 4, 5]);
+/// let indices = Array::from_vec(vec![0usize, 1, 2, 3, 4, 5]);
 /// let result = take(&c, &indices, None, Some("wrap")).expect("take with wrap mode should succeed");
 /// assert_eq!(result.to_vec(), vec![10, 20, 30, 10, 20, 30]);
 /// ```
 pub fn take<T: Clone + ToString + num_traits::Zero>(
     array: &Array<T>,
-    indices: &Array<T>,
+    indices: &Array<usize>,
     axis: Option<usize>,
     mode: Option<&str>,
 ) -> Result<Array<T>> {
@@ -367,25 +367,8 @@ pub fn take<T: Clone + ToString + num_traits::Zero>(
         NumRs2Error::InvalidOperation("indices array should be contiguous".to_string())
     })?;
 
-    // Validate indices are integers
-    for i in 0..indices.size() {
-        if indices_slice[i].to_string().parse::<isize>().is_err() {
-            return Err(NumRs2Error::InvalidOperation(
-                "Indices must be integers".to_string(),
-            ));
-        }
-    }
-
     let handle_mode = mode.unwrap_or("raise");
-    let indices_vec: Vec<isize> = indices
-        .to_vec()
-        .iter()
-        .map(|x| {
-            x.to_string()
-                .parse::<isize>()
-                .map_err(|_| NumRs2Error::InvalidOperation("index should be parseable".to_string()))
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let indices_vec: Vec<isize> = indices_slice.iter().map(|&x| x as isize).collect();
 
     match axis {
         None => {
@@ -542,14 +525,14 @@ pub fn take<T: Clone + ToString + num_traits::Zero>(
 ///
 /// // Take values along axis 1
 /// let a = Array::from_vec(vec![10, 20, 30, 40, 50, 60]).reshape(&[2, 3]);
-/// let indices = Array::from_vec(vec![2, 0, 1, 1]).reshape(&[2, 2]);
+/// let indices = Array::from_vec(vec![2usize, 0, 1, 1]).reshape(&[2, 2]);
 /// let result = take_along_axis(&a, &indices, 1).expect("take_along_axis should succeed");
 /// assert_eq!(result.shape(), vec![2, 2]);
 /// assert_eq!(result.to_vec(), vec![30, 10, 50, 50]);
 /// ```
 pub fn take_along_axis<T: Clone + ToString>(
     array: &Array<T>,
-    indices: &Array<T>,
+    indices: &Array<usize>,
     axis: usize,
 ) -> Result<Array<T>> {
     if axis >= array.ndim() {
@@ -563,15 +546,6 @@ pub fn take_along_axis<T: Clone + ToString>(
     let indices_slice = indices.array().as_slice().ok_or_else(|| {
         NumRs2Error::InvalidOperation("indices array should be contiguous".to_string())
     })?;
-
-    // Validate indices are integers
-    for i in 0..indices.size() {
-        if indices_slice[i].to_string().parse::<isize>().is_err() {
-            return Err(NumRs2Error::InvalidOperation(
-                "Indices must be integers".to_string(),
-            ));
-        }
-    }
 
     let array_shape = array.shape();
     let indices_shape = indices.shape();
@@ -590,20 +564,9 @@ pub fn take_along_axis<T: Clone + ToString>(
     let result_shape = indices_shape.clone();
     let mut result_data = Vec::with_capacity(indices.size());
 
-    // Process each element in the indices array
-    let indices_data: Vec<isize> = indices
-        .to_vec()
-        .iter()
-        .map(|x| {
-            x.to_string()
-                .parse::<isize>()
-                .map_err(|_| NumRs2Error::InvalidOperation("index should be parseable".to_string()))
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    for (flat_idx, &idx_value) in indices_data.iter().enumerate() {
+    for (flat_idx, &idx_value) in indices_slice.iter().enumerate() {
         // Validate index
-        if idx_value < 0 || idx_value >= axis_size as isize {
+        if idx_value >= axis_size {
             return Err(NumRs2Error::IndexOutOfBounds(format!(
                 "Index {} is out of bounds for axis with size {}",
                 idx_value, axis_size
@@ -620,7 +583,7 @@ pub fn take_along_axis<T: Clone + ToString>(
         }
 
         // Modify the index at the specified axis
-        multi_idx[axis] = idx_value as usize;
+        multi_idx[axis] = idx_value;
 
         // Get the value from the array
         let value = array
@@ -657,15 +620,15 @@ pub fn take_along_axis<T: Clone + ToString>(
 /// use numrs2::prelude::*;
 ///
 /// // Put values along axis 1
-/// let mut a = Array::zeros(&[2, 3]);
-/// let indices = Array::from_vec(vec![2, 0, 1, 1]).reshape(&[2, 2]);
-/// let values = Array::from_vec(vec![10, 20, 30, 40]).reshape(&[2, 2]);
+/// let mut a: Array<i32> = Array::zeros(&[2, 3]);
+/// let indices = Array::from_vec(vec![2usize, 0, 1, 1]).reshape(&[2, 2]);
+/// let values = Array::from_vec(vec![10i32, 20, 30, 40]).reshape(&[2, 2]);
 /// put_along_axis(&mut a, &indices, &values, 1).expect("put_along_axis should succeed");
 /// // a[0, 2] = 10, a[0, 0] = 20, a[1, 1] = 30, a[1, 1] = 40 (overwrites to 40)
 /// ```
 pub fn put_along_axis<T: Clone + ToString>(
     array: &mut Array<T>,
-    indices: &Array<T>,
+    indices: &Array<usize>,
     values: &Array<T>,
     axis: usize,
 ) -> Result<()> {
@@ -680,15 +643,6 @@ pub fn put_along_axis<T: Clone + ToString>(
     let indices_slice = indices.array().as_slice().ok_or_else(|| {
         NumRs2Error::InvalidOperation("indices array should be contiguous".to_string())
     })?;
-
-    // Validate indices are integers
-    for i in 0..indices.size() {
-        if indices_slice[i].to_string().parse::<isize>().is_err() {
-            return Err(NumRs2Error::InvalidOperation(
-                "Indices must be integers".to_string(),
-            ));
-        }
-    }
 
     let array_shape = array.shape();
     let indices_shape = indices.shape();
@@ -713,22 +667,11 @@ pub fn put_along_axis<T: Clone + ToString>(
         }
     }
 
-    // Process each element in the indices array
-    let indices_data: Vec<isize> = indices
-        .to_vec()
-        .iter()
-        .map(|x| {
-            x.to_string()
-                .parse::<isize>()
-                .map_err(|_| NumRs2Error::InvalidOperation("index should be parseable".to_string()))
-        })
-        .collect::<Result<Vec<_>>>()?;
-
     let values_data = values.to_vec();
 
-    for (flat_idx, &idx_value) in indices_data.iter().enumerate() {
+    for (flat_idx, &idx_value) in indices_slice.iter().enumerate() {
         // Validate index
-        if idx_value < 0 || idx_value >= axis_size as isize {
+        if idx_value >= axis_size {
             return Err(NumRs2Error::IndexOutOfBounds(format!(
                 "Index {} is out of bounds for axis with size {}",
                 idx_value, axis_size
@@ -745,7 +688,7 @@ pub fn put_along_axis<T: Clone + ToString>(
         }
 
         // Modify the index at the specified axis
-        multi_idx[axis] = idx_value as usize;
+        multi_idx[axis] = idx_value;
 
         // Set the value in the array
         array.set(&multi_idx, values_data[flat_idx].clone())?;

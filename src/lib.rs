@@ -4,9 +4,8 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.3.1** - Patch release (2026-03-21): Fixed clippy warnings for MSRV compatibility,
-//! resolved Color trait ambiguity in viz modules, corrected counter loop patterns and manual checked
-//! division warnings. All 1,111+ tests passing with zero warnings.
+//! **Version 0.3.2** - Patch release (2026-03-27): Minor improvements and updates.
+//! All tests passing with zero warnings.
 //!
 //! ## Quick Start
 //!

@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["COOLJAPAN OU (Team KitaSan)"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -49,13 +49,13 @@ ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without extern
 # ===================================================================
 # ALL external functionality (ndarray, rand, rayon, BLAS) goes through scirs2-core
 # Using crates.io versions for stable 0.3.0 release
-scirs2-core = { version = "0.3.4", features = ["random", "array", "simd", "parallel", "linalg"] }
-scirs2-stats = { version = "0.3.4" }
-scirs2-linalg = { version = "0.3.4" }
-scirs2-ndimage = { version = "0.3.4" }
-scirs2-spatial = { version = "0.3.4", features = ["parallel"] }
-scirs2-special = { version = "0.3.4" }
-scirs2-fft = { version = "0.3.4" }
+scirs2-core = { version = "0.4.0", features = ["random", "array", "simd", "parallel", "linalg"] }
+scirs2-stats = { version = "0.4.0" }
+scirs2-linalg = { version = "0.4.0" }
+scirs2-ndimage = { version = "0.4.0" }
+scirs2-spatial = { version = "0.4.0", features = ["parallel"] }
+scirs2-special = { version = "0.4.0" }
+scirs2-fft = { version = "0.4.0" }
 
 # ===================================================================
 # ALLOWED DEPENDENCIES (Non-conflicting)
@@ -71,7 +71,7 @@ serde_json = "1.0.149"
 csv = "1.4.0"
 oxicode = { version = "0.2", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
-oxiarc-archive = { version = "0.2.5" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
+oxiarc-archive = { version = "0.2.6" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
 # NPZ format support with pure Rust compression (DEFLATE via OxiARC)
 serde-pickle = "1.2.0" # Python pickle format support
 memmap2 = "0.9.10"      # Memory-mapped file I/O
@@ -98,7 +98,7 @@ chrono = { version = "0.4.44", default-features = false, features = ["std", "clo
 # ❌ ndarray-linalg = "*"      # FORBIDDEN - Use oxiblas-ndarray (pure Rust)
 
 # Optional GPU acceleration dependencies
-wgpu = { version = "29.0.0", optional = true }
+wgpu = { version = "29.0.1", optional = true }
 bytemuck = { version = "1.25.0", features = ["derive"], optional = true }
 futures-intrusive = { version = "0.5.0", optional = true }
 tokio = { version = "1.50.0", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
@@ -151,13 +151,13 @@ getrandom = { version = "0.4", default-features = false, features = ["wasm_js"] 
 # Also add v0.2 with renamed package for transitive deps using older rand
 getrandom_02 = { package = "getrandom", version = "=0.2.17", default-features = false, features = ["js"] }
 # uuid also needs WASM support enabled
-uuid = { version = "1.22", features = ["js"] }  # Enable JS random for WASM
+uuid = { version = "1.23", features = ["js"] }  # Enable JS random for WASM
 
 [dev-dependencies]
 criterion = "0.8.2"  # Benchmarking library
 approx = "0.5.1"     # Approximate floating-point comparisons for tests
 tempfile = "3.27.0"   # Temporary files for testing I/O functionality
-proptest = "1.10.0"   # Property-based testing for mathematical invariants
+proptest = "1.11.0"   # Property-based testing for mathematical invariants
 serial_test = "3.4.0"  # For tests that require serial execution (global state)
 wasm-bindgen-test = "0.3.64"  # Testing framework for WebAssembly
 # For performance benchmarks in bench.rs
@@ -317,22 +317,22 @@ harness = false
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.3.4" }
-scirs2-stats = { version = "0.3.4" }
-scirs2-linalg = { version = "0.3.4" }
-scirs2-ndimage = { version = "0.3.4" }
-scirs2-spatial = { version = "0.3.4" }
-scirs2-special = { version = "0.3.4" }
-scirs2-fft = { version = "0.3.4" }
-scirs2-numpy = { version = "0.3.4" }
+scirs2-core = { version = "0.4.0" }
+scirs2-stats = { version = "0.4.0" }
+scirs2-linalg = { version = "0.4.0" }
+scirs2-ndimage = { version = "0.4.0" }
+scirs2-spatial = { version = "0.4.0" }
+scirs2-special = { version = "0.4.0" }
+scirs2-fft = { version = "0.4.0" }
+scirs2-numpy = { version = "0.4.0" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
-arrow = "58.0.0"
-arrow-array = "58.0.0"
-arrow-buffer = "58.0.0"
-arrow-cast = "58.0.0"
-arrow-schema = "58.0.0"
-parquet = "58.0.0"  # Apache Parquet (pure Rust)
+arrow = "58.1.0"
+arrow-array = "58.1.0"
+arrow-buffer = "58.1.0"
+arrow-cast = "58.1.0"
+arrow-schema = "58.1.0"
+parquet = "58.1.0"  # Apache Parquet (pure Rust)
 
 
 # ===================================================================

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-03-27
+
+### Changed
+- **Version Bump**: Updated to v0.3.2 patch release
+- **PyPI Compatibility**: Improved PyPI publishing configuration
+
+### Fixed
+- **MOS (Minimum Output Size)**: Resolved minimum output size constraints
+
 ## [0.3.1] - 2026-03-21
 
 ### Fixed

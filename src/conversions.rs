@@ -206,7 +206,7 @@ impl<T> Array<T> {
     pub fn downcast<U>(&self) -> Result<Array<U>>
     where
         T: Clone + NumCast + std::fmt::Debug,
-        U: Clone + NumCast + PartialOrd + std::fmt::Debug,
+        U: Clone + NumCast + std::fmt::Debug,
     {
         let data = self.to_vec();
         let mut converted = Vec::with_capacity(data.len());

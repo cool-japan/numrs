@@ -16,7 +16,7 @@ mod test_indexing_functions {
     #[test]
     fn test_take_flattened() {
         let a = Array::from_vec(vec![10, 20, 30, 40, 50]);
-        let indices = Array::from_vec(vec![0, 2, 4]);
+        let indices = Array::from_vec(vec![0usize, 2, 4]);
         let result = take(&a, &indices, None, None).unwrap();
         assert_eq!(result.to_vec(), vec![10, 30, 50]);
     }
@@ -24,7 +24,7 @@ mod test_indexing_functions {
     #[test]
     fn test_take_along_axis() {
         let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
-        let indices = Array::from_vec(vec![0, 2]);
+        let indices = Array::from_vec(vec![0usize, 2]);
         let result = take(&a, &indices, Some(1), None).unwrap();
         assert_eq!(result.shape(), vec![2, 2]);
         // The result order depends on how the function iterates through the data
@@ -43,7 +43,7 @@ mod test_indexing_functions {
     #[test]
     fn test_take_wrap_mode() {
         let a = Array::from_vec(vec![10, 20, 30]);
-        let indices = Array::from_vec(vec![0, 1, 2, 3, 4, 5]);
+        let indices = Array::from_vec(vec![0usize, 1, 2, 3, 4, 5]);
         let result = take(&a, &indices, None, Some("wrap")).unwrap();
         assert_eq!(result.to_vec(), vec![10, 20, 30, 10, 20, 30]);
     }
@@ -51,15 +51,15 @@ mod test_indexing_functions {
     #[test]
     fn test_take_clip_mode() {
         let a = Array::from_vec(vec![10, 20, 30]);
-        let indices = Array::from_vec(vec![-1, 0, 1, 2, 3, 4]);
+        let indices = Array::from_vec(vec![0usize, 1, 2, 3, 4]);
         let result = take(&a, &indices, None, Some("clip")).unwrap();
-        assert_eq!(result.to_vec(), vec![10, 10, 20, 30, 30, 30]);
+        assert_eq!(result.to_vec(), vec![10, 20, 30, 30, 30]);
     }
 
     #[test]
     fn test_take_along_axis_2d() {
         let a = Array::from_vec(vec![10, 20, 30, 40, 50, 60]).reshape(&[2, 3]);
-        let indices = Array::from_vec(vec![2, 0, 1, 1]).reshape(&[2, 2]);
+        let indices = Array::from_vec(vec![2usize, 0, 1, 1]).reshape(&[2, 2]);
         let result = take_along_axis(&a, &indices, 1).unwrap();
         assert_eq!(result.shape(), vec![2, 2]);
         assert_eq!(result.to_vec(), vec![30, 10, 50, 50]);
@@ -68,7 +68,7 @@ mod test_indexing_functions {
     #[test]
     fn test_take_error_invalid_index() {
         let a = Array::from_vec(vec![10, 20, 30]);
-        let indices = Array::from_vec(vec![0, 1, 5]);
+        let indices = Array::from_vec(vec![0usize, 1, 5]);
         let result = take(&a, &indices, None, None);
         assert!(result.is_err());
     }
@@ -352,7 +352,7 @@ mod test_edge_cases {
     #[test]
     fn test_empty_inputs() {
         let empty: Array<i32> = Array::from_vec(vec![]);
-        let indices: Array<i32> = Array::from_vec(vec![]);
+        let indices: Array<usize> = Array::from_vec(vec![]);
         let result = take(&empty, &indices, None, None).unwrap();
         assert_eq!(result.to_vec(), Vec::<i32>::new());
     }
@@ -360,7 +360,7 @@ mod test_edge_cases {
     #[test]
     fn test_single_element_arrays() {
         let a = Array::from_vec(vec![42]);
-        let indices = Array::from_vec(vec![0]);
+        let indices = Array::from_vec(vec![0usize]);
         let result = take(&a, &indices, None, None).unwrap();
         assert_eq!(result.to_vec(), vec![42]);
     }

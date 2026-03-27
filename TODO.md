@@ -4,21 +4,21 @@
 
 This document outlines the development status and roadmap for NumRS2, a high-performance numerical computing library for Rust.
 
-## Current Status (March 2026) - v0.3.1
+## Current Status (March 2026) - v0.3.2
 
-**Patch Release**: NumRS2 v0.3.1 is now available!
+**Patch Release**: NumRS2 v0.3.2 is now available!
 
 ### Release Metrics
-- **Version**: 0.3.1 (v0.3.1 Patch - March 21, 2026)
-- **Total Code**: ~290,582 lines of Rust code (222,275 code + 22,459 comments + 45,848 blanks; 671 files)
-- **Test Coverage**: 4,704+ library tests passing + doctests passing
-- **Public API**: 2,709+ public functions/structs/enums/traits; zero unimplemented stubs
+- **Version**: 0.3.2 (v0.3.2 Patch - March 27, 2026)
+- **Total Code**: ~290,513 lines of Rust code (222,217 code + 22,459 comments + 45,848 blanks; 671 files)
+- **Test Coverage**: 5,058+ library tests passing (4,166 nextest + 892 doc tests)
+- **Public API**: 5,899+ public functions/structs/enums/traits; zero unimplemented stubs
 - **Quality**: Zero compilation warnings, zero errors, zero production unwrap() calls
 - **SIMD Operations**: 128+ vectorized functions (AVX2, AVX512, ARM NEON)
-- **Dependencies**: SciRS2 v0.3.4, OxiBLAS v0.3.0+ (pure Rust, stable releases)
-- **Special Functions**: scirs2-special v0.3.4
+- **Dependencies**: SciRS2 v0.4.0, OxiBLAS v0.3.0+ (pure Rust, stable releases)
+- **Special Functions**: scirs2-special v0.4.0
 - **Performance**: Critical O(n²) → O(1) bug fixed (1,000,000x speedup for large arrays), NSGA-III handles 8 objectives in 78.4s
-- **Latest Enhancement**: v0.3.1 patch - All clippy warnings resolved (Color trait ambiguity, enumerate/zip idioms, checked_div) (March 21, 2026)
+- **Latest Enhancement**: v0.3.2 patch - Minor improvements and updates (March 27, 2026)
 
 ### Core Features (Complete)
 - ✅ N-dimensional array operations with NumPy compatibility
@@ -166,8 +166,8 @@ All modules integrated using SciRS2 v0.3.0:
   - Fixed `Color` trait ambiguity in viz modules (matrix.rs, perf.rs, plot2d.rs, plot3d.rs, stats.rs)
   - Replaced explicit counter loops with `enumerate`/`zip` pattern in cluster.rs
   - Replaced manual checked division with `.checked_div()` in performance_tuning.rs, access_patterns.rs, scheduler.rs
-- ✅ **SciRS2 Ecosystem Update**: Updated all scirs2-* deps to v0.3.4
-- ✅ **Test Coverage**: 4,704+ tests passing (up from 4,098+)
+- ✅ **SciRS2 Ecosystem Update**: Updated all scirs2-* deps to v0.4.0
+- ✅ **Test Coverage**: 5,058+ tests passing (up from 4,098+)
 
 ### Short-term Goals (v0.3.2 - Patches)
 - [ ] Complete WASM support (awaiting scirs2-spatial with feature-gated tokio)
@@ -310,4 +310,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
 
 ---
 
-**NumRS2 v0.3.1** - Production-ready numerical computing for Rust with SciRS2 v0.3.4 integration (COOLJAPAN Ecosystem)
+**NumRS2 v0.3.2** - Production-ready numerical computing for Rust with SciRS2 v0.4.0 integration (COOLJAPAN Ecosystem)

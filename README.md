@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **Version 0.3.1** - Patch release (2026-03-21): Fixed all clippy warnings (Color trait ambiguity, counter loops, manual checked division). Features 128+ SIMD-vectorized functions (AVX2, AVX512, ARM NEON), 4,704+ tests passing, 222,275+ lines of production Rust code, 2,709+ public API items, zero stubs, built on pure Rust SciRS2 ecosystem.
+> **Version 0.3.2** - Patch release (2026-03-27): Minor improvements and updates. Features 128+ SIMD-vectorized functions (AVX2, AVX512, ARM NEON), 5,058+ tests passing, 222,000+ lines of production Rust code, 5,899+ public API items, zero stubs, built on pure Rust SciRS2 ecosystem.
 
 ## ✨ Architecture Highlights
 
@@ -69,7 +69,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.3.1", features = ["arrow"] }
+numrs2 = { version = "0.3.2", features = ["arrow"] }
 ```
 
 Or, when building:
@@ -80,7 +80,7 @@ cargo build --features scirs
 
 ### 🚀 Performance Optimizations
 
-NumRS2 leverages SciRS2-Core (v0.3.4) for cutting-edge performance optimizations:
+NumRS2 leverages SciRS2-Core (v0.4.0) for cutting-edge performance optimizations:
 
 - **Unified SIMD Operations**: All SIMD code goes through SciRS2-Core's SimdUnifiedOps trait
 - **Adaptive Algorithm Selection**: AutoOptimizer automatically chooses between scalar, SIMD, or GPU implementations
@@ -142,10 +142,10 @@ For examples, see [gpu_example.rs](examples/gpu_example.rs)
 **Production-Ready Features**
 - Complete multi-array NPZ support for NumPy compatibility
 - Zero clippy warnings and zero critical errors
-- 4,704+ comprehensive tests
+- 5,058+ comprehensive tests
 - Enhanced scheduler with critical deadlock fix (1,143x speedup)
-- 222,275+ lines of production Rust code
-- 2,709+ public API items; zero unimplemented stubs
+- 222,000+ lines of production Rust code (671 Rust files)
+- 5,899+ public API items; zero unimplemented stubs
 
 **Enhanced Modules**
 - Linear algebra: Extended iterative solvers (CG, GMRES, BiCGSTAB, FGMRES, MINRES)
@@ -317,7 +317,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.3.1"
+numrs2 = "0.3.2"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
@@ -340,7 +340,7 @@ OxiBLAS provides:
 
 NumRS2 is built on top of the SciRS2 ecosystem and pure Rust libraries:
 
-- **SciRS2 ecosystem** (scirs2-core, scirs2-linalg, scirs2-stats, etc. v0.3.4): Provides the foundation for n-dimensional arrays, linear algebra, statistics, survival analysis, causal inference, bioinformatics, and combinatorics
+- **SciRS2 ecosystem** (scirs2-core, scirs2-linalg, scirs2-stats, etc. v0.4.0): Provides the foundation for n-dimensional arrays, linear algebra, statistics, survival analysis, causal inference, bioinformatics, and combinatorics
 - **OxiBLAS** (pure Rust BLAS/LAPACK): Powers high-performance linear algebra routines with no C dependencies
 - **Oxicode**: Pure Rust serialization for data persistence
 - **Rayon**: Enables parallel computation capabilities
