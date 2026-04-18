@@ -1320,7 +1320,8 @@ mod tests {
     #[test]
     fn test_adjacency_matrix_creation() {
         let edges = vec![(0, 1), (1, 2), (2, 0)];
-        let adj = AdjacencyMatrix::<f64>::from_edges(3, &edges).unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(3, &edges).expect("test: valid adjacency matrix");
         assert_eq!(adj.num_nodes, 3);
         assert_eq!(adj.adj[[0, 1]], 1.0);
         assert_eq!(adj.adj[[1, 2]], 1.0);
@@ -1331,8 +1332,11 @@ mod tests {
     #[test]
     fn test_adjacency_with_self_loops() {
         let edges = vec![(0, 1), (1, 2)];
-        let adj = AdjacencyMatrix::<f64>::from_edges(3, &edges).unwrap();
-        let adj_self = adj.with_self_loops().unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(3, &edges).expect("test: valid adjacency matrix");
+        let adj_self = adj
+            .with_self_loops()
+            .expect("test: valid self-loop addition");
         assert_eq!(adj_self.adj[[0, 0]], 1.0);
         assert_eq!(adj_self.adj[[1, 1]], 1.0);
         assert_eq!(adj_self.adj[[2, 2]], 1.0);
@@ -1341,8 +1345,9 @@ mod tests {
     #[test]
     fn test_degree_matrix() {
         let edges = vec![(0, 1), (0, 2), (1, 2)];
-        let adj = AdjacencyMatrix::<f64>::from_edges(3, &edges).unwrap();
-        let degrees = adj.degree_matrix().unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(3, &edges).expect("test: valid adjacency matrix");
+        let degrees = adj.degree_matrix().expect("test: valid degree matrix");
         assert_eq!(degrees[0], 2.0); // node 0 has 2 outgoing edges
         assert_eq!(degrees[1], 1.0);
         assert_eq!(degrees[2], 1.0);
@@ -1351,8 +1356,11 @@ mod tests {
     #[test]
     fn test_symmetric_normalization() {
         let edges = vec![(0, 1), (1, 0)];
-        let adj = AdjacencyMatrix::<f64>::from_edges(2, &edges).unwrap();
-        let norm = adj.symmetric_normalize().unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(2, &edges).expect("test: valid adjacency matrix");
+        let norm = adj
+            .symmetric_normalize()
+            .expect("test: valid symmetric normalization");
         // D^(-1/2) = [[1, 0], [0, 1]] for degree 1
         // Normalized adj should be [[0, 1], [1, 0]]
         assert!((norm[[0, 1]] - 1.0).abs() < 1e-10);
@@ -1362,7 +1370,7 @@ mod tests {
     #[test]
     fn test_edge_list_creation() {
         let edges = vec![(0, 1), (1, 2), (2, 0)];
-        let edge_list = EdgeList::<f64>::from_edges(3, &edges).unwrap();
+        let edge_list = EdgeList::<f64>::from_edges(3, &edges).expect("test: valid edge list");
         assert_eq!(edge_list.num_nodes, 3);
         assert_eq!(edge_list.edges.len(), 3);
     }
@@ -1377,7 +1385,8 @@ mod tests {
     #[test]
     fn test_sparse_adjacency_from_edges() {
         let edges = vec![(0, 1), (0, 2), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         assert_eq!(sparse.num_nodes, 3);
         assert_eq!(sparse.row_ptr.len(), 4); // num_nodes + 1
         assert_eq!(sparse.col_indices.len(), 3);
@@ -1386,8 +1395,9 @@ mod tests {
     #[test]
     fn test_sparse_adjacency_neighbors() {
         let edges = vec![(0, 1), (0, 2), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
-        let (neighbors, weights) = sparse.neighbors(0).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
+        let (neighbors, weights) = sparse.neighbors(0).expect("test: valid neighbor retrieval");
         assert_eq!(neighbors.len(), 2);
         assert!(neighbors.contains(&1));
         assert!(neighbors.contains(&2));
@@ -1396,7 +1406,8 @@ mod tests {
     #[test]
     fn test_sparse_adjacency_degrees() {
         let edges = vec![(0, 1), (0, 2), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let degrees = sparse.degrees();
         assert_eq!(degrees[0], 2.0);
         assert_eq!(degrees[1], 1.0);
@@ -1406,9 +1417,11 @@ mod tests {
     #[test]
     fn test_mean_aggregation() {
         let edges = vec![(0, 1), (0, 2), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
-        let agg = mean_aggregation(&sparse, &features.view()).unwrap();
+        let agg =
+            mean_aggregation(&sparse, &features.view()).expect("test: valid mean aggregation");
         // Node 0 neighbors: [1, 2] -> mean = [(3+5)/2, (4+6)/2] = [4, 5]
         assert_eq!(agg[[0, 0]], 4.0);
         assert_eq!(agg[[0, 1]], 5.0);
@@ -1417,9 +1430,10 @@ mod tests {
     #[test]
     fn test_sum_aggregation() {
         let edges = vec![(0, 1), (0, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
-        let agg = sum_aggregation(&sparse, &features.view()).unwrap();
+        let agg = sum_aggregation(&sparse, &features.view()).expect("test: valid sum aggregation");
         // Node 0 neighbors: [1, 2] -> sum = [3+5, 4+6] = [8, 10]
         assert_eq!(agg[[0, 0]], 8.0);
         assert_eq!(agg[[0, 1]], 10.0);
@@ -1428,9 +1442,11 @@ mod tests {
     #[test]
     fn test_max_pooling_aggregation() {
         let edges = vec![(0, 1), (0, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = array![[1.0, 6.0], [3.0, 4.0], [5.0, 2.0]];
-        let agg = max_pooling_aggregation(&sparse, &features.view()).unwrap();
+        let agg = max_pooling_aggregation(&sparse, &features.view())
+            .expect("test: valid max pooling aggregation");
         // Node 0 neighbors: [1, 2] -> max = [max(3,5), max(4,2)] = [5, 4]
         assert_eq!(agg[[0, 0]], 5.0);
         assert_eq!(agg[[0, 1]], 4.0);
@@ -1438,7 +1454,7 @@ mod tests {
 
     #[test]
     fn test_gcn_layer_creation() {
-        let gcn = GcnLayer::<f64>::new(10, 20).unwrap();
+        let gcn = GcnLayer::<f64>::new(10, 20).expect("test: valid GCN layer");
         assert_eq!(gcn.in_features, 10);
         assert_eq!(gcn.out_features, 20);
         assert_eq!(gcn.weight.shape(), &[10, 20]);
@@ -1448,26 +1464,30 @@ mod tests {
     #[test]
     fn test_gcn_layer_forward() {
         let edges = vec![(0, 1), (1, 2)];
-        let adj = AdjacencyMatrix::<f64>::from_edges(3, &edges).unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(3, &edges).expect("test: valid adjacency matrix");
         let features = Array2::ones((3, 5));
-        let gcn = GcnLayer::new(5, 10).unwrap();
-        let output = gcn.forward(&adj, &features.view()).unwrap();
+        let gcn = GcnLayer::new(5, 10).expect("test: valid GCN layer");
+        let output = gcn
+            .forward(&adj, &features.view())
+            .expect("test: valid GCN forward pass");
         assert_eq!(output.shape(), &[3, 10]);
     }
 
     #[test]
     fn test_gcn_layer_dimension_mismatch() {
         let edges = vec![(0, 1)];
-        let adj = AdjacencyMatrix::<f64>::from_edges(2, &edges).unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(2, &edges).expect("test: valid adjacency matrix");
         let features = Array2::ones((2, 10));
-        let gcn = GcnLayer::new(5, 10).unwrap(); // expects 5 input features
+        let gcn = GcnLayer::new(5, 10).expect("test: valid GCN layer (expects 5 input features)");
         let result = gcn.forward(&adj, &features.view());
         assert!(result.is_err());
     }
 
     #[test]
     fn test_gat_layer_creation() {
-        let gat = GatLayer::<f64>::new(10, 8, 4, true, 0.2).unwrap();
+        let gat = GatLayer::<f64>::new(10, 8, 4, true, 0.2).expect("test: valid GAT layer");
         assert_eq!(gat.in_features, 10);
         assert_eq!(gat.out_features, 8);
         assert_eq!(gat.num_heads, 4);
@@ -1483,10 +1503,13 @@ mod tests {
     #[test]
     fn test_gat_layer_forward() {
         let edges = vec![(0, 1), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = Array2::ones((3, 4));
-        let gat = GatLayer::new(4, 2, 2, true, 0.2).unwrap();
-        let output = gat.forward(&sparse, &features.view()).unwrap();
+        let gat = GatLayer::new(4, 2, 2, true, 0.2).expect("test: valid GAT layer");
+        let output = gat
+            .forward(&sparse, &features.view())
+            .expect("test: valid GAT forward pass");
         // 2 heads × 2 features, concatenated
         assert_eq!(output.shape(), &[3, 4]);
     }
@@ -1494,17 +1517,21 @@ mod tests {
     #[test]
     fn test_gat_layer_average_heads() {
         let edges = vec![(0, 1)];
-        let sparse = SparseAdjacency::<f64>::from_edges(2, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(2, &edges).expect("test: valid sparse adjacency");
         let features = Array2::ones((2, 4));
-        let gat = GatLayer::new(4, 8, 2, false, 0.2).unwrap(); // concat=false
-        let output = gat.forward(&sparse, &features.view()).unwrap();
+        let gat = GatLayer::new(4, 8, 2, false, 0.2).expect("test: valid GAT layer (concat=false)");
+        let output = gat
+            .forward(&sparse, &features.view())
+            .expect("test: valid GAT forward pass");
         // Averaged heads, so output_dim = 8
         assert_eq!(output.shape(), &[2, 8]);
     }
 
     #[test]
     fn test_graphsage_layer_creation() {
-        let sage = GraphSageLayer::<f64>::new(10, 20, SageAggregator::Mean, true).unwrap();
+        let sage = GraphSageLayer::<f64>::new(10, 20, SageAggregator::Mean, true)
+            .expect("test: valid GraphSAGE layer");
         assert_eq!(sage.in_features, 10);
         assert_eq!(sage.out_features, 20);
         assert_eq!(sage.aggregator, SageAggregator::Mean);
@@ -1514,26 +1541,34 @@ mod tests {
     #[test]
     fn test_graphsage_layer_forward() {
         let edges = vec![(0, 1), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = Array2::ones((3, 5));
-        let sage = GraphSageLayer::new(5, 10, SageAggregator::Mean, false).unwrap();
-        let output = sage.forward(&sparse, &features.view()).unwrap();
+        let sage = GraphSageLayer::new(5, 10, SageAggregator::Mean, false)
+            .expect("test: valid GraphSAGE layer");
+        let output = sage
+            .forward(&sparse, &features.view())
+            .expect("test: valid GraphSAGE forward pass");
         assert_eq!(output.shape(), &[3, 10]);
     }
 
     #[test]
     fn test_graphsage_pool_aggregator() {
         let edges = vec![(0, 1), (0, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = Array2::ones((3, 4));
-        let sage = GraphSageLayer::new(4, 8, SageAggregator::Pool, true).unwrap();
-        let output = sage.forward(&sparse, &features.view()).unwrap();
+        let sage = GraphSageLayer::new(4, 8, SageAggregator::Pool, true)
+            .expect("test: valid GraphSAGE pool layer");
+        let output = sage
+            .forward(&sparse, &features.view())
+            .expect("test: valid GraphSAGE forward pass");
         assert_eq!(output.shape(), &[3, 8]);
     }
 
     #[test]
     fn test_mpnn_layer_creation() {
-        let mpnn = MpnnLayer::<f64>::new(10, 20).unwrap();
+        let mpnn = MpnnLayer::<f64>::new(10, 20).expect("test: valid MPNN layer");
         assert_eq!(mpnn.in_features, 10);
         assert_eq!(mpnn.out_features, 20);
     }
@@ -1541,16 +1576,19 @@ mod tests {
     #[test]
     fn test_mpnn_layer_forward() {
         let edges = vec![(0, 1), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = Array2::ones((3, 5));
-        let mpnn = MpnnLayer::new(5, 10).unwrap();
-        let output = mpnn.forward(&sparse, &features.view()).unwrap();
+        let mpnn = MpnnLayer::new(5, 10).expect("test: valid MPNN layer");
+        let output = mpnn
+            .forward(&sparse, &features.view())
+            .expect("test: valid MPNN forward pass");
         assert_eq!(output.shape(), &[3, 10]);
     }
 
     #[test]
     fn test_gin_layer_creation() {
-        let gin = GinLayer::<f64>::new(10, 20, 0.0).unwrap();
+        let gin = GinLayer::<f64>::new(10, 20, 0.0).expect("test: valid GIN layer");
         assert_eq!(gin.in_features, 10);
         assert_eq!(gin.out_features, 20);
         assert_eq!(gin.epsilon, 0.0);
@@ -1559,27 +1597,33 @@ mod tests {
     #[test]
     fn test_gin_layer_forward() {
         let edges = vec![(0, 1), (1, 2)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = Array2::ones((3, 5));
-        let gin = GinLayer::new(5, 10, 0.0).unwrap();
-        let output = gin.forward(&sparse, &features.view()).unwrap();
+        let gin = GinLayer::new(5, 10, 0.0).expect("test: valid GIN layer");
+        let output = gin
+            .forward(&sparse, &features.view())
+            .expect("test: valid GIN forward pass");
         assert_eq!(output.shape(), &[3, 10]);
     }
 
     #[test]
     fn test_gin_layer_with_epsilon() {
         let edges = vec![(0, 1)];
-        let sparse = SparseAdjacency::<f64>::from_edges(2, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(2, &edges).expect("test: valid sparse adjacency");
         let features = array![[1.0, 2.0], [3.0, 4.0]];
-        let gin = GinLayer::new(2, 2, 0.5).unwrap();
-        let output = gin.forward(&sparse, &features.view()).unwrap();
+        let gin = GinLayer::new(2, 2, 0.5).expect("test: valid GIN layer");
+        let output = gin
+            .forward(&sparse, &features.view())
+            .expect("test: valid GIN forward pass");
         assert_eq!(output.shape(), &[2, 2]);
     }
 
     #[test]
     fn test_global_mean_pool() {
         let features = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
-        let pooled = global_mean_pool(&features.view()).unwrap();
+        let pooled = global_mean_pool(&features.view()).expect("test: valid global mean pool");
         assert_eq!(pooled.len(), 2);
         assert_eq!(pooled[0], 3.0); // (1+3+5)/3
         assert_eq!(pooled[1], 4.0); // (2+4+6)/3
@@ -1588,7 +1632,7 @@ mod tests {
     #[test]
     fn test_global_max_pool() {
         let features = array![[1.0, 6.0], [3.0, 4.0], [5.0, 2.0]];
-        let pooled = global_max_pool(&features.view()).unwrap();
+        let pooled = global_max_pool(&features.view()).expect("test: valid global max pool");
         assert_eq!(pooled.len(), 2);
         assert_eq!(pooled[0], 5.0);
         assert_eq!(pooled[1], 6.0);
@@ -1597,7 +1641,7 @@ mod tests {
     #[test]
     fn test_global_sum_pool() {
         let features = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
-        let pooled = global_sum_pool(&features.view()).unwrap();
+        let pooled = global_sum_pool(&features.view()).expect("test: valid global sum pool");
         assert_eq!(pooled.len(), 2);
         assert_eq!(pooled[0], 9.0);
         assert_eq!(pooled[1], 12.0);
@@ -1607,7 +1651,7 @@ mod tests {
     fn test_topk_pool() {
         let features = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]];
         let scores = array![0.1, 0.4, 0.2, 0.5];
-        let pooled = topk_pool(&features.view(), &scores.view(), 2).unwrap();
+        let pooled = topk_pool(&features.view(), &scores.view(), 2).expect("test: valid topk pool");
         assert_eq!(pooled.shape(), &[2, 2]);
         // Top 2 scores: indices 3 (0.5) and 1 (0.4)
         assert_eq!(pooled[[0, 0]], 7.0); // features of node 3
@@ -1634,7 +1678,7 @@ mod tests {
     fn test_graph_data_creation() {
         let edges = vec![(0, 1), (1, 2)];
         let features = Array2::<f64>::ones((3, 5));
-        let graph = GraphData::new(3, &edges, features).unwrap();
+        let graph = GraphData::new(3, &edges, features).expect("test: valid graph data creation");
         assert_eq!(graph.adjacency.num_nodes, 3);
         assert_eq!(graph.node_features.shape(), &[3, 5]);
         assert!(graph.edge_features.is_none());
@@ -1654,10 +1698,16 @@ mod tests {
         let features = Array2::<f64>::ones((3, 5));
         let edge_features = Array2::<f64>::ones((2, 3));
         let graph = GraphData::new(3, &edges, features)
-            .unwrap()
+            .expect("test: valid graph data creation")
             .with_edge_features(edge_features);
         assert!(graph.edge_features.is_some());
-        assert_eq!(graph.edge_features.unwrap().shape(), &[2, 3]);
+        assert_eq!(
+            graph
+                .edge_features
+                .expect("test: edge features are some")
+                .shape(),
+            &[2, 3]
+        );
     }
 
     // Additional edge case tests
@@ -1665,7 +1715,8 @@ mod tests {
     #[test]
     fn test_empty_graph() {
         let edges: Vec<(usize, usize)> = vec![];
-        let adj = AdjacencyMatrix::<f64>::from_edges(3, &edges).unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(3, &edges).expect("test: valid adjacency matrix");
         assert_eq!(adj.num_nodes, 3);
         // All adjacency values should be 0
         for i in 0..3 {
@@ -1678,7 +1729,8 @@ mod tests {
     #[test]
     fn test_self_loop_graph() {
         let edges = vec![(0, 0), (1, 1), (2, 2)];
-        let adj = AdjacencyMatrix::<f64>::from_edges(3, &edges).unwrap();
+        let adj =
+            AdjacencyMatrix::<f64>::from_edges(3, &edges).expect("test: valid adjacency matrix");
         assert_eq!(adj.adj[[0, 0]], 1.0);
         assert_eq!(adj.adj[[1, 1]], 1.0);
         assert_eq!(adj.adj[[2, 2]], 1.0);
@@ -1687,7 +1739,8 @@ mod tests {
     #[test]
     fn test_complete_graph() {
         let edges = vec![(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let degrees = sparse.degrees();
         // In a complete graph on 3 nodes, each node has degree 2
         assert_eq!(degrees[0], 2.0);
@@ -1699,9 +1752,11 @@ mod tests {
     fn test_aggregation_isolated_node() {
         // Node 2 has no neighbors
         let edges = vec![(0, 1)];
-        let sparse = SparseAdjacency::<f64>::from_edges(3, &edges).unwrap();
+        let sparse =
+            SparseAdjacency::<f64>::from_edges(3, &edges).expect("test: valid sparse adjacency");
         let features = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
-        let agg = mean_aggregation(&sparse, &features.view()).unwrap();
+        let agg =
+            mean_aggregation(&sparse, &features.view()).expect("test: valid mean aggregation");
         // Node 2 has no neighbors, so aggregation should be [0, 0]
         assert_eq!(agg[[2, 0]], 0.0);
         assert_eq!(agg[[2, 1]], 0.0);

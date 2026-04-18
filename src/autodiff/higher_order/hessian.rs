@@ -34,7 +34,7 @@ use crate::autodiff::{Tape, Var};
 ///     vars[0] * vars[0] + vars[1] * vars[1]
 /// }
 ///
-/// let hess = hessian_exact(f, &[3.0, 4.0]).unwrap();
+/// let hess = hessian_exact(f, &[3.0, 4.0]).expect("valid hessian computation");
 /// ```
 pub fn hessian_exact<F, T>(f: F, x: &[T]) -> Result<Array<T>>
 where

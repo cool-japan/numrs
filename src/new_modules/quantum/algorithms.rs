@@ -13,8 +13,8 @@
 //! use numrs2::new_modules::quantum::circuit::QuantumCircuit;
 //!
 //! // Apply QFT to a 3-qubit circuit
-//! let mut circuit = QuantumCircuit::<f64>::new(3).unwrap();
-//! QuantumFourierTransform::apply(&mut circuit).unwrap();
+//! let mut circuit = QuantumCircuit::<f64>::new(3).expect("valid qubit count");
+//! QuantumFourierTransform::apply(&mut circuit).expect("valid QFT application");
 //! ```
 
 use crate::array::Array;
@@ -457,8 +457,8 @@ mod tests {
 
     #[test]
     fn test_qft_circuit() {
-        let mut circuit = QuantumCircuit::<f64>::new(3).unwrap();
-        QuantumFourierTransform::apply(&mut circuit).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(3).expect("test: valid qubit count");
+        QuantumFourierTransform::apply(&mut circuit).expect("test: valid QFT application");
 
         // QFT should add gates
         assert!(circuit.num_gates() > 0);
@@ -466,30 +466,31 @@ mod tests {
 
     #[test]
     fn test_qft_on_zero_state() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
-        QuantumFourierTransform::apply(&mut circuit).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        QuantumFourierTransform::apply(&mut circuit).expect("test: valid QFT application");
 
-        let state = circuit.execute().unwrap();
+        let state = circuit.execute().expect("test: circuit execution succeeds");
 
         // QFT|00⟩ = (|00⟩ + |01⟩ + |10⟩ + |11⟩)/2
         for i in 0..4 {
-            let prob = state.get_probability(i).unwrap();
+            let prob = state.get_probability(i).expect("test: valid state index");
             assert_relative_eq!(prob, 0.25, epsilon = 1e-10);
         }
     }
 
     #[test]
     fn test_inverse_qft() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid 2-qubit circuit");
 
         // Apply QFT then inverse QFT
-        QuantumFourierTransform::apply(&mut circuit).unwrap();
-        QuantumFourierTransform::apply_inverse(&mut circuit).unwrap();
+        QuantumFourierTransform::apply(&mut circuit).expect("test: valid QFT application");
+        QuantumFourierTransform::apply_inverse(&mut circuit)
+            .expect("test: valid inverse QFT application");
 
-        let state = circuit.execute().unwrap();
+        let state = circuit.execute().expect("test: circuit execution succeeds");
 
         // Should return to |00⟩
-        let prob_00 = state.get_probability(0).unwrap();
+        let prob_00 = state.get_probability(0).expect("test: valid state index");
         assert_relative_eq!(prob_00, 1.0, epsilon = 1e-8);
     }
 
@@ -510,10 +511,10 @@ mod tests {
         };
 
         let iterations = GroverSearch::optimal_iterations(2, 1);
-        let state = GroverSearch::search(2, oracle, iterations).unwrap();
+        let state = GroverSearch::search(2, oracle, iterations).expect("test: valid Grover search");
 
         // Should have high probability of measuring |11⟩
-        let prob_11 = state.get_probability(3).unwrap();
+        let prob_11 = state.get_probability(3).expect("test: valid state index");
         assert!(prob_11 > 0.5);
     }
 
@@ -523,14 +524,18 @@ mod tests {
         let ham = HamiltonianPauliZ::new(vec![1.0]);
 
         // Test with |0⟩
-        let state_0 = StateVector::<f64>::new(1).unwrap();
-        let energy_0 = ham.expectation_value(&state_0).unwrap();
+        let state_0 = StateVector::<f64>::new(1).expect("test: valid qubit count");
+        let energy_0 = ham
+            .expectation_value(&state_0)
+            .expect("test: valid expectation value");
         assert_relative_eq!(energy_0, 1.0, epsilon = 1e-10);
 
         // Test with |1⟩
         let amplitudes = vec![Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)];
-        let state_1 = StateVector::from_amplitudes(amplitudes).unwrap();
-        let energy_1 = ham.expectation_value(&state_1).unwrap();
+        let state_1 = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
+        let energy_1 = ham
+            .expectation_value(&state_1)
+            .expect("test: valid expectation value");
         assert_relative_eq!(energy_1, -1.0, epsilon = 1e-10);
     }
 
@@ -546,7 +551,8 @@ mod tests {
         let ham = HamiltonianPauliZ::new(vec![1.0]);
 
         let initial_params = vec![0.5];
-        let (params, energy) = VQE::minimize(1, &ham, ansatz, initial_params, 10).unwrap();
+        let (params, energy) = VQE::minimize(1, &ham, ansatz, initial_params, 10)
+            .expect("test: valid VQE minimization");
 
         // After 10 iterations with step_size=0.1, params should be around 1.5
         // which gives energy ≈ cos(1.5) ≈ 0.07
@@ -565,13 +571,13 @@ mod tests {
 
     #[test]
     fn test_diffusion_operator() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
 
         // Initialize to superposition
-        circuit.h(0).unwrap();
-        circuit.h(1).unwrap();
+        circuit.h(0).expect("test: valid qubit index");
+        circuit.h(1).expect("test: valid qubit index");
 
-        GroverSearch::diffusion_operator(&mut circuit).unwrap();
+        GroverSearch::diffusion_operator(&mut circuit).expect("test: valid diffusion operator");
 
         // Should have added gates
         assert!(circuit.num_gates() > 2);
@@ -583,15 +589,17 @@ mod tests {
         let ham = HamiltonianPauliZ::new(vec![1.0, 2.0]);
 
         // State |00⟩: E = 1 + 2 = 3
-        let state = StateVector::<f64>::new(2).unwrap();
-        let energy = ham.expectation_value(&state).unwrap();
+        let state = StateVector::<f64>::new(2).expect("test: valid qubit count");
+        let energy = ham
+            .expectation_value(&state)
+            .expect("test: valid expectation value");
         assert_relative_eq!(energy, 3.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_qft_circuit_depth() {
-        let mut circuit = QuantumCircuit::<f64>::new(3).unwrap();
-        QuantumFourierTransform::apply(&mut circuit).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(3).expect("test: valid qubit count");
+        QuantumFourierTransform::apply(&mut circuit).expect("test: valid QFT application");
 
         let depth = circuit.depth();
         assert!(depth > 0);
@@ -599,13 +607,13 @@ mod tests {
 
     #[test]
     fn test_qft_single_qubit() {
-        let mut circuit = QuantumCircuit::<f64>::new(1).unwrap();
-        QuantumFourierTransform::apply(&mut circuit).unwrap();
-        let state = circuit.execute().unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(1).expect("test: valid qubit count");
+        QuantumFourierTransform::apply(&mut circuit).expect("test: valid QFT application");
+        let state = circuit.execute().expect("test: circuit execution succeeds");
 
         // Single qubit QFT is just Hadamard
-        let prob_0 = state.get_probability(0).unwrap();
-        let prob_1 = state.get_probability(1).unwrap();
+        let prob_0 = state.get_probability(0).expect("test: valid state index");
+        let prob_1 = state.get_probability(1).expect("test: valid state index");
         assert_relative_eq!(prob_0, 0.5, epsilon = 1e-10);
         assert_relative_eq!(prob_1, 0.5, epsilon = 1e-10);
     }
@@ -613,8 +621,10 @@ mod tests {
     #[test]
     fn test_hamiltonian_zero_state() {
         let ham = HamiltonianPauliZ::new(vec![1.0, 1.0]);
-        let state = StateVector::<f64>::new(2).unwrap();
-        let energy = ham.expectation_value(&state).unwrap();
+        let state = StateVector::<f64>::new(2).expect("test: valid qubit count");
+        let energy = ham
+            .expectation_value(&state)
+            .expect("test: valid expectation value");
         assert_relative_eq!(energy, 2.0, epsilon = 1e-10);
     }
 

@@ -679,7 +679,8 @@ mod tests {
         let y_true = array![1.0, 2.0, 3.0];
         let y_pred = array![1.1, 2.1, 3.1];
 
-        let loss = mse_loss(&y_true.view(), &y_pred.view(), ReductionMode::Mean).unwrap();
+        let loss = mse_loss(&y_true.view(), &y_pred.view(), ReductionMode::Mean)
+            .expect("test: valid mse loss params");
 
         // MSE = mean((0.1)^2 + (0.1)^2 + (0.1)^2) = 0.01
         assert_abs_diff_eq!(loss, 0.01, epsilon = 1e-6);
@@ -690,7 +691,8 @@ mod tests {
         let y_true = array![1.0, 2.0, 3.0];
         let y_pred = array![1.1, 2.1, 3.1];
 
-        let loss = mae_loss(&y_true.view(), &y_pred.view(), ReductionMode::Mean).unwrap();
+        let loss = mae_loss(&y_true.view(), &y_pred.view(), ReductionMode::Mean)
+            .expect("test: valid mae loss params");
 
         // MAE = mean(|0.1| + |0.1| + |0.1|) = 0.1
         assert_abs_diff_eq!(loss, 0.1, epsilon = 1e-6);
@@ -701,7 +703,8 @@ mod tests {
         let y_true = array![0.0, 0.0, 0.0];
         let y_pred = array![0.5, 1.0, 2.0];
 
-        let loss = huber_loss(&y_true.view(), &y_pred.view(), 1.0, ReductionMode::Mean).unwrap();
+        let loss = huber_loss(&y_true.view(), &y_pred.view(), 1.0, ReductionMode::Mean)
+            .expect("test: valid huber loss params");
 
         // For delta=1: values <= 1 use squared, > 1 use linear
         // |0.5| <= 1: 0.5 * 0.5^2 = 0.125
@@ -716,8 +719,8 @@ mod tests {
         let y_true = array![1.0, 0.0, 1.0];
         let y_pred = array![0.9, 0.1, 0.8];
 
-        let loss =
-            binary_cross_entropy(&y_true.view(), &y_pred.view(), ReductionMode::Mean).unwrap();
+        let loss = binary_cross_entropy(&y_true.view(), &y_pred.view(), ReductionMode::Mean)
+            .expect("test: valid bce params");
 
         // Should be small since predictions are close to truth
         assert!(loss < 0.2);

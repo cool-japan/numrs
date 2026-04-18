@@ -38,6 +38,7 @@
 
 use super::collective::CollectiveError;
 use super::process::{Communicator, ProcessError};
+use oxiarc_lz4::{compress as lz4_compress, decompress as lz4_decompress};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -341,29 +342,50 @@ pub async fn overlap_compute_communicate() -> Result<(), OptimizationError> {
 
 /// Compress data for network transfer
 ///
-/// Compresses data using a fast compression algorithm to reduce network traffic.
-pub fn compress_data<T: Serialize>(_data: &[T]) -> Result<Vec<u8>, OptimizationError> {
-    // Placeholder implementation
-    // Real implementation would use a compression library like:
-    // - LZ4 for fast compression
-    // - Zstd for better compression ratio
-    // - Snappy for very fast compression
+/// Serializes the data to JSON and compresses with LZ4 (fast, low-latency).
+/// Wire format: [8-byte u64 LE uncompressed size][LZ4 frame compressed bytes]
+pub fn compress_data<T: Serialize>(data: &[T]) -> Result<Vec<u8>, OptimizationError> {
+    let json_bytes = serde_json::to_vec(data)
+        .map_err(|e| OptimizationError::CompressionError(format!("Serialization error: {}", e)))?;
 
-    Err(OptimizationError::CompressionError(
-        "Compression not yet implemented".to_string(),
-    ))
+    let uncompressed_size = json_bytes.len() as u64;
+
+    let compressed = lz4_compress(&json_bytes).map_err(|e| {
+        OptimizationError::CompressionError(format!("LZ4 compression error: {}", e))
+    })?;
+
+    let mut result = Vec::with_capacity(8 + compressed.len());
+    result.extend_from_slice(&uncompressed_size.to_le_bytes());
+    result.extend_from_slice(&compressed);
+
+    Ok(result)
 }
 
 /// Decompress data after network transfer
 ///
-/// Decompresses data that was compressed with compress_data.
+/// Decompresses data that was compressed with `compress_data`.
+/// Wire format: [8-byte u64 LE uncompressed size][LZ4 frame compressed bytes]
 pub fn decompress_data<T: for<'de> Deserialize<'de>>(
-    _data: &[u8],
+    data: &[u8],
 ) -> Result<Vec<T>, OptimizationError> {
-    // Placeholder implementation
-    Err(OptimizationError::CompressionError(
-        "Decompression not yet implemented".to_string(),
-    ))
+    if data.len() < 8 {
+        return Err(OptimizationError::CompressionError(format!(
+            "Data too short: expected at least 8 bytes, got {}",
+            data.len()
+        )));
+    }
+
+    let size_bytes: [u8; 8] = data[..8].try_into().map_err(|_| {
+        OptimizationError::CompressionError("Failed to read uncompressed size header".to_string())
+    })?;
+    let uncompressed_size = u64::from_le_bytes(size_bytes) as usize;
+
+    let json_bytes = lz4_decompress(&data[8..], uncompressed_size).map_err(|e| {
+        OptimizationError::CompressionError(format!("LZ4 decompression error: {}", e))
+    })?;
+
+    serde_json::from_slice(&json_bytes)
+        .map_err(|e| OptimizationError::CompressionError(format!("Deserialization error: {}", e)))
 }
 
 #[cfg(test)]
@@ -410,5 +432,67 @@ mod tests {
         let ring = NetworkTopology::Ring;
         assert!(ring.has_direct_connection(0, 1, 4));
         assert!(!ring.has_direct_connection(0, 2, 4));
+    }
+
+    #[test]
+    fn test_compress_decompress_roundtrip_floats() {
+        let data: Vec<f64> = vec![1.0, 2.5, -3.14, 0.0, f64::MAX];
+        let compressed = compress_data(&data).expect("compression should succeed");
+        let recovered: Vec<f64> =
+            decompress_data(&compressed).expect("decompression should succeed");
+        assert_eq!(data.len(), recovered.len());
+        for (a, b) in data.iter().zip(recovered.iter()) {
+            assert!(
+                (a - b).abs() < f64::EPSILON * 100.0,
+                "mismatch: {} vs {}",
+                a,
+                b
+            );
+        }
+    }
+
+    #[test]
+    fn test_compress_decompress_roundtrip_strings() {
+        let data: Vec<String> = vec![
+            "hello".to_string(),
+            "world".to_string(),
+            "oxiarc".to_string(),
+        ];
+        let compressed = compress_data(&data).expect("compression should succeed");
+        let recovered: Vec<String> =
+            decompress_data(&compressed).expect("decompression should succeed");
+        assert_eq!(data, recovered);
+    }
+
+    #[test]
+    fn test_compress_empty_slice() {
+        let data: Vec<u32> = vec![];
+        let compressed = compress_data(&data).expect("compression of empty slice should succeed");
+        let recovered: Vec<u32> =
+            decompress_data(&compressed).expect("decompression should succeed");
+        assert_eq!(recovered, data);
+    }
+
+    #[test]
+    fn test_compress_highly_compressible() {
+        let data: Vec<u32> = vec![42u32; 10_000];
+        let compressed = compress_data(&data).expect("compression should succeed");
+        // LZ4 should compress highly repetitive data significantly
+        assert!(
+            compressed.len() < data.len() * 4,
+            "expected compression, got {} bytes for {} elements",
+            compressed.len(),
+            data.len()
+        );
+        let recovered: Vec<u32> =
+            decompress_data(&compressed).expect("decompression should succeed");
+        assert_eq!(data, recovered);
+    }
+
+    #[test]
+    fn test_decompress_invalid_data() {
+        let bad_data = b"too short";
+        let result: Result<Vec<u32>, _> = decompress_data(bad_data);
+        assert!(result.is_err(), "should fail on short data");
     }
 }

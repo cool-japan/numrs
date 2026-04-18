@@ -397,13 +397,13 @@ mod tests {
         let compressed = ModelCompression::compress_weights(&weights);
         assert!(compressed.is_ok());
 
-        let compressed_data = compressed.unwrap();
+        let compressed_data = compressed.expect("test: valid compression");
         assert!(!compressed_data.is_empty());
 
         let decompressed = ModelCompression::decompress_weights(&compressed_data);
         assert!(decompressed.is_ok());
 
-        let recovered = decompressed.unwrap();
+        let recovered = decompressed.expect("test: valid decompression");
         assert_eq!(recovered.shape(), weights.shape());
     }
 
@@ -414,7 +414,7 @@ mod tests {
         let result = ModelCompression::quantize_weights(&weights, 8);
         assert!(result.is_ok());
 
-        let (quantized, scale, zero_point) = result.unwrap();
+        let (quantized, scale, zero_point) = result.expect("test: valid quantization");
         assert!(!quantized.is_empty());
         assert!(scale > 0.0);
 
@@ -431,7 +431,7 @@ mod tests {
         let result = ModelCompression::quantize_weights(&weights, 16);
         assert!(result.is_ok());
 
-        let (quantized, scale, zero_point) = result.unwrap();
+        let (quantized, scale, zero_point) = result.expect("test: valid quantization");
         assert_eq!(quantized.len(), 3 * 3 * 2); // 2 bytes per value
 
         let dequantized =
@@ -448,7 +448,10 @@ mod tests {
 
     #[test]
     fn test_compute_hash() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -456,39 +459,45 @@ mod tests {
         let hash = ModelFingerprint::compute_hash(&model);
         assert!(hash.is_ok());
 
-        let hash_str = hash.unwrap();
+        let hash_str = hash.expect("test: valid hash computation");
         assert!(!hash_str.is_empty());
         assert!(!hash_str.is_empty());
     }
 
     #[test]
     fn test_verify_hash() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
 
-        let hash = ModelFingerprint::compute_hash(&model).unwrap();
+        let hash = ModelFingerprint::compute_hash(&model).expect("test: valid hash computation");
 
         let verified = ModelFingerprint::verify_hash(&model, &hash);
         assert!(verified.is_ok());
-        assert!(verified.unwrap());
+        assert!(verified.expect("test: valid hash verification"));
 
         let verified_wrong = ModelFingerprint::verify_hash(&model, "wrong_hash");
         assert!(verified_wrong.is_ok());
-        assert!(!verified_wrong.unwrap());
+        assert!(!verified_wrong.expect("test: valid hash verification (wrong hash)"));
     }
 
     #[test]
     fn test_compute_checksum() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
 
         let checksum = ModelFingerprint::compute_checksum(&model);
         assert!(checksum.is_ok());
-        assert!(checksum.unwrap() > 0);
+        assert!(checksum.expect("test: valid checksum computation") > 0);
     }
 
     #[test]
@@ -496,18 +505,22 @@ mod tests {
         let temp_dir = env::temp_dir();
         let path = temp_dir.join("test_detect.numrs2");
 
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
 
         // Save model
-        super::super::serialize::ModelSerializer::save(&model, &path).unwrap();
+        super::super::serialize::ModelSerializer::save(&model, &path)
+            .expect("test: valid model save");
 
         // Detect format
         let format = FormatDetector::detect(&path);
         assert!(format.is_ok());
-        assert_eq!(format.unwrap(), "numrs2");
+        assert_eq!(format.expect("test: valid format detection"), "numrs2");
 
         // Test is_numrs2_format
         assert!(FormatDetector::is_numrs2_format(&path));
@@ -522,11 +535,11 @@ mod tests {
         let temp_dir = env::temp_dir();
         let path = temp_dir.join("test_unknown.bin");
 
-        fs::write(&path, b"UNKNOWN_FORMAT_DATA").unwrap();
+        fs::write(&path, b"UNKNOWN_FORMAT_DATA").expect("test: valid file write");
 
         let format = FormatDetector::detect(&path);
         assert!(format.is_ok());
-        assert_eq!(format.unwrap(), "unknown");
+        assert_eq!(format.expect("test: valid format detection"), "unknown");
 
         // Cleanup
         let _ = fs::remove_file(path);
@@ -537,7 +550,10 @@ mod tests {
         let temp_dir = env::temp_dir();
         let path = temp_dir.join("test_streaming.numrs2");
 
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((100, 50)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -563,7 +579,7 @@ mod tests {
         assert!(compressed.is_ok());
 
         // Test decompress
-        let decompressed = decompress_weights(&compressed.unwrap());
+        let decompressed = decompress_weights(&compressed.expect("test: valid compression"));
         assert!(decompressed.is_ok());
 
         // Test quantize
@@ -571,7 +587,10 @@ mod tests {
         assert!(quantized.is_ok());
 
         // Test hash
-        let metadata = ModelMetadata::builder().name("test").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test")
+            .build()
+            .expect("test: valid metadata build");
         let layer = LayerData::dense("layer1", weights, None);
         let model = NumRS2Model::new(metadata, vec![layer]);
 
@@ -584,10 +603,11 @@ mod tests {
         let original = Array2::from_shape_fn((4, 3), |(i, j)| (i * 3 + j) as f64 * 0.5);
 
         let (quantized, scale, zero_point) =
-            ModelCompression::quantize_weights(&original, 8).unwrap();
+            ModelCompression::quantize_weights(&original, 8).expect("test: valid quantization");
 
         let recovered =
-            ModelCompression::dequantize_weights(&quantized, (4, 3), 8, scale, zero_point).unwrap();
+            ModelCompression::dequantize_weights(&quantized, (4, 3), 8, scale, zero_point)
+                .expect("test: valid dequantization");
 
         // Check shapes match
         assert_eq!(recovered.shape(), original.shape());
@@ -600,13 +620,18 @@ mod tests {
 
     #[test]
     fn test_hash_consistency() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
 
-        let hash1 = ModelFingerprint::compute_hash(&model).unwrap();
-        let hash2 = ModelFingerprint::compute_hash(&model).unwrap();
+        let hash1 =
+            ModelFingerprint::compute_hash(&model).expect("test: valid model hash computation");
+        let hash2 =
+            ModelFingerprint::compute_hash(&model).expect("test: valid model hash computation");
 
         // Same model should produce same hash
         assert_eq!(hash1, hash2);

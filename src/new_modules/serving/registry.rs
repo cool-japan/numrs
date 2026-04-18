@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn test_registry_creation() {
         let registry = ModelRegistry::new();
-        assert_eq!(registry.model_count().unwrap(), 0);
+        assert_eq!(registry.model_count().expect("test: valid model count"), 0);
     }
 
     #[test]
@@ -553,7 +553,12 @@ mod tests {
             .register("test_model", "v1.0", model, None)
             .expect("Registration should succeed");
 
-        assert_eq!(registry.model_count().unwrap(), 1);
+        assert_eq!(
+            registry
+                .model_count()
+                .expect("test: valid model count after registration"),
+            1
+        );
     }
 
     #[test]
@@ -588,7 +593,7 @@ mod tests {
             .unregister("test_model", "v1.0")
             .expect("Unregistration should succeed");
 
-        assert_eq!(registry.model_count().unwrap(), 0);
+        assert_eq!(registry.model_count().expect("test: valid model count"), 0);
     }
 
     #[test]

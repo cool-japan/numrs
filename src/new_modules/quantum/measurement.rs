@@ -439,15 +439,16 @@ mod tests {
             outcome: 6, // 110 in binary
             num_qubits: 3,
         };
-        assert_eq!(result.get_bit(0).unwrap(), 0);
-        assert_eq!(result.get_bit(1).unwrap(), 1);
-        assert_eq!(result.get_bit(2).unwrap(), 1);
+        assert_eq!(result.get_bit(0).expect("test: valid bit index"), 0);
+        assert_eq!(result.get_bit(1).expect("test: valid bit index"), 1);
+        assert_eq!(result.get_bit(2).expect("test: valid bit index"), 1);
     }
 
     #[test]
     fn test_measure_all_zero_state() {
-        let state = StateVector::<f64>::new(2).unwrap();
-        let (result, _) = Measurement::measure_all(&state, Some(42)).unwrap();
+        let state = StateVector::<f64>::new(2).expect("test: valid qubit count");
+        let (result, _) =
+            Measurement::measure_all(&state, Some(42)).expect("test: valid measurement");
 
         assert_eq!(result.outcome, 0);
         assert_eq!(result.num_qubits, 2);
@@ -460,14 +461,15 @@ mod tests {
             Complex::new(1.0 / 2.0_f64.sqrt(), 0.0),
             Complex::new(1.0 / 2.0_f64.sqrt(), 0.0),
         ];
-        let state = StateVector::from_amplitudes(amplitudes).unwrap();
+        let state = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
 
         // Measure many times
         let mut zeros = 0;
         let mut ones = 0;
 
         for i in 0..100 {
-            let (result, _) = Measurement::measure_all(&state, Some(i as u64)).unwrap();
+            let (result, _) =
+                Measurement::measure_all(&state, Some(i as u64)).expect("test: valid measurement");
             if result.outcome == 0 {
                 zeros += 1;
             } else {
@@ -486,9 +488,9 @@ mod tests {
             Complex::new(1.0 / 2.0_f64.sqrt(), 0.0),
             Complex::new(1.0 / 2.0_f64.sqrt(), 0.0),
         ];
-        let state = StateVector::from_amplitudes(amplitudes).unwrap();
+        let state = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
 
-        let stats = Measurement::sample(&state, 1000, Some(42)).unwrap();
+        let stats = Measurement::sample(&state, 1000, Some(42)).expect("test: valid sampling");
 
         assert_eq!(stats.total_shots, 1000);
 
@@ -531,8 +533,9 @@ mod tests {
 
     #[test]
     fn test_measure_qubits() {
-        let state = StateVector::<f64>::new(3).unwrap();
-        let results = Measurement::measure_qubits(&state, &[0, 1, 2], Some(42)).unwrap();
+        let state = StateVector::<f64>::new(3).expect("test: valid qubit count");
+        let results = Measurement::measure_qubits(&state, &[0, 1, 2], Some(42))
+            .expect("test: valid qubit measurement");
 
         assert_eq!(results.len(), 3);
         // Should all be 0 for |000⟩ state
@@ -542,12 +545,14 @@ mod tests {
     #[test]
     fn test_measure_x_basis() {
         // |0⟩ state
-        let state = StateVector::<f64>::new(1).unwrap();
+        let state = StateVector::<f64>::new(1).expect("test: valid qubit count");
 
         // |0⟩ in X basis is |+⟩, should measure 0 half the time
         let mut count_0 = 0;
         for i in 0..100 {
-            if Measurement::measure_x(&state, 0, Some(i)).unwrap() == 0 {
+            if Measurement::measure_x(&state, 0, Some(i)).expect("test: valid x-basis measurement")
+                == 0
+            {
                 count_0 += 1;
             }
         }
@@ -558,20 +563,20 @@ mod tests {
     #[test]
     fn test_expectation_z() {
         // |0⟩ state
-        let state = StateVector::<f64>::new(1).unwrap();
-        let exp = Measurement::expectation_z(&state, 0).unwrap();
+        let state = StateVector::<f64>::new(1).expect("test: valid qubit count");
+        let exp = Measurement::expectation_z(&state, 0).expect("test: valid expectation value");
         assert_relative_eq!(exp, 1.0, epsilon = 1e-10);
 
         // |1⟩ state
         let amplitudes = vec![Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)];
-        let state = StateVector::from_amplitudes(amplitudes).unwrap();
-        let exp = Measurement::expectation_z(&state, 0).unwrap();
+        let state = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
+        let exp = Measurement::expectation_z(&state, 0).expect("test: valid expectation value");
         assert_relative_eq!(exp, -1.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_invalid_qubit_measurement() {
-        let state = StateVector::<f64>::new(2).unwrap();
+        let state = StateVector::<f64>::new(2).expect("test: valid qubit count");
         let result = Measurement::measure_qubits(&state, &[5], Some(42));
         assert!(result.is_err());
     }

@@ -4,21 +4,21 @@
 
 This document outlines the development status and roadmap for NumRS2, a high-performance numerical computing library for Rust.
 
-## Current Status (March 2026) - v0.3.2
+## Current Status (April 2026) - v0.3.3
 
-**Patch Release**: NumRS2 v0.3.2 is now available!
+**Patch Release**: NumRS2 v0.3.3 is now available!
 
 ### Release Metrics
-- **Version**: 0.3.2 (v0.3.2 Patch - March 27, 2026)
-- **Total Code**: ~290,513 lines of Rust code (222,217 code + 22,459 comments + 45,848 blanks; 671 files)
-- **Test Coverage**: 5,058+ library tests passing (4,166 nextest + 892 doc tests)
+- **Version**: 0.3.3 (v0.3.3 Patch - April 18, 2026)
+- **Total Code**: ~291,575 lines of Rust code (223,171 code + 22,459 comments + 45,848 blanks; 674 files)
+- **Test Coverage**: 5,063+ library tests passing (4,171 nextest + 892 doc tests)
 - **Public API**: 5,899+ public functions/structs/enums/traits; zero unimplemented stubs
 - **Quality**: Zero compilation warnings, zero errors, zero production unwrap() calls
 - **SIMD Operations**: 128+ vectorized functions (AVX2, AVX512, ARM NEON)
-- **Dependencies**: SciRS2 v0.4.0, OxiBLAS v0.3.0+ (pure Rust, stable releases)
-- **Special Functions**: scirs2-special v0.4.0
+- **Dependencies**: SciRS2 v0.4.2, OxiBLAS v0.3.0+ (pure Rust, stable releases)
+- **Special Functions**: scirs2-special v0.4.2
 - **Performance**: Critical O(n²) → O(1) bug fixed (1,000,000x speedup for large arrays), NSGA-III handles 8 objectives in 78.4s
-- **Latest Enhancement**: v0.3.2 patch - Minor improvements and updates (March 27, 2026)
+- **Latest Enhancement**: v0.3.3 patch - Dependency upgrades, linter compliance, wee_alloc → dlmalloc (April 18, 2026)
 
 ### Core Features (Complete)
 - ✅ N-dimensional array operations with NumPy compatibility
@@ -169,7 +169,7 @@ All modules integrated using SciRS2 v0.3.0:
 - ✅ **SciRS2 Ecosystem Update**: Updated all scirs2-* deps to v0.4.0
 - ✅ **Test Coverage**: 5,058+ tests passing (up from 4,098+)
 
-### Short-term Goals (v0.3.2 - Patches)
+### Short-term Goals (v0.3.3 - Patches)
 - [ ] Complete WASM support (awaiting scirs2-spatial with feature-gated tokio)
 - ✅ Additional distribution functions (beta, gamma, student-t extensions) - COMPLETED Feb 9, 2026
 - ✅ Enhanced GPU acceleration (compute shaders, buffer management) - COMPLETED Feb 9, 2026
@@ -310,4 +310,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
 
 ---
 
-**NumRS2 v0.3.2** - Production-ready numerical computing for Rust with SciRS2 v0.4.0 integration (COOLJAPAN Ecosystem)
+**NumRS2 v0.3.3** - Production-ready numerical computing for Rust with SciRS2 v0.4.2 integration (COOLJAPAN Ecosystem)

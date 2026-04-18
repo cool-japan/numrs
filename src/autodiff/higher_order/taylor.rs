@@ -91,10 +91,10 @@ impl<T: Float> TaylorExpansion2<T> {
 ///
 /// // f(x,y) = x^2 + y^2
 /// let f = |vars: &[HyperDual<f64>]| vars[0] * vars[0] + vars[1] * vars[1];
-/// let taylor = multivariate_taylor(f, &[1.0, 1.0]).unwrap();
+/// let taylor = multivariate_taylor(f, &[1.0, 1.0]).expect("valid taylor expansion");
 ///
 /// // Evaluate near the center
-/// let approx = taylor.evaluate(&[1.1, 1.2]).unwrap();
+/// let approx = taylor.evaluate(&[1.1, 1.2]).expect("valid taylor evaluation");
 /// // Should be close to f(1.1, 1.2) = 1.21 + 1.44 = 2.65
 /// ```
 pub fn multivariate_taylor<F, T>(f: F, center: &[T]) -> Result<TaylorExpansion2<T>>

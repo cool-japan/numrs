@@ -210,7 +210,7 @@ where
 /// use numrs2::io::messagepack::{to_messagepack_bytes, from_messagepack_bytes};
 ///
 /// let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
-/// let bytes = to_messagepack_bytes(&array).unwrap();
+/// let bytes = to_messagepack_bytes(&array).expect("valid messagepack serialization");
 ///
 /// let loaded: Array<f64> = from_messagepack_bytes(&bytes)
 ///     .expect("Failed to deserialize from bytes");

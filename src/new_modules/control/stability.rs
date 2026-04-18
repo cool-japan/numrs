@@ -777,7 +777,7 @@ mod tests {
     fn test_routh_hurwitz_stable() {
         // s^3 + 2s^2 + 3s + 4 (stable)
         let coeffs = vec![1.0, 2.0, 3.0, 4.0];
-        let rh = RouthHurwitz::new(&coeffs).unwrap();
+        let rh = RouthHurwitz::new(&coeffs).expect("test: valid Routh-Hurwitz table");
         assert!(rh.is_stable());
     }
 
@@ -785,22 +785,24 @@ mod tests {
     fn test_routh_hurwitz_unstable() {
         // s^3 - 2s^2 + 3s + 4 (unstable due to negative coefficient)
         let coeffs = vec![1.0, -2.0, 3.0, 4.0];
-        let rh = RouthHurwitz::new(&coeffs).unwrap();
+        let rh = RouthHurwitz::new(&coeffs).expect("test: valid Routh-Hurwitz table");
         assert!(!rh.is_stable());
     }
 
     #[test]
     fn test_bibo_stability() {
         // Stable system: poles at -1, -2
-        let tf = TransferFunction::new(vec![1.0], vec![1.0, 3.0, 2.0]).unwrap();
-        let stable = is_bibo_stable(&tf).unwrap();
+        let tf = TransferFunction::new(vec![1.0], vec![1.0, 3.0, 2.0])
+            .expect("test: valid transfer function");
+        let stable = is_bibo_stable(&tf).expect("test: valid BIBO stability check");
         assert!(stable);
     }
 
     #[test]
     fn test_bode_plot_generation() {
-        let tf = TransferFunction::new(vec![1.0], vec![1.0, 1.0]).unwrap();
-        let bode = bode_plot(&tf, (0.1, 100.0), 50).unwrap();
+        let tf = TransferFunction::new(vec![1.0], vec![1.0, 1.0])
+            .expect("test: valid transfer function");
+        let bode = bode_plot(&tf, (0.1, 100.0), 50).expect("test: valid Bode plot generation");
 
         assert_eq!(bode.frequencies.len(), 50);
         assert_eq!(bode.magnitude_db.len(), 50);
@@ -809,8 +811,10 @@ mod tests {
 
     #[test]
     fn test_nyquist_plot_generation() {
-        let tf = TransferFunction::new(vec![1.0], vec![1.0, 1.0]).unwrap();
-        let nyquist = nyquist_plot(&tf, (0.0, 10.0), 100).unwrap();
+        let tf = TransferFunction::new(vec![1.0], vec![1.0, 1.0])
+            .expect("test: valid transfer function");
+        let nyquist =
+            nyquist_plot(&tf, (0.0, 10.0), 100).expect("test: valid Nyquist plot generation");
 
         assert_eq!(nyquist.real.len(), 100);
         assert_eq!(nyquist.imag.len(), 100);
@@ -825,7 +829,7 @@ mod tests {
         let a = array![[2.0, 3.0], [4.0, 5.0]];
         let b = array![8.0, 14.0];
 
-        let x = solve_linear_system(&a, &b).unwrap();
+        let x = solve_linear_system(&a, &b).expect("test: valid linear system solution");
 
         assert!((x[0] - 1.0).abs() < 1e-10);
         assert!((x[1] - 2.0).abs() < 1e-10);

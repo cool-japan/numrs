@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["COOLJAPAN OU (Team KitaSan)"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -38,8 +38,8 @@ matlab = ["dep:matfile"]  # MATLAB .mat file I/O (pure Rust)
 messagepack = ["dep:rmp-serde"]  # MessagePack serialization (pure Rust)
 bson = ["dep:bson"]  # BSON format support (pure Rust)
 io-all = ["arrow", "parquet", "netcdf", "matlab", "messagepack", "bson"]  # Enable all I/O formats
-wasm = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:wee_alloc"]  # WebAssembly support
-distributed = ["dep:tokio", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread", "tokio/macros", "tokio/time"]  # Distributed computing support (Pure Rust, no MPI)
+wasm = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:dlmalloc"]  # WebAssembly support
+distributed = ["dep:tokio", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread", "tokio/macros", "tokio/time", "dep:oxiarc-lz4"]  # Distributed computing support (Pure Rust, no MPI)
 visualization = ["dep:plotters", "dep:plotters-backend", "dep:plotters-svg", "dep:resvg", "dep:usvg", "dep:tiny-skia", "dep:rgb"]  # Advanced visualization tools (pure Rust)
 ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without external dependencies
 
@@ -49,13 +49,13 @@ ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without extern
 # ===================================================================
 # ALL external functionality (ndarray, rand, rayon, BLAS) goes through scirs2-core
 # Using crates.io versions for stable 0.3.0 release
-scirs2-core = { version = "0.4.0", features = ["random", "array", "simd", "parallel", "linalg"] }
-scirs2-stats = { version = "0.4.0" }
-scirs2-linalg = { version = "0.4.0" }
-scirs2-ndimage = { version = "0.4.0" }
-scirs2-spatial = { version = "0.4.0", features = ["parallel"] }
-scirs2-special = { version = "0.4.0" }
-scirs2-fft = { version = "0.4.0" }
+scirs2-core = { version = "0.4.2", features = ["random", "array", "simd", "parallel", "linalg"] }
+scirs2-stats = { version = "0.4.2" }
+scirs2-linalg = { version = "0.4.2" }
+scirs2-ndimage = { version = "0.4.2" }
+scirs2-spatial = { version = "0.4.2", features = ["parallel"] }
+scirs2-special = { version = "0.4.2" }
+scirs2-fft = { version = "0.4.2" }
 
 # ===================================================================
 # ALLOWED DEPENDENCIES (Non-conflicting)
@@ -72,6 +72,7 @@ csv = "1.4.0"
 oxicode = { version = "0.2", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
 oxiarc-archive = { version = "0.2.6" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
+oxiarc-lz4 = { version = "0.2.6", optional = true }   # Pure Rust LZ4 for distributed network transfer (COOLJAPAN Policy)
 # NPZ format support with pure Rust compression (DEFLATE via OxiARC)
 serde-pickle = "1.2.0" # Python pickle format support
 memmap2 = "0.9.10"      # Memory-mapped file I/O
@@ -101,10 +102,10 @@ chrono = { version = "0.4.44", default-features = false, features = ["std", "clo
 wgpu = { version = "29.0.1", optional = true }
 bytemuck = { version = "1.25.0", features = ["derive"], optional = true }
 futures-intrusive = { version = "0.5.0", optional = true }
-tokio = { version = "1.50.0", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
+tokio = { version = "1.52.1", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
 
 # Optional Python bindings dependencies
-pyo3 = { version = "0.28.2", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.28.3", features = ["extension-module"], optional = true }
 scirs2-numpy = { workspace = true, optional = true }
 
 # Optional Apache Arrow dependencies (via SciRS2 workspace)
@@ -115,19 +116,19 @@ arrow-cast = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 
 # Optional I/O format dependencies (Pure Rust - COOLJAPAN Policy)
-parquet = { workspace = true, optional = true }  # Apache Parquet (pure Rust)
+parquet = { workspace = true, optional = true, default-features = false, features = ["arrow", "snap", "brotli", "flate2-zlib-rs", "lz4", "base64", "simdutf8"] }  # Apache Parquet, no zstd-sys (C) — COOLJAPAN Pure Rust Policy
 netcdf3 = { version = "0.6.0", optional = true }  # NetCDF-3 (pure Rust)
 matfile = { version = "0.5.0", optional = true, features = ["ndarray"] }  # MATLAB .mat files (pure Rust)
 rmp-serde = { version = "1.3.1", optional = true }  # MessagePack (pure Rust)
 bson = { version = "3.1.0", optional = true, features = ["serde"] }  # BSON (pure Rust)
 
 # Optional WebAssembly dependencies (Pure Rust - COOLJAPAN Policy)
-wasm-bindgen = { version = "0.2.114", optional = true, features = ["serde-serialize"] }  # WebAssembly bindings
-wasm-bindgen-futures = { version = "0.4.64", optional = true }  # Async/await support for WASM
-js-sys = { version = "0.3.91", optional = true }  # JavaScript standard library bindings
-web-sys = { version = "0.3.91", optional = true, features = ["console", "Window", "Performance"] }  # Web API bindings
+wasm-bindgen = { version = "0.2.118", optional = true, features = ["serde-serialize"] }  # WebAssembly bindings
+wasm-bindgen-futures = { version = "0.4.68", optional = true }  # Async/await support for WASM
+js-sys = { version = "0.3.95", optional = true }  # JavaScript standard library bindings
+web-sys = { version = "0.3.95", optional = true, features = ["console", "Window", "Performance"] }  # Web API bindings
 console_error_panic_hook = { version = "0.1.7", optional = true }  # Better panic messages in WASM
-wee_alloc = { version = "0.4.5", optional = true }  # Small allocator for WASM
+dlmalloc = { version = "0.2", features = ["global"], optional = true }  # Maintained pure-Rust allocator for WASM
 
 # Optional Visualization dependencies (Pure Rust - COOLJAPAN Policy)
 plotters = { version = "0.3.7", optional = true }  # High-performance plotting library
@@ -149,7 +150,7 @@ rgb = { version = "0.8.53", optional = true }  # RGB color types
 # Force getrandom v0.3 with WASM support enabled
 getrandom = { version = "0.4", default-features = false, features = ["wasm_js"] }
 # Also add v0.2 with renamed package for transitive deps using older rand
-getrandom_02 = { package = "getrandom", version = "=0.2.17", default-features = false, features = ["js"] }
+getrandom_02 = { package = "getrandom", version = "0.2", default-features = false, features = ["js"] }
 # uuid also needs WASM support enabled
 uuid = { version = "1.23", features = ["js"] }  # Enable JS random for WASM
 
@@ -159,10 +160,10 @@ approx = "0.5.1"     # Approximate floating-point comparisons for tests
 tempfile = "3.27.0"   # Temporary files for testing I/O functionality
 proptest = "1.11.0"   # Property-based testing for mathematical invariants
 serial_test = "3.4.0"  # For tests that require serial execution (global state)
-wasm-bindgen-test = "0.3.64"  # Testing framework for WebAssembly
+wasm-bindgen-test = "0.3.68"  # Testing framework for WebAssembly
 # For performance benchmarks in bench.rs
 serde_json = "1.0.149"  # For loading NumPy benchmark results
-tokio = { version = "1.50.0", features = ["rt", "macros"] }  # For GPU tests
+tokio = { version = "1.52.1", features = ["rt", "macros"] }  # For GPU tests
 
 [workspace.lints.rust]
 unused_variables = "allow"
@@ -288,6 +289,11 @@ path = "bench/distributed_benchmarks.rs"
 harness = false
 required-features = ["distributed"]
 
+[[bench]]
+name = "io_benchmarks"
+path = "bench/io_benchmarks.rs"
+harness = false
+
 # ===================================================================
 # v0.2.0 ENHANCED BENCHMARKS (benches/ directory)
 # ===================================================================
@@ -312,19 +318,29 @@ name = "cache_alignment_benchmark"
 path = "benches/cache_alignment_benchmark.rs"
 harness = false
 
+[[bench]]
+name = "sparse_benchmark"
+path = "benches/sparse_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "complex_benchmark"
+path = "benches/complex_benchmark.rs"
+harness = false
+
 # ===================================================================
 # WORKSPACE CONFIGURATION (SCIRS2 POLICY)
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.4.0" }
-scirs2-stats = { version = "0.4.0" }
-scirs2-linalg = { version = "0.4.0" }
-scirs2-ndimage = { version = "0.4.0" }
-scirs2-spatial = { version = "0.4.0" }
-scirs2-special = { version = "0.4.0" }
-scirs2-fft = { version = "0.4.0" }
-scirs2-numpy = { version = "0.4.0" }
+scirs2-core = { version = "0.4.2" }
+scirs2-stats = { version = "0.4.2" }
+scirs2-linalg = { version = "0.4.2" }
+scirs2-ndimage = { version = "0.4.2" }
+scirs2-spatial = { version = "0.4.2" }
+scirs2-special = { version = "0.4.2" }
+scirs2-fft = { version = "0.4.2" }
+scirs2-numpy = { version = "0.4.2" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
 arrow = "58.1.0"
@@ -332,7 +348,7 @@ arrow-array = "58.1.0"
 arrow-buffer = "58.1.0"
 arrow-cast = "58.1.0"
 arrow-schema = "58.1.0"
-parquet = "58.1.0"  # Apache Parquet (pure Rust)
+parquet = { version = "58.1.0", default-features = false }  # Apache Parquet, no zstd-sys (C) — COOLJAPAN Pure Rust Policy
 
 
 # ===================================================================

@@ -87,11 +87,11 @@ use scirs2_core::ndarray::{Array1, ArrayView1};
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.5, 0.5]);
-/// let d = kl_divergence(&p, &q).unwrap();
+/// let d = kl_divergence(&p, &q).expect("valid probability distributions");
 /// assert!(d.abs() < 1e-10); // D_KL(P||P) = 0
 ///
 /// let q2 = Array1::from_vec(vec![0.6, 0.4]);
-/// let d2 = kl_divergence(&p, &q2).unwrap();
+/// let d2 = kl_divergence(&p, &q2).expect("valid probability distributions");
 /// assert!(d2 > 0.0); // D_KL(P||Q) > 0 when P != Q
 /// ```
 pub fn kl_divergence(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Error> {
@@ -155,11 +155,11 @@ pub fn kl_divergence(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Erro
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.5, 0.5]);
-/// let jsd = jensen_shannon_divergence(&p, &q).unwrap();
+/// let jsd = jensen_shannon_divergence(&p, &q).expect("valid probability distributions");
 /// assert!(jsd.abs() < 1e-10); // JSD(P,P) = 0
 ///
 /// let q2 = Array1::from_vec(vec![0.6, 0.4]);
-/// let jsd2 = jensen_shannon_divergence(&p, &q2).unwrap();
+/// let jsd2 = jensen_shannon_divergence(&p, &q2).expect("valid probability distributions");
 /// assert!(jsd2 > 0.0 && jsd2 < 2_f64.ln()); // 0 < JSD < log(2)
 /// ```
 pub fn jensen_shannon_divergence(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Error> {
@@ -213,12 +213,12 @@ pub fn jensen_shannon_divergence(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.5, 0.5]);
-/// let bc = bhattacharyya_coefficient(&p, &q).unwrap();
+/// let bc = bhattacharyya_coefficient(&p, &q).expect("valid probability distributions");
 /// assert!((bc - 1.0).abs() < 1e-10); // BC(P,P) = 1
 ///
 /// let p2 = Array1::from_vec(vec![1.0, 0.0]);
 /// let q2 = Array1::from_vec(vec![0.0, 1.0]);
-/// let bc2 = bhattacharyya_coefficient(&p2, &q2).unwrap();
+/// let bc2 = bhattacharyya_coefficient(&p2, &q2).expect("valid probability distributions");
 /// assert!(bc2.abs() < 1e-10); // BC = 0 for disjoint support
 /// ```
 pub fn bhattacharyya_coefficient(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Error> {
@@ -273,7 +273,7 @@ pub fn bhattacharyya_coefficient(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.5, 0.5]);
-/// let d = bhattacharyya_distance(&p, &q).unwrap();
+/// let d = bhattacharyya_distance(&p, &q).expect("valid probability distributions");
 /// assert!(d.abs() < 1e-10); // D_B(P,P) = 0
 /// ```
 pub fn bhattacharyya_distance(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Error> {
@@ -313,12 +313,12 @@ pub fn bhattacharyya_distance(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, N
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.5, 0.5]);
-/// let h = hellinger_distance(&p, &q).unwrap();
+/// let h = hellinger_distance(&p, &q).expect("valid probability distributions");
 /// assert!(h.abs() < 1e-10); // H(P,P) = 0
 ///
 /// let p2 = Array1::from_vec(vec![1.0, 0.0]);
 /// let q2 = Array1::from_vec(vec![0.0, 1.0]);
-/// let h2 = hellinger_distance(&p2, &q2).unwrap();
+/// let h2 = hellinger_distance(&p2, &q2).expect("valid probability distributions");
 /// assert!((h2 - 1.0).abs() < 1e-10); // H = 1 for disjoint support
 /// ```
 pub fn hellinger_distance(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Error> {
@@ -357,12 +357,12 @@ pub fn hellinger_distance(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.5, 0.5]);
-/// let tv = total_variation_distance(&p, &q).unwrap();
+/// let tv = total_variation_distance(&p, &q).expect("valid probability distributions");
 /// assert!(tv.abs() < 1e-10); // TV(P,P) = 0
 ///
 /// let p2 = Array1::from_vec(vec![1.0, 0.0]);
 /// let q2 = Array1::from_vec(vec![0.0, 1.0]);
-/// let tv2 = total_variation_distance(&p2, &q2).unwrap();
+/// let tv2 = total_variation_distance(&p2, &q2).expect("valid probability distributions");
 /// assert!((tv2 - 1.0).abs() < 1e-10); // TV = 1 for disjoint support
 /// ```
 pub fn total_variation_distance(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Error> {
@@ -420,7 +420,7 @@ pub fn total_variation_distance(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64,
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.5, 0.5]);
-/// let chi2 = chi_squared_divergence(&p, &q).unwrap();
+/// let chi2 = chi_squared_divergence(&p, &q).expect("valid probability distributions");
 /// assert!(chi2.abs() < 1e-10); // χ²(P,P) = 0
 /// ```
 pub fn chi_squared_divergence(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, NumRs2Error> {
@@ -487,11 +487,11 @@ pub fn chi_squared_divergence(p: &Array1<f64>, q: &Array1<f64>) -> Result<f64, N
 /// let q = Array1::from_vec(vec![0.6, 0.4]);
 ///
 /// // KL divergence: f(t) = t*log(t)
-/// let d_kl = f_divergence(&p, &q, |t| if t > 0.0 { t * t.ln() } else { 0.0 }).unwrap();
+/// let d_kl = f_divergence(&p, &q, |t| if t > 0.0 { t * t.ln() } else { 0.0 }).expect("valid probability distributions");
 /// assert!(d_kl > 0.0);
 ///
 /// // Chi-squared: f(t) = (t-1)²
-/// let d_chi2 = f_divergence(&p, &q, |t| (t - 1.0).powi(2)).unwrap();
+/// let d_chi2 = f_divergence(&p, &q, |t| (t - 1.0).powi(2)).expect("valid probability distributions");
 /// assert!(d_chi2 > 0.0);
 /// ```
 pub fn f_divergence<F>(p: &Array1<f64>, q: &Array1<f64>, f: F) -> Result<f64, NumRs2Error>

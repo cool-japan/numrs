@@ -350,7 +350,7 @@ mod tests {
         let version = VersionInfo::parse("0.4.0");
         assert!(version.is_ok());
 
-        let v = version.unwrap();
+        let v = version.expect("test: valid version parse");
         assert_eq!(v.major, 0);
         assert_eq!(v.minor, 4);
         assert_eq!(v.patch, 0);
@@ -412,7 +412,7 @@ mod tests {
             .version("1.0.0")
             .architecture("MLP")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -432,7 +432,10 @@ mod tests {
 
     #[test]
     fn test_validate_model_no_layers() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let model = NumRS2Model::new(metadata, vec![]);
 
@@ -483,7 +486,7 @@ mod tests {
         let result = ModelMigration::migrate_to_current(model);
         assert!(result.is_ok());
 
-        let migrated = result.unwrap();
+        let migrated = result.expect("test: valid model migration");
         assert_eq!(migrated.format.version, MODEL_FORMAT_VERSION);
     }
 
@@ -516,7 +519,7 @@ mod tests {
             .version("1.0.0")
             .architecture("MLP")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         NumRS2Model::new(metadata, vec![layer])

@@ -286,7 +286,7 @@ impl<T: Clone> Array<T> {
                 // Create a transposed view and then flatten
                 // Need to implement a transpose with indices method
                 // For now, just do a simple flatten
-                // let transposed = self.transpose(&indices).unwrap();
+                // let transposed = self.transpose(&indices).expect("valid transpose indices");
                 let transposed = self.clone();
                 transposed.reshape(&[transposed.size()])
             }

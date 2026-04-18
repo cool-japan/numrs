@@ -12,7 +12,7 @@
 
 #![allow(clippy::result_large_err)]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use numrs2::linalg::vector_ops::cross;
 use numrs2::linalg_accelerated::{cholesky, det, eig, eigvals, inv, lu, qr, solve, svd};
 use numrs2::prelude::*;
@@ -26,6 +26,10 @@ fn bench_matrix_multiplication(c: &mut Criterion) {
 
     // Test sizes from small to large
     for size in [10, 50, 100, 200, 500, 1000].iter() {
+        // Throughput: 2*N^3 FLOPs for NxN matrix multiplication (multiply-adds)
+        group.throughput(Throughput::Elements(
+            (*size as u64) * (*size as u64) * (*size as u64) * 2,
+        ));
         group.bench_with_input(
             BenchmarkId::new("square_matmul", size),
             size,
@@ -41,7 +45,10 @@ fn bench_matrix_multiplication(c: &mut Criterion) {
             },
         );
 
-        // Benchmark rectangular matrices
+        // Benchmark rectangular matrices: [s, 2s] @ [2s, s] -> [s, s]: FLOPs = 2*s*s*(2s) = 4*s^3
+        group.throughput(Throughput::Elements(
+            (*size as u64) * (*size as u64) * (*size as u64) * 4,
+        ));
         group.bench_with_input(
             BenchmarkId::new("rect_matmul", size),
             size,

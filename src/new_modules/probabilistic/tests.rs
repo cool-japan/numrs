@@ -271,20 +271,33 @@ fn test_bayesian_network_workflow() {
 
     // Create a simple network: Rain -> Sprinkler -> Grass Wet
     let mut rain = BayesianNode::new("Rain".to_string(), 2);
-    rain.set_cpt(vec![], vec![0.8, 0.2]).unwrap(); // P(Rain = No/Yes)
+    rain.set_cpt(vec![], vec![0.8, 0.2])
+        .expect("test: valid CPT for Rain"); // P(Rain = No/Yes)
 
     let mut sprinkler = BayesianNode::new("Sprinkler".to_string(), 2);
     sprinkler.add_parent(0); // Sprinkler depends on Rain
-    sprinkler.set_cpt(vec![0], vec![0.6, 0.4]).unwrap(); // P(S|R=No)
-    sprinkler.set_cpt(vec![1], vec![0.99, 0.01]).unwrap(); // P(S|R=Yes)
+    sprinkler
+        .set_cpt(vec![0], vec![0.6, 0.4])
+        .expect("test: valid CPT for Sprinkler given Rain=No"); // P(S|R=No)
+    sprinkler
+        .set_cpt(vec![1], vec![0.99, 0.01])
+        .expect("test: valid CPT for Sprinkler given Rain=Yes"); // P(S|R=Yes)
 
     let mut grass = BayesianNode::new("Grass Wet".to_string(), 2);
     grass.add_parent(0); // Grass depends on Rain
     grass.add_parent(1); // Grass depends on Sprinkler
-    grass.set_cpt(vec![0, 0], vec![0.99, 0.01]).unwrap(); // P(G|R=No,S=No)
-    grass.set_cpt(vec![0, 1], vec![0.1, 0.9]).unwrap(); // P(G|R=No,S=Yes)
-    grass.set_cpt(vec![1, 0], vec![0.1, 0.9]).unwrap(); // P(G|R=Yes,S=No)
-    grass.set_cpt(vec![1, 1], vec![0.01, 0.99]).unwrap(); // P(G|R=Yes,S=Yes)
+    grass
+        .set_cpt(vec![0, 0], vec![0.99, 0.01])
+        .expect("test: valid CPT for Grass given Rain=No,Sprinkler=No"); // P(G|R=No,S=No)
+    grass
+        .set_cpt(vec![0, 1], vec![0.1, 0.9])
+        .expect("test: valid CPT for Grass given Rain=No,Sprinkler=Yes"); // P(G|R=No,S=Yes)
+    grass
+        .set_cpt(vec![1, 0], vec![0.1, 0.9])
+        .expect("test: valid CPT for Grass given Rain=Yes,Sprinkler=No"); // P(G|R=Yes,S=No)
+    grass
+        .set_cpt(vec![1, 1], vec![0.01, 0.99])
+        .expect("test: valid CPT for Grass given Rain=Yes,Sprinkler=Yes"); // P(G|R=Yes,S=Yes)
 
     bn.add_node(rain);
     bn.add_node(sprinkler);

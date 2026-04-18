@@ -600,7 +600,7 @@ mod tests {
 
         assert_eq!(metrics.total, 2);
         assert!(metrics.mae.is_some());
-        assert!((metrics.mae.unwrap() - 0.5).abs() < 1e-10);
+        assert!((metrics.mae.expect("test: MAE is some") - 0.5).abs() < 1e-10);
     }
 
     #[test]

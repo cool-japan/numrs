@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn test_max_pool2d() {
         let x = Array2::from_shape_fn((4, 4), |(i, j)| (i * 4 + j) as f64);
-        let result = max_pool2d(&x.view(), (2, 2), (2, 2)).unwrap();
+        let result = max_pool2d(&x.view(), (2, 2), (2, 2)).expect("test: valid pool params");
 
         assert_eq!(result.dim(), (2, 2));
 
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn test_avg_pool2d() {
         let x = Array2::from_shape_fn((4, 4), |(_, _)| 1.0);
-        let result = avg_pool2d(&x.view(), (2, 2), (2, 2)).unwrap();
+        let result = avg_pool2d(&x.view(), (2, 2), (2, 2)).expect("test: valid pool params");
 
         assert_eq!(result.dim(), (2, 2));
 
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn test_global_avg_pool() {
         let x = Array2::from_shape_fn((3, 3), |(_, _)| 2.0);
-        let result = global_avg_pool(&x.view()).unwrap();
+        let result = global_avg_pool(&x.view()).expect("test: valid global avg pool params");
 
         assert_abs_diff_eq!(result, 2.0, epsilon = 1e-6);
     }

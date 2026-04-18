@@ -30,16 +30,16 @@ use super::types::{
 /// use scirs2_core::ndarray::Array1;
 ///
 /// // Simple Exponential Smoothing
-/// let model = ExponentialSmoothing::ses(0.3).unwrap();
+/// let model = ExponentialSmoothing::ses(0.3).expect("valid smoothing parameter");
 ///
 /// // Holt's Linear Trend
-/// let model = ExponentialSmoothing::holt(0.3, 0.1).unwrap();
+/// let model = ExponentialSmoothing::holt(0.3, 0.1).expect("valid smoothing parameters");
 ///
 /// // Damped Trend
-/// let model = ExponentialSmoothing::damped_trend(0.3, 0.1, 0.9).unwrap();
+/// let model = ExponentialSmoothing::damped_trend(0.3, 0.1, 0.9).expect("valid smoothing parameters");
 ///
 /// // Holt-Winters Additive
-/// let model = ExponentialSmoothing::holt_winters(0.3, 0.1, 0.2, 12, SeasonalComponent::Additive).unwrap();
+/// let model = ExponentialSmoothing::holt_winters(0.3, 0.1, 0.2, 12, SeasonalComponent::Additive).expect("valid smoothing parameters");
 /// ```
 #[derive(Debug, Clone)]
 pub struct ExponentialSmoothing {

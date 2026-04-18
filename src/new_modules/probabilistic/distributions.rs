@@ -821,7 +821,8 @@ mod tests {
 
     #[test]
     fn test_beta_distribution_pdf() {
-        let beta = BetaDistribution::new(2.0, 5.0).unwrap();
+        let beta =
+            BetaDistribution::new(2.0, 5.0).expect("test: valid Beta distribution parameters");
 
         // PDF should be 0 outside [0,1]
         assert_eq!(beta.pdf(-0.1), 0.0);
@@ -834,7 +835,8 @@ mod tests {
 
     #[test]
     fn test_beta_distribution_moments() {
-        let beta = BetaDistribution::new(2.0, 5.0).unwrap();
+        let beta =
+            BetaDistribution::new(2.0, 5.0).expect("test: valid Beta distribution parameters");
 
         // Mean = α/(α+β) = 2/7
         assert_relative_eq!(beta.mean(), 2.0 / 7.0, epsilon = 1e-10);
@@ -846,12 +848,13 @@ mod tests {
 
     #[test]
     fn test_beta_distribution_sampling() {
-        let beta = BetaDistribution::new(2.0, 5.0).unwrap();
+        let beta =
+            BetaDistribution::new(2.0, 5.0).expect("test: valid Beta distribution parameters");
         let mut rng = thread_rng();
 
         // Sample multiple times
         for _ in 0..100 {
-            let sample = beta.sample(&mut rng).unwrap();
+            let sample = beta.sample(&mut rng).expect("test: valid Beta sample");
             assert!((0.0..=1.0).contains(&sample));
         }
     }
@@ -867,7 +870,8 @@ mod tests {
 
     #[test]
     fn test_gamma_distribution_pdf() {
-        let gamma = GammaDistribution::new(2.0, 1.0).unwrap();
+        let gamma =
+            GammaDistribution::new(2.0, 1.0).expect("test: valid Gamma distribution parameters");
 
         // PDF should be 0 for x <= 0
         assert_eq!(gamma.pdf(0.0), 0.0);
@@ -880,7 +884,8 @@ mod tests {
 
     #[test]
     fn test_gamma_distribution_moments() {
-        let gamma = GammaDistribution::new(2.0, 1.0).unwrap();
+        let gamma =
+            GammaDistribution::new(2.0, 1.0).expect("test: valid Gamma distribution parameters");
 
         // Mean = α/β = 2/1 = 2
         assert_relative_eq!(gamma.mean(), 2.0, epsilon = 1e-10);
@@ -891,12 +896,13 @@ mod tests {
 
     #[test]
     fn test_gamma_distribution_sampling() {
-        let gamma = GammaDistribution::new(2.0, 1.0).unwrap();
+        let gamma =
+            GammaDistribution::new(2.0, 1.0).expect("test: valid Gamma distribution parameters");
         let mut rng = thread_rng();
 
         // Sample multiple times
         for _ in 0..100 {
-            let sample = gamma.sample(&mut rng).unwrap();
+            let sample = gamma.sample(&mut rng).expect("test: valid Gamma sample");
             assert!(sample > 0.0);
         }
     }
@@ -915,7 +921,8 @@ mod tests {
 
     #[test]
     fn test_dirichlet_distribution_mean() {
-        let dir = DirichletDistribution::new(vec![1.0, 2.0, 3.0]).unwrap();
+        let dir = DirichletDistribution::new(vec![1.0, 2.0, 3.0])
+            .expect("test: valid Dirichlet distribution parameters");
         let mean = dir.mean();
 
         assert_eq!(mean.len(), 3);
@@ -926,11 +933,12 @@ mod tests {
 
     #[test]
     fn test_dirichlet_distribution_sampling() {
-        let dir = DirichletDistribution::new(vec![1.0, 2.0, 3.0]).unwrap();
+        let dir = DirichletDistribution::new(vec![1.0, 2.0, 3.0])
+            .expect("test: valid Dirichlet distribution parameters");
         let mut rng = thread_rng();
 
         for _ in 0..100 {
-            let sample = dir.sample(&mut rng).unwrap();
+            let sample = dir.sample(&mut rng).expect("test: valid Dirichlet sample");
 
             // Check simplex constraint
             let sum: f64 = sample.iter().sum();
@@ -954,28 +962,35 @@ mod tests {
 
     #[test]
     fn test_student_t_distribution_moments() {
-        let t = StudentTDistribution::new(5.0).unwrap();
+        let t =
+            StudentTDistribution::new(5.0).expect("test: valid Student-T distribution parameters");
 
         // Mean should be 0 for ν > 1
         assert_eq!(t.mean(), Some(0.0));
 
         // Variance = ν/(ν-2) for ν > 2
-        assert_relative_eq!(t.variance().unwrap(), 5.0 / 3.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            t.variance().expect("test: variance exists for df>2"),
+            5.0 / 3.0,
+            epsilon = 1e-10
+        );
 
         // For ν = 1 (Cauchy), mean is undefined
-        let cauchy = StudentTDistribution::new(1.0).unwrap();
+        let cauchy =
+            StudentTDistribution::new(1.0).expect("test: valid Student-T distribution parameters");
         assert_eq!(cauchy.mean(), None);
         assert_eq!(cauchy.variance(), None);
     }
 
     #[test]
     fn test_student_t_distribution_sampling() {
-        let t = StudentTDistribution::new(5.0).unwrap();
+        let t =
+            StudentTDistribution::new(5.0).expect("test: valid Student-T distribution parameters");
         let mut rng = thread_rng();
 
         // Just verify sampling works
         for _ in 0..100 {
-            let _sample = t.sample(&mut rng).unwrap();
+            let _sample = t.sample(&mut rng).expect("test: valid Student-T sample");
         }
     }
 
@@ -990,7 +1005,8 @@ mod tests {
 
     #[test]
     fn test_lognormal_distribution_pdf() {
-        let ln = LogNormalDistribution::new(0.0, 1.0).unwrap();
+        let ln = LogNormalDistribution::new(0.0, 1.0)
+            .expect("test: valid LogNormal distribution parameters");
 
         // PDF should be 0 for x <= 0
         assert_eq!(ln.pdf(0.0), 0.0);
@@ -1002,11 +1018,12 @@ mod tests {
 
     #[test]
     fn test_lognormal_distribution_sampling() {
-        let ln = LogNormalDistribution::new(0.0, 1.0).unwrap();
+        let ln = LogNormalDistribution::new(0.0, 1.0)
+            .expect("test: valid LogNormal distribution parameters");
         let mut rng = thread_rng();
 
         for _ in 0..100 {
-            let sample = ln.sample(&mut rng).unwrap();
+            let sample = ln.sample(&mut rng).expect("test: valid LogNormal sample");
             assert!(sample > 0.0);
         }
     }
@@ -1022,7 +1039,8 @@ mod tests {
 
     #[test]
     fn test_von_mises_distribution_pdf() {
-        let vm = VonMisesDistribution::new(0.0, 1.0).unwrap();
+        let vm = VonMisesDistribution::new(0.0, 1.0)
+            .expect("test: valid VonMises distribution parameters");
 
         // PDF should be positive
         assert!(vm.pdf(0.0) > 0.0);
@@ -1031,11 +1049,12 @@ mod tests {
 
     #[test]
     fn test_von_mises_distribution_sampling() {
-        let vm = VonMisesDistribution::new(0.0, 1.0).unwrap();
+        let vm = VonMisesDistribution::new(0.0, 1.0)
+            .expect("test: valid VonMises distribution parameters");
         let mut rng = thread_rng();
 
         for _ in 0..100 {
-            let sample = vm.sample(&mut rng).unwrap();
+            let sample = vm.sample(&mut rng).expect("test: valid VonMises sample");
             // Sample should be finite and when normalized should be in [0, 2π)
             assert!(sample.is_finite());
             let normalized = sample.rem_euclid(2.0 * PI);

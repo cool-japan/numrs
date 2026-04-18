@@ -459,12 +459,20 @@ mod tests {
         let n2 = graph.add_node();
         let sink = graph.add_node();
 
-        graph.add_edge(source, n1, 10.0).unwrap();
-        graph.add_edge(source, n2, 10.0).unwrap();
-        graph.add_edge(n1, sink, 10.0).unwrap();
-        graph.add_edge(n2, sink, 10.0).unwrap();
+        graph
+            .add_edge(source, n1, 10.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(source, n2, 10.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, sink, 10.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n2, sink, 10.0)
+            .expect("test: valid edge addition");
 
-        let result = max_flow(&graph, source, sink).unwrap();
+        let result = max_flow(&graph, source, sink).expect("test: valid max flow");
         assert_eq!(result.max_flow, 20.0);
     }
 
@@ -475,10 +483,14 @@ mod tests {
         let n1 = graph.add_node();
         let sink = graph.add_node();
 
-        graph.add_edge(source, n1, 10.0).unwrap();
-        graph.add_edge(n1, sink, 5.0).unwrap();
+        graph
+            .add_edge(source, n1, 10.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, sink, 5.0)
+            .expect("test: valid edge addition");
 
-        let result = max_flow(&graph, source, sink).unwrap();
+        let result = max_flow(&graph, source, sink).expect("test: valid max flow");
         assert_eq!(result.max_flow, 5.0);
     }
 
@@ -488,7 +500,9 @@ mod tests {
         let source = graph.add_node();
         let sink = graph.add_node();
 
-        graph.add_edge(source, sink, -1.0).unwrap();
+        graph
+            .add_edge(source, sink, -1.0)
+            .expect("test: valid edge addition");
 
         let result = max_flow(&graph, source, sink);
         assert!(result.is_err());
@@ -501,12 +515,18 @@ mod tests {
         let n1 = graph.add_node();
         let sink = graph.add_node();
 
-        graph.add_edge(source, n1, 10.0).unwrap();
-        graph.add_edge(n1, sink, 5.0).unwrap();
-        graph.add_edge(source, sink, 15.0).unwrap();
+        graph
+            .add_edge(source, n1, 10.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, sink, 5.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(source, sink, 15.0)
+            .expect("test: valid edge addition");
 
-        let flow_result = max_flow(&graph, source, sink).unwrap();
-        let cut = min_cut(&graph, &flow_result).unwrap();
+        let flow_result = max_flow(&graph, source, sink).expect("test: valid max flow");
+        let cut = min_cut(&graph, &flow_result).expect("test: valid min cut");
 
         // Min-cut capacity should equal max flow
         let cut_capacity: Weight = cut.iter().map(|(_, _, w)| w).sum();
@@ -527,12 +547,20 @@ mod tests {
         }
 
         // Add edges
-        bipartite.add_edge(0, 3).unwrap();
-        bipartite.add_edge(0, 4).unwrap();
-        bipartite.add_edge(1, 4).unwrap();
-        bipartite.add_edge(2, 5).unwrap();
+        bipartite
+            .add_edge(0, 3)
+            .expect("test: valid bipartite edge addition");
+        bipartite
+            .add_edge(0, 4)
+            .expect("test: valid bipartite edge addition");
+        bipartite
+            .add_edge(1, 4)
+            .expect("test: valid bipartite edge addition");
+        bipartite
+            .add_edge(2, 5)
+            .expect("test: valid bipartite edge addition");
 
-        let matching = max_bipartite_matching(&bipartite).unwrap();
+        let matching = max_bipartite_matching(&bipartite).expect("test: valid bipartite matching");
 
         // Should find maximum matching of size 3
         assert_eq!(matching.len(), 3);
@@ -556,12 +584,20 @@ mod tests {
         bipartite.add_right(3);
         bipartite.add_right(4);
 
-        bipartite.add_edge(0, 3).unwrap();
-        bipartite.add_edge(1, 3).unwrap();
-        bipartite.add_edge(1, 4).unwrap();
-        bipartite.add_edge(2, 4).unwrap();
+        bipartite
+            .add_edge(0, 3)
+            .expect("test: valid bipartite edge addition");
+        bipartite
+            .add_edge(1, 3)
+            .expect("test: valid bipartite edge addition");
+        bipartite
+            .add_edge(1, 4)
+            .expect("test: valid bipartite edge addition");
+        bipartite
+            .add_edge(2, 4)
+            .expect("test: valid bipartite edge addition");
 
-        let matching = max_bipartite_matching(&bipartite).unwrap();
+        let matching = max_bipartite_matching(&bipartite).expect("test: valid bipartite matching");
 
         // Can only match 2 pairs (limited by right side)
         assert_eq!(matching.len(), 2);
@@ -573,9 +609,11 @@ mod tests {
         let n0 = graph.add_node();
         let n1 = graph.add_node();
 
-        graph.add_edge(n0, n1, 10.0).unwrap();
+        graph
+            .add_edge(n0, n1, 10.0)
+            .expect("test: valid edge addition");
 
-        let network = FlowNetwork::from_graph(&graph).unwrap();
+        let network = FlowNetwork::from_graph(&graph).expect("test: valid flow network creation");
         assert_eq!(network.residual_capacity(n0, n1), 10.0);
         assert_eq!(network.get_flow(n0, n1), 0.0);
     }

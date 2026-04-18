@@ -488,11 +488,21 @@ mod tests {
         let n2 = graph.add_node();
         let n3 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n0, n2, 4.0).unwrap();
-        graph.add_edge(n1, n2, 2.0).unwrap();
-        graph.add_edge(n1, n3, 5.0).unwrap();
-        graph.add_edge(n2, n3, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n0, n2, 4.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n2, 2.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n3, 5.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n2, n3, 1.0)
+            .expect("test: valid edge addition");
 
         graph
     }
@@ -500,14 +510,16 @@ mod tests {
     #[test]
     fn test_dijkstra() {
         let graph = create_test_graph();
-        let result = dijkstra(&graph, 0).unwrap();
+        let result = dijkstra(&graph, 0).expect("test: valid Dijkstra");
 
         assert_eq!(result.distance_to(0), Some(0.0));
         assert_eq!(result.distance_to(1), Some(1.0));
         assert_eq!(result.distance_to(2), Some(3.0));
         assert_eq!(result.distance_to(3), Some(4.0));
 
-        let path = result.reconstruct_path(3).unwrap();
+        let path = result
+            .reconstruct_path(3)
+            .expect("test: valid path reconstruction");
         assert_eq!(path, vec![0, 1, 2, 3]);
     }
 
@@ -516,7 +528,9 @@ mod tests {
         let mut graph = Graph::new(true);
         let n0 = graph.add_node();
         let n1 = graph.add_node();
-        graph.add_edge(n0, n1, -1.0).unwrap();
+        graph
+            .add_edge(n0, n1, -1.0)
+            .expect("test: valid edge addition");
 
         let result = dijkstra(&graph, n0);
         assert!(result.is_err());
@@ -525,7 +539,7 @@ mod tests {
     #[test]
     fn test_bellman_ford() {
         let graph = create_test_graph();
-        let result = bellman_ford(&graph, 0).unwrap();
+        let result = bellman_ford(&graph, 0).expect("test: valid Bellman-Ford");
 
         assert_eq!(result.distance_to(0), Some(0.0));
         assert_eq!(result.distance_to(1), Some(1.0));
@@ -540,10 +554,15 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n1, n2, -2.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n2, -2.0)
+            .expect("test: valid edge addition");
 
-        let result = bellman_ford(&graph, n0).unwrap();
+        let result =
+            bellman_ford(&graph, n0).expect("test: valid Bellman-Ford with negative edges");
         assert_eq!(result.distance_to(2), Some(-1.0));
     }
 
@@ -553,8 +572,12 @@ mod tests {
         let n0 = graph.add_node();
         let n1 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n1, n0, -2.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n0, -2.0)
+            .expect("test: valid edge addition");
 
         let result = bellman_ford(&graph, n0);
         assert!(result.is_err());
@@ -563,12 +586,14 @@ mod tests {
     #[test]
     fn test_floyd_warshall() {
         let graph = create_test_graph();
-        let result = floyd_warshall(&graph).unwrap();
+        let result = floyd_warshall(&graph).expect("test: valid Floyd-Warshall");
 
         assert_eq!(result.distance(0, 3), Some(4.0));
         assert_eq!(result.distance(0, 0), Some(0.0));
 
-        let path = result.reconstruct_path(0, 3).unwrap();
+        let path = result
+            .reconstruct_path(0, 3)
+            .expect("test: valid path reconstruction");
         assert_eq!(path[0], 0);
         assert_eq!(path[path.len() - 1], 3);
     }
@@ -579,7 +604,7 @@ mod tests {
 
         // Zero heuristic (equivalent to Dijkstra)
         let heuristic = Box::new(|_: NodeId, _: NodeId| 0.0);
-        let (path, cost) = astar(&graph, 0, 3, heuristic).unwrap();
+        let (path, cost) = astar(&graph, 0, 3, heuristic).expect("test: valid A* search");
 
         assert_eq!(cost, 4.0);
         assert_eq!(path[0], 0);
@@ -605,7 +630,7 @@ mod tests {
         predecessors.insert(1, Some(0));
         predecessors.insert(2, Some(1));
 
-        let path = reconstruct_path(&predecessors, 2).unwrap();
+        let path = reconstruct_path(&predecessors, 2).expect("test: valid path reconstruction");
         assert_eq!(path, vec![0, 1, 2]);
     }
 }

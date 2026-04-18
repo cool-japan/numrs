@@ -4,7 +4,7 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.3.2** - Patch release (2026-03-27): Minor improvements and updates.
+//! **Version 0.3.3** - Patch release (2026-03-27): Minor improvements and updates.
 //! All tests passing with zero warnings.
 //!
 //! ## Quick Start

@@ -797,11 +797,14 @@ mod tests {
 
     #[test]
     fn test_gaussian_proposal() {
-        let proposal = GaussianProposal::new(0.5).unwrap();
+        let proposal =
+            GaussianProposal::new(0.5).expect("test: valid Gaussian proposal parameters");
         let mut rng = thread_rng();
 
         let current = vec![0.0, 0.0];
-        let proposed = proposal.propose(&current, &mut rng).unwrap();
+        let proposed = proposal
+            .propose(&current, &mut rng)
+            .expect("test: valid proposal generation");
 
         assert_eq!(proposed.len(), 2);
         assert_eq!(proposal.log_prob(&current, &proposed), 0.0); // Symmetric
@@ -812,12 +815,15 @@ mod tests {
         // Target: Standard normal N(0,1)
         let log_posterior = |theta: &[f64]| -> f64 { -0.5 * theta[0].powi(2) };
 
-        let proposal = GaussianProposal::new(0.5).unwrap();
+        let proposal =
+            GaussianProposal::new(0.5).expect("test: valid Gaussian proposal parameters");
         let sampler = MetropolisHastings::new(log_posterior, proposal);
 
         let mut rng = thread_rng();
         // Use more samples for better convergence in parallel testing
-        let result = sampler.sample(&[0.0], 2000, 200, &mut rng).unwrap();
+        let result = sampler
+            .sample(&[0.0], 2000, 200, &mut rng)
+            .expect("test: valid MCMC sampling");
 
         assert!(!result.samples.is_empty());
         assert!(result.acceptance_rate > 0.0 && result.acceptance_rate < 1.0);
@@ -879,10 +885,13 @@ mod tests {
         let log_posterior = |theta: &[f64]| -> f64 { -0.5 * theta[0].powi(2) };
         let grad = |theta: &[f64]| -> Vec<f64> { vec![-theta[0]] };
 
-        let hmc = HamiltonianMC::new(log_posterior, grad, 0.1, 10).unwrap();
+        let hmc =
+            HamiltonianMC::new(log_posterior, grad, 0.1, 10).expect("test: valid HMC parameters");
         let mut rng = thread_rng();
 
-        let result = hmc.sample(&[0.0], 500, 50, &mut rng).unwrap();
+        let result = hmc
+            .sample(&[0.0], 500, 50, &mut rng)
+            .expect("test: valid HMC sampling");
 
         assert!(!result.samples.is_empty());
         assert!(result.acceptance_rate > 0.0);

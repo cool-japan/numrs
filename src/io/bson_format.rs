@@ -260,7 +260,7 @@ where
 /// use numrs2::io::bson_format::{to_bson_document, from_bson_document};
 ///
 /// let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
-/// let doc = to_bson_document(&array).unwrap();
+/// let doc = to_bson_document(&array).expect("valid bson serialization");
 ///
 /// let loaded: Array<f64> = from_bson_document(&doc)
 ///     .expect("Failed to deserialize from BSON document");

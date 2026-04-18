@@ -293,13 +293,13 @@ impl PerfTimer {
     }
 }
 
-/// Memory allocation helper using wee_alloc
+/// Memory allocation helper using dlmalloc
 ///
 /// This is automatically used when the wasm feature is enabled
-/// to provide a smaller allocator optimized for WebAssembly.
+/// to provide a maintained pure-Rust allocator optimized for WebAssembly.
 #[cfg(feature = "wasm")]
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
 
 #[cfg(test)]
 mod tests {

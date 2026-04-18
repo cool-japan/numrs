@@ -69,12 +69,12 @@
 //!
 //! // Compute Shannon entropy of a discrete distribution
 //! let probs = Array1::from_vec(vec![0.25, 0.25, 0.25, 0.25]);
-//! let h = entropy::shannon_entropy(&probs, entropy::LogBase::Bits).unwrap();
+//! let h = entropy::shannon_entropy(&probs, entropy::LogBase::Bits).expect("valid probability distribution");
 //! // Uniform distribution has maximum entropy: H = log₂(4) = 2 bits
 //!
 //! // Compute mutual information between two variables
-//! let joint_probs = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-//! let mi = mutual_information::mutual_information(&joint_probs).unwrap();
+//! let joint_probs = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).expect("valid shape and data length");
+//! let mi = mutual_information::mutual_information(&joint_probs).expect("valid probability distribution");
 //! // Independent variables have zero mutual information
 //! ```
 //!

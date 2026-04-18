@@ -42,6 +42,13 @@ use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
 
+/// Converts a f64 value to generic Float type T.
+/// For all valid Float types (f32, f64), this is infallible.
+#[inline]
+fn cast_f64<T: Float>(val: f64) -> T {
+    T::from(val).unwrap_or_else(T::zero)
+}
+
 /// Distance metric types
 #[derive(Debug, Clone, Copy)]
 pub enum DistanceMetric {
@@ -183,9 +190,8 @@ where
     let x_vec = x.to_vec();
     let y_vec = y.to_vec();
 
-    let p_t = T::from(p).expect("Minkowski p parameter must be convertible to target type");
-    let inv_p =
-        T::from(1.0 / p).expect("Inverse of Minkowski p must be convertible to target type");
+    let p_t = cast_f64(p);
+    let inv_p = cast_f64(1.0 / p);
 
     let sum: T = x_vec
         .iter()
@@ -248,7 +254,7 @@ where
 
     let x_vec = x.to_vec();
     let y_vec = y.to_vec();
-    let n = T::from(x_vec.len()).expect("Vector length must be convertible to target type");
+    let n = T::from(x_vec.len()).unwrap_or_else(T::zero);
 
     // Compute means
     let mean_x: T = x_vec.iter().copied().fold(T::zero(), |acc, x| acc + x) / n;
@@ -293,11 +299,7 @@ pub fn hamming<T>(x: &Array<T>, y: &Array<T>) -> Result<T>
 where
     T: Float + Debug,
 {
-    hamming_threshold(
-        x,
-        y,
-        T::from(1e-10).expect("Threshold 1e-10 must be convertible to target type"),
-    )
+    hamming_threshold(x, y, cast_f64(1e-10))
 }
 
 /// Hamming distance with custom threshold
@@ -316,10 +318,8 @@ where
         .filter(|(&xi, &yi)| (xi - yi).abs() > threshold)
         .count();
 
-    let n = T::from(x_vec.len()).expect("Vector length must be convertible to target type");
-    Ok(T::from(n_different)
-        .expect("Count of different elements must be convertible to target type")
-        / n)
+    let n = T::from(x_vec.len()).unwrap_or_else(T::zero);
+    Ok(T::from(n_different).unwrap_or_else(T::zero) / n)
 }
 
 // ============================================================================

@@ -314,7 +314,8 @@ mod tests {
         let embedding_matrix = Array2::from_shape_fn((10, 5), |(i, j)| (i * 10 + j) as f64);
         let indices = vec![0, 2, 5];
 
-        let result = embedding(&indices, &embedding_matrix.view()).unwrap();
+        let result =
+            embedding(&indices, &embedding_matrix.view()).expect("test: valid embedding params");
 
         assert_eq!(result.dim(), (3, 5));
 
@@ -326,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_positional_encoding() {
-        let pe = positional_encoding::<f64>(10, 8).unwrap();
+        let pe = positional_encoding::<f64>(10, 8).expect("test: valid positional encoding params");
 
         assert_eq!(pe.dim(), (10, 8));
 
@@ -341,7 +342,8 @@ mod tests {
         let embedding_matrix = Array2::from_shape_fn((5, 3), |(_, _)| 1.0);
         let indices = vec![0, 1, 2];
 
-        let result = embedding_bag(&indices, &embedding_matrix.view(), "sum").unwrap();
+        let result = embedding_bag(&indices, &embedding_matrix.view(), "sum")
+            .expect("test: valid embedding_bag params");
 
         // Sum of 3 vectors of ones should be [3, 3, 3]
         for &val in result.iter() {
@@ -354,7 +356,8 @@ mod tests {
         let embedding_matrix = Array2::from_shape_fn((5, 3), |(_, _)| 2.0);
         let indices = vec![0, 1, 2, 3];
 
-        let result = embedding_bag(&indices, &embedding_matrix.view(), "mean").unwrap();
+        let result = embedding_bag(&indices, &embedding_matrix.view(), "mean")
+            .expect("test: valid embedding_bag params");
 
         // Mean of vectors of twos should be [2, 2, 2]
         for &val in result.iter() {

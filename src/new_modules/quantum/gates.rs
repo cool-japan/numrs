@@ -34,7 +34,7 @@ use std::fmt::Debug;
 /// ```
 /// use numrs2::new_modules::quantum::gates::pauli_x;
 ///
-/// let x_gate = pauli_x::<f64>().unwrap();
+/// let x_gate = pauli_x::<f64>().expect("valid gate creation");
 /// assert_eq!(x_gate.shape(), &[2, 2]);
 /// ```
 pub fn pauli_x<T>() -> Result<Array<Complex<T>>>
@@ -493,8 +493,8 @@ mod tests {
             for j in 0..n {
                 let mut sum = Complex::new(T::zero(), T::zero());
                 for k in 0..n {
-                    let u_ki = gate.get(&[k, i]).unwrap();
-                    let u_kj = gate.get(&[k, j]).unwrap();
+                    let u_ki = gate.get(&[k, i]).expect("gate matrix index is valid");
+                    let u_kj = gate.get(&[k, j]).expect("gate matrix index is valid");
                     sum = sum + u_ki.conj() * u_kj;
                 }
 
@@ -513,9 +513,9 @@ mod tests {
 
     #[test]
     fn test_pauli_gates_unitary() {
-        let x = pauli_x::<f64>().unwrap();
-        let y = pauli_y::<f64>().unwrap();
-        let z = pauli_z::<f64>().unwrap();
+        let x = pauli_x::<f64>().expect("test: valid Pauli-X gate");
+        let y = pauli_y::<f64>().expect("test: valid Pauli-Y gate");
+        let z = pauli_z::<f64>().expect("test: valid Pauli-Z gate");
 
         assert!(is_unitary(&x, 1e-10));
         assert!(is_unitary(&y, 1e-10));
@@ -524,19 +524,19 @@ mod tests {
 
     #[test]
     fn test_hadamard_unitary() {
-        let h = hadamard::<f64>().unwrap();
+        let h = hadamard::<f64>().expect("test: valid Hadamard gate");
         assert!(is_unitary(&h, 1e-10));
     }
 
     #[test]
     fn test_pauli_x_properties() {
-        let x = pauli_x::<f64>().unwrap();
+        let x = pauli_x::<f64>().expect("test: valid Pauli-X gate");
 
         // X² = I
         let mut x_squared = Complex::new(0.0, 0.0);
         for k in 0..2 {
-            let xk0 = x.get(&[0, k]).unwrap();
-            let x0k = x.get(&[k, 0]).unwrap();
+            let xk0 = x.get(&[0, k]).expect("test: valid matrix index");
+            let x0k = x.get(&[k, 0]).expect("test: valid matrix index");
             x_squared += xk0 * x0k;
         }
         assert_relative_eq!(x_squared.re, 1.0, epsilon = 1e-10);
@@ -545,9 +545,9 @@ mod tests {
     #[test]
     fn test_rotation_gates() {
         let theta = std::f64::consts::PI / 4.0;
-        let rx_gate = rx(theta).unwrap();
-        let ry_gate = ry(theta).unwrap();
-        let rz_gate = rz(theta).unwrap();
+        let rx_gate = rx(theta).expect("test: valid Rx gate");
+        let ry_gate = ry(theta).expect("test: valid Ry gate");
+        let rz_gate = rz(theta).expect("test: valid Rz gate");
 
         assert!(is_unitary(&rx_gate, 1e-10));
         assert!(is_unitary(&ry_gate, 1e-10));
@@ -556,54 +556,54 @@ mod tests {
 
     #[test]
     fn test_cnot_unitary() {
-        let cnot_gate = cnot::<f64>().unwrap();
+        let cnot_gate = cnot::<f64>().expect("test: valid CNOT gate");
         assert!(is_unitary(&cnot_gate, 1e-10));
         assert_eq!(cnot_gate.shape(), &[4, 4]);
     }
 
     #[test]
     fn test_swap_unitary() {
-        let swap_gate = swap::<f64>().unwrap();
+        let swap_gate = swap::<f64>().expect("test: valid SWAP gate");
         assert!(is_unitary(&swap_gate, 1e-10));
         assert_eq!(swap_gate.shape(), &[4, 4]);
     }
 
     #[test]
     fn test_cz_unitary() {
-        let cz_gate = cz::<f64>().unwrap();
+        let cz_gate = cz::<f64>().expect("test: valid CZ gate");
         assert!(is_unitary(&cz_gate, 1e-10));
     }
 
     #[test]
     fn test_toffoli_unitary() {
-        let toffoli_gate = toffoli::<f64>().unwrap();
+        let toffoli_gate = toffoli::<f64>().expect("test: valid Toffoli gate");
         assert!(is_unitary(&toffoli_gate, 1e-10));
         assert_eq!(toffoli_gate.shape(), &[8, 8]);
     }
 
     #[test]
     fn test_fredkin_unitary() {
-        let fredkin_gate = fredkin::<f64>().unwrap();
+        let fredkin_gate = fredkin::<f64>().expect("test: valid Fredkin gate");
         assert!(is_unitary(&fredkin_gate, 1e-10));
         assert_eq!(fredkin_gate.shape(), &[8, 8]);
     }
 
     #[test]
     fn test_phase_gate() {
-        let s = phase_gate::<f64>().unwrap();
+        let s = phase_gate::<f64>().expect("test: valid phase gate");
         assert!(is_unitary(&s, 1e-10));
     }
 
     #[test]
     fn test_t_gate() {
-        let t = t_gate::<f64>().unwrap();
+        let t = t_gate::<f64>().expect("test: valid T gate");
         assert!(is_unitary(&t, 1e-10));
     }
 
     #[test]
     fn test_controlled_gate() {
-        let x = pauli_x::<f64>().unwrap();
-        let cx = controlled_gate(&x).unwrap();
+        let x = pauli_x::<f64>().expect("test: valid Pauli-X gate");
+        let cx = controlled_gate(&x).expect("test: valid controlled gate creation");
 
         assert!(is_unitary(&cx, 1e-10));
         assert_eq!(cx.shape(), &[4, 4]);
@@ -611,20 +611,20 @@ mod tests {
 
     #[test]
     fn test_identity_gate() {
-        let id2 = identity::<f64>(2).unwrap();
+        let id2 = identity::<f64>(2).expect("test: valid identity gate");
         assert!(is_unitary(&id2, 1e-10));
         assert_eq!(id2.shape(), &[4, 4]);
     }
 
     #[test]
     fn test_rotation_angle_zero() {
-        let rx0 = rx(0.0).unwrap();
-        let id = identity::<f64>(1).unwrap();
+        let rx0 = rx(0.0).expect("test: valid Rx gate");
+        let id = identity::<f64>(1).expect("test: valid identity gate");
 
         for i in 0..2 {
             for j in 0..2 {
-                let rx_val = rx0.get(&[i, j]).unwrap();
-                let id_val = id.get(&[i, j]).unwrap();
+                let rx_val = rx0.get(&[i, j]).expect("test: valid matrix index");
+                let id_val = id.get(&[i, j]).expect("test: valid matrix index");
                 assert_relative_eq!(rx_val.re, id_val.re, epsilon = 1e-10);
                 assert_relative_eq!(rx_val.im, id_val.im, epsilon = 1e-10);
             }

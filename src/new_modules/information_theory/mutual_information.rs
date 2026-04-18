@@ -89,13 +89,13 @@ pub enum NormalizationType {
 /// use scirs2_core::ndarray::Array2;
 ///
 /// // Independent variables have zero MI
-/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-/// let mi = mutual_information(&joint).unwrap();
+/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).expect("valid shape and data length");
+/// let mi = mutual_information(&joint).expect("valid joint distribution");
 /// assert!(mi.abs() < 1e-10);
 ///
 /// // Perfectly correlated variables
-/// let joint2 = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).unwrap();
-/// let mi2 = mutual_information(&joint2).unwrap();
+/// let joint2 = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).expect("valid shape and data length");
+/// let mi2 = mutual_information(&joint2).expect("valid joint distribution");
 /// assert!((mi2 - 1.0).abs() < 1e-10); // I(X;X) = H(X) = 1 bit
 /// ```
 pub fn mutual_information(joint_probs: &Array2<f64>) -> Result<f64, NumRs2Error> {
@@ -146,8 +146,8 @@ pub fn mutual_information(joint_probs: &Array2<f64>) -> Result<f64, NumRs2Error>
 ///         0.125, 0.125, 0.125, 0.125,  // Z=0
 ///         0.125, 0.125, 0.125, 0.125,  // Z=1
 ///     ]
-/// ).unwrap();
-/// let cmi = conditional_mutual_information(&joint).unwrap();
+/// ).expect("valid shape and data length");
+/// let cmi = conditional_mutual_information(&joint).expect("valid joint distribution");
 /// assert!(cmi.abs() < 1e-10); // I(X;Y|Z) = 0 for conditional independence
 /// ```
 pub fn conditional_mutual_information(joint_probs: &Array3<f64>) -> Result<f64, NumRs2Error> {
@@ -226,13 +226,13 @@ pub fn conditional_mutual_information(joint_probs: &Array3<f64>) -> Result<f64, 
 /// use scirs2_core::ndarray::Array2;
 ///
 /// // Independent variables
-/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-/// let nmi = normalized_mutual_information(&joint, NormalizationType::Arithmetic).unwrap();
+/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).expect("valid shape and data length");
+/// let nmi = normalized_mutual_information(&joint, NormalizationType::Arithmetic).expect("valid joint distribution");
 /// assert!(nmi.abs() < 1e-10); // NMI = 0 for independence
 ///
 /// // Perfectly correlated
-/// let joint2 = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).unwrap();
-/// let nmi2 = normalized_mutual_information(&joint2, NormalizationType::Arithmetic).unwrap();
+/// let joint2 = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).expect("valid shape and data length");
+/// let nmi2 = normalized_mutual_information(&joint2, NormalizationType::Arithmetic).expect("valid joint distribution");
 /// assert!((nmi2 - 1.0).abs() < 1e-10); // NMI = 1 for perfect correlation
 /// ```
 pub fn normalized_mutual_information(
@@ -315,8 +315,8 @@ pub fn normalized_mutual_information(
 /// use numrs2::new_modules::information_theory::mutual_information::pointwise_mutual_information;
 /// use scirs2_core::ndarray::Array2;
 ///
-/// let joint = Array2::from_shape_vec((2, 2), vec![0.4, 0.1, 0.1, 0.4]).unwrap();
-/// let pmi = pointwise_mutual_information(&joint).unwrap();
+/// let joint = Array2::from_shape_vec((2, 2), vec![0.4, 0.1, 0.1, 0.4]).expect("valid shape and data length");
+/// let pmi = pointwise_mutual_information(&joint).expect("valid joint distribution");
 /// // Positive PMI indicates association, negative indicates anti-association
 /// assert!(pmi[[0, 0]] > 0.0); // Strong association
 /// assert!(pmi[[0, 1]] < 0.0); // Weak association
@@ -381,13 +381,13 @@ pub fn pointwise_mutual_information(joint_probs: &Array2<f64>) -> Result<Array2<
 /// use scirs2_core::ndarray::Array2;
 ///
 /// // Independent variables
-/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-/// let vi = variation_of_information(&joint).unwrap();
+/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).expect("valid shape and data length");
+/// let vi = variation_of_information(&joint).expect("valid joint distribution");
 /// assert!((vi - 2.0).abs() < 1e-10); // VI = H(X) + H(Y) when independent
 ///
 /// // Perfectly correlated
-/// let joint2 = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).unwrap();
-/// let vi2 = variation_of_information(&joint2).unwrap();
+/// let joint2 = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).expect("valid shape and data length");
+/// let vi2 = variation_of_information(&joint2).expect("valid joint distribution");
 /// assert!(vi2.abs() < 1e-10); // VI = 0 when X = Y
 /// ```
 pub fn variation_of_information(joint_probs: &Array2<f64>) -> Result<f64, NumRs2Error> {
@@ -423,8 +423,8 @@ pub fn variation_of_information(joint_probs: &Array2<f64>) -> Result<f64, NumRs2
 /// use scirs2_core::ndarray::Array2;
 ///
 /// // Perfect agreement
-/// let joint = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).unwrap();
-/// let ami = adjusted_mutual_information(&joint).unwrap();
+/// let joint = Array2::from_shape_vec((2, 2), vec![0.5, 0.0, 0.0, 0.5]).expect("valid shape and data length");
+/// let ami = adjusted_mutual_information(&joint).expect("valid joint distribution");
 /// assert!((ami - 1.0).abs() < 0.1); // AMI ≈ 1 for perfect clustering
 /// ```
 pub fn adjusted_mutual_information(joint_probs: &Array2<f64>) -> Result<f64, NumRs2Error> {

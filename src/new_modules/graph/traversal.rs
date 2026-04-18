@@ -547,11 +547,17 @@ mod tests {
         let n2 = graph.add_node();
         let n3 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n0, n2, 1.0).unwrap();
-        graph.add_edge(n1, n3, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n0, n2, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n3, 1.0)
+            .expect("test: valid edge addition");
 
-        let result = bfs(&graph, n0).unwrap();
+        let result = bfs(&graph, n0).expect("test: valid BFS");
         assert_eq!(result.distances[&n0], 0);
         assert_eq!(result.distances[&n1], 1);
         assert_eq!(result.distances[&n2], 1);
@@ -565,10 +571,14 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n1, n2, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n2, 1.0)
+            .expect("test: valid edge addition");
 
-        let result = dfs(&graph, n0).unwrap();
+        let result = dfs(&graph, n0).expect("test: valid DFS");
         assert!(result.pre_order.contains_key(&n0));
         assert!(result.pre_order.contains_key(&n1));
         assert!(result.pre_order.contains_key(&n2));
@@ -583,10 +593,14 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n1, n2, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n2, 1.0)
+            .expect("test: valid edge addition");
 
-        let sorted = topological_sort(&graph).unwrap();
+        let sorted = topological_sort(&graph).expect("test: valid topological sort");
         assert_eq!(sorted.len(), 3);
 
         // Check topological order property
@@ -601,8 +615,12 @@ mod tests {
         let n0 = graph.add_node();
         let n1 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n1, n0, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n0, 1.0)
+            .expect("test: valid edge addition");
 
         let result = topological_sort(&graph);
         assert!(result.is_err());
@@ -616,10 +634,14 @@ mod tests {
         let n2 = graph.add_node();
         let n3 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n2, n3, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n2, n3, 1.0)
+            .expect("test: valid edge addition");
 
-        let components = connected_components(&graph).unwrap();
+        let components = connected_components(&graph).expect("test: valid connected components");
         assert_eq!(components.len(), 2);
     }
 
@@ -630,11 +652,17 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n1, n2, 1.0).unwrap();
-        graph.add_edge(n2, n0, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n2, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n2, n0, 1.0)
+            .expect("test: valid edge addition");
 
-        let sccs = strongly_connected_components(&graph).unwrap();
+        let sccs = strongly_connected_components(&graph).expect("test: valid SCCs");
         assert_eq!(sccs.len(), 1);
         assert_eq!(sccs[0].len(), 3);
     }
@@ -645,13 +673,17 @@ mod tests {
         let n0 = graph.add_node();
         let n1 = graph.add_node();
 
-        assert!(!has_cycle(&graph).unwrap());
+        assert!(!has_cycle(&graph).expect("test: valid cycle detection"));
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        assert!(!has_cycle(&graph).unwrap());
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        assert!(!has_cycle(&graph).expect("test: valid cycle detection"));
 
-        graph.add_edge(n1, n0, 1.0).unwrap();
-        assert!(has_cycle(&graph).unwrap());
+        graph
+            .add_edge(n1, n0, 1.0)
+            .expect("test: valid edge addition");
+        assert!(has_cycle(&graph).expect("test: valid cycle detection"));
     }
 
     #[test]
@@ -661,13 +693,19 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        assert!(!has_cycle(&graph).unwrap());
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        assert!(!has_cycle(&graph).expect("test: valid cycle detection"));
 
-        graph.add_edge(n1, n2, 1.0).unwrap();
-        assert!(!has_cycle(&graph).unwrap());
+        graph
+            .add_edge(n1, n2, 1.0)
+            .expect("test: valid edge addition");
+        assert!(!has_cycle(&graph).expect("test: valid cycle detection"));
 
-        graph.add_edge(n2, n0, 1.0).unwrap();
-        assert!(has_cycle(&graph).unwrap());
+        graph
+            .add_edge(n2, n0, 1.0)
+            .expect("test: valid edge addition");
+        assert!(has_cycle(&graph).expect("test: valid cycle detection"));
     }
 }

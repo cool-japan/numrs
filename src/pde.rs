@@ -28,7 +28,7 @@
 //!     100,  // number of time steps
 //!     BoundaryCondition::Dirichlet(0.0),
 //!     BoundaryCondition::Dirichlet(1.0),
-//! ).unwrap();
+//! ).expect("valid PDE parameters");
 //! ```
 
 use crate::error::{NumRs2Error, Result};

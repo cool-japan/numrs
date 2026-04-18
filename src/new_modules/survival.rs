@@ -120,14 +120,14 @@ use scirs2_stats::survival::{CoxPH, KaplanMeier as KMInner, NelsonAalen as NAInn
 ///
 /// let times  = [0.5, 1.0, 2.0, 3.0, 4.0];
 /// let events = [true, true, false, true, false];
-/// let km = KaplanMeier::fit(&times, &events).unwrap();
+/// let km = KaplanMeier::fit(&times, &events).expect("valid survival data");
 ///
 /// // Step-function value at t = 2.0
 /// let s2 = km.survival_at(2.0);
 /// assert!(s2 > 0.0 && s2 <= 1.0);
 ///
 /// // 95 % confidence interval at t = 2.0
-/// let (lo, hi) = km.confidence_interval(2.0, 0.05).unwrap();
+/// let (lo, hi) = km.confidence_interval(2.0, 0.05).expect("valid confidence interval parameters");
 /// assert!(lo <= hi);
 /// ```
 pub struct KaplanMeier {
@@ -183,7 +183,7 @@ impl KaplanMeier {
     /// ```rust,no_run
     /// use numrs2::new_modules::survival::KaplanMeier;
     ///
-    /// let km = KaplanMeier::fit(&[1.0, 2.0, 4.0], &[true, false, true]).unwrap();
+    /// let km = KaplanMeier::fit(&[1.0, 2.0, 4.0], &[true, false, true]).expect("valid survival data");
     /// assert_eq!(km.survival_at(0.5), 1.0); // before first event
     /// ```
     pub fn survival_at(&self, t: f64) -> f64 {
@@ -325,7 +325,7 @@ impl KaplanMeier {
 ///
 /// let times  = [1.0, 2.0, 3.0, 4.0, 5.0];
 /// let events = [true, true, false, true, true];
-/// let na = NelsonAalen::fit(&times, &events).unwrap();
+/// let na = NelsonAalen::fit(&times, &events).expect("valid survival data");
 ///
 /// let h3 = na.cumulative_hazard_at(3.0);
 /// let s3 = na.survival_at(3.0);
@@ -503,7 +503,7 @@ impl NelsonAalen {
 /// let t2 = [5.0, 6.0, 7.0, 8.0];
 /// let e2 = [true, true, true, true];
 ///
-/// let (chi2, pval) = log_rank_test(&t1, &e1, &t2, &e2).unwrap();
+/// let (chi2, pval) = log_rank_test(&t1, &e1, &t2, &e2).expect("valid survival data for log-rank test");
 /// assert!(pval < 0.05, "groups have different survival: p = {pval}");
 /// ```
 pub fn log_rank_test(
@@ -539,9 +539,9 @@ pub fn log_rank_test(
 /// let cov = Array2::from_shape_vec(
 ///     (6, 2),
 ///     vec![0.1, 0.0, 0.5, 1.0, 1.0, 0.0, 0.2, 1.0, 0.8, 0.0, 1.5, 1.0],
-/// ).unwrap();
+/// ).expect("valid shape and data length");
 ///
-/// let model = CoxProportionalHazards::fit(&times, &events, &cov).unwrap();
+/// let model = CoxProportionalHazards::fit(&times, &events, &cov).expect("valid Cox model data");
 /// let coefficients = model.coefficients();
 /// let hazard_ratios = model.hazard_ratio();
 /// let c_index = model.concordance_index(&times, &events, &cov);
@@ -577,8 +577,8 @@ impl CoxProportionalHazards {
     ///
     /// let times  = [1.0, 2.0, 3.0, 5.0];
     /// let events = [true, true, false, true];
-    /// let cov = Array2::from_shape_vec((4, 1), vec![0.1, 0.9, 0.3, 1.2]).unwrap();
-    /// let model = CoxProportionalHazards::fit(&times, &events, &cov).unwrap();
+    /// let cov = Array2::from_shape_vec((4, 1), vec![0.1, 0.9, 0.3, 1.2]).expect("valid shape and data length");
+    /// let model = CoxProportionalHazards::fit(&times, &events, &cov).expect("valid Cox model data");
     /// ```
     pub fn fit(times: &[f64], events: &[bool], covariates: &Array2<f64>) -> Result<Self> {
         let inner = CoxPH::fit(times, events, covariates)

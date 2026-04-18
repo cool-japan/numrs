@@ -505,7 +505,7 @@ fn first_stage_diagnostics(
 /// let y = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let x = vec![0.5, 1.0, 1.5, 2.0, 2.5];
 /// let z = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-/// let result = two_stage_least_squares(&y, &x, &z).unwrap();
+/// let result = two_stage_least_squares(&y, &x, &z).expect("valid IV estimation data");
 /// println!("Causal effect β_x = {:.4}", result.coef[0]);
 /// ```
 pub fn two_stage_least_squares(y: &[f64], x: &[f64], z: &[f64]) -> Result<IVEstimate> {
@@ -744,7 +744,7 @@ pub struct DiDEstimate {
 /// let post_t = vec![16.0, 17.0, 18.0]; // +3 above trend
 /// let pre_c  = vec![10.0, 11.0, 12.0];
 /// let post_c = vec![13.0, 14.0, 15.0]; // just the trend
-/// let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c).unwrap();
+/// let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c).expect("valid DiD data");
 /// assert!((result.att - 3.0).abs() < 0.5);
 /// ```
 pub fn difference_in_differences(
@@ -898,7 +898,7 @@ pub struct PropensityScores {
 ///
 /// let cov = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
 /// let trt = vec![false, false, true, true];
-/// let ps = estimate_propensity_scores(&cov, &trt).unwrap();
+/// let ps = estimate_propensity_scores(&cov, &trt).expect("valid propensity score data");
 /// assert_eq!(ps.scores.len(), 4);
 /// ```
 pub fn estimate_propensity_scores(
@@ -1041,9 +1041,9 @@ pub fn estimate_propensity_scores(
 ///
 /// let cov = vec![vec![0.0], vec![1.0], vec![2.0], vec![3.0]];
 /// let trt = vec![false, false, true, true];
-/// let ps  = estimate_propensity_scores(&cov, &trt).unwrap();
+/// let ps  = estimate_propensity_scores(&cov, &trt).expect("valid propensity score inputs");
 /// let y   = vec![1.0, 1.5, 3.0, 3.5];
-/// let ate = ipw_ate(&y, &trt, &ps.scores).unwrap();
+/// let ate = ipw_ate(&y, &trt, &ps.scores).expect("valid IPW ATE data");
 /// ```
 pub fn ipw_ate(outcome: &[f64], treatment: &[bool], propensity_scores: &[f64]) -> Result<f64> {
     let n = outcome.len();
@@ -1100,7 +1100,8 @@ mod tests {
         let pre_c: Vec<f64> = (0..n).map(|i| 10.0 + i as f64 * 0.5).collect();
         let post_c: Vec<f64> = pre_c.iter().map(|&v| v + trend).collect();
 
-        let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c).unwrap();
+        let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c)
+            .expect("test: valid DiD computation");
 
         assert!(
             (result.att - true_att).abs() < 0.5,
@@ -1119,7 +1120,8 @@ mod tests {
         let pre_c = vec![10.0, 11.0, 12.0, 13.0];
         let post_c = vec![14.0, 15.0, 16.0, 17.0]; // same trend
 
-        let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c).unwrap();
+        let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c)
+            .expect("test: valid DiD computation");
 
         assert!(
             result.att.abs() < 1e-6,
@@ -1156,7 +1158,8 @@ mod tests {
         let pre_c: Vec<f64> = (0..n).map(|i| 20.0 + i as f64).collect();
         let post_c: Vec<f64> = pre_c.iter().map(|&v| v + 1.0).collect();
 
-        let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c).unwrap();
+        let result = difference_in_differences(&pre_t, &post_t, &pre_c, &post_c)
+            .expect("test: valid DiD computation");
 
         assert!(
             (result.att - true_att).abs() < 0.5,
@@ -1185,7 +1188,8 @@ mod tests {
         ];
         let treatment = vec![false, false, false, false, true, true, true, true];
 
-        let ps = estimate_propensity_scores(&covariates, &treatment).unwrap();
+        let ps = estimate_propensity_scores(&covariates, &treatment)
+            .expect("test: valid propensity score estimation");
 
         assert_eq!(ps.scores.len(), 8);
         for &s in &ps.scores {
@@ -1227,8 +1231,10 @@ mod tests {
             .map(|i| if treatment[i] { 1.0 + true_ate } else { 1.0 })
             .collect();
 
-        let ps = estimate_propensity_scores(&covariates, &treatment).unwrap();
-        let ate = ipw_ate(&outcome, &treatment, &ps.scores).unwrap();
+        let ps = estimate_propensity_scores(&covariates, &treatment)
+            .expect("test: valid propensity score estimation");
+        let ate =
+            ipw_ate(&outcome, &treatment, &ps.scores).expect("test: valid IPW ATE computation");
 
         assert!(
             (ate - true_ate).abs() < 1.0,
@@ -1261,7 +1267,7 @@ mod tests {
         let x: Vec<f64> = z.iter().map(|&zi| 0.8 * zi).collect();
         let y: Vec<f64> = x.iter().map(|&xi| 2.0 * xi + 0.5).collect();
 
-        let result = two_stage_least_squares(&y, &x, &z).unwrap();
+        let result = two_stage_least_squares(&y, &x, &z).expect("test: valid 2SLS computation");
 
         let beta_x = result.coef[0];
         assert!(
@@ -1272,7 +1278,10 @@ mod tests {
         assert_eq!(result.estimator, "2SLS");
         // First-stage F should be large (z is a strong instrument)
         assert!(
-            result.first_stage_f.unwrap() > 10.0,
+            result
+                .first_stage_f
+                .expect("test: first-stage F statistic is some")
+                > 10.0,
             "Expected strong first-stage F"
         );
     }
@@ -1285,7 +1294,7 @@ mod tests {
         let x: Vec<f64> = z.iter().map(|&zi| 2.0 * zi + 1.0).collect();
         let y: Vec<f64> = x.iter().map(|&xi| xi + 0.1).collect();
 
-        let summary = weak_instrument_test(&y, &x, &z).unwrap();
+        let summary = weak_instrument_test(&y, &x, &z).expect("test: valid weak instrument test");
 
         assert_eq!(summary.f_statistics.len(), 1);
         assert!(

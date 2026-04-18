@@ -31,7 +31,7 @@ use crate::autodiff::{Dual, Tape, Var};
 /// let f = |vars: &[Dual<f64>]| -> Vec<Dual<f64>> {
 ///     vec![vars[0] * vars[0] + vars[1], vars[0] * vars[1]]
 /// };
-/// let jac = forward_jacobian(f, &[2.0, 3.0]).unwrap();
+/// let jac = forward_jacobian(f, &[2.0, 3.0]).expect("valid jacobian computation");
 /// ```
 pub fn forward_jacobian<F, T>(f: F, x: &[T]) -> Result<Array<T>>
 where
@@ -106,7 +106,7 @@ where
 ///         vec![out1, out2]
 ///     },
 ///     &[2.0, 3.0],
-/// ).unwrap();
+/// ).expect("valid reverse jacobian computation");
 /// ```
 pub fn reverse_jacobian<F, T>(f: F, x: &[T]) -> Result<Array<T>>
 where

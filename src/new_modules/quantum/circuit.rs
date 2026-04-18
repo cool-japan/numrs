@@ -9,16 +9,16 @@
 //! use numrs2::new_modules::quantum::circuit::QuantumCircuit;
 //!
 //! // Create a 2-qubit circuit
-//! let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
+//! let mut circuit = QuantumCircuit::<f64>::new(2).expect("valid qubit count");
 //!
 //! // Add a Hadamard gate on qubit 0
-//! circuit.h(0).unwrap();
+//! circuit.h(0).expect("valid qubit index");
 //!
 //! // Add a CNOT gate with control=0, target=1
-//! circuit.cnot(0, 1).unwrap();
+//! circuit.cnot(0, 1).expect("valid qubit indices");
 //!
 //! // Execute the circuit
-//! let final_state = circuit.execute().unwrap();
+//! let final_state = circuit.execute().expect("circuit execution succeeds");
 //! ```
 
 use crate::array::Array;
@@ -411,43 +411,43 @@ mod tests {
 
     #[test]
     fn test_circuit_creation() {
-        let circuit = QuantumCircuit::<f64>::new(2).unwrap();
+        let circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
         assert_eq!(circuit.num_qubits(), 2);
         assert_eq!(circuit.num_gates(), 0);
     }
 
     #[test]
     fn test_add_single_qubit_gates() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
-        circuit.h(0).unwrap();
-        circuit.x(1).unwrap();
-        circuit.y(0).unwrap();
-        circuit.z(1).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit.h(0).expect("test: valid qubit index");
+        circuit.x(1).expect("test: valid qubit index");
+        circuit.y(0).expect("test: valid qubit index");
+        circuit.z(1).expect("test: valid qubit index");
 
         assert_eq!(circuit.num_gates(), 4);
     }
 
     #[test]
     fn test_add_two_qubit_gates() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
-        circuit.cnot(0, 1).unwrap();
-        circuit.swap(0, 1).unwrap();
-        circuit.cz(0, 1).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit.cnot(0, 1).expect("test: valid qubit indices");
+        circuit.swap(0, 1).expect("test: valid qubit indices");
+        circuit.cz(0, 1).expect("test: valid qubit indices");
 
         assert_eq!(circuit.num_gates(), 3);
     }
 
     #[test]
     fn test_bell_state_circuit() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
-        circuit.h(0).unwrap();
-        circuit.cnot(0, 1).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit.h(0).expect("test: valid qubit index");
+        circuit.cnot(0, 1).expect("test: valid qubit indices");
 
-        let state = circuit.execute().unwrap();
+        let state = circuit.execute().expect("test: circuit execution succeeds");
 
         // Bell state: (|00⟩ + |11⟩)/√2
-        let prob_00 = state.get_probability(0).unwrap();
-        let prob_11 = state.get_probability(3).unwrap();
+        let prob_00 = state.get_probability(0).expect("test: valid state index");
+        let prob_11 = state.get_probability(3).expect("test: valid state index");
 
         assert_relative_eq!(prob_00, 0.5, epsilon = 1e-10);
         assert_relative_eq!(prob_11, 0.5, epsilon = 1e-10);
@@ -455,43 +455,43 @@ mod tests {
 
     #[test]
     fn test_circuit_depth() {
-        let mut circuit = QuantumCircuit::<f64>::new(3).unwrap();
-        circuit.h(0).unwrap();
-        circuit.h(1).unwrap();
-        circuit.h(2).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(3).expect("test: valid qubit count");
+        circuit.h(0).expect("test: valid qubit index");
+        circuit.h(1).expect("test: valid qubit index");
+        circuit.h(2).expect("test: valid qubit index");
         // All three H gates can be parallel, depth = 1
 
         assert_eq!(circuit.depth(), 1);
 
-        circuit.cnot(0, 1).unwrap(); // Depth 2
-        circuit.cnot(1, 2).unwrap(); // Depth 3
+        circuit.cnot(0, 1).expect("test: valid qubit indices"); // Depth 2
+        circuit.cnot(1, 2).expect("test: valid qubit indices"); // Depth 3
 
         assert_eq!(circuit.depth(), 3);
     }
 
     #[test]
     fn test_rotation_gates() {
-        let mut circuit = QuantumCircuit::<f64>::new(1).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(1).expect("test: valid qubit count");
         let theta = std::f64::consts::PI;
 
-        circuit.rx(0, theta).unwrap();
-        circuit.ry(0, theta).unwrap();
-        circuit.rz(0, theta).unwrap();
+        circuit.rx(0, theta).expect("test: valid rotation gate");
+        circuit.ry(0, theta).expect("test: valid rotation gate");
+        circuit.rz(0, theta).expect("test: valid rotation gate");
 
         assert_eq!(circuit.num_gates(), 3);
     }
 
     #[test]
     fn test_toffoli_gate() {
-        let mut circuit = QuantumCircuit::<f64>::new(3).unwrap();
-        circuit.toffoli(0, 1, 2).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(3).expect("test: valid qubit count");
+        circuit.toffoli(0, 1, 2).expect("test: valid qubit indices");
 
         assert_eq!(circuit.num_gates(), 1);
     }
 
     #[test]
     fn test_invalid_qubit_index() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
         let result = circuit.h(5);
 
         assert!(result.is_err());
@@ -499,9 +499,9 @@ mod tests {
 
     #[test]
     fn test_clear_circuit() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
-        circuit.h(0).unwrap();
-        circuit.cnot(0, 1).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit.h(0).expect("test: valid qubit index");
+        circuit.cnot(0, 1).expect("test: valid qubit indices");
 
         assert_eq!(circuit.num_gates(), 2);
 
@@ -511,14 +511,16 @@ mod tests {
 
     #[test]
     fn test_circuit_optimize() {
-        let mut circuit = QuantumCircuit::<f64>::new(1).unwrap();
-        circuit.x(0).unwrap();
-        circuit.y(0).unwrap();
-        circuit.z(0).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(1).expect("test: valid qubit count");
+        circuit.x(0).expect("test: valid qubit index");
+        circuit.y(0).expect("test: valid qubit index");
+        circuit.z(0).expect("test: valid qubit index");
 
         assert_eq!(circuit.num_gates(), 3);
 
-        circuit.optimize().unwrap();
+        circuit
+            .optimize()
+            .expect("test: circuit optimization succeeds");
 
         // Should be fused into a single gate
         assert_eq!(circuit.num_gates(), 1);
@@ -526,9 +528,9 @@ mod tests {
 
     #[test]
     fn test_summary() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
-        circuit.h(0).unwrap();
-        circuit.cnot(0, 1).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit.h(0).expect("test: valid qubit index");
+        circuit.cnot(0, 1).expect("test: valid qubit indices");
 
         let summary = circuit.summary();
         assert!(summary.contains("qubits=2"));
@@ -537,24 +539,24 @@ mod tests {
 
     #[test]
     fn test_same_qubit_cnot_error() {
-        let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
         let result = circuit.cnot(0, 0);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_phase_and_t_gates() {
-        let mut circuit = QuantumCircuit::<f64>::new(1).unwrap();
-        circuit.s(0).unwrap();
-        circuit.t(0).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(1).expect("test: valid qubit count");
+        circuit.s(0).expect("test: valid qubit index");
+        circuit.t(0).expect("test: valid qubit index");
 
         assert_eq!(circuit.num_gates(), 2);
     }
 
     #[test]
     fn test_fredkin_gate() {
-        let mut circuit = QuantumCircuit::<f64>::new(3).unwrap();
-        circuit.fredkin(0, 1, 2).unwrap();
+        let mut circuit = QuantumCircuit::<f64>::new(3).expect("test: valid qubit count");
+        circuit.fredkin(0, 1, 2).expect("test: valid qubit indices");
 
         assert_eq!(circuit.num_gates(), 1);
     }

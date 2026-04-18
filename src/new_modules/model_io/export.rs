@@ -419,7 +419,7 @@ mod tests {
             .description("Test model for export")
             .hyperparameter("hidden_size", "128")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -429,8 +429,9 @@ mod tests {
 
         // Verify file exists and is valid JSON
         assert!(path.exists());
-        let contents = fs::read_to_string(&path).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        let contents = fs::read_to_string(&path).expect("test: valid file read");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&contents).expect("test: valid JSON parse");
         assert_eq!(parsed["name"], "test_model");
         assert_eq!(parsed["architecture"], "MLP");
 
@@ -447,7 +448,7 @@ mod tests {
             .name("test_model")
             .architecture("Transformer")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer1 = LayerData::dense("layer1", Array2::ones((512, 256)), None);
         let layer2 = LayerData::dense("layer2", Array2::ones((256, 128)), None);
@@ -486,7 +487,7 @@ mod tests {
         let header = ModelExporter::create_npy_header(&shape, "f8");
         assert!(header.is_ok());
 
-        let header = header.unwrap();
+        let header = header.expect("test: valid NPY header creation");
         assert!(header.starts_with(b"\x93NUMPY"));
         assert!(header.len().is_multiple_of(16)); // Should be aligned to 16 bytes
     }
@@ -499,7 +500,7 @@ mod tests {
             .architecture("CNN")
             .hyperparameter("kernel_size", "3")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -533,7 +534,7 @@ mod tests {
             .name("test_model")
             .architecture("ResNet")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer1 = LayerData::dense("layer1", Array2::ones((256, 128)), None);
         let layer2 = LayerData::dense("layer2", Array2::ones((128, 64)), None);
@@ -557,7 +558,10 @@ mod tests {
         let temp_dir = env::temp_dir();
         let json_path = temp_dir.join("test_convenience.json");
 
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -581,7 +585,10 @@ mod tests {
         let temp_dir = env::temp_dir();
         let path = temp_dir.join("test_weights.npz");
 
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer1 = LayerData::dense("layer1", Array2::ones((10, 5)), Some(Array1::zeros(5)));
         let layer2 = LayerData::dense("layer2", Array2::ones((5, 2)), None);

@@ -42,7 +42,7 @@ use super::core::{compute_norm_vec, dot_vec, matvec, SolverResult};
 /// ]).reshape(&[2, 2]);
 /// let b = Array::from_vec(vec![1.0, 0.0]);
 ///
-/// let result = minres(&a, &b, None, Some(1e-6), Some(100)).unwrap();
+/// let result = minres(&a, &b, None, Some(1e-6), Some(100)).expect("valid minres solver params");
 /// assert!(result.converged);
 /// ```
 ///

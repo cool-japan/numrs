@@ -788,8 +788,10 @@ mod tests {
         let c = array![[1.0, 0.0]];
         let d = array![[0.0]];
 
-        let ss = StateSpace::new(a, b, c, d).unwrap();
-        let is_controllable = ss.is_controllable().unwrap();
+        let ss = StateSpace::new(a, b, c, d).expect("test: valid state-space system");
+        let is_controllable = ss
+            .is_controllable()
+            .expect("test: valid controllability check");
         assert!(is_controllable);
     }
 
@@ -801,8 +803,8 @@ mod tests {
         let c = array![[1.0, 0.0]];
         let d = array![[0.0]];
 
-        let ss = StateSpace::new(a, b, c, d).unwrap();
-        let is_observable = ss.is_observable().unwrap();
+        let ss = StateSpace::new(a, b, c, d).expect("test: valid state-space system");
+        let is_observable = ss.is_observable().expect("test: valid observability check");
         assert!(is_observable);
     }
 
@@ -811,7 +813,7 @@ mod tests {
         let a = array![[1.0, 2.0], [3.0, 4.0]];
         let b = array![[5.0, 6.0], [7.0, 8.0]];
 
-        let c = matrix_multiply(&a, &b).unwrap();
+        let c = matrix_multiply(&a, &b).expect("test: valid matrix multiplication");
 
         assert!((c[[0, 0]] - 19.0).abs() < 1e-10);
         assert!((c[[0, 1]] - 22.0).abs() < 1e-10);
@@ -824,7 +826,8 @@ mod tests {
         let a = array![[1.0, 2.0], [3.0, 4.0]];
         let v = array![5.0, 6.0];
 
-        let result = matrix_vector_multiply(&a, &v).unwrap();
+        let result =
+            matrix_vector_multiply(&a, &v).expect("test: valid matrix-vector multiplication");
 
         assert!((result[0] - 17.0).abs() < 1e-10);
         assert!((result[1] - 39.0).abs() < 1e-10);
@@ -833,11 +836,11 @@ mod tests {
     #[test]
     fn test_matrix_rank() {
         let a = array![[1.0, 2.0], [2.0, 4.0]]; // Rank 1
-        let rank = matrix_rank(&a).unwrap();
+        let rank = matrix_rank(&a).expect("test: valid matrix rank computation");
         assert_eq!(rank, 1);
 
         let b = array![[1.0, 0.0], [0.0, 1.0]]; // Rank 2
-        let rank = matrix_rank(&b).unwrap();
+        let rank = matrix_rank(&b).expect("test: valid matrix rank computation");
         assert_eq!(rank, 2);
     }
 }

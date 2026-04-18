@@ -512,7 +512,8 @@ mod tests {
     #[test]
     fn test_output_limits() {
         let mut pid = PIDController::new(10.0, 0.0, 0.0, 0.01);
-        pid.set_output_limits(-5.0, 5.0).unwrap();
+        pid.set_output_limits(-5.0, 5.0)
+            .expect("test: valid output limits");
 
         let output = pid.update(1.0);
         assert!((-5.0..=5.0).contains(&output));
@@ -537,7 +538,8 @@ mod tests {
     #[test]
     fn test_ziegler_nichols_tuning() {
         let mut pid = PIDController::new(0.0, 0.0, 0.0, 0.01);
-        pid.tune_ziegler_nichols(4.0, 2.0).unwrap();
+        pid.tune_ziegler_nichols(4.0, 2.0)
+            .expect("test: valid Ziegler-Nichols tuning");
 
         let (kp, ki, kd) = pid.gains();
 
@@ -549,7 +551,8 @@ mod tests {
     #[test]
     fn test_cohen_coon_tuning() {
         let mut pid = PIDController::new(0.0, 0.0, 0.0, 0.01);
-        pid.tune_cohen_coon(1.0, 10.0, 1.0).unwrap();
+        pid.tune_cohen_coon(1.0, 10.0, 1.0)
+            .expect("test: valid Cohen-Coon tuning");
 
         let (kp, ki, kd) = pid.gains();
 
@@ -564,7 +567,7 @@ mod tests {
         let result = tune_imc(1.0, 10.0, 1.0, 5.0);
         assert!(result.is_ok());
 
-        let (kp, ki, kd) = result.unwrap();
+        let (kp, ki, kd) = result.expect("test: valid IMC tuning");
         assert!(kp > 0.0);
         assert!(ki > 0.0);
         assert_eq!(kd, 0.0); // IMC doesn't use derivative for FOPDT
@@ -576,7 +579,8 @@ mod tests {
         let output = vec![0.0, 0.5, 0.9, 1.1, 1.0, 1.0];
         let setpoint = 1.0;
 
-        let metrics = analyze_step_response(&time, &output, setpoint).unwrap();
+        let metrics = analyze_step_response(&time, &output, setpoint)
+            .expect("test: valid step response analysis");
 
         assert!(metrics.rise_time > 0.0);
         assert!(metrics.overshoot_percent >= 0.0);

@@ -24,7 +24,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 /// // Evaluate at x = 3
 /// let mut vars = std::collections::HashMap::new();
 /// vars.insert("x".to_string(), 3.0);
-/// let result = expr.eval(&vars).unwrap();
+/// let result = expr.eval(&vars).expect("valid expression evaluation");
 /// assert_eq!(result, 8.0);
 /// ```
 #[derive(Debug, Clone, PartialEq)]

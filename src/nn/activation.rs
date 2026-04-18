@@ -41,7 +41,7 @@ use scirs2_core::simd_ops::SimdUnifiedOps;
 /// use scirs2_core::ndarray::array;
 ///
 /// let x = array![-1.0, 0.0, 1.0, 2.0];
-/// let y = relu(&x.view()).unwrap();
+/// let y = relu(&x.view()).expect("valid relu input");
 /// // y = [0.0, 0.0, 1.0, 2.0]
 /// ```
 pub fn relu<T>(x: &ArrayView1<T>) -> NnResult<Array1<T>>
@@ -582,7 +582,7 @@ mod tests {
     #[test]
     fn test_relu() {
         let x = array![-2.0, -1.0, 0.0, 1.0, 2.0];
-        let y = relu(&x.view()).unwrap();
+        let y = relu(&x.view()).expect("test: valid relu input");
         assert_abs_diff_eq!(y[0], 0.0, epsilon = 1e-6);
         assert_abs_diff_eq!(y[1], 0.0, epsilon = 1e-6);
         assert_abs_diff_eq!(y[2], 0.0, epsilon = 1e-6);
@@ -593,14 +593,14 @@ mod tests {
     #[test]
     fn test_sigmoid() {
         let x = array![0.0];
-        let y = sigmoid(&x.view()).unwrap();
+        let y = sigmoid(&x.view()).expect("test: valid sigmoid input");
         assert_abs_diff_eq!(y[0], 0.5, epsilon = 1e-6);
     }
 
     #[test]
     fn test_softmax() {
         let x = array![1.0, 2.0, 3.0];
-        let y = softmax(&x.view()).unwrap();
+        let y = softmax(&x.view()).expect("test: valid softmax input");
 
         // Sum should be 1.0
         let sum: f64 = y.sum();
@@ -614,7 +614,7 @@ mod tests {
     fn test_softmax_numerical_stability() {
         // Large values that would overflow exp
         let x = array![1000.0, 1001.0, 1002.0];
-        let y = softmax(&x.view()).unwrap();
+        let y = softmax(&x.view()).expect("test: valid softmax input");
 
         // Should not contain NaN or Inf
         assert!(y.iter().all(|&v| v.is_finite()));
@@ -627,7 +627,7 @@ mod tests {
     #[test]
     fn test_gelu() {
         let x = array![0.0];
-        let y = gelu(&x.view()).unwrap();
+        let y = gelu(&x.view()).expect("test: valid gelu input");
         // GELU(0) ≈ 0
         assert_abs_diff_eq!(y[0], 0.0, epsilon = 1e-6);
     }
@@ -635,7 +635,7 @@ mod tests {
     #[test]
     fn test_swish() {
         let x = array![0.0];
-        let y = swish(&x.view()).unwrap();
+        let y = swish(&x.view()).expect("test: valid swish input");
         // Swish(0) = 0
         assert_abs_diff_eq!(y[0], 0.0, epsilon = 1e-6);
     }

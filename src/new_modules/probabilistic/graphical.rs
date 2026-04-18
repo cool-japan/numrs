@@ -765,9 +765,12 @@ mod tests {
         node.add_parent(0);
 
         // Set CPT for parent state 0
-        node.set_cpt(vec![0], vec![0.7, 0.3]).unwrap();
+        node.set_cpt(vec![0], vec![0.7, 0.3])
+            .expect("test: valid CPT for node");
 
-        let prob = node.get_probability(0, &[0]).unwrap();
+        let prob = node
+            .get_probability(0, &[0])
+            .expect("test: valid probability lookup");
         assert_relative_eq!(prob, 0.7, epsilon = 1e-10);
     }
 
@@ -790,17 +793,19 @@ mod tests {
         let hmm = HiddenMarkovModel::new(3, 2);
         assert!(hmm.is_ok());
 
-        let hmm = hmm.unwrap();
+        let hmm = hmm.expect("test: valid HMM creation");
         assert_eq!(hmm.n_states, 3);
         assert_eq!(hmm.n_observations, 2);
     }
 
     #[test]
     fn test_hmm_forward() {
-        let hmm = HiddenMarkovModel::new(2, 2).unwrap();
+        let hmm = HiddenMarkovModel::new(2, 2).expect("test: valid HMM creation");
         let observations = vec![0, 1, 0];
 
-        let alpha = hmm.forward(&observations).unwrap();
+        let alpha = hmm
+            .forward(&observations)
+            .expect("test: valid HMM forward pass");
 
         assert_eq!(alpha.len(), 3);
         assert_eq!(alpha[0].len(), 2);
@@ -815,10 +820,12 @@ mod tests {
 
     #[test]
     fn test_hmm_backward() {
-        let hmm = HiddenMarkovModel::new(2, 2).unwrap();
+        let hmm = HiddenMarkovModel::new(2, 2).expect("test: valid HMM creation");
         let observations = vec![0, 1, 0];
 
-        let beta = hmm.backward(&observations).unwrap();
+        let beta = hmm
+            .backward(&observations)
+            .expect("test: valid HMM backward pass");
 
         assert_eq!(beta.len(), 3);
         assert_eq!(beta[0].len(), 2);
@@ -833,10 +840,12 @@ mod tests {
 
     #[test]
     fn test_hmm_viterbi() {
-        let hmm = HiddenMarkovModel::new(2, 2).unwrap();
+        let hmm = HiddenMarkovModel::new(2, 2).expect("test: valid HMM creation");
         let observations = vec![0, 1, 0];
 
-        let path = hmm.viterbi(&observations).unwrap();
+        let path = hmm
+            .viterbi(&observations)
+            .expect("test: valid HMM Viterbi decoding");
 
         assert_eq!(path.len(), 3);
         for &state in &path {
@@ -846,10 +855,12 @@ mod tests {
 
     #[test]
     fn test_hmm_likelihood() {
-        let hmm = HiddenMarkovModel::new(2, 2).unwrap();
+        let hmm = HiddenMarkovModel::new(2, 2).expect("test: valid HMM creation");
         let observations = vec![0, 1, 0];
 
-        let likelihood = hmm.likelihood(&observations).unwrap();
+        let likelihood = hmm
+            .likelihood(&observations)
+            .expect("test: valid HMM likelihood");
 
         assert!(likelihood > 0.0);
         assert!(likelihood <= 1.0);
@@ -857,10 +868,12 @@ mod tests {
 
     #[test]
     fn test_hmm_generate() {
-        let hmm = HiddenMarkovModel::new(2, 2).unwrap();
+        let hmm = HiddenMarkovModel::new(2, 2).expect("test: valid HMM creation");
         let mut rng = thread_rng();
 
-        let (states, observations) = hmm.generate(10, &mut rng).unwrap();
+        let (states, observations) = hmm
+            .generate(10, &mut rng)
+            .expect("test: valid HMM sequence generation");
 
         assert_eq!(states.len(), 10);
         assert_eq!(observations.len(), 10);
@@ -875,7 +888,7 @@ mod tests {
 
     #[test]
     fn test_rbf_kernel() {
-        let kernel = RBFKernel::new(1.0, 1.0).unwrap();
+        let kernel = RBFKernel::new(1.0, 1.0).expect("test: valid RBF kernel parameters");
 
         let x1 = vec![0.0, 0.0];
         let x2 = vec![1.0, 0.0];
@@ -891,18 +904,19 @@ mod tests {
 
     #[test]
     fn test_gaussian_process() {
-        let kernel = RBFKernel::new(1.0, 1.0).unwrap();
-        let mut gp = GaussianProcess::new(kernel, 0.1).unwrap();
+        let kernel = RBFKernel::new(1.0, 1.0).expect("test: valid RBF kernel parameters");
+        let mut gp =
+            GaussianProcess::new(kernel, 0.1).expect("test: valid Gaussian Process creation");
 
         // Training data: f(x) = x²
         let x_train = vec![vec![0.0], vec![1.0], vec![2.0]];
         let y_train = vec![0.0, 1.0, 4.0];
 
-        gp.fit(x_train, y_train).unwrap();
+        gp.fit(x_train, y_train).expect("test: valid GP fit");
 
         // Predict at training points
         let x_test = vec![vec![0.0], vec![1.0]];
-        let (means, variances) = gp.predict(&x_test).unwrap();
+        let (means, variances) = gp.predict(&x_test).expect("test: valid GP prediction");
 
         assert_eq!(means.len(), 2);
         assert_eq!(variances.len(), 2);
@@ -921,7 +935,7 @@ mod tests {
         let a = vec![vec![2.0, 1.0], vec![1.0, 3.0]];
         let b = vec![5.0, 6.0];
 
-        let x = solve_linear_system(&a, &b).unwrap();
+        let x = solve_linear_system(&a, &b).expect("test: valid linear system solution");
 
         assert_relative_eq!(x[0], 1.8, epsilon = 1e-6);
         assert_relative_eq!(x[1], 1.4, epsilon = 1e-6);

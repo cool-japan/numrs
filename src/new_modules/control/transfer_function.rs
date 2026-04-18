@@ -39,7 +39,7 @@ impl TransferFunction {
     /// // H(s) = (s + 2)/(s^2 + 3s + 2)
     /// let num = vec![1.0, 2.0];  // s + 2
     /// let den = vec![1.0, 3.0, 2.0];  // s^2 + 3s + 2
-    /// let tf = TransferFunction::new(num, den).unwrap();
+    /// let tf = TransferFunction::new(num, den).expect("valid transfer function");
     /// ```
     pub fn new(numerator: Vec<f64>, denominator: Vec<f64>) -> ControlResult<Self> {
         if numerator.is_empty() || denominator.is_empty() {
@@ -518,7 +518,8 @@ mod tests {
     #[test]
     fn test_dc_gain() {
         // H(s) = 2/(s + 1)
-        let tf = TransferFunction::new(vec![2.0], vec![1.0, 1.0]).unwrap();
+        let tf = TransferFunction::new(vec![2.0], vec![1.0, 1.0])
+            .expect("test: valid transfer function");
         let dc_gain = tf.dc_gain();
         assert!((dc_gain - 2.0).abs() < 1e-10);
     }
@@ -526,10 +527,12 @@ mod tests {
     #[test]
     fn test_series_connection() {
         // H1(s) = 1/(s+1), H2(s) = 1/(s+2)
-        let h1 = TransferFunction::new(vec![1.0], vec![1.0, 1.0]).unwrap();
-        let h2 = TransferFunction::new(vec![1.0], vec![1.0, 2.0]).unwrap();
+        let h1 = TransferFunction::new(vec![1.0], vec![1.0, 1.0])
+            .expect("test: valid transfer function");
+        let h2 = TransferFunction::new(vec![1.0], vec![1.0, 2.0])
+            .expect("test: valid transfer function");
 
-        let series = h1.series(&h2).unwrap();
+        let series = h1.series(&h2).expect("test: valid series connection");
 
         // Result should be 1/((s+1)(s+2)) = 1/(s^2 + 3s + 2)
         assert_eq!(series.numerator.len(), 1);
@@ -578,9 +581,12 @@ mod tests {
     #[test]
     fn test_frequency_response() {
         // H(s) = 1/(s + 1)
-        let tf = TransferFunction::new(vec![1.0], vec![1.0, 1.0]).unwrap();
+        let tf = TransferFunction::new(vec![1.0], vec![1.0, 1.0])
+            .expect("test: valid transfer function");
         let freqs = vec![0.0, 1.0, 10.0];
-        let response = tf.frequency_response(&freqs).unwrap();
+        let response = tf
+            .frequency_response(&freqs)
+            .expect("test: valid frequency response");
 
         assert_eq!(response.frequencies.len(), 3);
         assert_eq!(response.magnitude.len(), 3);

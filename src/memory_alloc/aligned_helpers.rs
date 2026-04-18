@@ -694,14 +694,15 @@ mod tests {
 
     #[test]
     fn test_aligned_box_basic() {
-        let boxed = AlignedBox::new(42u64).unwrap();
+        let boxed = AlignedBox::new(42u64).expect("test: valid AlignedBox creation");
         assert_eq!(*boxed, 42);
         assert!(boxed.verify_alignment());
     }
 
     #[test]
     fn test_aligned_box_alignment() {
-        let boxed = AlignedBox::with_alignment(123u64, 64).unwrap();
+        let boxed =
+            AlignedBox::with_alignment(123u64, 64).expect("test: valid AlignedBox with alignment");
         let addr = boxed.as_ptr() as usize;
         assert_eq!(addr % 64, 0);
         assert_eq!(boxed.alignment(), 64);
@@ -709,10 +710,10 @@ mod tests {
 
     #[test]
     fn test_aligned_vec_basic() {
-        let mut vec = AlignedVec::with_capacity(10).unwrap();
-        vec.push(1.0f64).unwrap();
-        vec.push(2.0f64).unwrap();
-        vec.push(3.0f64).unwrap();
+        let mut vec = AlignedVec::with_capacity(10).expect("test: valid AlignedVec creation");
+        vec.push(1.0f64).expect("test: valid push");
+        vec.push(2.0f64).expect("test: valid push");
+        vec.push(3.0f64).expect("test: valid push");
 
         assert_eq!(vec.len(), 3);
         assert_eq!(vec[0], 1.0);
@@ -723,9 +724,9 @@ mod tests {
 
     #[test]
     fn test_aligned_vec_grow() {
-        let mut vec = AlignedVec::with_capacity(2).unwrap();
+        let mut vec = AlignedVec::with_capacity(2).expect("test: valid AlignedVec creation");
         for i in 0..10 {
-            vec.push(i).unwrap();
+            vec.push(i).expect("test: valid push");
         }
 
         assert_eq!(vec.len(), 10);
@@ -739,10 +740,10 @@ mod tests {
 
     #[test]
     fn test_aligned_vec_pop() {
-        let mut vec = AlignedVec::with_capacity(5).unwrap();
-        vec.push(1).unwrap();
-        vec.push(2).unwrap();
-        vec.push(3).unwrap();
+        let mut vec = AlignedVec::with_capacity(5).expect("test: valid AlignedVec creation");
+        vec.push(1).expect("test: valid push");
+        vec.push(2).expect("test: valid push");
+        vec.push(3).expect("test: valid push");
 
         assert_eq!(vec.pop(), Some(3));
         assert_eq!(vec.pop(), Some(2));
@@ -751,9 +752,9 @@ mod tests {
 
     #[test]
     fn test_aligned_vec_clear() {
-        let mut vec = AlignedVec::with_capacity(5).unwrap();
-        vec.push(1).unwrap();
-        vec.push(2).unwrap();
+        let mut vec = AlignedVec::with_capacity(5).expect("test: valid AlignedVec creation");
+        vec.push(1).expect("test: valid push");
+        vec.push(2).expect("test: valid push");
         vec.clear();
 
         assert_eq!(vec.len(), 0);

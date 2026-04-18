@@ -69,7 +69,7 @@ use scirs2_core::ndarray::{Array1, ArrayView1};
 ///
 /// // IID sequence
 /// let sequence = Array1::from_vec(vec![0, 1, 0, 1, 0, 1, 0, 1]);
-/// let rate = entropy_rate(&sequence, 0).unwrap();
+/// let rate = entropy_rate(&sequence, 0).expect("valid sequence and order");
 /// assert!(rate > 0.9 && rate < 1.1); // Approximately 1 bit per symbol
 /// ```
 pub fn entropy_rate(sequence: &Array1<usize>, order: usize) -> Result<f64, NumRs2Error> {
@@ -166,11 +166,11 @@ pub fn entropy_rate(sequence: &Array1<usize>, order: usize) -> Result<f64, NumRs
 /// use numrs2::new_modules::information_theory::coding::binary_symmetric_channel_capacity;
 ///
 /// // Perfect channel (p=0)
-/// let c = binary_symmetric_channel_capacity(0.0).unwrap();
+/// let c = binary_symmetric_channel_capacity(0.0).expect("valid channel parameter");
 /// assert!((c - 1.0).abs() < 1e-10); // C = 1 bit
 ///
 /// // Maximally noisy (p=0.5)
-/// let c2 = binary_symmetric_channel_capacity(0.5).unwrap();
+/// let c2 = binary_symmetric_channel_capacity(0.5).expect("valid channel parameter");
 /// assert!(c2.abs() < 1e-10); // C = 0 bits
 /// ```
 pub fn binary_symmetric_channel_capacity(error_prob: f64) -> Result<f64, NumRs2Error> {
@@ -218,11 +218,11 @@ pub fn binary_symmetric_channel_capacity(error_prob: f64) -> Result<f64, NumRs2E
 /// use numrs2::new_modules::information_theory::coding::binary_erasure_channel_capacity;
 ///
 /// // Perfect channel (ε=0)
-/// let c = binary_erasure_channel_capacity(0.0).unwrap();
+/// let c = binary_erasure_channel_capacity(0.0).expect("valid channel parameter");
 /// assert!((c - 1.0).abs() < 1e-10); // C = 1 bit
 ///
 /// // Half erasures (ε=0.5)
-/// let c2 = binary_erasure_channel_capacity(0.5).unwrap();
+/// let c2 = binary_erasure_channel_capacity(0.5).expect("valid channel parameter");
 /// assert!((c2 - 0.5).abs() < 1e-10); // C = 0.5 bits
 /// ```
 pub fn binary_erasure_channel_capacity(erasure_prob: f64) -> Result<f64, NumRs2Error> {
@@ -262,11 +262,11 @@ pub fn binary_erasure_channel_capacity(erasure_prob: f64) -> Result<f64, NumRs2E
 /// use numrs2::new_modules::information_theory::coding::rate_distortion_binary;
 ///
 /// // Fair coin, zero distortion
-/// let r = rate_distortion_binary(0.5, 0.0).unwrap();
+/// let r = rate_distortion_binary(0.5, 0.0).expect("valid distribution and distortion");
 /// assert!((r - 1.0).abs() < 1e-10); // R(0) = H(0.5) = 1 bit
 ///
 /// // Fair coin, maximum distortion
-/// let r2 = rate_distortion_binary(0.5, 0.5).unwrap();
+/// let r2 = rate_distortion_binary(0.5, 0.5).expect("valid distribution and distortion");
 /// assert!(r2.abs() < 1e-10); // R(0.5) = 0 bits
 /// ```
 pub fn rate_distortion_binary(source_prob: f64, distortion: f64) -> Result<f64, NumRs2Error> {
@@ -358,7 +358,7 @@ pub fn aic(log_likelihood: f64, num_parameters: usize) -> f64 {
 /// let log_likelihood = -100.0;
 /// let k = 5;
 /// let n = 50;
-/// let aicc_val = aicc(log_likelihood, k, n).unwrap();
+/// let aicc_val = aicc(log_likelihood, k, n).expect("valid AICc parameters");
 /// // AICc = AIC + correction
 /// assert!(aicc_val > 210.0); // Larger than AIC due to correction
 /// ```

@@ -444,11 +444,21 @@ mod tests {
         let n2 = graph.add_node();
         let n3 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n0, n2, 4.0).unwrap();
-        graph.add_edge(n1, n2, 2.0).unwrap();
-        graph.add_edge(n1, n3, 5.0).unwrap();
-        graph.add_edge(n2, n3, 3.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n0, n2, 4.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n2, 2.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n3, 5.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n2, n3, 3.0)
+            .expect("test: valid edge addition");
 
         graph
     }
@@ -472,7 +482,7 @@ mod tests {
     #[test]
     fn test_kruskal() {
         let graph = create_test_graph();
-        let result = kruskal(&graph).unwrap();
+        let result = kruskal(&graph).expect("test: valid Kruskal MST");
 
         assert_eq!(result.edges.len(), 3); // V-1 edges
         assert_eq!(result.total_weight, 6.0); // 1 + 2 + 3
@@ -481,9 +491,9 @@ mod tests {
         let mut weights: Vec<Weight> = result
             .edges
             .iter()
-            .map(|&e| graph.get_edge(e).unwrap().weight)
+            .map(|&e| graph.get_edge(e).expect("test: valid edge").weight)
             .collect();
-        weights.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        weights.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         assert_eq!(weights, vec![1.0, 2.0, 3.0]);
     }
 
@@ -502,8 +512,12 @@ mod tests {
         let n2 = graph.add_node();
         let n3 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n2, n3, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n2, n3, 1.0)
+            .expect("test: valid edge addition");
         // Two separate components
 
         let result = kruskal(&graph);
@@ -513,7 +527,7 @@ mod tests {
     #[test]
     fn test_prim() {
         let graph = create_test_graph();
-        let result = prim(&graph, None).unwrap();
+        let result = prim(&graph, None).expect("test: valid Prim MST");
 
         assert_eq!(result.edges.len(), 3); // V-1 edges
         assert_eq!(result.total_weight, 6.0);
@@ -522,7 +536,7 @@ mod tests {
     #[test]
     fn test_prim_with_start() {
         let graph = create_test_graph();
-        let result = prim(&graph, Some(2)).unwrap();
+        let result = prim(&graph, Some(2)).expect("test: valid Prim MST with start");
 
         assert_eq!(result.edges.len(), 3);
         assert_eq!(result.total_weight, 6.0);
@@ -535,7 +549,9 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
         // n2 is disconnected
 
         let result = prim(&graph, None);
@@ -545,7 +561,7 @@ mod tests {
     #[test]
     fn test_boruvka() {
         let graph = create_test_graph();
-        let result = boruvka(&graph).unwrap();
+        let result = boruvka(&graph).expect("test: valid Boruvka MST");
 
         assert_eq!(result.edges.len(), 3); // V-1 edges
         assert_eq!(result.total_weight, 6.0);
@@ -558,7 +574,9 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
         // n2 is disconnected
 
         let result = boruvka(&graph);
@@ -569,9 +587,9 @@ mod tests {
     fn test_mst_algorithms_consistency() {
         let graph = create_test_graph();
 
-        let kruskal_result = kruskal(&graph).unwrap();
-        let prim_result = prim(&graph, None).unwrap();
-        let boruvka_result = boruvka(&graph).unwrap();
+        let kruskal_result = kruskal(&graph).expect("test: valid Kruskal MST");
+        let prim_result = prim(&graph, None).expect("test: valid Prim MST");
+        let boruvka_result = boruvka(&graph).expect("test: valid Boruvka MST");
 
         // All should have same total weight
         assert_eq!(kruskal_result.total_weight, prim_result.total_weight);

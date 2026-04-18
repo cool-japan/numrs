@@ -21,7 +21,7 @@
 //! let mut graph = Graph::new(true);
 //! let n0 = graph.add_node();
 //! let n1 = graph.add_node();
-//! graph.add_edge(n0, n1, 1.0).unwrap();
+//! graph.add_edge(n0, n1, 1.0).expect("valid edge addition");
 //! ```
 //!
 //! # SCIRS2 Integration
@@ -363,15 +363,17 @@ mod tests {
         let n0 = graph.add_node();
         let n1 = graph.add_node();
 
-        let e0 = graph.add_edge(n0, n1, 1.5).unwrap();
+        let e0 = graph
+            .add_edge(n0, n1, 1.5)
+            .expect("test: valid edge addition");
         assert_eq!(graph.edge_count(), 1);
 
-        let edge = graph.get_edge(e0).unwrap();
+        let edge = graph.get_edge(e0).expect("test: valid edge retrieval");
         assert_eq!(edge.from, n0);
         assert_eq!(edge.to, n1);
         assert_eq!(edge.weight, 1.5);
 
-        let neighbors = graph.neighbors(n0).unwrap();
+        let neighbors = graph.neighbors(n0).expect("test: valid neighbor retrieval");
         assert_eq!(neighbors.len(), 1);
         assert_eq!(neighbors[0].0, n1);
     }
@@ -382,11 +384,13 @@ mod tests {
         let n0 = graph.add_node();
         let n1 = graph.add_node();
 
-        graph.add_edge(n0, n1, 2.0).unwrap();
+        graph
+            .add_edge(n0, n1, 2.0)
+            .expect("test: valid edge addition");
 
         // Both directions should have the edge
-        let neighbors0 = graph.neighbors(n0).unwrap();
-        let neighbors1 = graph.neighbors(n1).unwrap();
+        let neighbors0 = graph.neighbors(n0).expect("test: valid neighbor retrieval");
+        let neighbors1 = graph.neighbors(n1).expect("test: valid neighbor retrieval");
         assert_eq!(neighbors0.len(), 1);
         assert_eq!(neighbors1.len(), 1);
         assert_eq!(neighbors0[0].0, n1);
@@ -400,16 +404,22 @@ mod tests {
         let n1 = graph.add_node();
         let n2 = graph.add_node();
 
-        graph.add_edge(n0, n1, 1.0).unwrap();
-        graph.add_edge(n0, n2, 1.0).unwrap();
-        graph.add_edge(n1, n2, 1.0).unwrap();
+        graph
+            .add_edge(n0, n1, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n0, n2, 1.0)
+            .expect("test: valid edge addition");
+        graph
+            .add_edge(n1, n2, 1.0)
+            .expect("test: valid edge addition");
 
-        assert_eq!(graph.out_degree(n0).unwrap(), 2);
-        assert_eq!(graph.in_degree(n0).unwrap(), 0);
-        assert_eq!(graph.out_degree(n1).unwrap(), 1);
-        assert_eq!(graph.in_degree(n1).unwrap(), 1);
-        assert_eq!(graph.out_degree(n2).unwrap(), 0);
-        assert_eq!(graph.in_degree(n2).unwrap(), 2);
+        assert_eq!(graph.out_degree(n0).expect("test: valid out-degree"), 2);
+        assert_eq!(graph.in_degree(n0).expect("test: valid in-degree"), 0);
+        assert_eq!(graph.out_degree(n1).expect("test: valid out-degree"), 1);
+        assert_eq!(graph.in_degree(n1).expect("test: valid in-degree"), 1);
+        assert_eq!(graph.out_degree(n2).expect("test: valid out-degree"), 0);
+        assert_eq!(graph.in_degree(n2).expect("test: valid in-degree"), 2);
     }
 
     #[test]

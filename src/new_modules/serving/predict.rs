@@ -502,7 +502,13 @@ mod tests {
             .with_timeout(5000);
 
         assert_eq!(req.inputs.len(), 2);
-        assert_eq!(req.request_ids.as_ref().unwrap().len(), 2);
+        assert_eq!(
+            req.request_ids
+                .as_ref()
+                .expect("test: request IDs are some")
+                .len(),
+            2
+        );
         assert_eq!(req.timeout_ms, Some(5000));
     }
 

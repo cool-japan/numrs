@@ -114,12 +114,12 @@ impl LogBase {
 ///
 /// // Uniform distribution has maximum entropy
 /// let uniform = Array1::from_vec(vec![0.25, 0.25, 0.25, 0.25]);
-/// let h = shannon_entropy(&uniform, LogBase::Bits).unwrap();
+/// let h = shannon_entropy(&uniform, LogBase::Bits).expect("valid probability distribution");
 /// assert!((h - 2.0).abs() < 1e-10); // log2(4) = 2 bits
 ///
 /// // Deterministic distribution has zero entropy
 /// let deterministic = Array1::from_vec(vec![1.0, 0.0, 0.0, 0.0]);
-/// let h = shannon_entropy(&deterministic, LogBase::Bits).unwrap();
+/// let h = shannon_entropy(&deterministic, LogBase::Bits).expect("valid probability distribution");
 /// assert!(h.abs() < 1e-10);
 /// ```
 pub fn shannon_entropy(probs: &Array1<f64>, base: LogBase) -> Result<f64, NumRs2Error> {
@@ -161,8 +161,8 @@ pub fn shannon_entropy(probs: &Array1<f64>, base: LogBase) -> Result<f64, NumRs2
 /// use scirs2_core::ndarray::Array2;
 ///
 /// // Independent uniform variables
-/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-/// let h = joint_entropy(&joint, LogBase::Bits).unwrap();
+/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).expect("valid shape and data length");
+/// let h = joint_entropy(&joint, LogBase::Bits).expect("valid probability distribution");
 /// assert!((h - 2.0).abs() < 1e-10); // log2(4) = 2 bits
 /// ```
 pub fn joint_entropy(joint_probs: &Array2<f64>, base: LogBase) -> Result<f64, NumRs2Error> {
@@ -216,8 +216,8 @@ pub fn joint_entropy(joint_probs: &Array2<f64>, base: LogBase) -> Result<f64, Nu
 /// use scirs2_core::ndarray::Array2;
 ///
 /// // For independent variables, H(X|Y) = H(X)
-/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-/// let h_cond = conditional_entropy(&joint, LogBase::Bits).unwrap();
+/// let joint = Array2::from_shape_vec((2, 2), vec![0.25, 0.25, 0.25, 0.25]).expect("valid shape and data length");
+/// let h_cond = conditional_entropy(&joint, LogBase::Bits).expect("valid probability distribution");
 /// assert!((h_cond - 1.0).abs() < 1e-10); // Each variable has 1 bit
 /// ```
 pub fn conditional_entropy(joint_probs: &Array2<f64>, base: LogBase) -> Result<f64, NumRs2Error> {
@@ -259,7 +259,7 @@ pub fn conditional_entropy(joint_probs: &Array2<f64>, base: LogBase) -> Result<f
 ///
 /// let p = Array1::from_vec(vec![0.5, 0.5]);
 /// let q = Array1::from_vec(vec![0.4, 0.6]);
-/// let h_cross = cross_entropy(&p, &q, LogBase::Bits).unwrap();
+/// let h_cross = cross_entropy(&p, &q, LogBase::Bits).expect("valid probability distributions");
 /// assert!(h_cross > 1.0); // Greater than H(P) = 1 bit
 /// ```
 pub fn cross_entropy(p: &Array1<f64>, q: &Array1<f64>, base: LogBase) -> Result<f64, NumRs2Error> {
@@ -321,12 +321,12 @@ pub fn cross_entropy(p: &Array1<f64>, q: &Array1<f64>, base: LogBase) -> Result<
 /// let probs = Array1::from_vec(vec![0.5, 0.3, 0.2]);
 ///
 /// // α = 2 (collision entropy)
-/// let h2 = renyi_entropy(&probs, 2.0, LogBase::Bits).unwrap();
+/// let h2 = renyi_entropy(&probs, 2.0, LogBase::Bits).expect("valid probability distribution");
 /// assert!(h2 > 0.0);
 ///
 /// // As α → 1, should approach Shannon entropy
-/// let h_shannon = renyi_entropy(&probs, 0.999, LogBase::Bits).unwrap();
-/// let h_shannon2 = renyi_entropy(&probs, 1.001, LogBase::Bits).unwrap();
+/// let h_shannon = renyi_entropy(&probs, 0.999, LogBase::Bits).expect("valid probability distribution");
+/// let h_shannon2 = renyi_entropy(&probs, 1.001, LogBase::Bits).expect("valid probability distribution");
 /// assert!((h_shannon - h_shannon2).abs() < 0.1);
 /// ```
 pub fn renyi_entropy(probs: &Array1<f64>, alpha: f64, base: LogBase) -> Result<f64, NumRs2Error> {
@@ -410,7 +410,7 @@ pub fn renyi_entropy(probs: &Array1<f64>, alpha: f64, base: LogBase) -> Result<f
 /// let n = 100;
 /// let pdf = Array1::from_elem(n, 1.0); // Uniform PDF = 1
 /// let dx = 1.0 / (n as f64);
-/// let h = differential_entropy(&pdf, dx, LogBase::Nats).unwrap();
+/// let h = differential_entropy(&pdf, dx, LogBase::Nats).expect("valid probability distribution");
 /// // For uniform on [0,1], h(X) = 0 nats
 /// assert!(h.abs() < 0.1);
 /// ```

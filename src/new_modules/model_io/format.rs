@@ -535,11 +535,17 @@ mod tests {
             .build();
 
         assert!(metadata.is_ok());
-        let metadata = metadata.unwrap();
+        let metadata = metadata.expect("test: valid metadata build");
         assert_eq!(metadata.name, "test_model");
         assert_eq!(metadata.version, "1.0.0");
         assert_eq!(metadata.architecture, "Transformer");
-        assert_eq!(metadata.hyperparameters.get("hidden_size").unwrap(), "512");
+        assert_eq!(
+            metadata
+                .hyperparameters
+                .get("hidden_size")
+                .expect("test: hidden_size hyperparameter exists"),
+            "512"
+        );
     }
 
     #[test]
@@ -585,7 +591,7 @@ mod tests {
             .version("1.0.0")
             .architecture("MLP")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer1 = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let layer2 = LayerData::dense("layer2", Array2::ones((5, 2)), None);
@@ -598,7 +604,10 @@ mod tests {
 
     #[test]
     fn test_get_layer_by_index() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer1 = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let layer2 = LayerData::dense("layer2", Array2::ones((5, 2)), None);
@@ -607,7 +616,10 @@ mod tests {
 
         let layer = model.get_layer(0);
         assert!(layer.is_ok());
-        assert_eq!(layer.unwrap().name, "layer1");
+        assert_eq!(
+            layer.expect("test: valid layer retrieval by index").name,
+            "layer1"
+        );
 
         let layer_invalid = model.get_layer(10);
         assert!(layer_invalid.is_err());
@@ -615,7 +627,10 @@ mod tests {
 
     #[test]
     fn test_get_layer_by_name() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer1 = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let layer2 = LayerData::dense("layer2", Array2::ones((5, 2)), None);
@@ -624,7 +639,10 @@ mod tests {
 
         let layer = model.get_layer_by_name("layer2");
         assert!(layer.is_ok());
-        assert_eq!(layer.unwrap().name, "layer2");
+        assert_eq!(
+            layer.expect("test: valid layer retrieval by name").name,
+            "layer2"
+        );
 
         let layer_invalid = model.get_layer_by_name("nonexistent");
         assert!(layer_invalid.is_err());
@@ -636,8 +654,18 @@ mod tests {
 
         assert_eq!(opt.optimizer_name, "Adam");
         assert_eq!(opt.learning_rate, 0.001);
-        assert_eq!(opt.parameters.get("beta1").unwrap(), &0.9);
-        assert_eq!(opt.parameters.get("beta2").unwrap(), &0.999);
+        assert_eq!(
+            opt.parameters
+                .get("beta1")
+                .expect("test: beta1 parameter exists"),
+            &0.9
+        );
+        assert_eq!(
+            opt.parameters
+                .get("beta2")
+                .expect("test: beta2 parameter exists"),
+            &0.999
+        );
         assert!(opt.first_moments.is_some());
         assert!(opt.second_moments.is_some());
     }
@@ -648,7 +676,12 @@ mod tests {
 
         assert_eq!(opt.optimizer_name, "SGD");
         assert_eq!(opt.learning_rate, 0.01);
-        assert_eq!(opt.parameters.get("momentum").unwrap(), &0.9);
+        assert_eq!(
+            opt.parameters
+                .get("momentum")
+                .expect("test: momentum parameter exists"),
+            &0.9
+        );
         assert!(opt.velocity.is_some());
     }
 
@@ -660,15 +693,16 @@ mod tests {
         let deserialized = layer.weights_as_array2();
         assert!(deserialized.is_ok());
 
-        let recovered = deserialized.unwrap();
+        let recovered = deserialized.expect("test: valid weight deserialization");
         assert_eq!(recovered.shape(), weights.shape());
     }
 
     #[test]
     fn test_compression_type_serialization() {
         let comp = CompressionType::Oxicode;
-        let serialized = serde_json::to_string(&comp).unwrap();
-        let deserialized: CompressionType = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&comp).expect("test: valid JSON serialization");
+        let deserialized: CompressionType =
+            serde_json::from_str(&serialized).expect("test: valid JSON deserialization");
         assert_eq!(comp, deserialized);
     }
 

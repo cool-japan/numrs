@@ -104,7 +104,7 @@ impl TestResult {
 /// let b = Array::from_vec(vec![1.0000001, 2.0000001, 3.0000001]);
 /// let config = ToleranceConfig::default();
 ///
-/// let result = assert_array_almost_equal(&a, &b, &config).unwrap();
+/// let result = assert_array_almost_equal(&a, &b, &config).expect("valid test assertion");
 /// assert!(result.passed);
 /// ```
 pub fn assert_array_almost_equal<T>(
@@ -233,7 +233,7 @@ where
 /// let a = Array::from_vec(vec![1, 2, 3]);
 /// let b = Array::from_vec(vec![1, 2, 3]);
 ///
-/// let result = assert_array_equal(&a, &b).unwrap();
+/// let result = assert_array_equal(&a, &b).expect("valid test assertion");
 /// assert!(result.passed);
 /// ```
 pub fn assert_array_equal<T>(actual: &Array<T>, desired: &Array<T>) -> Result<TestResult>
@@ -275,7 +275,7 @@ where
 /// use numrs2::testing::assert_array_all_finite;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-/// let result = assert_array_all_finite(&a).unwrap();
+/// let result = assert_array_all_finite(&a).expect("valid test assertion");
 /// assert!(result.passed);
 /// ```
 pub fn assert_array_all_finite<T>(array: &Array<T>) -> Result<TestResult>
@@ -307,7 +307,7 @@ where
 /// use numrs2::testing::assert_array_no_nan;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-/// let result = assert_array_no_nan(&a).unwrap();
+/// let result = assert_array_no_nan(&a).expect("valid test assertion");
 /// assert!(result.passed);
 /// ```
 pub fn assert_array_no_nan<T>(array: &Array<T>) -> Result<TestResult>
@@ -650,7 +650,8 @@ mod tests {
         let b = Array::from_vec(vec![1.0000001, 2.0000001, 3.0000001]);
 
         let config = ToleranceConfig::default();
-        let result = assert_array_almost_equal(&a, &b, &config).unwrap();
+        let result =
+            assert_array_almost_equal(&a, &b, &config).expect("test: valid assertion params");
         assert!(result.passed);
     }
 
@@ -659,18 +660,19 @@ mod tests {
         let a = Array::from_vec(vec![1, 2, 3]);
         let b = Array::from_vec(vec![1, 2, 3]);
 
-        let result = assert_array_equal(&a, &b).unwrap();
+        let result = assert_array_equal(&a, &b).expect("test: valid assertion params");
         assert!(result.passed);
     }
 
     #[test]
     fn test_assert_array_all_finite() {
         let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
-        let result = assert_array_all_finite(&a).unwrap();
+        let result = assert_array_all_finite(&a).expect("test: valid finite array");
         assert!(result.passed);
 
         let b = Array::from_vec(vec![1.0, f64::NAN, 3.0]);
-        let result = assert_array_all_finite(&b).unwrap();
+        let result =
+            assert_array_all_finite(&b).expect("test: assertion call succeeds even for NaN");
         assert!(!result.passed);
     }
 

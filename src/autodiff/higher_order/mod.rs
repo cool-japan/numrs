@@ -43,7 +43,7 @@
 //! }
 //!
 //! let point = vec![1.0, 2.0];
-//! let hess = hessian_exact(f, &point).unwrap();
+//! let hess = hessian_exact(f, &point).expect("valid hessian computation");
 //! // H = [[2, 1], [1, 2]]
 //! ```
 

@@ -27,7 +27,7 @@ use crate::symbolic::expr::Expr;
 ///
 /// let x = Expr::var("x");
 /// let f = x.clone() * x.clone(); // f(x) = x²
-/// let df = differentiate(&f, "x").unwrap(); // f'(x) = 2x
+/// let df = differentiate(&f, "x").expect("valid differentiation"); // f'(x) = 2x
 /// ```
 pub fn differentiate(expr: &Expr, var: &str) -> Result<Expr> {
     match expr {
@@ -210,7 +210,7 @@ pub fn differentiate(expr: &Expr, var: &str) -> Result<Expr> {
 /// let y = Expr::var("y");
 /// let f = x.clone() * x.clone() + y.clone() * y.clone(); // f(x,y) = x² + y²
 ///
-/// let grad = gradient(&f, &["x", "y"]).unwrap();
+/// let grad = gradient(&f, &["x", "y"]).expect("valid gradient computation");
 /// // grad = [2x, 2y]
 /// ```
 pub fn gradient(expr: &Expr, vars: &[&str]) -> Result<Vec<Expr>> {
@@ -249,7 +249,7 @@ pub fn gradient(expr: &Expr, vars: &[&str]) -> Result<Vec<Expr>> {
 ///     y.clone() * y.clone(),
 /// ];
 ///
-/// let jac = jacobian(&exprs, &["x", "y"]).unwrap();
+/// let jac = jacobian(&exprs, &["x", "y"]).expect("valid jacobian computation");
 /// // jac = [[2x, 0], [y, x], [0, 2y]]
 /// ```
 pub fn jacobian(exprs: &[Expr], vars: &[&str]) -> Result<Vec<Vec<Expr>>> {
@@ -282,7 +282,7 @@ pub fn jacobian(exprs: &[Expr], vars: &[&str]) -> Result<Vec<Vec<Expr>>> {
 /// let y = Expr::var("y");
 /// let f = x.clone() * x.clone() + x.clone() * y.clone() + y.clone() * y.clone();
 ///
-/// let hess = hessian(&f, &["x", "y"]).unwrap();
+/// let hess = hessian(&f, &["x", "y"]).expect("valid hessian computation");
 /// // hess = [[2, 1], [1, 2]]
 /// ```
 pub fn hessian(expr: &Expr, vars: &[&str]) -> Result<Vec<Vec<Expr>>> {

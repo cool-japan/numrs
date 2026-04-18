@@ -19,7 +19,7 @@
 //! use std::net::SocketAddr;
 //!
 //! # async fn example() -> Result<(), CommunicationError> {
-//! let addr: SocketAddr = "127.0.0.1:5000".parse().unwrap();
+//! let addr: SocketAddr = "127.0.0.1:5000".parse().expect("valid socket address literal");
 //! let mut manager = ConnectionManager::new(addr).await?;
 //!
 //! // Send data to another process

@@ -47,8 +47,8 @@ use crate::error::{NumRs2Error, Result};
 /// for x in &[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0] {
 ///     stats.push(*x);
 /// }
-/// assert!((stats.mean().unwrap() - 5.0).abs() < 1e-10);
-/// assert!((stats.variance().unwrap() - 4.0).abs() < 1e-10);
+/// assert!((stats.mean().expect("stats have data") - 5.0).abs() < 1e-10);
+/// assert!((stats.variance().expect("stats have data") - 4.0).abs() < 1e-10);
 /// ```
 #[derive(Debug, Clone)]
 pub struct OnlineStats {
@@ -213,7 +213,7 @@ impl OnlineStats {
 /// for i in 0..100 {
 ///     cov.push(i as f64, 2.0 * i as f64 + 1.0);
 /// }
-/// assert!((cov.correlation().unwrap() - 1.0).abs() < 1e-10);
+/// assert!((cov.correlation().expect("covariance has data") - 1.0).abs() < 1e-10);
 /// ```
 #[derive(Debug, Clone)]
 pub struct OnlineCovariance {
@@ -365,11 +365,11 @@ impl OnlineCovariance {
 /// ```
 /// use numrs2::new_modules::streaming_stats::ExponentialMovingAverage;
 ///
-/// let mut ema = ExponentialMovingAverage::new(0.5).unwrap();
+/// let mut ema = ExponentialMovingAverage::new(0.5).expect("valid smoothing factor");
 /// ema.push(10.0);
-/// assert!((ema.value().unwrap() - 10.0).abs() < 1e-10);
+/// assert!((ema.value().expect("EMA has data") - 10.0).abs() < 1e-10);
 /// ema.push(20.0);
-/// assert!((ema.value().unwrap() - 15.0).abs() < 1e-10);
+/// assert!((ema.value().expect("EMA has data") - 15.0).abs() < 1e-10);
 /// ```
 #[derive(Debug, Clone)]
 pub struct ExponentialMovingAverage {
@@ -439,11 +439,11 @@ impl ExponentialMovingAverage {
 /// ```
 /// use numrs2::new_modules::streaming_stats::OnlineQuantile;
 ///
-/// let mut oq = OnlineQuantile::new(0.5).unwrap(); // median
+/// let mut oq = OnlineQuantile::new(0.5).expect("valid quantile parameter"); // median
 /// for i in 1..=1000 {
 ///     oq.push(i as f64);
 /// }
-/// let est = oq.quantile().unwrap();
+/// let est = oq.quantile().expect("quantile has data");
 /// assert!((est - 500.5).abs() < 10.0); // approximate
 /// ```
 #[derive(Debug, Clone)]
@@ -615,7 +615,7 @@ impl OnlineQuantile {
 /// ```
 /// use numrs2::new_modules::streaming_stats::OnlineHistogram;
 ///
-/// let mut hist = OnlineHistogram::new(0.0, 10.0, 5).unwrap();
+/// let mut hist = OnlineHistogram::new(0.0, 10.0, 5).expect("valid histogram parameters");
 /// for v in &[1.0, 3.0, 5.0, 7.0, 9.0] {
 ///     hist.push(*v);
 /// }

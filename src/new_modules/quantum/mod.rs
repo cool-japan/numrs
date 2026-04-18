@@ -29,11 +29,11 @@
 //! use numrs2::new_modules::quantum::circuit::QuantumCircuit;
 //!
 //! // Create Bell state (|00⟩ + |11⟩)/√2
-//! let mut circuit = QuantumCircuit::<f64>::new(2).unwrap();
-//! circuit.h(0).unwrap();  // Hadamard on qubit 0
-//! circuit.cnot(0, 1).unwrap();  // CNOT with control=0, target=1
+//! let mut circuit = QuantumCircuit::<f64>::new(2).expect("valid qubit count");
+//! circuit.h(0).expect("valid qubit index");  // Hadamard on qubit 0
+//! circuit.cnot(0, 1).expect("valid qubit indices");  // CNOT with control=0, target=1
 //!
-//! let state = circuit.execute().unwrap();
+//! let state = circuit.execute().expect("circuit execution succeeds");
 //! ```
 //!
 //! ## Running Grover's Search
@@ -49,7 +49,7 @@
 //! };
 //!
 //! let iterations = GroverSearch::optimal_iterations(2, 1);
-//! let result_state = GroverSearch::search(2, oracle, iterations).unwrap();
+//! let result_state = GroverSearch::search(2, oracle, iterations).expect("valid Grover search");
 //! ```
 //!
 //! ## Quantum Fourier Transform
@@ -58,10 +58,10 @@
 //! use numrs2::new_modules::quantum::circuit::QuantumCircuit;
 //! use numrs2::new_modules::quantum::algorithms::QuantumFourierTransform;
 //!
-//! let mut circuit = QuantumCircuit::<f64>::new(3).unwrap();
-//! QuantumFourierTransform::apply(&mut circuit).unwrap();
+//! let mut circuit = QuantumCircuit::<f64>::new(3).expect("valid qubit count");
+//! QuantumFourierTransform::apply(&mut circuit).expect("valid QFT application");
 //!
-//! let state = circuit.execute().unwrap();
+//! let state = circuit.execute().expect("circuit execution succeeds");
 //! ```
 //!
 //! # Mathematical Background

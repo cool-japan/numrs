@@ -587,10 +587,11 @@ mod tests {
 
     #[test]
     fn test_beta_binomial_conjugate() {
-        let prior = BetaBinomialConjugate::new(1.0, 1.0).unwrap(); // Uniform prior
+        let prior = BetaBinomialConjugate::new(1.0, 1.0)
+            .expect("test: valid Beta-Binomial prior parameters"); // Uniform prior
 
         // Observe 7 successes in 10 trials
-        let posterior = prior.update(7, 10).unwrap();
+        let posterior = prior.update(7, 10).expect("test: valid posterior update");
 
         // Posterior should be Beta(8, 4)
         assert_relative_eq!(posterior.alpha(), 8.0, epsilon = 1e-10);
@@ -602,11 +603,14 @@ mod tests {
 
     #[test]
     fn test_gamma_poisson_conjugate() {
-        let prior = GammaPoissonConjugate::new(1.0, 1.0).unwrap();
+        let prior = GammaPoissonConjugate::new(1.0, 1.0)
+            .expect("test: valid Gamma-Poisson prior parameters");
 
         // Observe data: [2, 3, 4, 3, 2]
         let data = vec![2.0, 3.0, 4.0, 3.0, 2.0];
-        let posterior = prior.update(&data).unwrap();
+        let posterior = prior
+            .update(&data)
+            .expect("test: valid Gamma-Poisson posterior update");
 
         // Sum = 14, n = 5
         // Posterior: Gamma(1 + 14, 1 + 5) = Gamma(15, 6)
@@ -616,11 +620,14 @@ mod tests {
 
     #[test]
     fn test_normal_normal_conjugate() {
-        let prior = NormalNormalConjugate::new(0.0, 1.0, 1.0).unwrap();
+        let prior = NormalNormalConjugate::new(0.0, 1.0, 1.0)
+            .expect("test: valid Normal-Normal prior parameters");
 
         // Observe data near 2.0
         let data = vec![1.8, 2.0, 2.2, 1.9, 2.1];
-        let (mean_post, var_post) = prior.update(&data).unwrap();
+        let (mean_post, var_post) = prior
+            .update(&data)
+            .expect("test: valid Normal-Normal posterior update");
 
         // Posterior mean should be between prior mean (0) and sample mean (2)
         assert!(mean_post > 0.0 && mean_post < 2.0);
@@ -631,11 +638,14 @@ mod tests {
 
     #[test]
     fn test_dirichlet_multinomial_conjugate() {
-        let prior = DirichletMultinomialConjugate::new(vec![1.0, 1.0, 1.0]).unwrap();
+        let prior = DirichletMultinomialConjugate::new(vec![1.0, 1.0, 1.0])
+            .expect("test: valid Dirichlet-Multinomial prior parameters");
 
         // Observe counts
         let counts = vec![10, 20, 15];
-        let posterior = prior.update(&counts).unwrap();
+        let posterior = prior
+            .update(&counts)
+            .expect("test: valid Dirichlet-Multinomial posterior update");
 
         // Posterior alpha should be [11, 21, 16]
         assert_relative_eq!(posterior.alpha()[0], 11.0, epsilon = 1e-10);
@@ -666,7 +676,8 @@ mod tests {
         let log_lik_samples = vec![-10.0, -12.0, -11.0, -10.5, -11.5];
         let log_lik_at_mean = -11.0;
 
-        let dic_result = dic(&log_lik_samples, log_lik_at_mean).unwrap();
+        let dic_result =
+            dic(&log_lik_samples, log_lik_at_mean).expect("test: valid DIC computation");
 
         assert!(dic_result.dic.is_finite());
         assert!(dic_result.d_bar > 0.0);
@@ -682,7 +693,7 @@ mod tests {
             vec![-0.9, -2.1, -1.6, -2.4],
         ];
 
-        let waic_result = waic(&pointwise_ll).unwrap();
+        let waic_result = waic(&pointwise_ll).expect("test: valid WAIC computation");
 
         assert!(waic_result.waic.is_finite());
         assert!(waic_result.lppd.is_finite());
@@ -692,7 +703,8 @@ mod tests {
     #[test]
     fn test_equal_tailed_interval() {
         let samples = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
-        let (lower, upper) = equal_tailed_interval(&samples, 0.1).unwrap();
+        let (lower, upper) = equal_tailed_interval(&samples, 0.1)
+            .expect("test: valid equal-tailed interval computation");
 
         // 90% interval should exclude bottom 5% and top 5%
         assert!(lower >= 1.0);
@@ -703,7 +715,8 @@ mod tests {
     #[test]
     fn test_hpd_interval() {
         let samples = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
-        let (lower, upper) = hpd_interval(&samples, 0.1).unwrap();
+        let (lower, upper) =
+            hpd_interval(&samples, 0.1).expect("test: valid HPD interval computation");
 
         // 90% HPD should be a valid interval
         assert!(lower < upper);
@@ -725,7 +738,8 @@ mod tests {
     #[test]
     fn test_harmonic_mean_marginal_likelihood() {
         let log_lik_samples = vec![-10.0, -11.0, -12.0, -10.5, -11.5];
-        let log_ml = harmonic_mean_marginal_likelihood(&log_lik_samples).unwrap();
+        let log_ml = harmonic_mean_marginal_likelihood(&log_lik_samples)
+            .expect("test: valid marginal likelihood computation");
 
         assert!(log_ml.is_finite());
         assert!(log_ml < 0.0); // Log of value less than 1
@@ -736,7 +750,8 @@ mod tests {
         let observed = 5.0;
         let replicated = vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
-        let pvalue = posterior_predictive_pvalue(observed, &replicated).unwrap();
+        let pvalue = posterior_predictive_pvalue(observed, &replicated)
+            .expect("test: valid posterior predictive p-value");
 
         // 6 out of 8 values are >= 5.0
         assert_relative_eq!(pvalue, 6.0 / 8.0, epsilon = 1e-10);
@@ -744,13 +759,18 @@ mod tests {
 
     #[test]
     fn test_credible_interval_95() {
-        let prior = NormalNormalConjugate::new(0.0, 1.0, 1.0).unwrap();
+        let prior = NormalNormalConjugate::new(0.0, 1.0, 1.0)
+            .expect("test: valid Normal-Normal prior parameters");
         let data = vec![1.0, 2.0, 1.5, 1.8, 2.1];
 
-        let (lower, upper) = prior.credible_interval_95(&data).unwrap();
+        let (lower, upper) = prior
+            .credible_interval_95(&data)
+            .expect("test: valid 95% credible interval");
 
         assert!(lower < upper);
-        let (mean, _) = prior.update(&data).unwrap();
+        let (mean, _) = prior
+            .update(&data)
+            .expect("test: valid Normal-Normal posterior update");
         assert!(lower < mean && mean < upper);
     }
 }

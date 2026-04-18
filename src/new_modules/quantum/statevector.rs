@@ -14,7 +14,7 @@
 //! use numrs2::new_modules::quantum::statevector::StateVector;
 //!
 //! // Create a 2-qubit state |00⟩
-//! let state = StateVector::<f64>::new(2).unwrap();
+//! let state = StateVector::<f64>::new(2).expect("valid qubit count");
 //! assert_eq!(state.num_qubits(), 2);
 //! ```
 
@@ -56,7 +56,7 @@ where
     /// ```
     /// use numrs2::new_modules::quantum::statevector::StateVector;
     ///
-    /// let state = StateVector::<f64>::new(3).unwrap();
+    /// let state = StateVector::<f64>::new(3).expect("valid qubit count");
     /// assert_eq!(state.num_qubits(), 3);
     /// ```
     pub fn new(num_qubits: usize) -> Result<Self> {
@@ -471,19 +471,19 @@ mod tests {
 
     #[test]
     fn test_statevector_creation() {
-        let state = StateVector::<f64>::new(2).unwrap();
+        let state = StateVector::<f64>::new(2).expect("test: valid qubit count");
         assert_eq!(state.num_qubits(), 2);
         assert_eq!(state.dim(), 4);
 
         // Should be initialized to |00⟩
-        let prob = state.get_probability(0).unwrap();
+        let prob = state.get_probability(0).expect("test: valid state index");
         assert_relative_eq!(prob, 1.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_statevector_normalization() {
         let amplitudes = vec![Complex::new(1.0, 0.0), Complex::new(1.0, 0.0)];
-        let state = StateVector::from_amplitudes(amplitudes).unwrap();
+        let state = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
 
         let norm_sq = state.probability_norm_squared();
         assert_relative_eq!(norm_sq, 1.0, epsilon = 1e-10);
@@ -495,10 +495,10 @@ mod tests {
             Complex::new(1.0 / 2.0_f64.sqrt(), 0.0),
             Complex::new(1.0 / 2.0_f64.sqrt(), 0.0),
         ];
-        let state = StateVector::from_amplitudes(amplitudes).unwrap();
+        let state = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
 
-        let prob0 = state.get_probability(0).unwrap();
-        let prob1 = state.get_probability(1).unwrap();
+        let prob0 = state.get_probability(0).expect("test: valid state index");
+        let prob1 = state.get_probability(1).expect("test: valid state index");
 
         assert_relative_eq!(prob0, 0.5, epsilon = 1e-10);
         assert_relative_eq!(prob1, 0.5, epsilon = 1e-10);
@@ -506,8 +506,10 @@ mod tests {
 
     #[test]
     fn test_density_matrix_from_pure_state() {
-        let state = StateVector::<f64>::new(1).unwrap();
-        let rho = state.to_density_matrix().unwrap();
+        let state = StateVector::<f64>::new(1).expect("test: valid qubit count");
+        let rho = state
+            .to_density_matrix()
+            .expect("test: valid density matrix conversion");
 
         // Check trace = 1
         let tr = rho.trace();
@@ -544,12 +546,12 @@ mod tests {
             Complex::new(0.5, 0.0),
             Complex::new(0.5, 0.0),
         ];
-        let state = StateVector::from_amplitudes(amplitudes).unwrap();
+        let state = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
         let probs = state.get_probabilities();
 
         assert_eq!(probs.shape()[0], 4);
         for i in 0..4 {
-            let p = probs.get(&[i]).unwrap();
+            let p = probs.get(&[i]).expect("test: valid probability index");
             assert_relative_eq!(p, 0.25, epsilon = 1e-10);
         }
     }
@@ -558,27 +560,27 @@ mod tests {
     fn test_complex_amplitudes() {
         // Test with complex amplitudes
         let amplitudes = vec![Complex::new(0.5, 0.5), Complex::new(0.5, -0.5)];
-        let state = StateVector::from_amplitudes(amplitudes).unwrap();
+        let state = StateVector::from_amplitudes(amplitudes).expect("test: valid amplitudes");
         let norm = state.probability_norm_squared();
         assert_relative_eq!(norm, 1.0, epsilon = 1e-10);
     }
 
     #[test]
     fn test_three_qubit_state() {
-        let state = StateVector::<f64>::new(3).unwrap();
+        let state = StateVector::<f64>::new(3).expect("test: valid qubit count");
         assert_eq!(state.num_qubits(), 3);
         assert_eq!(state.dim(), 8);
     }
 
     #[test]
     fn test_large_qubit_state() {
-        let state = StateVector::<f64>::new(4).unwrap();
+        let state = StateVector::<f64>::new(4).expect("test: valid qubit count");
         assert_eq!(state.dim(), 16);
     }
 
     #[test]
     fn test_probability_sum() {
-        let state = StateVector::<f64>::new(2).unwrap();
+        let state = StateVector::<f64>::new(2).expect("test: valid qubit count");
         let probs = state.get_probabilities();
         let sum: f64 = probs.to_vec().iter().sum();
         assert_relative_eq!(sum, 1.0, epsilon = 1e-10);
@@ -586,14 +588,16 @@ mod tests {
 
     #[test]
     fn test_density_matrix_hermitian() {
-        let state = StateVector::<f64>::new(1).unwrap();
-        let rho = state.to_density_matrix().unwrap();
+        let state = StateVector::<f64>::new(1).expect("test: valid qubit count");
+        let rho = state
+            .to_density_matrix()
+            .expect("test: valid density matrix conversion");
 
         // Check if Hermitian: rho[i,j] = conj(rho[j,i])
         for i in 0..2 {
             for j in 0..2 {
-                let rho_ij = rho.matrix().get(&[i, j]).unwrap();
-                let rho_ji = rho.matrix().get(&[j, i]).unwrap();
+                let rho_ij = rho.matrix().get(&[i, j]).expect("test: valid matrix index");
+                let rho_ji = rho.matrix().get(&[j, i]).expect("test: valid matrix index");
                 assert_relative_eq!(rho_ij.re, rho_ji.re, epsilon = 1e-10);
                 assert_relative_eq!(rho_ij.im, -rho_ji.im, epsilon = 1e-10);
             }

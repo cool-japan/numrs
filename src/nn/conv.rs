@@ -491,7 +491,7 @@ mod tests {
         let input = array![1.0, 2.0, 3.0, 4.0, 5.0];
         let kernel = array![1.0, 0.0, -1.0];
 
-        let output = conv1d(&input.view(), &kernel.view(), 1).unwrap();
+        let output = conv1d(&input.view(), &kernel.view(), 1).expect("test: valid conv1d params");
 
         // Expected: [1*1 + 2*0 + 3*(-1), 2*1 + 3*0 + 4*(-1), 3*1 + 4*0 + 5*(-1)]
         //         = [-2, -2, -2]
@@ -506,7 +506,8 @@ mod tests {
         let input = Array2::from_shape_fn((3, 3), |(i, j)| (i * 3 + j) as f64);
         let kernel = Array2::from_shape_fn((2, 2), |(_, _)| 1.0);
 
-        let output = conv2d(&input.view(), &kernel.view(), (1, 1)).unwrap();
+        let output =
+            conv2d(&input.view(), &kernel.view(), (1, 1)).expect("test: valid conv2d params");
 
         assert_eq!(output.dim(), (2, 2));
 
@@ -522,7 +523,8 @@ mod tests {
         let input = Array2::from_shape_fn((3, 3), |(_, _)| 1.0);
         let kernel = Array2::from_shape_fn((2, 2), |(_, _)| 1.0);
 
-        let output = conv2d_with_padding(&input.view(), &kernel.view(), (1, 1), 1).unwrap();
+        let output = conv2d_with_padding(&input.view(), &kernel.view(), (1, 1), 1)
+            .expect("test: valid conv2d params");
 
         // With padding, output should be larger
         assert!(output.nrows() >= input.nrows());
@@ -536,7 +538,8 @@ mod tests {
         let input = Array4::<f64>::from_shape_fn((1, 1, 4, 4), |(_, _, h, w)| (h * 4 + w) as f64);
         let kernel = Array4::<f64>::from_shape_fn((1, 1, 2, 2), |(_, _, _, _)| 1.0);
 
-        let output = conv2d_batched(&input, &kernel, None, (1, 1), (0, 0), (1, 1)).unwrap();
+        let output = conv2d_batched(&input, &kernel, None, (1, 1), (0, 0), (1, 1))
+            .expect("test: valid conv2d_batched params");
 
         // Output shape: (1, 1, 3, 3)
         assert_eq!(output.dim(), (1, 1, 3, 3));
@@ -723,7 +726,7 @@ mod tests {
 
         let output =
             conv_transpose2d_batched(&input, &kernel, None, (1, 1), (0, 0), (0, 0), (1, 1))
-                .unwrap();
+                .expect("test: valid conv_transpose2d_batched params");
 
         // Transposed conv with stride=1, no padding, 2x2 input, 2x2 kernel -> 3x3 output
         assert_eq!(output.dim(), (1, 1, 3, 3));

@@ -31,13 +31,13 @@
 //! use numrs2::new_modules::quantum::unitarity::{is_unitary, unitarity_error};
 //! use numrs2::new_modules::quantum::gates::hadamard;
 //!
-//! let h = hadamard::<f64>().unwrap();
+//! let h = hadamard::<f64>().expect("valid Hadamard gate");
 //!
 //! // Check if the Hadamard gate is unitary
-//! assert!(is_unitary(&h, 1e-10).unwrap());
+//! assert!(is_unitary(&h, 1e-10).expect("valid unitarity check"));
 //!
 //! // Compute the deviation from unitarity
-//! let error = unitarity_error(&h).unwrap();
+//! let error = unitarity_error(&h).expect("valid unitarity error computation");
 //! assert!(error < 1e-10);
 //! ```
 //!
@@ -125,11 +125,11 @@ pub fn is_runtime_validation_enabled() -> bool {
 /// use numrs2::new_modules::quantum::unitarity::is_unitary;
 /// use numrs2::new_modules::quantum::gates::{hadamard, pauli_x};
 ///
-/// let h = hadamard::<f64>().unwrap();
-/// assert!(is_unitary(&h, 1e-10).unwrap());
+/// let h = hadamard::<f64>().expect("valid Hadamard gate");
+/// assert!(is_unitary(&h, 1e-10).expect("valid unitarity check"));
 ///
-/// let x = pauli_x::<f64>().unwrap();
-/// assert!(is_unitary(&x, 1e-10).unwrap());
+/// let x = pauli_x::<f64>().expect("valid Pauli-X gate");
+/// assert!(is_unitary(&x, 1e-10).expect("valid unitarity check"));
 /// ```
 pub fn is_unitary<T>(gate_matrix: &Array<Complex<T>>, tolerance: f64) -> Result<bool>
 where
@@ -197,8 +197,8 @@ where
 /// use numrs2::new_modules::quantum::unitarity::unitarity_error;
 /// use numrs2::new_modules::quantum::gates::hadamard;
 ///
-/// let h = hadamard::<f64>().unwrap();
-/// let error = unitarity_error(&h).unwrap();
+/// let h = hadamard::<f64>().expect("valid Hadamard gate");
+/// let error = unitarity_error(&h).expect("valid unitarity error computation");
 /// assert!(error < 1e-14);
 /// ```
 pub fn unitarity_error<T>(gate_matrix: &Array<Complex<T>>) -> Result<f64>
@@ -266,8 +266,8 @@ where
 /// use numrs2::new_modules::quantum::unitarity::validate_gate_unitarity;
 /// use numrs2::new_modules::quantum::gates::pauli_z;
 ///
-/// let z = pauli_z::<f64>().unwrap();
-/// validate_gate_unitarity(&z, 1e-10, Some("Pauli-Z")).unwrap();
+/// let z = pauli_z::<f64>().expect("valid Pauli-Z gate");
+/// validate_gate_unitarity(&z, 1e-10, Some("Pauli-Z")).expect("valid unitarity validation");
 /// ```
 pub fn validate_gate_unitarity<T>(
     gate_matrix: &Array<Complex<T>>,
@@ -316,7 +316,7 @@ where
 /// use numrs2::new_modules::quantum::gates::hadamard;
 ///
 /// // Get the Hadamard gate matrix
-/// let h = hadamard::<f64>().unwrap();
+/// let h = hadamard::<f64>().expect("valid Hadamard gate");
 ///
 /// // With runtime validation enabled
 /// enable_runtime_validation();
@@ -397,7 +397,7 @@ pub struct StandardGatesValidation {
 /// ```
 /// use numrs2::new_modules::quantum::unitarity::validate_all_standard_gates;
 ///
-/// let validation = validate_all_standard_gates(1e-10).unwrap();
+/// let validation = validate_all_standard_gates(1e-10).expect("valid gate validation");
 /// assert!(validation.all_passed);
 /// ```
 pub fn validate_all_standard_gates(tolerance: f64) -> Result<StandardGatesValidation> {

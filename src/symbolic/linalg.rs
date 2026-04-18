@@ -25,7 +25,7 @@ use std::collections::HashMap;
 ///     vec![x.clone(), Expr::constant(1.0)],
 ///     vec![Expr::constant(0.0), x.clone()],
 /// ];
-/// let mat = SymbolicMatrix::from_vec(data).unwrap();
+/// let mat = SymbolicMatrix::from_vec(data).expect("valid matrix data");
 /// ```
 #[derive(Debug, Clone)]
 pub struct SymbolicMatrix {

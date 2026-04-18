@@ -404,7 +404,7 @@ mod tests {
             .version("1.0.0")
             .architecture("MLP")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -417,7 +417,7 @@ mod tests {
         let loaded = ModelSerializer::load(&path);
         assert!(loaded.is_ok());
 
-        let loaded_model = loaded.unwrap();
+        let loaded_model = loaded.expect("test: valid model load");
         assert_eq!(loaded_model.metadata.name, "test_model");
         assert_eq!(loaded_model.num_layers(), 1);
 
@@ -435,7 +435,7 @@ mod tests {
             .version("1.0.0")
             .architecture("MLP")
             .build()
-            .unwrap();
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((100, 50)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -448,7 +448,7 @@ mod tests {
         let loaded = ModelSerializer::load_compressed(&path);
         assert!(loaded.is_ok());
 
-        let loaded_model = loaded.unwrap();
+        let loaded_model = loaded.expect("test: valid compressed model load");
         assert_eq!(loaded_model.metadata.name, "test_model");
 
         // Cleanup
@@ -460,9 +460,13 @@ mod tests {
         let temp_dir = env::temp_dir().join("test_checkpoints");
         let _ = fs::create_dir_all(&temp_dir);
 
-        let mut manager = CheckpointManager::new(&temp_dir, 3).unwrap();
+        let mut manager =
+            CheckpointManager::new(&temp_dir, 3).expect("test: valid checkpoint manager");
 
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -475,7 +479,9 @@ mod tests {
         }
 
         // Check that only 3 checkpoints remain
-        let checkpoints = manager.list_checkpoints().unwrap();
+        let checkpoints = manager
+            .list_checkpoints()
+            .expect("test: valid checkpoint listing");
         assert!(checkpoints.len() <= 3);
 
         // Load best model
@@ -491,18 +497,30 @@ mod tests {
         let temp_dir = env::temp_dir().join("test_best_tracking");
         let _ = fs::create_dir_all(&temp_dir);
 
-        let mut manager = CheckpointManager::new(&temp_dir, 5).unwrap();
+        let mut manager =
+            CheckpointManager::new(&temp_dir, 5).expect("test: valid checkpoint manager");
 
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
 
         // Save checkpoints with decreasing loss
-        manager.save_checkpoint(&model, 0, 1.0).unwrap();
-        manager.save_checkpoint(&model, 1, 0.5).unwrap();
-        manager.save_checkpoint(&model, 2, 0.3).unwrap();
-        manager.save_checkpoint(&model, 3, 0.7).unwrap(); // Not best
+        manager
+            .save_checkpoint(&model, 0, 1.0)
+            .expect("test: valid checkpoint save");
+        manager
+            .save_checkpoint(&model, 1, 0.5)
+            .expect("test: valid checkpoint save");
+        manager
+            .save_checkpoint(&model, 2, 0.3)
+            .expect("test: valid checkpoint save");
+        manager
+            .save_checkpoint(&model, 3, 0.7)
+            .expect("test: valid checkpoint save"); // Not best
 
         // Best loss should be 0.3
         assert_eq!(manager.get_best_loss(), Some(0.3));
@@ -516,7 +534,10 @@ mod tests {
         let temp_dir = env::temp_dir();
         let path = temp_dir.join("test_convenience.numrs2");
 
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);
@@ -543,7 +564,7 @@ mod tests {
         let temp_dir = env::temp_dir().join("test_empty_checkpoints");
         let _ = fs::create_dir_all(&temp_dir);
 
-        let manager = CheckpointManager::new(&temp_dir, 3).unwrap();
+        let manager = CheckpointManager::new(&temp_dir, 3).expect("test: valid checkpoint manager");
 
         // Try to load from empty directory
         let result = manager.load_latest();
@@ -558,7 +579,10 @@ mod tests {
 
     #[test]
     fn test_model_checkpoint_creation() {
-        let metadata = ModelMetadata::builder().name("test_model").build().unwrap();
+        let metadata = ModelMetadata::builder()
+            .name("test_model")
+            .build()
+            .expect("test: valid metadata build");
 
         let layer = LayerData::dense("layer1", Array2::ones((10, 5)), None);
         let model = NumRS2Model::new(metadata, vec![layer]);

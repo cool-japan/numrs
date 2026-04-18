@@ -279,7 +279,8 @@ mod tests {
         let gamma = Array1::ones(3);
         let beta = Array1::zeros(3);
 
-        let result = layer_norm(&x.view(), &gamma.view(), &beta.view(), 1e-5).unwrap();
+        let result = layer_norm(&x.view(), &gamma.view(), &beta.view(), 1e-5)
+            .expect("test: valid layer_norm params");
 
         // Each row should have mean ≈ 0 and variance ≈ 1
         for i in 0..result.nrows() {
@@ -292,7 +293,7 @@ mod tests {
     #[test]
     fn test_dropout_inference() {
         let x = array![1.0, 2.0, 3.0, 4.0, 5.0];
-        let result = dropout(&x.view(), 0.5, false).unwrap();
+        let result = dropout(&x.view(), 0.5, false).expect("test: valid dropout params");
 
         // In inference mode, dropout should have no effect
         assert_eq!(result, x);
@@ -303,7 +304,7 @@ mod tests {
         // Use a large array (1000 elements) to ensure statistical reliability
         // With 0.5 dropout, probability of ALL elements surviving is (0.5)^1000 ≈ 0
         let x = Array1::from_vec((1..=1000).map(|i| i as f64).collect());
-        let result = dropout(&x.view(), 0.5, true).unwrap();
+        let result = dropout(&x.view(), 0.5, true).expect("test: valid dropout params");
 
         // Some elements should be zero, others scaled
         let num_zeros = result.iter().filter(|&&v| v == 0.0).count();

@@ -327,7 +327,7 @@ impl<T: Float + fmt::Display> fmt::Display for Dual<T> {
 /// }
 ///
 /// let x = Array::from_vec(vec![3.0, 4.0]);
-/// let grad = gradient(f, &x).unwrap();
+/// let grad = gradient(f, &x).expect("valid gradient computation");
 /// // ∇f = [2x, 2y] = [6, 8]
 /// assert_eq!(grad.to_vec(), vec![6.0, 8.0]);
 /// ```
@@ -687,7 +687,7 @@ impl<T: Float> Default for Tape<T> {
 /// }
 ///
 /// let x = Array::from_vec(vec![3.0, 4.0]);
-/// let hessian = hessian(f, &x).unwrap();
+/// let hessian = hessian(f, &x).expect("valid hessian computation");
 /// // H = [[2, 0], [0, 2]]
 /// ```
 pub fn hessian<F, T>(f: F, x: &Array<T>) -> Result<Array<T>>

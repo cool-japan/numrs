@@ -277,7 +277,7 @@ mod tests {
         let fr = FrequencyResponse::new(freqs.clone(), mags.clone(), phases.clone());
         assert!(fr.is_ok());
 
-        let fr = fr.unwrap();
+        let fr = fr.expect("test: valid frequency response creation");
         assert_eq!(fr.frequencies, freqs);
         assert_eq!(fr.magnitude, mags);
         assert_eq!(fr.phase, phases);
@@ -299,7 +299,8 @@ mod tests {
         let mags = Array1::from_vec(vec![10.0]);
         let phases = Array1::from_vec(vec![0.0]);
 
-        let fr = FrequencyResponse::new(freqs, mags, phases).unwrap();
+        let fr =
+            FrequencyResponse::new(freqs, mags, phases).expect("test: valid frequency response");
         let mag_db = fr.magnitude_db();
 
         assert!((mag_db[0] - 20.0).abs() < 1e-10);
@@ -311,7 +312,8 @@ mod tests {
         let mags = Array1::from_vec(vec![1.0]);
         let phases = Array1::from_vec(vec![std::f64::consts::PI]);
 
-        let fr = FrequencyResponse::new(freqs, mags, phases).unwrap();
+        let fr =
+            FrequencyResponse::new(freqs, mags, phases).expect("test: valid frequency response");
         let phase_deg = fr.phase_deg();
 
         assert!((phase_deg[0] - 180.0).abs() < 1e-10);
@@ -329,7 +331,14 @@ mod tests {
         }; // 0.1 seconds
         assert!(!disc.is_continuous());
         assert!(disc.is_discrete());
-        assert!((disc.sample_time().unwrap() - 0.1).abs() < 1e-10);
+        assert!(
+            (disc
+                .sample_time()
+                .expect("test: discrete system has sample time")
+                - 0.1)
+                .abs()
+                < 1e-10
+        );
     }
 
     #[test]
