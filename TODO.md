@@ -4,12 +4,12 @@
 
 This document outlines the development status and roadmap for NumRS2, a high-performance numerical computing library for Rust.
 
-## Current Status (June 2026) - v0.4.0
+## Current Status (June 2026) - v0.4.1
 
-**Major Release**: NumRS2 v0.4.0 is now available!
+**Major Release**: NumRS2 v0.4.1 is now available!
 
 ### Release Metrics
-- **Version**: 0.4.0 (v0.4.0 - 2026-06-05)
+- **Version**: 0.4.1 (v0.4.0 - 2026-06-05)
 - **Total Code**: ~540,000+ lines of Rust code (490+ source files)
 - **Test Coverage**: 4,820+ library tests passing; zero failures
 - **Public API**: 7,000+ public functions/structs/enums/traits; zero unimplemented stubs
@@ -332,4 +332,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
 
 ---
 
-**NumRS2 v0.4.0** - Production-ready numerical computing for Rust with SciRS2 v0.5.0 integration (COOLJAPAN Ecosystem)
+**NumRS2 v0.4.1** - Production-ready numerical computing for Rust with SciRS2 v0.5.0 integration (COOLJAPAN Ecosystem)

@@ -69,7 +69,7 @@ To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.4.0", features = ["arrow"] }
+numrs2 = { version = "0.4.1", features = ["arrow"] }
 ```
 
 Or, when building:
@@ -317,7 +317,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-numrs2 = "0.4.0"
+numrs2 = "0.4.1"
 ```
 
 For BLAS/LAPACK support, ensure you have the necessary system libraries:
