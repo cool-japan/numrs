@@ -104,7 +104,8 @@ where
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + Div<Output = T>,
+        + Div<Output = T>
+        + std::fmt::Debug,
 {
     let shape = a.shape();
     if shape.len() != 2 {
@@ -453,16 +454,23 @@ where
     Ok((q, r))
 }
 
-/// Simplified SVD computation (delegates to existing implementation)
+/// Simplified SVD computation (delegates to matrix_decomp implementation)
 fn compute_svd<T>(a: &Array<T>) -> Result<(Array<T>, Array<T>, Array<T>)>
 where
-    T: Float + Clone + Default,
+    T: Float + Clone + Default + std::fmt::Debug,
 {
-    // This would call the actual SVD implementation from scirs2-linalg
-    // For now, return a placeholder that shows the signature
-    Err(NumRs2Error::ComputationError(
-        "SVD computation requires scirs2-linalg integration".to_string(),
-    ))
+    #[cfg(feature = "lapack")]
+    {
+        use crate::new_modules::matrix_decomp::svd;
+        svd(a)
+    }
+    #[cfg(not(feature = "lapack"))]
+    {
+        let _ = a;
+        Err(NumRs2Error::FeatureNotEnabled(
+            "lapack feature required for SVD in randomized algorithms".to_string(),
+        ))
+    }
 }
 
 /// Extract first k columns of a matrix

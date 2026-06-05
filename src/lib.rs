@@ -4,8 +4,10 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.3.3** - Patch release (2026-03-27): Minor improvements and updates.
-//! All tests passing with zero warnings.
+//! **Version 0.4.0** - Major release (2026-06-05): Major feature additions including skew/kurtosis,
+//! F-distribution sampling, instance normalization, BFGS optimizer, VECM Johansen fitting,
+//! FEM 2D point evaluation, real eigendecomposition via QR iteration, full Golub-Kahan SVD,
+//! and SciRS2 ecosystem update to v0.5.0.
 //!
 //! ## Quick Start
 //!
@@ -285,10 +287,10 @@ pub mod prelude {
         bincount, blackman, clip, conj, copysign, cumprod, cumsum, cumulative_prod, cumulative_sum,
         diff, diff_extended, digitize, divmod, ediff1d, empty, fmod, frexp, gcd, geomspace,
         gradient, hamming, hanning, heaviside, i0, imag, interp, isfinite, isinf, isnan, kaiser,
-        lcm, ldexp, linspace, logspace, max, mean, median, min, modf, nan_to_num, nanmax, nanmean,
-        nanmin, nanstd, nansum, nanvar, nextafter, nonzero, ones, partition, prod, real,
-        real_if_close, remainder, resize, searchsorted, sinc, sort, std, sum, trapz, var, zeros,
-        ElementWiseMath,
+        kurtosis, lcm, ldexp, linspace, logspace, max, mean, median, min, modf, nan_to_num, nanmax,
+        nanmean, nanmin, nanstd, nansum, nanvar, nextafter, nonzero, ones, partition, prod, real,
+        real_if_close, remainder, resize, searchsorted, sinc, skew, sort, std, sum, trapz, var,
+        zeros, ElementWiseMath,
     };
     pub use crate::matrix::{
         asmatrix, matrix, matrix_from_nested, matrix_from_scalar, BandedMatrix, Matrix,

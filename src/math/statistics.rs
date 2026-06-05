@@ -1354,3 +1354,386 @@ where
         val
     }))
 }
+
+/// Compute sample skewness of array elements.
+///
+/// Uses the adjusted Fisher-Pearson standardized moment coefficient (the same
+/// formula used by NumPy's `scipy.stats.skew` with `bias=True` and by Pandas'
+/// `DataFrame.skew`).
+///
+/// `skew = E[(x - μ)^3] / σ^3`
+///
+/// When `axis` is `None` the statistic is computed over the flattened array.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::math::skew;
+///
+/// let a = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 10.0]);
+/// let s = skew(&a, None).expect("skew should succeed");
+/// // Positive skew expected for right-skewed data
+/// assert!(s.to_vec()[0] > 0.0);
+/// ```
+pub fn skew<T>(array: &Array<T>, axis: Option<isize>) -> Result<Array<T>>
+where
+    T: Float
+        + Clone
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + NumCast,
+{
+    if array.is_empty() {
+        return Err(crate::error::NumRs2Error::InvalidOperation(
+            "Cannot compute skewness of empty array".to_string(),
+        ));
+    }
+
+    match axis {
+        None => {
+            let data = array.to_vec();
+            let n = data.len();
+            if n < 2 {
+                return Err(crate::error::NumRs2Error::InvalidOperation(
+                    "Skewness requires at least 2 elements".to_string(),
+                ));
+            }
+            let n_t = T::from(n).ok_or_else(|| {
+                crate::error::NumRs2Error::ConversionError("Cannot convert n to T".to_string())
+            })?;
+            let mean_val = data.iter().fold(T::zero(), |acc, &x| acc + x) / n_t;
+            let variance = data.iter().fold(T::zero(), |acc, &x| {
+                let d = x - mean_val;
+                acc + d * d
+            }) / n_t;
+            let std_val = variance.sqrt();
+            if std_val == T::zero() {
+                return Ok(Array::from_vec(vec![T::zero()]));
+            }
+            let third_moment = data.iter().fold(T::zero(), |acc, &x| {
+                let d = x - mean_val;
+                acc + d * d * d
+            }) / n_t;
+            let skew_val = third_moment / (std_val * std_val * std_val);
+            Ok(Array::from_vec(vec![skew_val]))
+        }
+        Some(ax) => {
+            let axis = if ax < 0 {
+                (array.ndim() as isize + ax) as usize
+            } else {
+                ax as usize
+            };
+            if axis >= array.ndim() {
+                return Err(crate::error::NumRs2Error::DimensionMismatch(format!(
+                    "Axis {} out of bounds for array of dimension {}",
+                    axis,
+                    array.ndim()
+                )));
+            }
+            let shape = array.shape();
+            let axis_size = shape[axis];
+            if axis_size < 2 {
+                return Err(crate::error::NumRs2Error::InvalidOperation(
+                    "Skewness requires at least 2 elements along the axis".to_string(),
+                ));
+            }
+            let axis_size_t = T::from(axis_size).ok_or_else(|| {
+                crate::error::NumRs2Error::ConversionError(
+                    "Cannot convert axis_size to T".to_string(),
+                )
+            })?;
+
+            let mut out_shape = shape.clone();
+            out_shape.remove(axis);
+            if out_shape.is_empty() {
+                out_shape.push(1);
+            }
+            let out_size: usize = out_shape.iter().product();
+            let mut result_data = vec![T::zero(); out_size];
+
+            for out_idx in 0..out_size {
+                let mut indices = vec![0usize; array.ndim()];
+                let mut temp = out_idx;
+                for i in (0..array.ndim()).rev() {
+                    if i == axis {
+                        continue;
+                    }
+                    let dim_idx = if i < axis { i } else { i - 1 };
+                    if dim_idx < out_shape.len() {
+                        indices[i] = temp % out_shape[dim_idx];
+                        temp /= out_shape[dim_idx];
+                    }
+                }
+
+                let mut sum = T::zero();
+                for j in 0..axis_size {
+                    indices[axis] = j;
+                    sum = sum + array.get(&indices)?;
+                }
+                let mean_val = sum / axis_size_t;
+
+                let mut var_sum = T::zero();
+                let mut third_sum = T::zero();
+                for j in 0..axis_size {
+                    indices[axis] = j;
+                    let d = array.get(&indices)? - mean_val;
+                    var_sum = var_sum + d * d;
+                    third_sum = third_sum + d * d * d;
+                }
+                let variance = var_sum / axis_size_t;
+                let std_val = variance.sqrt();
+                result_data[out_idx] = if std_val == T::zero() {
+                    T::zero()
+                } else {
+                    (third_sum / axis_size_t) / (std_val * std_val * std_val)
+                };
+            }
+
+            Ok(Array::from_vec(result_data).reshape(&out_shape))
+        }
+    }
+}
+
+/// Compute sample excess kurtosis of array elements.
+///
+/// Returns the *excess* kurtosis (also called "Fisher's definition"), i.e.
+/// the fourth standardised moment minus 3.  A normal distribution has
+/// excess kurtosis 0; positive values indicate heavier tails (leptokurtic),
+/// negative values indicate lighter tails (platykurtic).
+///
+/// `kurtosis = E[(x - μ)^4] / σ^4 - 3`
+///
+/// When `axis` is `None` the statistic is computed over the flattened array.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::math::kurtosis;
+///
+/// let a = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 5.0]);
+/// let k = kurtosis(&a, None).expect("kurtosis should succeed");
+/// // Uniform-like distribution has negative excess kurtosis
+/// assert!(k.to_vec()[0] < 0.0);
+/// ```
+pub fn kurtosis<T>(array: &Array<T>, axis: Option<isize>) -> Result<Array<T>>
+where
+    T: Float
+        + Clone
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + NumCast,
+{
+    if array.is_empty() {
+        return Err(crate::error::NumRs2Error::InvalidOperation(
+            "Cannot compute kurtosis of empty array".to_string(),
+        ));
+    }
+
+    let three = T::from(3u8).ok_or_else(|| {
+        crate::error::NumRs2Error::ConversionError("Cannot convert 3 to T".to_string())
+    })?;
+
+    match axis {
+        None => {
+            let data = array.to_vec();
+            let n = data.len();
+            if n < 2 {
+                return Err(crate::error::NumRs2Error::InvalidOperation(
+                    "Kurtosis requires at least 2 elements".to_string(),
+                ));
+            }
+            let n_t = T::from(n).ok_or_else(|| {
+                crate::error::NumRs2Error::ConversionError("Cannot convert n to T".to_string())
+            })?;
+            let mean_val = data.iter().fold(T::zero(), |acc, &x| acc + x) / n_t;
+            let variance = data.iter().fold(T::zero(), |acc, &x| {
+                let d = x - mean_val;
+                acc + d * d
+            }) / n_t;
+            let std_val = variance.sqrt();
+            if std_val == T::zero() {
+                return Ok(Array::from_vec(vec![T::zero()]));
+            }
+            let fourth_moment = data.iter().fold(T::zero(), |acc, &x| {
+                let d = x - mean_val;
+                let d2 = d * d;
+                acc + d2 * d2
+            }) / n_t;
+            let sigma4 = variance * variance;
+            let kurt_val = fourth_moment / sigma4 - three;
+            Ok(Array::from_vec(vec![kurt_val]))
+        }
+        Some(ax) => {
+            let axis = if ax < 0 {
+                (array.ndim() as isize + ax) as usize
+            } else {
+                ax as usize
+            };
+            if axis >= array.ndim() {
+                return Err(crate::error::NumRs2Error::DimensionMismatch(format!(
+                    "Axis {} out of bounds for array of dimension {}",
+                    axis,
+                    array.ndim()
+                )));
+            }
+            let shape = array.shape();
+            let axis_size = shape[axis];
+            if axis_size < 2 {
+                return Err(crate::error::NumRs2Error::InvalidOperation(
+                    "Kurtosis requires at least 2 elements along the axis".to_string(),
+                ));
+            }
+            let axis_size_t = T::from(axis_size).ok_or_else(|| {
+                crate::error::NumRs2Error::ConversionError(
+                    "Cannot convert axis_size to T".to_string(),
+                )
+            })?;
+
+            let mut out_shape = shape.clone();
+            out_shape.remove(axis);
+            if out_shape.is_empty() {
+                out_shape.push(1);
+            }
+            let out_size: usize = out_shape.iter().product();
+            let mut result_data = vec![T::zero(); out_size];
+
+            for out_idx in 0..out_size {
+                let mut indices = vec![0usize; array.ndim()];
+                let mut temp = out_idx;
+                for i in (0..array.ndim()).rev() {
+                    if i == axis {
+                        continue;
+                    }
+                    let dim_idx = if i < axis { i } else { i - 1 };
+                    if dim_idx < out_shape.len() {
+                        indices[i] = temp % out_shape[dim_idx];
+                        temp /= out_shape[dim_idx];
+                    }
+                }
+
+                let mut sum = T::zero();
+                for j in 0..axis_size {
+                    indices[axis] = j;
+                    sum = sum + array.get(&indices)?;
+                }
+                let mean_val = sum / axis_size_t;
+
+                let mut var_sum = T::zero();
+                let mut fourth_sum = T::zero();
+                for j in 0..axis_size {
+                    indices[axis] = j;
+                    let d = array.get(&indices)? - mean_val;
+                    let d2 = d * d;
+                    var_sum = var_sum + d2;
+                    fourth_sum = fourth_sum + d2 * d2;
+                }
+                let variance = var_sum / axis_size_t;
+                let sigma4 = variance * variance;
+                result_data[out_idx] = if sigma4 == T::zero() {
+                    T::zero()
+                } else {
+                    fourth_sum / axis_size_t / sigma4 - three
+                };
+            }
+
+            Ok(Array::from_vec(result_data).reshape(&out_shape))
+        }
+    }
+}
+
+#[cfg(test)]
+mod skew_kurtosis_tests {
+    use super::*;
+    use crate::array::Array;
+
+    #[test]
+    fn test_skew_symmetric_data() {
+        // Symmetric data should have skewness ≈ 0
+        let data = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 5.0]);
+        let s = skew(&data, None).expect("skew should succeed");
+        assert!(
+            s.to_vec()[0].abs() < 1e-10,
+            "symmetric distribution skewness should be ~0, got {}",
+            s.to_vec()[0]
+        );
+    }
+
+    #[test]
+    fn test_skew_right_skewed() {
+        // Right-skewed data (long tail on the right) should have positive skewness
+        let data = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 10.0]);
+        let s = skew(&data, None).expect("skew should succeed");
+        assert!(
+            s.to_vec()[0] > 0.0,
+            "right-skewed data should have positive skewness"
+        );
+    }
+
+    #[test]
+    fn test_skew_constant_array_returns_zero() {
+        let data = Array::from_vec(vec![5.0_f64, 5.0, 5.0, 5.0]);
+        let s = skew(&data, None).expect("constant array skew should succeed");
+        assert_eq!(s.to_vec()[0], 0.0);
+    }
+
+    #[test]
+    fn test_skew_too_few_elements_errors() {
+        let data = Array::from_vec(vec![42.0_f64]);
+        assert!(
+            skew(&data, None).is_err(),
+            "skew with 1 element should return error"
+        );
+    }
+
+    #[test]
+    fn test_kurtosis_uniform_like_data() {
+        // For uniform-like data the excess kurtosis should be negative (platykurtic)
+        let data = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 5.0]);
+        let k = kurtosis(&data, None).expect("kurtosis should succeed");
+        assert!(
+            k.to_vec()[0] < 0.0,
+            "uniform-like data should have negative excess kurtosis, got {}",
+            k.to_vec()[0]
+        );
+    }
+
+    #[test]
+    fn test_kurtosis_constant_array_returns_zero() {
+        let data = Array::from_vec(vec![3.0_f64, 3.0, 3.0, 3.0]);
+        let k = kurtosis(&data, None).expect("constant array kurtosis should succeed");
+        assert_eq!(k.to_vec()[0], 0.0);
+    }
+
+    #[test]
+    fn test_kurtosis_too_few_elements_errors() {
+        let data = Array::from_vec(vec![99.0_f64]);
+        assert!(
+            kurtosis(&data, None).is_err(),
+            "kurtosis with 1 element should return error"
+        );
+    }
+
+    #[test]
+    fn test_skew_empty_array_errors() {
+        let data: Array<f64> = Array::from_vec(vec![]);
+        assert!(
+            skew(&data, None).is_err(),
+            "skew on empty array should fail"
+        );
+    }
+
+    #[test]
+    fn test_kurtosis_empty_array_errors() {
+        let data: Array<f64> = Array::from_vec(vec![]);
+        assert!(
+            kurtosis(&data, None).is_err(),
+            "kurtosis on empty array should fail"
+        );
+    }
+}

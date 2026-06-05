@@ -625,6 +625,177 @@ pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
     }
 }
 
+/// Calculate a weighted average and return both the average and the sum of weights
+///
+/// This is the companion to `average` that fulfils the NumPy `returned=True` semantic.
+/// Returns `(weighted_average, sum_of_weights)` as separate `Array<T>` values.
+///
+/// # Parameters
+///
+/// * `a`       - Input array
+/// * `axis`    - Optional axis along which to average. When `None`, reduces the full array.
+/// * `weights` - Optional weights. When `None` every element has implicit weight 1.
+///
+/// # Returns
+///
+/// `(weighted_average, sum_of_weights)`
+///
+/// * For the overall case (no axis): both arrays are scalar (length-1) arrays.
+/// * For the axis case: the shapes match the reduced output dimension.
+pub fn average_with_weights<T: Float + Clone + Zero + NumCast + Send + Sync>(
+    a: &Array<T>,
+    axis: Option<usize>,
+    weights: Option<&Array<T>>,
+) -> Result<(Array<T>, Array<T>)> {
+    if let Some(ax) = axis {
+        // ---------------------------------------------------------------
+        // Axis-reduced case
+        // ---------------------------------------------------------------
+        let shape = a.shape();
+        let axis_size = shape[ax];
+
+        match weights {
+            None => {
+                // Uniform weights of 1: avg = mean along axis, weight_sum = axis_size
+                let weighted_sum = {
+                    let mut result_shape = shape.clone();
+                    result_shape.remove(ax);
+                    let a_data = a.to_vec();
+                    let result_size = result_shape.iter().product::<usize>().max(1);
+                    let mut sums = vec![T::zero(); result_size];
+                    let mut result_indices = vec![0usize; result_shape.len()];
+                    let mut indices = vec![0usize; shape.len()];
+                    for i in 0..result_size {
+                        let mut remainder = i;
+                        for j in (0..result_shape.len()).rev() {
+                            result_indices[j] = remainder % result_shape[j];
+                            remainder /= result_shape[j];
+                        }
+                        let mut result_idx = 0;
+                        #[allow(clippy::needless_range_loop)]
+                        for j in 0..shape.len() {
+                            if j == ax {
+                                indices[j] = 0;
+                            } else {
+                                indices[j] = result_indices[result_idx];
+                                result_idx += 1;
+                            }
+                        }
+                        let mut s = T::zero();
+                        for k in 0..axis_size {
+                            indices[ax] = k;
+                            let mut flat_idx = 0;
+                            let mut stride = 1;
+                            for j in (0..shape.len()).rev() {
+                                flat_idx += indices[j] * stride;
+                                stride *= shape[j];
+                            }
+                            s = s + a_data[flat_idx];
+                        }
+                        sums[i] = s;
+                    }
+                    let result_shape_inner = {
+                        let mut s = shape.clone();
+                        s.remove(ax);
+                        s
+                    };
+                    Array::from_vec(sums).reshape(&result_shape_inner)
+                };
+
+                let n = T::from(axis_size).ok_or_else(|| {
+                    NumRs2Error::ConversionError("axis size conversion failed".to_string())
+                })?;
+                let weight_sum_data = weighted_sum.to_vec();
+                let avg_data: Vec<T> = weight_sum_data.iter().map(|&s| s / n).collect();
+                let out_shape = {
+                    let mut s = shape.clone();
+                    s.remove(ax);
+                    s
+                };
+                let avg = Array::from_vec(avg_data).reshape(&out_shape);
+                let weight_sum_arr = {
+                    let ws: Vec<T> = weight_sum_data.iter().map(|_| n).collect();
+                    Array::from_vec(ws).reshape(&out_shape)
+                };
+                Ok((avg, weight_sum_arr))
+            }
+            Some(w) => {
+                // Explicit weights
+                if a.shape() != w.shape() {
+                    return Err(NumRs2Error::ShapeMismatch {
+                        expected: a.shape(),
+                        actual: w.shape(),
+                    });
+                }
+                let weighted_sum_arr = weighted_sum_along_axis(a, w, ax)?;
+                let weight_sum_arr = w.sum_axis(ax)?;
+
+                let w_sum_data = weight_sum_arr.to_vec();
+                let ws_data = weighted_sum_arr.to_vec();
+                let avg_data: Vec<T> = ws_data
+                    .iter()
+                    .zip(w_sum_data.iter())
+                    .map(|(&ws, &wsum)| {
+                        if wsum == T::zero() {
+                            T::zero()
+                        } else {
+                            ws / wsum
+                        }
+                    })
+                    .collect();
+                let out_shape = weight_sum_arr.shape();
+                let avg = Array::from_vec(avg_data).reshape(&out_shape);
+                Ok((avg, weight_sum_arr))
+            }
+        }
+    } else {
+        // ---------------------------------------------------------------
+        // Overall (no-axis) case — returns scalar-valued length-1 arrays
+        // ---------------------------------------------------------------
+        let a_data = a.to_vec();
+        if a_data.is_empty() {
+            return Err(NumRs2Error::InvalidOperation(
+                "Cannot average empty array".to_string(),
+            ));
+        }
+
+        match weights {
+            None => {
+                let n = T::from(a_data.len()).ok_or_else(|| {
+                    NumRs2Error::ConversionError("data length conversion failed".to_string())
+                })?;
+                let sum = a_data.iter().fold(T::zero(), |acc, &v| acc + v);
+                let avg = sum / n;
+                Ok((Array::from_vec(vec![avg]), Array::from_vec(vec![n])))
+            }
+            Some(w) => {
+                if a.shape() != w.shape() {
+                    return Err(NumRs2Error::ShapeMismatch {
+                        expected: a.shape(),
+                        actual: w.shape(),
+                    });
+                }
+                let w_data = w.to_vec();
+                let mut weighted_sum = T::zero();
+                let mut weight_sum = T::zero();
+                for i in 0..a_data.len() {
+                    weighted_sum = weighted_sum + a_data[i] * w_data[i];
+                    weight_sum = weight_sum + w_data[i];
+                }
+                let avg = if weight_sum == T::zero() {
+                    T::zero()
+                } else {
+                    weighted_sum / weight_sum
+                };
+                Ok((
+                    Array::from_vec(vec![avg]),
+                    Array::from_vec(vec![weight_sum]),
+                ))
+            }
+        }
+    }
+}
+
 /// Calculate the weighted sum along a specified axis
 fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast + Send + Sync>(
     a: &Array<T>,
@@ -702,4 +873,61 @@ fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast + Send + Sync>(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_average_with_weights_overall() -> Result<()> {
+        // a=[1,2,3,4], weights=[1,2,3,4]
+        // weighted_sum = 1*1+2*2+3*3+4*4 = 1+4+9+16 = 30
+        // weight_sum   = 1+2+3+4         = 10
+        // avg          = 30/10           = 3.0
+        let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
+        let w = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
+
+        let (avg, weight_sum) = average_with_weights(&a, None, Some(&w))?;
+
+        let avg_val = avg.to_vec()[0];
+        let ws_val = weight_sum.to_vec()[0];
+
+        assert!(
+            (avg_val - 3.0).abs() < 1e-12,
+            "expected avg=3.0, got {}",
+            avg_val
+        );
+        assert!(
+            (ws_val - 10.0).abs() < 1e-12,
+            "expected weight_sum=10.0, got {}",
+            ws_val
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_average_with_weights_no_weights() -> Result<()> {
+        // a=[1.0,2.0,3.0], no weights → uniform weight 1
+        // avg = (1+2+3)/3 = 2.0
+        // weight_sum = 3.0
+        let a = Array::from_vec(vec![1.0f64, 2.0, 3.0]);
+
+        let (avg, weight_sum) = average_with_weights(&a, None, None)?;
+
+        let avg_val = avg.to_vec()[0];
+        let ws_val = weight_sum.to_vec()[0];
+
+        assert!(
+            (avg_val - 2.0).abs() < 1e-12,
+            "expected avg=2.0, got {}",
+            avg_val
+        );
+        assert!(
+            (ws_val - 3.0).abs() < 1e-12,
+            "expected weight_sum=3.0, got {}",
+            ws_val
+        );
+        Ok(())
+    }
 }

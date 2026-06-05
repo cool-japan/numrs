@@ -18,7 +18,10 @@ pub mod nan_stats;
 pub mod quantile;
 
 // Re-export Statistics trait and PARALLEL_THRESHOLD constant
-pub use basic::{average, max_along_axis, min_along_axis, ptp, Statistics, PARALLEL_THRESHOLD};
+pub use basic::{
+    average, average_with_weights, max_along_axis, min_along_axis, ptp, Statistics,
+    PARALLEL_THRESHOLD,
+};
 
 // Re-export correlation functions
 pub use correlation::{corrcoef, cov};

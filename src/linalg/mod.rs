@@ -824,7 +824,12 @@ where
     }
 
     /// Compute the eigenvalues and eigenvectors of a square matrix
+    ///
+    /// Uses the QR iteration algorithm with Wilkinson shifts to compute real
+    /// eigenvalues and eigenvectors of a square matrix.
     pub fn eig(&self) -> Result<(Array<T>, Array<T>)> {
+        use crate::new_modules::matrix_decomp::qr as qr_decomp;
+
         // Check if the matrix is square
         let shape = self.shape();
         if shape.len() != 2 || shape[0] != shape[1] {
@@ -833,14 +838,84 @@ where
             ));
         }
 
-        // This would use ndarray-linalg's eigenvalue computation in a full version
-        // For now, we'll just return placeholder values
         let n = shape[0];
 
-        let eigenvalues = Array::zeros(&[n]);
-        let eigenvectors = Array::zeros(&[n, n]);
+        // QR iteration with accumulated orthogonal transformations
+        // Uses Wilkinson shifts for improved convergence on symmetric-like matrices
+        let max_iter = 1000;
+        let tol: T = T::epsilon() * T::from(100.0).unwrap_or(T::one());
 
-        Ok((eigenvalues, eigenvectors))
+        // Work with a mutable copy of the matrix
+        let mut h = self.clone();
+        // Q accumulates the eigenvectors: start with identity
+        let mut q_total = Array::eye_square(n);
+
+        for _iter in 0..max_iter {
+            // Wilkinson shift: use eigenvalue of bottom-right 2x2 closer to h[n-1,n-1]
+            let shift = if n >= 2 {
+                let a = h.get(&[n - 2, n - 2])?;
+                let b = h.get(&[n - 2, n - 1])?;
+                let c = h.get(&[n - 1, n - 2])?;
+                let d = h.get(&[n - 1, n - 1])?;
+                let tr = a + d;
+                let det = a * d - b * c;
+                let disc = (tr * tr - T::from(4.0).unwrap_or(T::one()) * det).max(T::zero());
+                let sqrt_disc = disc.sqrt();
+                let l1 = (tr + sqrt_disc) / T::from(2.0).unwrap_or(T::one());
+                let l2 = (tr - sqrt_disc) / T::from(2.0).unwrap_or(T::one());
+                // Pick the eigenvalue closer to the bottom-right element
+                if (l1 - d).abs() < (l2 - d).abs() {
+                    l1
+                } else {
+                    l2
+                }
+            } else {
+                T::zero()
+            };
+
+            // Apply shift: H_shifted = H - shift * I
+            let mut h_shifted = h.clone();
+            for i in 0..n {
+                let v = h_shifted.get(&[i, i])?;
+                h_shifted.set(&[i, i], v - shift)?;
+            }
+
+            // QR decompose the shifted matrix
+            let (q_k, r_k) = qr_decomp(&h_shifted)?;
+
+            // H_new = R * Q + shift * I (unshift)
+            let mut h_new = r_k.matmul(&q_k)?;
+            for i in 0..n {
+                let v = h_new.get(&[i, i])?;
+                h_new.set(&[i, i], v + shift)?;
+            }
+
+            // Accumulate Q: Q_total = Q_total * Q_k
+            q_total = q_total.matmul(&q_k)?;
+
+            // Check convergence: off-diagonal elements below diagonal should be small
+            let mut converged = true;
+            for i in 1..n {
+                let sub_diag = h_new.get(&[i, i - 1])?.abs();
+                if sub_diag > tol {
+                    converged = false;
+                    break;
+                }
+            }
+
+            h = h_new;
+
+            if converged {
+                break;
+            }
+        }
+
+        // Extract diagonal as eigenvalues
+        let eigenvalues: Vec<T> = (0..n)
+            .map(|i| h.get(&[i, i]).unwrap_or(T::zero()))
+            .collect();
+
+        Ok((Array::from_vec(eigenvalues), q_total))
     }
 
     /// Compute the Cholesky decomposition of a matrix
@@ -1649,23 +1724,11 @@ where
     }
 
     /// Compute the eigenvalues and eigenvectors of a square matrix
+    ///
+    /// Without the `matrix_decomp` feature this operation is not available.
+    /// Enable the `matrix_decomp` feature for a full QR-iteration implementation.
     pub fn eig(&self) -> Result<(Array<T>, Array<T>)> {
-        // Check if the matrix is square
-        let shape = self.shape();
-        if shape.len() != 2 || shape[0] != shape[1] {
-            return Err(NumRs2Error::DimensionMismatch(
-                "eigendecomposition requires a square matrix".to_string(),
-            ));
-        }
-
-        // This would use ndarray-linalg's eigenvalue computation in a full version
-        // For now, we'll just return placeholder values
-        let n = shape[0];
-
-        let eigenvalues = Array::zeros(&[n]);
-        let eigenvectors = Array::zeros(&[n, n]);
-
-        Ok((eigenvalues, eigenvectors))
+        Err(NumRs2Error::FeatureNotEnabled("matrix_decomp".to_string()))
     }
 
     /// Compute the Cholesky decomposition of a matrix

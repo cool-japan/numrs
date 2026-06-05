@@ -401,25 +401,52 @@ where
             }
         }
 
-        let remaining_qubits = self.num_qubits - traced_qubits.len();
-        let new_dim = 2_usize.pow(remaining_qubits as u32);
+        // Build sorted lists for remaining and traced qubit positions.
+        // Qubit convention: qubit q corresponds to bit q of the state index (LSB = qubit 0),
+        // consistent with the gate application convention: `(idx >> q) & 1`.
+        let mut traced_sorted: Vec<usize> = traced_qubits.to_vec();
+        traced_sorted.sort_unstable();
+        traced_sorted.dedup();
+
+        let remaining_list: Vec<usize> = (0..self.num_qubits)
+            .filter(|q| !traced_sorted.contains(q))
+            .collect();
+
+        let num_remaining = remaining_list.len();
+        let new_dim = 2_usize.pow(num_remaining as u32);
+        let traced_dim = 2_usize.pow(traced_sorted.len() as u32);
+        let old_dim = 2_usize.pow(self.num_qubits as u32);
+
+        // Helper closure: reconstruct a full state index from a reduced-system index
+        // and a traced-qubit index.  Both `rem_idx` and `traced_idx` are compact
+        // indices whose bits correspond to the qubits listed in `remaining_list` and
+        // `traced_sorted` respectively (bit 0 of the compact index ↔ first qubit in
+        // the sorted list).
+        let reconstruct_full = |rem_idx: usize, traced_idx: usize| -> usize {
+            let mut full_idx = 0usize;
+            // Insert bits for remaining qubits
+            for (rank, &qubit_pos) in remaining_list.iter().enumerate() {
+                let bit = (rem_idx >> rank) & 1;
+                full_idx |= bit << qubit_pos;
+            }
+            // Insert bits for traced qubits
+            for (rank, &qubit_pos) in traced_sorted.iter().enumerate() {
+                let bit = (traced_idx >> rank) & 1;
+                full_idx |= bit << qubit_pos;
+            }
+            full_idx
+        };
 
         let mut reduced = vec![Complex::new(T::zero(), T::zero()); new_dim * new_dim];
-
-        // Simplified partial trace implementation
-        // For production use, would need full tensor network contraction
-        let old_dim = 2_usize.pow(self.num_qubits as u32);
 
         for i in 0..new_dim {
             for j in 0..new_dim {
                 let mut sum = Complex::new(T::zero(), T::zero());
 
-                // Sum over traced indices
-                let traced_dim = 2_usize.pow(traced_qubits.len() as u32);
+                // Sum ρ[full_i, full_j] over all traced-qubit basis states k
                 for k in 0..traced_dim {
-                    // Map reduced indices to full indices
-                    let full_i = i; // Simplified mapping
-                    let full_j = j;
+                    let full_i = reconstruct_full(i, k);
+                    let full_j = reconstruct_full(j, k);
 
                     if full_i < old_dim && full_j < old_dim {
                         if let Ok(val) = self.matrix.get(&[full_i, full_j]) {
@@ -434,7 +461,7 @@ where
 
         Ok(Self {
             matrix: Array::from_vec(reduced).reshape(&[new_dim, new_dim]),
-            num_qubits: remaining_qubits,
+            num_qubits: num_remaining,
         })
     }
 
@@ -584,6 +611,107 @@ mod tests {
         let probs = state.get_probabilities();
         let sum: f64 = probs.to_vec().iter().sum();
         assert_relative_eq!(sum, 1.0, epsilon = 1e-10);
+    }
+
+    // Bell state |Φ+⟩ = (|00⟩ + |11⟩)/√2.
+    // Qubit convention: qubit 0 = LSB, qubit 1 = MSB.
+    //   |00⟩ → index 0  (bit1=0, bit0=0)
+    //   |01⟩ → index 1  (bit1=0, bit0=1)
+    //   |10⟩ → index 2  (bit1=1, bit0=0)
+    //   |11⟩ → index 3  (bit1=1, bit0=1)
+    // So Bell amplitudes: amp[0] = 1/√2, amp[3] = 1/√2, rest zero.
+    //
+    // Partial trace over qubit 0 should yield the 2×2 maximally mixed state I/2.
+    // Purity of I/2 is Tr((I/2)²) = 1/2.
+    #[test]
+    fn test_partial_trace_bell_state() {
+        let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt();
+        // Index 0 = |00⟩, index 3 = |11⟩
+        let amplitudes = vec![
+            Complex::new(inv_sqrt2, 0.0), // |00⟩
+            Complex::new(0.0, 0.0),       // |01⟩
+            Complex::new(0.0, 0.0),       // |10⟩
+            Complex::new(inv_sqrt2, 0.0), // |11⟩
+        ];
+        let state =
+            StateVector::from_amplitudes(amplitudes).expect("test: valid Bell state amplitudes");
+        assert_eq!(state.num_qubits(), 2);
+
+        // Trace out qubit 0 (LSB) → reduced system is qubit 1
+        let rho_full = state
+            .to_density_matrix()
+            .expect("test: density matrix from Bell state");
+
+        let rho_red = rho_full
+            .partial_trace(&[0])
+            .expect("test: partial trace over qubit 0");
+
+        assert_eq!(rho_red.num_qubits(), 1);
+
+        // Should be I/2: diagonal entries = 0.5, off-diagonal = 0
+        let m00 = rho_red.matrix().get(&[0, 0]).expect("test: rho_red[0,0]");
+        let m01 = rho_red.matrix().get(&[0, 1]).expect("test: rho_red[0,1]");
+        let m10 = rho_red.matrix().get(&[1, 0]).expect("test: rho_red[1,0]");
+        let m11 = rho_red.matrix().get(&[1, 1]).expect("test: rho_red[1,1]");
+
+        assert_relative_eq!(m00.re, 0.5, epsilon = 1e-10);
+        assert_relative_eq!(m00.im, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(m01.re, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(m01.im, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(m10.re, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(m10.im, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(m11.re, 0.5, epsilon = 1e-10);
+        assert_relative_eq!(m11.im, 0.0, epsilon = 1e-10);
+
+        // Purity = Tr(ρ²) = 0.5 for maximally mixed single-qubit state
+        let purity = rho_red.purity();
+        assert_relative_eq!(purity, 0.5, epsilon = 1e-10);
+    }
+
+    // Product state |ψ⟩ ⊗ |φ⟩ where |ψ⟩ = (|0⟩ + |1⟩)/√2 (qubit 1, MSB)
+    // and |φ⟩ = |0⟩ (qubit 0, LSB).
+    // Amplitude vector (qubit1 ⊗ qubit0 basis):
+    //   amp[0] = 1/√2 (|00⟩), amp[1] = 0 (|01⟩), amp[2] = 1/√2 (|10⟩), amp[3] = 0 (|11⟩)
+    //
+    // Trace out qubit 0 → remaining qubit 1 should be |ψ⟩ = (|0⟩+|1⟩)/√2, purity = 1.
+    #[test]
+    fn test_partial_trace_product_state() {
+        let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt();
+        // qubit 1 = (|0⟩+|1⟩)/√2, qubit 0 = |0⟩
+        // combined: amp[0]=1/√2, amp[1]=0, amp[2]=1/√2, amp[3]=0
+        let amplitudes = vec![
+            Complex::new(inv_sqrt2, 0.0), // |00⟩
+            Complex::new(0.0, 0.0),       // |01⟩
+            Complex::new(inv_sqrt2, 0.0), // |10⟩
+            Complex::new(0.0, 0.0),       // |11⟩
+        ];
+        let state =
+            StateVector::from_amplitudes(amplitudes).expect("test: valid product state amplitudes");
+
+        let rho_full = state
+            .to_density_matrix()
+            .expect("test: density matrix from product state");
+
+        // Trace out qubit 0 (|0⟩ part) → should get pure state of qubit 1
+        let rho_red = rho_full
+            .partial_trace(&[0])
+            .expect("test: partial trace over qubit 0");
+
+        assert_eq!(rho_red.num_qubits(), 1);
+
+        // Expected: ρ_1 = |+⟩⟨+| = [[0.5, 0.5],[0.5, 0.5]]
+        let m00 = rho_red.matrix().get(&[0, 0]).expect("test: rho_red[0,0]");
+        let m11 = rho_red.matrix().get(&[1, 1]).expect("test: rho_red[1,1]");
+        let m01 = rho_red.matrix().get(&[0, 1]).expect("test: rho_red[0,1]");
+
+        assert_relative_eq!(m00.re, 0.5, epsilon = 1e-10);
+        assert_relative_eq!(m11.re, 0.5, epsilon = 1e-10);
+        assert_relative_eq!(m01.re, 0.5, epsilon = 1e-10);
+        assert_relative_eq!(m01.im, 0.0, epsilon = 1e-10);
+
+        // Pure state: purity = 1
+        let purity = rho_red.purity();
+        assert_relative_eq!(purity, 1.0, epsilon = 1e-10);
     }
 
     #[test]

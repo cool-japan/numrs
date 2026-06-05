@@ -15,8 +15,8 @@ use scirs2_core::random::prelude::*;
 use scirs2_core::SliceRandomExt;
 use scirs2_core::{Distribution as CoreDistribution, Pert};
 use scirs2_stats::distributions::{
-    lognormal::Lognormal, Bernoulli, Beta, Binomial, Cauchy, ChiSquare, Exponential, Gamma, Normal,
-    Pareto, Poisson, StudentT, Weibull,
+    f::F as FDistribution, lognormal::Lognormal, Bernoulli, Beta, Binomial, Cauchy, ChiSquare,
+    Exponential, Gamma, Normal, Pareto, Poisson, StudentT, Weibull,
 };
 use scirs2_stats::Distribution;
 use std::fmt::Debug;
@@ -981,6 +981,73 @@ impl RandomState {
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert PERT sample to target type".to_string(),
+                )
+            })?;
+            vec.push(val);
+        }
+
+        Ok(Array::from_vec(vec).reshape(shape))
+    }
+
+    /// Generate random samples from an F (Fisher-Snedecor) distribution.
+    ///
+    /// The F distribution arises as the ratio of two independent chi-squared
+    /// random variables divided by their respective degrees of freedom.  It is
+    /// widely used in ANOVA and regression analysis.
+    ///
+    /// # Arguments
+    ///
+    /// * `dfnum` - Numerator degrees of freedom (must be > 0)
+    /// * `dfden` - Denominator degrees of freedom (must be > 0)
+    /// * `shape` - Shape of the output array
+    pub fn f_dist<T: Float + NumCast + Clone + Debug + Display>(
+        &self,
+        dfnum: T,
+        dfden: T,
+        shape: &[usize],
+    ) -> Result<Array<T>> {
+        if dfnum <= T::zero() {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Numerator degrees of freedom must be positive, got {}",
+                dfnum
+            )));
+        }
+        if dfden <= T::zero() {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Denominator degrees of freedom must be positive, got {}",
+                dfden
+            )));
+        }
+
+        let dfnum_f64 = dfnum.to_f64().ok_or_else(|| {
+            NumRs2Error::InvalidOperation(
+                "Failed to convert numerator degrees of freedom to f64".to_string(),
+            )
+        })?;
+        let dfden_f64 = dfden.to_f64().ok_or_else(|| {
+            NumRs2Error::InvalidOperation(
+                "Failed to convert denominator degrees of freedom to f64".to_string(),
+            )
+        })?;
+
+        let dist = FDistribution::<f64>::new(dfnum_f64, dfden_f64, 0.0, 1.0).map_err(|e| {
+            NumRs2Error::InvalidOperation(format!("Failed to create F distribution: {}", e))
+        })?;
+
+        let _rng = self.get_rng()?;
+        let size: usize = shape.iter().product();
+        let mut vec = Vec::with_capacity(size);
+
+        for _ in 0..size {
+            let samples = dist.rvs(1).map_err(|e| {
+                NumRs2Error::InvalidOperation(format!(
+                    "Failed to sample from F distribution: {}",
+                    e
+                ))
+            })?;
+            let val = T::from(samples[0]).ok_or_else(|| {
+                NumRs2Error::InvalidOperation(
+                    "Failed to convert F distribution sample to target type".to_string(),
                 )
             })?;
             vec.push(val);

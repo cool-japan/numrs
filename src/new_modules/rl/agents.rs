@@ -405,6 +405,16 @@ impl RLAgent for DQNAgent {
     fn action_dim(&self) -> usize {
         self.action_dim
     }
+
+    /// Return Q-values for all actions given `state`.
+    ///
+    /// Runs a forward pass through the Q-network and converts the resulting
+    /// `Array1<f64>` into a plain `Vec<f64>` so that exploration strategies
+    /// (e.g. `BoltzmannExploration`) can compute action probabilities.
+    fn action_values(&self, state: &Array1<f64>) -> Result<Vec<f64>> {
+        let q_array = self.q_network.forward(state)?;
+        Ok(q_array.to_vec())
+    }
 }
 
 /// Policy Gradient (REINFORCE) agent

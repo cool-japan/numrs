@@ -531,10 +531,8 @@ impl EnhancedSimdOps {
             _mm256_storeu_ps(dst.as_mut_ptr().add(i + 3 * AVX2_F32_LANES), v3);
         }
 
-        // Handle remaining
-        for i in simd_len..len {
-            dst[i] = src[i];
-        }
+        // Handle remaining elements after SIMD chunks
+        dst[simd_len..].copy_from_slice(&src[simd_len..]);
     }
 
     /// AVX2 optimized copy
@@ -565,9 +563,7 @@ impl EnhancedSimdOps {
             _mm256_storeu_pd(dst.as_mut_ptr().add(i + 3 * AVX2_F64_LANES), v3);
         }
 
-        // Handle remaining
-        for i in simd_len..len {
-            dst[i] = src[i];
-        }
+        // Handle remaining elements after SIMD chunks
+        dst[simd_len..].copy_from_slice(&src[simd_len..]);
     }
 }

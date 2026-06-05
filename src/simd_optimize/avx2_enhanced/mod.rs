@@ -565,7 +565,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_abs_f32(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let expected = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-6,
@@ -584,7 +584,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_abs_f64(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f64, 2.0, 3.0, 4.0];
+        let expected = [1.0f64, 2.0, 3.0, 4.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -603,7 +603,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_sign_f64(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f64, -1.0, 0.0, -1.0];
+        let expected = [1.0f64, -1.0, 0.0, -1.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -622,7 +622,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_clip_f32(&input, 0.0, 1.0);
         let result_vec = result.to_vec();
 
-        let expected = vec![0.0f32, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0];
+        let expected = [0.0f32, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-6,
@@ -641,7 +641,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_clip_f64(&input, 0.0, 1.0);
         let result_vec = result.to_vec();
 
-        let expected = vec![0.0f64, 0.5, 1.0, 1.0];
+        let expected = [0.0f64, 0.5, 1.0, 1.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -660,7 +660,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_floor_f64(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f64, 2.0, -2.0, -3.0];
+        let expected = [1.0f64, 2.0, -2.0, -3.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -679,7 +679,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_ceil_f64(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![2.0f64, 3.0, -1.0, -2.0];
+        let expected = [2.0f64, 3.0, -1.0, -2.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -698,7 +698,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_round_f64(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f64, 3.0, -1.0, -3.0];
+        let expected = [1.0f64, 3.0, -1.0, -3.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -966,7 +966,7 @@ mod tests {
 
         let c_data = c.to_vec();
         // Expected: [[1*5+2*7, 1*6+2*8], [3*5+4*7, 3*6+4*8]] = [[19, 22], [43, 50]]
-        let expected = vec![19.0f32, 22.0, 43.0, 50.0];
+        let expected = [19.0f32, 22.0, 43.0, 50.0];
         for i in 0..expected.len() {
             assert!(
                 (c_data[i] - expected[i]).abs() < 1e-5,
@@ -1032,7 +1032,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_diff_f64(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![2.0f64, 3.0, 4.0];
+        let expected = [2.0f64, 3.0, 4.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1051,7 +1051,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_cumsum_f64(&input);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f64, 3.0, 6.0, 10.0];
+        let expected = [1.0f64, 3.0, 6.0, 10.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1069,7 +1069,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_linspace_f64(0.0, 1.0, 5);
         let result_vec = result.to_vec();
 
-        let expected = vec![0.0f64, 0.25, 0.5, 0.75, 1.0];
+        let expected = [0.0f64, 0.25, 0.5, 0.75, 1.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1087,7 +1087,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_arange_f64(0.0, 5.0, 1.0);
         let result_vec = result.to_vec();
 
-        let expected = vec![0.0f64, 1.0, 2.0, 3.0, 4.0];
+        let expected = [0.0f64, 1.0, 2.0, 3.0, 4.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1107,7 +1107,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_add_arrays_f64(&a, &b);
         let result_vec = result.to_vec();
 
-        let expected = vec![6.0f64, 8.0, 10.0, 12.0];
+        let expected = [6.0f64, 8.0, 10.0, 12.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1127,7 +1127,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_sub_arrays_f64(&a, &b);
         let result_vec = result.to_vec();
 
-        let expected = vec![4.0f64, 4.0, 4.0, 4.0];
+        let expected = [4.0f64, 4.0, 4.0, 4.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1147,7 +1147,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_mul_arrays_f64(&a, &b);
         let result_vec = result.to_vec();
 
-        let expected = vec![5.0f64, 12.0, 21.0, 32.0];
+        let expected = [5.0f64, 12.0, 21.0, 32.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1167,7 +1167,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_div_arrays_f64(&a, &b);
         let result_vec = result.to_vec();
 
-        let expected = vec![5.0f64, 4.0, 3.0, 4.0];
+        let expected = [5.0f64, 4.0, 3.0, 4.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1189,7 +1189,7 @@ mod tests {
         let result_vec = result.to_vec();
 
         // a*b + c = [1*2+1, 2*2+1, 3*2+1, 4*2+1] = [3, 5, 7, 9]
-        let expected = vec![3.0f64, 5.0, 7.0, 9.0];
+        let expected = [3.0f64, 5.0, 7.0, 9.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1208,7 +1208,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_scalar_mul_f64(&a, 3.0);
         let result_vec = result.to_vec();
 
-        let expected = vec![3.0f64, 6.0, 9.0, 12.0];
+        let expected = [3.0f64, 6.0, 9.0, 12.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1227,7 +1227,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_square_f64(&a);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f64, 4.0, 9.0, 16.0];
+        let expected = [1.0f64, 4.0, 9.0, 16.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1246,7 +1246,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_reciprocal_f64(&a);
         let result_vec = result.to_vec();
 
-        let expected = vec![1.0f64, 0.5, 0.25, 0.2];
+        let expected = [1.0f64, 0.5, 0.25, 0.2];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,
@@ -1265,7 +1265,7 @@ mod tests {
         let result = EnhancedSimdOps::vectorized_negative_f64(&a);
         let result_vec = result.to_vec();
 
-        let expected = vec![-1.0f64, 2.0, -3.0, 4.0];
+        let expected = [-1.0f64, 2.0, -3.0, 4.0];
         for i in 0..expected.len() {
             assert!(
                 (result_vec[i] - expected[i]).abs() < 1e-14,

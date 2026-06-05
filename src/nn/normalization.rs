@@ -105,6 +105,49 @@ where
     Ok(result)
 }
 
+/// Instance Normalization
+///
+/// Normalizes each sample independently across its spatial dimensions (all
+/// columns for each row).  Unlike `layer_norm` there are no learned affine
+/// parameters — the output has zero mean and unit variance per row.
+///
+/// This is equivalent to applying `layer_norm` with `gamma = 1` and
+/// `beta = 0` to each row individually.
+///
+/// # Arguments
+///
+/// * `x` - Input tensor (batch_size, features)
+/// * `epsilon` - Small constant for numerical stability
+pub fn instance_norm<T>(x: &ArrayView2<T>, epsilon: T) -> NnResult<Array2<T>>
+where
+    T: Float + SimdUnifiedOps + ScalarOperand,
+{
+    if x.nrows() == 0 || x.ncols() == 0 {
+        return Err(NumRs2Error::InvalidOperation(
+            "instance_norm requires a non-empty input tensor".to_string(),
+        ));
+    }
+
+    let n_features = T::from(x.ncols()).ok_or_else(|| {
+        NumRs2Error::ConversionError("Failed to convert feature count".to_string())
+    })?;
+
+    let mut result = Array2::zeros(x.raw_dim());
+
+    for i in 0..x.nrows() {
+        let row = x.row(i);
+        let mean = row.sum() / n_features;
+        let var = row.mapv(|v| (v - mean) * (v - mean)).sum() / n_features;
+        let std_val = (var + epsilon).sqrt();
+
+        for j in 0..x.ncols() {
+            result[[i, j]] = (x[[i, j]] - mean) / std_val;
+        }
+    }
+
+    Ok(result)
+}
+
 /// RMS Normalization (Root Mean Square Layer Normalization)
 ///
 /// A simpler normalization that doesn't subtract the mean.

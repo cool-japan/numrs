@@ -676,6 +676,42 @@ where
     rng.noncentral_f(dfnum, dfden, nonc, shape)
 }
 
+/// Generate random samples from an F (Fisher-Snedecor) distribution.
+///
+/// The F distribution is the ratio of two independent chi-squared variates
+/// divided by their respective degrees of freedom.  It is used extensively
+/// in ANOVA, regression tests, and equality-of-variance tests.
+///
+/// # Arguments
+///
+/// * `dfnum` - Numerator degrees of freedom (must be > 0)
+/// * `dfden` - Denominator degrees of freedom (must be > 0)
+/// * `shape` - Shape of the output array
+///
+/// # Returns
+///
+/// An array of random values from the F distribution
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::random::distributions::f_dist;
+///
+/// let arr = f_dist(2.0_f64, 10.0, &[5]).expect("f_dist should succeed");
+/// assert_eq!(arr.shape(), vec![5]);
+/// // All F-distributed values are non-negative
+/// for v in arr.to_vec() {
+///     assert!(v >= 0.0, "F distribution values must be non-negative");
+/// }
+/// ```
+pub fn f_dist<T>(dfnum: T, dfden: T, shape: &[usize]) -> Result<Array<T>>
+where
+    T: num_traits::Float + num_traits::NumCast + Clone + std::fmt::Debug + std::fmt::Display,
+{
+    let rng = get_global_random_state()?;
+    rng.f_dist(dfnum, dfden, shape)
+}
+
 /// Generate random values from a von Mises distribution using the global generator
 ///
 /// The von Mises distribution, also known as the circular normal distribution, is a
@@ -1340,5 +1376,45 @@ mod tests {
 
         // Just verify we got valid samples
         assert!(!arr.to_vec().is_empty());
+    }
+
+    #[test]
+    fn test_f_dist_shape() {
+        let arr = f_dist(2.0_f64, 10.0, &[20]).expect("f_dist should succeed");
+        assert_eq!(
+            arr.shape(),
+            vec![20],
+            "shape should match requested dimensions"
+        );
+    }
+
+    #[test]
+    fn test_f_dist_values_nonnegative() {
+        // F-distributed values are always ≥ 0
+        let arr = f_dist(3.0_f64, 5.0, &[100]).expect("f_dist should succeed");
+        for v in arr.to_vec() {
+            assert!(
+                v >= 0.0,
+                "F distribution values must be non-negative, got {v}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_f_dist_invalid_dfnum() {
+        let result = f_dist::<f64>(0.0, 10.0, &[5]);
+        assert!(
+            result.is_err(),
+            "f_dist with dfnum=0 should return an error"
+        );
+    }
+
+    #[test]
+    fn test_f_dist_invalid_dfden() {
+        let result = f_dist::<f64>(2.0, -1.0, &[5]);
+        assert!(
+            result.is_err(),
+            "f_dist with negative dfden should return an error"
+        );
     }
 }

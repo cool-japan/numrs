@@ -394,9 +394,74 @@ impl PostProcessor {
                 point
             )));
         }
-        Err(FemError::SolverError(
-            "Point evaluation for 2D/3D not yet implemented".to_string(),
-        ))
+        if mesh.dimension == 2 {
+            if point.len() < 2 {
+                return Err(FemError::SolverError(
+                    "2D point must have at least 2 coordinates".to_string(),
+                ));
+            }
+            let xp = point[0];
+            let yp = point[1];
+
+            for elem in &mesh.elements {
+                use super::mesh::ElementKind;
+                match elem.kind {
+                    ElementKind::Triangle3 => {
+                        // Barycentric coordinates via 2x2 linear system
+                        // Reference: Farin (2001), Kopp (2008)
+                        let n0 = elem.nodes[0];
+                        let n1 = elem.nodes[1];
+                        let n2 = elem.nodes[2];
+                        let x1 = mesh.nodes[n0].coords[0];
+                        let y1 = mesh.nodes[n0].coords[1];
+                        let x2 = mesh.nodes[n1].coords[0];
+                        let y2 = mesh.nodes[n1].coords[1];
+                        let x3 = mesh.nodes[n2].coords[0];
+                        let y3 = mesh.nodes[n2].coords[1];
+
+                        // Matrix: [[x1-x3, x2-x3], [y1-y3, y2-y3]]
+                        let a = x1 - x3;
+                        let b = x2 - x3;
+                        let c = y1 - y3;
+                        let d = y2 - y3;
+                        let det = a * d - b * c;
+
+                        if det.abs() < 1e-14 {
+                            // Degenerate triangle, skip
+                            continue;
+                        }
+
+                        // Inverse: (1/det) * [[d, -b], [-c, a]]
+                        let rhs0 = xp - x3;
+                        let rhs1 = yp - y3;
+                        let lambda0 = (d * rhs0 - b * rhs1) / det;
+                        let lambda1 = (-c * rhs0 + a * rhs1) / det;
+                        let lambda2 = 1.0 - lambda0 - lambda1;
+
+                        let tol = 1e-10;
+                        if lambda0 >= -tol && lambda1 >= -tol && lambda2 >= -tol {
+                            let u0 = solution[n0];
+                            let u1 = solution[n1];
+                            let u2 = solution[n2];
+                            return Ok(lambda0 * u0 + lambda1 * u1 + lambda2 * u2);
+                        }
+                    }
+                    // Quad4 bilinear inverse-map is not implemented; skip gracefully
+                    ElementKind::Quad4 | ElementKind::Line2 => {}
+                }
+            }
+
+            return Err(FemError::SolverError(format!(
+                "Point {:?} not found in any 2D triangular element",
+                point
+            )));
+        }
+
+        // 3D meshes are not supported in the current ElementKind set
+        Err(FemError::SolverError(format!(
+            "Point evaluation not supported for dimension {}",
+            mesh.dimension
+        )))
     }
 }
 

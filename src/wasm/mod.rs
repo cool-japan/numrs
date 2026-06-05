@@ -137,7 +137,7 @@ mod tests {
     fn test_version() {
         let version = get_version();
         assert!(!version.is_empty());
-        assert!(version.contains("0.3"));
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

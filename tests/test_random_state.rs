@@ -51,7 +51,11 @@ fn test_random_state_thread_safety() {
             let mut results = Vec::with_capacity(samples);
 
             for _ in 0..samples {
-                let arr = rng_clone.lock().unwrap().random::<f64>(&[1]).unwrap();
+                let arr = rng_clone
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .random::<f64>(&[1])
+                    .unwrap();
                 results.push(arr.to_vec()[0]);
             }
 

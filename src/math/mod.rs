@@ -62,7 +62,8 @@ pub use diff::{diff, diff_extended, ediff1d, trapz};
 
 // Statistics functions
 pub use statistics::{
-    argmax, argmin, argsort, around, clip, cumprod, cumsum, mean, prod, resize, std, var,
+    argmax, argmin, argsort, around, clip, cumprod, cumsum, kurtosis, mean, prod, resize, skew,
+    std, var,
 };
 
 // Aggregation functions

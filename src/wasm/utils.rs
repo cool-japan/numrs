@@ -309,7 +309,7 @@ mod tests {
     fn test_version() {
         let ver = version();
         assert!(!ver.is_empty());
-        assert!(ver.contains("0.3"));
+        assert_eq!(ver, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

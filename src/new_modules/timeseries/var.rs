@@ -243,13 +243,211 @@ impl Vecm {
         Self { p, rank }
     }
 
-    /// Fit VECM model (simplified - would need Johansen procedure for full implementation).
-    pub fn fit(&self, _data: &ArrayView2<f64>) -> Result<VarParams> {
-        // Placeholder - full implementation would estimate cointegration vectors
-        // and error correction terms
-        Err(NumRs2Error::NotImplemented(
-            "Full VECM estimation not yet implemented".to_string(),
-        ))
+    /// Fit VECM model via the Johansen (1988) procedure.
+    ///
+    /// # Algorithm
+    /// 1. Form ΔY (first differences) and Y_{t-1} (lagged levels).
+    /// 2. Regress both ΔY and Y_{t-1} on lagged ΔY (lags 1..p-1) via OLS.
+    ///    Residuals are R0 (from ΔY regression) and R1 (from Y_{t-1} regression).
+    /// 3. Compute moment matrices S00 = R0ᵀR0/T, S11 = R1ᵀR1/T, S01 = R0ᵀR1/T.
+    /// 4. Form the symmetric PSD matrix M = S11^{-1/2} S10 S00^{-1} S01 S11^{-1/2}
+    ///    and solve its symmetric eigendecomposition.
+    /// 5. Top `rank` eigenvectors give the cointegrating vectors β;
+    ///    α = S01 β diag(λ)^{-1}.
+    /// 6. The returned `VarParams` encodes Π = αβᵀ as `coefficients[0]`,
+    ///    zero intercept, and S00 as the residual covariance `sigma`.
+    pub fn fit(&self, data: &ArrayView2<f64>) -> Result<VarParams> {
+        let (t, k) = data.dim();
+        let r = self.rank;
+
+        if t < self.p + 2 {
+            return Err(NumRs2Error::ValueError(
+                "Insufficient observations for VECM estimation".to_string(),
+            ));
+        }
+        if r == 0 || r > k {
+            return Err(NumRs2Error::ValueError(format!(
+                "Cointegration rank must satisfy 0 < rank <= k, got rank={} k={}",
+                r, k
+            )));
+        }
+
+        // ------------------------------------------------------------------ //
+        // Step 1: Build ΔY (first differences) and Y_{t-1} (lagged levels)  //
+        // ------------------------------------------------------------------ //
+        // Usable observations: indices p..t-1 (after taking p lags of ΔY)
+        // For each usable index i (0-based within usable range):
+        //   t_idx = i + p  (original index, 1-based from p..t-1)
+        //   ΔY_i  = Y[t_idx] - Y[t_idx - 1]
+        //   Ylm1_i = Y[t_idx - 1]          (Y_{t-1})
+
+        let n_obs = t - self.p; // number of usable rows
+        let mut delta_y = Array2::<f64>::zeros((n_obs, k));
+        let mut y_lag1 = Array2::<f64>::zeros((n_obs, k));
+
+        for i in 0..n_obs {
+            let t_idx = i + self.p;
+            for j in 0..k {
+                delta_y[[i, j]] = data[[t_idx, j]] - data[[t_idx - 1, j]];
+                y_lag1[[i, j]] = data[[t_idx - 1, j]];
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Step 2: Regress ΔY and Y_{t-1} on lagged ΔY (lags 1..p-1)        //
+        // If p == 1 there are no lagged ΔY regressors; residuals = raw data. //
+        // ------------------------------------------------------------------ //
+        let (resid0, resid1) = if self.p <= 1 {
+            (delta_y.clone(), y_lag1.clone())
+        } else {
+            // Build regressor matrix Z: rows = n_obs, cols = k*(p-1)
+            let n_z_cols = k * (self.p - 1);
+            let mut z = Array2::<f64>::zeros((n_obs, n_z_cols));
+            for i in 0..n_obs {
+                let t_idx = i + self.p;
+                let mut col = 0usize;
+                for lag in 1..self.p {
+                    for j in 0..k {
+                        // ΔY lagged by `lag` periods
+                        z[[i, col]] = data[[t_idx - lag, j]] - data[[t_idx - lag - 1, j]];
+                        col += 1;
+                    }
+                }
+            }
+
+            // OLS projection matrices: B = (ZᵀZ)^{-1} Zᵀ Y
+            // Residual = Y - Z B
+            let ztzt = z.t().dot(&z); // (n_z_cols × n_z_cols)
+            let ztdy = z.t().dot(&delta_y); // (n_z_cols × k)
+            let zty1 = z.t().dot(&y_lag1); // (n_z_cols × k)
+
+            let eye_z = Array2::<f64>::eye(n_z_cols);
+            let ztzt_inv = match scirs2_linalg::solve_multiple(&ztzt.view(), &eye_z.view(), None) {
+                Ok(inv) => inv,
+                Err(_) => {
+                    // Regularise lightly if singular
+                    let reg = &ztzt + &(Array2::<f64>::eye(n_z_cols) * 1e-10);
+                    scirs2_linalg::solve_multiple(&reg.view(), &eye_z.view(), None).map_err(
+                        |_| {
+                            NumRs2Error::ComputationError(
+                                "VECM: singular regressor matrix in auxiliary regression"
+                                    .to_string(),
+                            )
+                        },
+                    )?
+                }
+            };
+
+            let beta_dy = ztzt_inv.dot(&ztdy); // (n_z_cols × k)
+            let beta_y1 = ztzt_inv.dot(&zty1);
+
+            let fitted_dy = z.dot(&beta_dy);
+            let fitted_y1 = z.dot(&beta_y1);
+
+            (&delta_y - &fitted_dy, &y_lag1 - &fitted_y1)
+        };
+
+        // ------------------------------------------------------------------ //
+        // Step 3: Moment matrices                                             //
+        // ------------------------------------------------------------------ //
+        let t_f = n_obs as f64;
+        let s00 = resid0.t().dot(&resid0) / t_f; // k × k
+        let s11 = resid1.t().dot(&resid1) / t_f; // k × k
+        let s01 = resid0.t().dot(&resid1) / t_f; // k × k  (= S10ᵀ)
+
+        // ------------------------------------------------------------------ //
+        // Step 4: Compute S11^{-1/2} via eigendecomposition of S11           //
+        //   S11 = V D Vᵀ  =>  S11^{-1/2} = V D^{-1/2} Vᵀ                  //
+        // ------------------------------------------------------------------ //
+        // Regularise S11 slightly for robustness
+        let s11_reg = &s11 + &(Array2::<f64>::eye(k) * 1e-12);
+
+        let (eigvals_s11, eigvecs_s11) = scirs2_linalg::eigh(&s11_reg.view(), None)
+            .map_err(|e| NumRs2Error::ComputationError(format!("VECM: eigh(S11) failed: {}", e)))?;
+
+        // D^{-1/2}: invert and sqrt each eigenvalue (clamp for stability)
+        let d_inv_sqrt: Array2<f64> = {
+            let mut mat = Array2::<f64>::zeros((k, k));
+            for i in 0..k {
+                let ev = eigvals_s11[i].max(1e-14);
+                mat[[i, i]] = 1.0 / ev.sqrt();
+            }
+            mat
+        };
+
+        // S11^{-1/2} = V * D^{-1/2} * Vᵀ
+        let s11_inv_sqrt = eigvecs_s11.dot(&d_inv_sqrt).dot(&eigvecs_s11.t());
+
+        // ------------------------------------------------------------------ //
+        // Step 5: Build and diagonalise M = S11^{-1/2} S10 S00^{-1} S01 S11^{-1/2}
+        // ------------------------------------------------------------------ //
+        let eye_k = Array2::<f64>::eye(k);
+        let s00_inv = match scirs2_linalg::solve_multiple(&s00.view(), &eye_k.view(), None) {
+            Ok(inv) => inv,
+            Err(_) => {
+                let reg = &s00 + &(Array2::<f64>::eye(k) * 1e-12);
+                scirs2_linalg::solve_multiple(&reg.view(), &eye_k.view(), None).map_err(|_| {
+                    NumRs2Error::ComputationError("VECM: singular S00 matrix".to_string())
+                })?
+            }
+        };
+
+        // M = S11^{-1/2} * S10 * S00^{-1} * S01 * S11^{-1/2}
+        // Note: S10 = S01ᵀ
+        let s10 = s01.t().to_owned();
+        let mid = s10.dot(&s00_inv).dot(&s01); // k × k
+        let m_mat = s11_inv_sqrt.dot(&mid).dot(&s11_inv_sqrt); // k × k
+
+        // Symmetrise M to counteract floating-point asymmetry
+        let m_sym = (&m_mat + &m_mat.t()) / 2.0;
+
+        let (eigvals_m, eigvecs_m) = scirs2_linalg::eigh(&m_sym.view(), None)
+            .map_err(|e| NumRs2Error::ComputationError(format!("VECM: eigh(M) failed: {}", e)))?;
+
+        // eigh returns eigenvalues in ascending order; "top r" means last r
+        let total = eigvals_m.len();
+
+        // ------------------------------------------------------------------ //
+        // Step 6: Cointegrating vectors β and loading matrix α               //
+        // β columns are in the transformed space — map back via S11^{-1/2}  //
+        // ------------------------------------------------------------------ //
+        // Top r eigenvectors of M (in S11^{-1/2} coordinates)
+        let top_vecs = eigvecs_m.slice(s![.., total - r..]).to_owned(); // k × r
+        let top_vals = eigvals_m.slice(s![total - r..]).to_owned(); // r
+
+        // β = S11^{-1/2} * top_vecs  (map back to original space)
+        let beta = s11_inv_sqrt.dot(&top_vecs); // k × r
+
+        // α = S01 * β * diag(λ)^{-1}
+        //   = S01 * β * D_λ^{-1}
+        let s01_beta = s01.dot(&beta); // k × r
+        let mut alpha = Array2::<f64>::zeros((k, r));
+        for i in 0..r {
+            let lam = top_vals[i].max(1e-14);
+            for j in 0..k {
+                alpha[[j, i]] = s01_beta[[j, i]] / lam;
+            }
+        }
+
+        // Π = α βᵀ  (k × k), the long-run impact matrix
+        let pi = alpha.dot(&beta.t()); // k × k
+
+        // Pack into VarParams
+        // coefficients[0] = Π
+        // sigma = S00 (residual covariance of the differenced process)
+        let log_likelihood = 0.0_f64; // not computed (would require Gaussian likelihood)
+        let n_params = k * r * 2; // r*(α + β) columns
+        let aic = -2.0 * log_likelihood + 2.0 * n_params as f64;
+        let bic = -2.0 * log_likelihood + n_params as f64 * (n_obs as f64).ln();
+
+        Ok(VarParams {
+            coefficients: vec![pi],
+            intercept: Array1::zeros(k),
+            sigma: s00,
+            log_likelihood,
+            aic,
+            bic,
+        })
     }
 }
 

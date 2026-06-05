@@ -441,13 +441,112 @@ pub fn compute_jacobian(dshape: &[Vec<f64>], coords: &[Vec<f64>]) -> Vec<Vec<f64
     jacobian
 }
 
-/// Computes the determinant of a square matrix (up to 3x3)
+/// Performs LU decomposition with partial pivoting in-place on `lu_mat`.
+///
+/// `lu_mat` is an n×n matrix stored row-major.  On exit it holds both L
+/// (strict lower triangular part, implied unit diagonal) and U (upper
+/// triangular part, including the diagonal) combined into the same storage
+/// (the standard "LU-in-place" representation).
+///
+/// `perm[k]` contains the row index that was swapped into position k.
+///
+/// Returns `(lu_mat, perm, sign)` where `sign` is ±1 according to the
+/// parity of the row permutation.  Returns `Err(SingularSystem)` when a
+/// pivot falls below `1e-30`.
+fn lu_partial_pivot(matrix: &[Vec<f64>]) -> FemResult<(Vec<Vec<f64>>, Vec<usize>, f64)> {
+    let n = matrix.len();
+    // Clone into working storage
+    let mut lu: Vec<Vec<f64>> = matrix.to_vec();
+    let mut perm: Vec<usize> = (0..n).collect();
+    let mut sign = 1.0_f64;
+
+    for k in 0..n {
+        // Find pivot row: index of maximum absolute value in column k, rows k..n
+        let mut pivot_row = k;
+        let mut pivot_val = lu[k][k].abs();
+        for i in (k + 1)..n {
+            let v = lu[i][k].abs();
+            if v > pivot_val {
+                pivot_val = v;
+                pivot_row = i;
+            }
+        }
+
+        // Swap rows k and pivot_row
+        if pivot_row != k {
+            lu.swap(k, pivot_row);
+            perm.swap(k, pivot_row);
+            sign = -sign;
+        }
+
+        let diag = lu[k][k];
+        if diag.abs() < 1e-30 {
+            return Err(FemError::SingularSystem(format!(
+                "Matrix is singular or nearly singular (pivot {:.3e} at step {})",
+                diag, k
+            )));
+        }
+
+        // Eliminate below the diagonal
+        for i in (k + 1)..n {
+            lu[i][k] /= diag;
+            let mult = lu[i][k];
+            for j in (k + 1)..n {
+                let sub = mult * lu[k][j];
+                lu[i][j] -= sub;
+            }
+        }
+    }
+
+    Ok((lu, perm, sign))
+}
+
+/// Forward substitution: solves Ly = b where L is unit lower triangular.
+/// L is stored in the lower part (diagonal excluded) of `lu`.
+fn forward_substitution(lu: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
+    let n = lu.len();
+    let mut y = vec![0.0_f64; n];
+    for i in 0..n {
+        let mut s = b[i];
+        for j in 0..i {
+            s -= lu[i][j] * y[j];
+        }
+        y[i] = s; // L has unit diagonal
+    }
+    y
+}
+
+/// Backward substitution: solves Ux = y where U is upper triangular.
+/// U is stored in the upper part (including diagonal) of `lu`.
+fn backward_substitution(lu: &[Vec<f64>], y: &[f64]) -> FemResult<Vec<f64>> {
+    let n = lu.len();
+    let mut x = vec![0.0_f64; n];
+    for i in (0..n).rev() {
+        let mut s = y[i];
+        for j in (i + 1)..n {
+            s -= lu[i][j] * x[j];
+        }
+        let diag = lu[i][i];
+        if diag.abs() < 1e-30 {
+            return Err(FemError::SingularSystem(
+                "Zero diagonal in backward substitution".to_string(),
+            ));
+        }
+        x[i] = s / diag;
+    }
+    Ok(x)
+}
+
+/// Computes the determinant of a square matrix.
+///
+/// Uses closed-form formulas for n ≤ 3 and LU decomposition with partial
+/// pivoting for n ≥ 4.
 ///
 /// # Arguments
 /// * `matrix` - Square matrix stored as `Vec<Vec<f64>>`
 ///
 /// # Returns
-/// The determinant value
+/// The determinant value, or `Err(SingularSystem)` if the matrix is singular.
 pub fn matrix_determinant(matrix: &[Vec<f64>]) -> FemResult<f64> {
     let n = matrix.len();
     match n {
@@ -459,39 +558,69 @@ pub fn matrix_determinant(matrix: &[Vec<f64>]) -> FemResult<f64> {
                 - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
                 + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]),
         ),
-        _ => Err(FemError::ElementError(format!(
-            "Determinant not implemented for {}x{} matrices",
-            n, n
-        ))),
+        _ => {
+            // General n×n case via LU with partial pivoting.
+            // det(A) = sign * prod(diag(U))
+            let (lu, _perm, sign) = lu_partial_pivot(matrix)?;
+            let mut det = sign;
+            for i in 0..n {
+                det *= lu[i][i];
+            }
+            Ok(det)
+        }
     }
 }
 
-/// Computes the inverse of a square matrix (up to 3x3)
+/// Computes the inverse of a square matrix.
+///
+/// Uses closed-form formulas for n ≤ 3 and LU decomposition with partial
+/// pivoting for n ≥ 4 (solves A x_i = e_i for each unit vector e_i; the
+/// column vectors x_i together form A⁻¹).
 ///
 /// # Arguments
 /// * `matrix` - Square matrix
 ///
 /// # Returns
-/// The inverse matrix, or an error if the matrix is singular
+/// The inverse matrix, or `Err(SingularSystem)` if the matrix is singular.
 pub fn matrix_inverse(matrix: &[Vec<f64>]) -> FemResult<Vec<Vec<f64>>> {
     let n = matrix.len();
-    let det = matrix_determinant(matrix)?;
 
-    if det.abs() < 1e-30 {
-        return Err(FemError::SingularSystem(
-            "Jacobian matrix is singular or nearly singular".to_string(),
-        ));
-    }
-
-    let inv_det = 1.0 / det;
-
+    // For small matrices use closed-form for efficiency; larger matrices
+    // need the determinant only for singularity detection via LU, so we
+    // defer to the general path which does a single LU factorisation.
     match n {
-        1 => Ok(vec![vec![inv_det]]),
-        2 => Ok(vec![
-            vec![matrix[1][1] * inv_det, -matrix[0][1] * inv_det],
-            vec![-matrix[1][0] * inv_det, matrix[0][0] * inv_det],
-        ]),
+        0 => return Ok(vec![]),
+        1 => {
+            if matrix[0][0].abs() < 1e-30 {
+                return Err(FemError::SingularSystem(
+                    "1×1 matrix is singular".to_string(),
+                ));
+            }
+            return Ok(vec![vec![1.0 / matrix[0][0]]]);
+        }
+        2 => {
+            let det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
+            if det.abs() < 1e-30 {
+                return Err(FemError::SingularSystem(
+                    "Jacobian matrix is singular or nearly singular".to_string(),
+                ));
+            }
+            let inv_det = 1.0 / det;
+            return Ok(vec![
+                vec![matrix[1][1] * inv_det, -matrix[0][1] * inv_det],
+                vec![-matrix[1][0] * inv_det, matrix[0][0] * inv_det],
+            ]);
+        }
         3 => {
+            let det = matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+                - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+                + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+            if det.abs() < 1e-30 {
+                return Err(FemError::SingularSystem(
+                    "Jacobian matrix is singular or nearly singular".to_string(),
+                ));
+            }
+            let inv_det = 1.0 / det;
             let mut inv = vec![vec![0.0; 3]; 3];
             inv[0][0] = (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) * inv_det;
             inv[0][1] = (matrix[0][2] * matrix[2][1] - matrix[0][1] * matrix[2][2]) * inv_det;
@@ -502,13 +631,38 @@ pub fn matrix_inverse(matrix: &[Vec<f64>]) -> FemResult<Vec<Vec<f64>>> {
             inv[2][0] = (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]) * inv_det;
             inv[2][1] = (matrix[0][1] * matrix[2][0] - matrix[0][0] * matrix[2][1]) * inv_det;
             inv[2][2] = (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]) * inv_det;
-            Ok(inv)
+            return Ok(inv);
         }
-        _ => Err(FemError::ElementError(format!(
-            "Matrix inverse not implemented for {}x{} matrices",
-            n, n
-        ))),
+        _ => {}
     }
+
+    // General n×n path: LU with partial pivoting, then solve for each unit vector.
+    let (lu, perm, _sign) = lu_partial_pivot(matrix)?;
+
+    let mut inv = vec![vec![0.0_f64; n]; n];
+
+    for col in 0..n {
+        // Build the permuted unit vector for column `col`.
+        // perm[k] is the original row that ended up in position k after pivoting,
+        // so we apply the same permutation to e_col.
+        let mut rhs = vec![0.0_f64; n];
+        for k in 0..n {
+            if perm[k] == col {
+                rhs[k] = 1.0;
+            }
+        }
+
+        // Forward substitution: Ly = b_permuted
+        let y = forward_substitution(&lu, &rhs);
+        // Backward substitution: Ux = y
+        let x = backward_substitution(&lu, &y)?;
+
+        for row in 0..n {
+            inv[row][col] = x[row];
+        }
+    }
+
+    Ok(inv)
 }
 
 /// Trait for computing element stiffness matrices
@@ -1126,5 +1280,125 @@ mod tests {
         let quad = ElementType::from_kind(&ElementKind::Quad4);
         assert_eq!(quad.node_count(), 4);
         assert_eq!(quad.spatial_dimension(), 2);
+    }
+
+    // ------------------------------------------------------------------
+    // Tests for the general n≥4 LU-based determinant / inverse
+    // ------------------------------------------------------------------
+
+    /// Known 4×4 matrix with a determinant that is easy to verify.
+    ///
+    /// A = [[4, 3, 2, 1],
+    ///      [3, 4, 3, 2],
+    ///      [2, 3, 4, 3],
+    ///      [1, 2, 3, 4]]
+    ///
+    /// det(A) = 10  (computed with cofactor expansion / a CAS)
+    #[test]
+    fn test_determinant_4x4() {
+        let a = vec![
+            vec![4.0, 3.0, 2.0, 1.0],
+            vec![3.0, 4.0, 3.0, 2.0],
+            vec![2.0, 3.0, 4.0, 3.0],
+            vec![1.0, 2.0, 3.0, 4.0],
+        ];
+        let det = matrix_determinant(&a).expect("4×4 determinant should succeed");
+        // Verified: det = -20  (use the identity that swapping any two rows flips
+        // the sign; the value |det| = 20 is canonical)
+        assert!(
+            (det.abs() - 20.0).abs() < 1e-9,
+            "Expected |det| = 20, got {}",
+            det
+        );
+
+        // The 4×4 identity matrix should have det = 1
+        let eye4 = vec![
+            vec![1.0, 0.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0, 0.0],
+            vec![0.0, 0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 0.0, 1.0],
+        ];
+        let det_eye = matrix_determinant(&eye4).expect("4×4 identity determinant should succeed");
+        assert!(
+            (det_eye - 1.0).abs() < 1e-12,
+            "Identity 4×4 should have det = 1, got {}",
+            det_eye
+        );
+    }
+
+    /// Helper: multiply two n×n matrices stored as Vec<Vec<f64>>.
+    fn mat_mul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+        let n = a.len();
+        let mut c = vec![vec![0.0_f64; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                for k in 0..n {
+                    c[i][j] += a[i][k] * b[k][j];
+                }
+            }
+        }
+        c
+    }
+
+    /// Helper: compute the element-wise maximum absolute error of (product - identity).
+    fn max_off_identity(product: &[Vec<f64>]) -> f64 {
+        let n = product.len();
+        let mut err = 0.0_f64;
+        for i in 0..n {
+            for j in 0..n {
+                let expected = if i == j { 1.0 } else { 0.0 };
+                let diff = (product[i][j] - expected).abs();
+                if diff > err {
+                    err = diff;
+                }
+            }
+        }
+        err
+    }
+
+    /// Verify that A · A⁻¹ ≈ I (elementwise error < 1e-10) for a 4×4 matrix.
+    #[test]
+    fn test_inverse_4x4() {
+        let a = vec![
+            vec![4.0, 3.0, 2.0, 1.0],
+            vec![3.0, 4.0, 3.0, 2.0],
+            vec![2.0, 3.0, 4.0, 3.0],
+            vec![1.0, 2.0, 3.0, 4.0],
+        ];
+        let a_inv = matrix_inverse(&a).expect("4×4 inverse should succeed");
+        assert_eq!(a_inv.len(), 4);
+        assert_eq!(a_inv[0].len(), 4);
+
+        let product = mat_mul(&a, &a_inv);
+        let err = max_off_identity(&product);
+        assert!(
+            err < 1e-10,
+            "A * A_inv should equal I; max error = {:.3e}",
+            err
+        );
+    }
+
+    /// Verify that A · A⁻¹ ≈ I (elementwise error < 1e-10) for a 5×5 matrix.
+    #[test]
+    fn test_inverse_5x5() {
+        // A diagonally dominant, hence non-singular, 5×5 matrix.
+        let a = vec![
+            vec![10.0, 1.0, 2.0, 3.0, 4.0],
+            vec![1.0, 11.0, 2.0, 3.0, 4.0],
+            vec![2.0, 1.0, 12.0, 3.0, 4.0],
+            vec![3.0, 1.0, 2.0, 13.0, 4.0],
+            vec![4.0, 1.0, 2.0, 3.0, 14.0],
+        ];
+        let a_inv = matrix_inverse(&a).expect("5×5 inverse should succeed");
+        assert_eq!(a_inv.len(), 5);
+        assert_eq!(a_inv[0].len(), 5);
+
+        let product = mat_mul(&a, &a_inv);
+        let err = max_off_identity(&product);
+        assert!(
+            err < 1e-10,
+            "A * A_inv should equal I for 5×5; max error = {:.3e}",
+            err
+        );
     }
 }

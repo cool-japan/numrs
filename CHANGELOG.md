@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-05
+
+### Added
+- **Autodiff** (`src/autodiff/`): forward/reverse mode automatic differentiation with higher-order support (Hessian, Jacobian, hyperdual, Taylor)
+- **Distributed computing** (`src/distributed/`): data/model parallelism framework, collectives, distributed optimizers, coordinator (~8,000 lines)
+- **Visualization** (`src/viz/`): plotters-based 2D/3D/matrix/stats/performance plots (pure Rust)
+- **WebAssembly bindings** (`src/wasm/`): array, linalg, stats, utils bindings; JS/Vite demo app in `examples/wasm/`
+- **Reinforcement learning** (`src/new_modules/rl/`): DQN, Actor-Critic, PPO agents, prioritized replay, environment wrappers
+- **Quantum computing** (`src/new_modules/quantum/`): gates, circuits, state vector simulation, measurements, Deutsch-Jozsa, Grover, QFT
+- **Model I/O & serving** (`src/new_modules/model_io/`, `src/new_modules/serving/`): ONNX-compatible serialization, inference engine, model registry, real-time monitoring
+- **CMA-ES optimizer** (`src/optimize/cma_es/`): IPOP-CMA-ES with step-size adaptation, rank-μ/rank-one covariance updates
+- **Bayesian optimization** (`src/optimize/bayesian_opt.rs`): GP surrogate, EI/PI/UCB acquisition functions, Matérn/RBF kernels
+- **Computer vision** (`src/new_modules/cv/`): Gaussian/bilateral/median filters, Canny edges, Harris/FAST corners, morphological ops
+- **Computational geometry** (`src/new_modules/geometry/`): convex hull (Graham scan), Delaunay triangulation, Voronoi diagrams, polygon ops
+- **FEM solver** (`src/new_modules/fem/`): 1D/2D FEM with Dirichlet/Neumann BCs, Gaussian quadrature, direct/iterative solvers
+- **Wavelets** (`src/new_modules/wavelets/`): DWT/CWT, Haar, Daubechies (db2–db10), Symlet, Coiflet families
+- **Graph algorithms** (`src/new_modules/graph/`): BFS/DFS, Dijkstra/A*/Floyd-Warshall, MST (Kruskal/Prim), max-flow (Dinic)
+- **Information theory** (`src/new_modules/information_theory/`): Shannon entropy, mutual information, KL/JS divergence, channel capacity
+- **Control systems** (`src/new_modules/control/`): transfer functions, state space, Routh-Hurwitz, Bode/Nyquist, PID/LQR/pole placement
+- **Physical constants** (`src/new_modules/constants/`): CODATA 2018/2022 constants with uncertainties, unit conversions
+- **`average_with_weights`** in `src/stats/basic.rs`: public function returning `(weighted_avg, sum_of_weights)` tuple (NumPy `returned=True` semantics)
+- **`skew()` and `kurtosis()`** in `src/math/statistics.rs` and `src/math/mod.rs`: compute sample skewness (Fisher-Pearson) and excess kurtosis (fourth standardised moment minus 3); both accept an optional `axis` parameter and are re-exported from `prelude`
+- **`f_dist()`** in `src/random/distributions.rs`: sample from the F distribution (ratio of two chi-squared variates) given numerator and denominator degrees of freedom
+- **`instance_norm()`** in `src/nn/normalization.rs`: instance normalisation for 2-D tensors (normalises each row independently with configurable epsilon)
+- **Python optimizer methods** (`src/python/optimize.rs`): `py_minimize` now supports `"bfgs"` method (numerical gradient via central differences) in addition to the existing `"nelder-mead"` default
+- **VECM fitting via Johansen procedure** (`src/new_modules/timeseries/var.rs`): `VecmModel::fit` now implements the full Johansen (1988) cointegration/error-correction estimation instead of a placeholder
+- **FEM 2D point evaluation** (`src/new_modules/fem/solvers.rs`): FEM solver can now evaluate solutions at arbitrary 2D points using element shape functions
+
+### Changed
+- `scirs2-core`, `scirs2-stats`, `scirs2-linalg`, `scirs2-ndimage`, `scirs2-spatial`, `scirs2-special`, `scirs2-fft`, `scirs2-numpy` updated from 0.4.2 → 0.5.0
+- `oxiarc-archive` and `oxiarc-lz4` updated from 0.2.6 → 0.3.2
+- `oxicode` updated from 0.2 → 0.2.4
+
+### Fixed
+- **Build fix**: Updated `oxiarc-core` lockfile resolution from 0.2.6 to 0.2.8; resolves `oxiarc_core::cancel`/`progress` missing-module compile errors introduced by `scirs2-core 0.4.4`'s transitive `oxiarc-lz4 0.2.8`/`oxiarc-zstd 0.2.8` dependencies
+- **Stable SVD for large matrices** (`src/linalg_stable.rs`): `svd_bidiagonal` now runs full Golub–Kahan bidiagonalization + Jacobi SVD instead of silently falling back to the n≤3 path
+- **Stable eigendecomposition for large matrices** (`src/linalg_stable.rs`): `symmetric_eigen_tridiagonal` now runs a cyclic Jacobi sweeps algorithm instead of silently falling back to the n≤3 path
+- **Quantum partial trace** (`src/new_modules/quantum/statevector.rs`): correct bit-interleaving index reconstruction; previous code used `full_i = i` (identity mapping), producing a wrong density matrix for all multi-qubit traces
+- **Polynomial domain mapping** (`src/new_modules/polynomial/utils.rs`): `polyscale` now performs real polynomial composition under the affine map; previously returned the input coefficients unchanged
+- **FEM matrix operations for n>3** (`src/new_modules/fem/elements.rs`): `matrix_determinant` and `matrix_inverse` now handle arbitrary n×n via LU with partial pivoting; previously hard-errored for n>3, blocking 3D/higher-order FEM elements
+- **Schur decomposition** (`src/new_modules/matrix_decomp/schur.rs`): replaced single Rayleigh-shift with Francis implicit double-shift QR + deflation for correct real Schur form including complex-conjugate eigenpair blocks
+- **Boltzmann exploration** (`src/new_modules/rl/utils.rs`): `BoltzmannExploration::select_action` now computes temperature-scaled softmax over Q-values; previously fell back to greedy action selection regardless of temperature
+- **`gamma_ln` accuracy** (`src/new_modules/probabilistic/distributions.rs`): replaced custom Stirling approximation with `scirs2_special::loggamma` (Lanczos g=7, ~15-digit accuracy) with reflection formula for x<0.5
+- **Unsafe block warnings** (`src/memory_optimize/cache_layout.rs`): removed unnecessary `unsafe {}` wrappers around `std::arch::x86_64::__cpuid` (now a safe function in current Rust)
+- **Clippy compliance** (`src/simd_optimize/avx2_enhanced/`): replaced manual copy loops with `copy_from_slice`; replaced `vec![...]` with array literals in tests
+
+### Notes
+- **WASM blocker resolved**: `scirs2-spatial 0.4.4` feature-gates tokio under `async` (not enabled by default); `numrs2` uses only the `parallel` feature, so no transitive tokio. Browser WASM (`wasm32-unknown-unknown`) still requires disabling the `gpu` and `distributed` features (which pull tokio directly)
+- **Known future work**: `distributed/collective.rs` operations (scatter/gather/all-reduce) are stub-implemented returning empty results pending a real network transport layer; `distributed/linalg.rs` distributed linear algebra returns `NotImplemented`; GPU `NotImplemented` branches in `gpu/batching.rs` (Conv2D batching) and `gpu/ops.rs` (N-D broadcasting)
+
 ## [0.3.3] - 2026-04-18
 
 ### Added

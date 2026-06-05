@@ -159,7 +159,8 @@ fn detect_x86_cache_info() -> CacheInfo {
         associativity: 8,
     };
 
-    // Check if CPUID leaf 0x80000006 is available (cache info)
+    // Check if CPUID leaf 0x80000006 is available (cache info).
+    // __cpuid is a safe fn on x86_64 in current Rust.
     let cpuid_result = __cpuid(0x80000000);
     if cpuid_result.eax >= 0x80000006 {
         let cache_result = __cpuid(0x80000006);
@@ -245,7 +246,8 @@ fn detect_intel_cache_info(info: &mut CacheInfo) {
 
 #[cfg(target_arch = "x86_64")]
 fn detect_amd_cache_info(info: &mut CacheInfo) {
-    // AMD cache detection via CPUID leaves 0x80000005 and 0x80000006
+    // AMD cache detection via CPUID leaves 0x80000005 and 0x80000006.
+    // __cpuid is a safe fn on x86_64 in current Rust.
     // L1 cache info
     let l1_info = __cpuid(0x80000005);
     info.l1_size = ((l1_info.ecx >> 24) & 0xFF) as usize * 1024;
@@ -560,4 +562,29 @@ fn get_l2_cache_size() -> usize {
 #[allow(dead_code)]
 fn get_l3_cache_size() -> usize {
     get_cache_info().l3_size
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for issue #11: verify that detect_cache_info() compiles and runs
+    /// without requiring an `unsafe` block at the call site on x86_64 targets.
+    ///
+    /// Before the fix, `detect_x86_cache_info()` and `detect_amd_cache_info()` called
+    /// `std::arch::x86_64::__cpuid` (an unsafe function) without an enclosing `unsafe {}`
+    /// block, triggering E0133 on x86_64 builds.
+    #[test]
+    fn test_issue_11_cpuid_safe() {
+        // Calling detect_cache_info() exercises the x86_64 CPUID paths when compiled
+        // for that target. On any other architecture the fallback defaults are returned.
+        // If the bug were present this crate would fail to compile on x86_64 and this
+        // test could never execute.
+        let info = detect_cache_info();
+        // Sanity-check: cache sizes must be non-zero (defaults guarantee this).
+        assert!(info.line_size > 0, "cache line size should be non-zero");
+        assert!(info.l1_size > 0, "L1 cache size should be non-zero");
+        assert!(info.l2_size > 0, "L2 cache size should be non-zero");
+        assert!(info.l3_size > 0, "L3 cache size should be non-zero");
+    }
 }

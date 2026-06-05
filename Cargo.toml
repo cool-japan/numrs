@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.3.3"
+version = "0.4.0"
 edition = "2021"
 authors = ["COOLJAPAN OU (Team KitaSan)"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -49,13 +49,13 @@ ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without extern
 # ===================================================================
 # ALL external functionality (ndarray, rand, rayon, BLAS) goes through scirs2-core
 # Using crates.io versions for stable 0.3.0 release
-scirs2-core = { version = "0.4.2", features = ["random", "array", "simd", "parallel", "linalg"] }
-scirs2-stats = { version = "0.4.2" }
-scirs2-linalg = { version = "0.4.2" }
-scirs2-ndimage = { version = "0.4.2" }
-scirs2-spatial = { version = "0.4.2", features = ["parallel"] }
-scirs2-special = { version = "0.4.2" }
-scirs2-fft = { version = "0.4.2" }
+scirs2-core = { version = "0.5.0", features = ["random", "array", "simd", "parallel", "linalg"] }
+scirs2-stats = { version = "0.5.0" }
+scirs2-linalg = { version = "0.5.0" }
+scirs2-ndimage = { version = "0.5.0" }
+scirs2-spatial = { version = "0.5.0", features = ["parallel"] }
+scirs2-special = { version = "0.5.0" }
+scirs2-fft = { version = "0.5.0" }
 
 # ===================================================================
 # ALLOWED DEPENDENCIES (Non-conflicting)
@@ -69,10 +69,10 @@ lazy_static = "1.5.0"  # For static initialization patterns
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 csv = "1.4.0"
-oxicode = { version = "0.2", features = ["serde"] }
+oxicode = { version = "0.2.4", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
-oxiarc-archive = { version = "0.2.6" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
-oxiarc-lz4 = { version = "0.2.6", optional = true }   # Pure Rust LZ4 for distributed network transfer (COOLJAPAN Policy)
+oxiarc-archive = { version = "0.3.2" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
+oxiarc-lz4 = { version = "0.3.2", optional = true }   # Pure Rust LZ4 for distributed network transfer (COOLJAPAN Policy)
 # NPZ format support with pure Rust compression (DEFLATE via OxiARC)
 serde-pickle = "1.2.0" # Python pickle format support
 memmap2 = "0.9.10"      # Memory-mapped file I/O
@@ -329,18 +329,23 @@ path = "benches/complex_benchmark.rs"
 harness = false
 
 # ===================================================================
+# PATCH: Use local oxiarc workspace (crates.io version missing progress/cancel modules)
+# ===================================================================
+[patch.crates-io]
+
+# ===================================================================
 # WORKSPACE CONFIGURATION (SCIRS2 POLICY)
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.4.2" }
-scirs2-stats = { version = "0.4.2" }
-scirs2-linalg = { version = "0.4.2" }
-scirs2-ndimage = { version = "0.4.2" }
-scirs2-spatial = { version = "0.4.2" }
-scirs2-special = { version = "0.4.2" }
-scirs2-fft = { version = "0.4.2" }
-scirs2-numpy = { version = "0.4.2" }
+scirs2-core = { version = "0.5.0" }
+scirs2-stats = { version = "0.5.0" }
+scirs2-linalg = { version = "0.5.0" }
+scirs2-ndimage = { version = "0.5.0" }
+scirs2-spatial = { version = "0.5.0" }
+scirs2-special = { version = "0.5.0" }
+scirs2-fft = { version = "0.5.0" }
+scirs2-numpy = { version = "0.5.0" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
 arrow = "58.1.0"

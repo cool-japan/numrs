@@ -686,37 +686,41 @@ impl VonMisesDistribution {
 // Helper Functions
 // ============================================================================
 
-/// Log-gamma function (natural logarithm of the gamma function)
+/// Log-gamma function — natural logarithm of the Gamma function: ln Γ(x)
 ///
-/// This is a helper function that computes log(Γ(x)) using the scirs2_stats
-/// library when available, or a polynomial approximation otherwise.
+/// Delegates to `scirs2_special::loggamma` for positive arguments, which is a
+/// highly accurate (≈ 15-digit) Lanczos-based implementation.  For x ≤ 0 the
+/// Euler reflection formula is used:
+///
+///   ln Γ(x) = ln(π / sin(π x)) − ln Γ(1 − x)
+///
+/// This covers the full real domain (excluding non-positive integers where the
+/// function has poles).
 fn gamma_ln(x: f64) -> f64 {
-    // Use scirs2_stats::gamma::ln_gamma if available
-    // For now, use a basic approximation (Stirling's approximation for large x)
-    if x < 0.5 {
-        // Use reflection formula: Γ(x)Γ(1-x) = π/sin(πx)
+    if x <= 0.0 {
+        // Reflection formula; returns NaN / ±Inf at the poles (integer ≤ 0)
         let pi = std::f64::consts::PI;
-        return (pi / ((pi * x).sin())).ln() - gamma_ln(1.0 - x);
-    }
-
-    if x < 12.0 {
-        // For small x, use recursion Γ(x+1) = xΓ(x)
-        let mut result = 0.0;
-        let mut x_curr = x;
-        while x_curr < 12.0 {
-            result -= x_curr.ln();
-            x_curr += 1.0;
+        let sin_pi_x = (pi * x).sin();
+        if sin_pi_x == 0.0 {
+            return f64::INFINITY; // pole
         }
-        result + gamma_ln_stirling(x_curr)
-    } else {
-        gamma_ln_stirling(x)
+        return (pi / sin_pi_x.abs()).ln() - gamma_ln(1.0 - x);
     }
-}
 
-/// Stirling's approximation for log-gamma
-fn gamma_ln_stirling(x: f64) -> f64 {
-    let log_sqrt_2pi = 0.5 * (2.0 * std::f64::consts::PI).ln();
-    (x - 0.5) * x.ln() - x + log_sqrt_2pi + (1.0 / (12.0 * x)) - (1.0 / (360.0 * x.powi(3)))
+    // For x in (0, 0.5) the reflection formula gives better numerical
+    // conditioning than direct evaluation at small arguments.
+    if x < 0.5 {
+        let pi = std::f64::consts::PI;
+        let sin_pi_x = (pi * x).sin();
+        if sin_pi_x == 0.0 {
+            return f64::INFINITY;
+        }
+        return (pi / sin_pi_x).ln() - gamma_ln(1.0 - x);
+    }
+
+    // Delegate to the Lanczos implementation in scirs2-special (g=7, 9 coefficients,
+    // accurate to ~15 significant digits across the positive real line).
+    scirs2_special::loggamma(x)
 }
 
 /// Sample from standard normal distribution N(0,1)
@@ -1088,5 +1092,56 @@ mod tests {
         for _ in 0..100 {
             let _sample = sample_standard_normal(&mut rng);
         }
+    }
+
+    /// High-precision verification of the Lanczos-based `gamma_ln` helper.
+    ///
+    /// Reference values (accurate to at least 16 digits):
+    ///   ln Γ(0.5) = ln(√π)  ≈  0.572_364_942_924_700
+    ///   ln Γ(1.0) = 0.0      (exact)
+    ///   ln Γ(5.0) = ln(4!)  = ln(24)  ≈  3.178_053_830_347_946
+    ///   ln Γ(10.0) = ln(9!) = ln(362880)  ≈  12.801_827_480_081_469
+    #[test]
+    fn test_gamma_ln_known_values() {
+        // ln Γ(0.5) = 0.5 * ln(π)
+        let expected_half = 0.5f64 * std::f64::consts::PI.ln();
+        let computed_half = gamma_ln(0.5);
+        assert!(
+            (computed_half - expected_half).abs() < 1e-10,
+            "ln Γ(0.5): expected {:.15}, got {:.15}, diff {:.2e}",
+            expected_half,
+            computed_half,
+            (computed_half - expected_half).abs()
+        );
+
+        // ln Γ(1.0) = ln(1) = 0
+        let computed_one = gamma_ln(1.0);
+        assert!(
+            computed_one.abs() < 1e-14,
+            "ln Γ(1.0): expected 0.0, got {:.15e}",
+            computed_one
+        );
+
+        // ln Γ(5.0) = ln(4!) = ln(24)
+        let expected_five = 24.0f64.ln();
+        let computed_five = gamma_ln(5.0);
+        assert!(
+            (computed_five - expected_five).abs() < 1e-10,
+            "ln Γ(5.0): expected {:.15}, got {:.15}, diff {:.2e}",
+            expected_five,
+            computed_five,
+            (computed_five - expected_five).abs()
+        );
+
+        // ln Γ(10.0) = ln(9!) = ln(362880)
+        let expected_ten = 362880.0f64.ln();
+        let computed_ten = gamma_ln(10.0);
+        assert!(
+            (computed_ten - expected_ten).abs() < 1e-10,
+            "ln Γ(10.0): expected {:.15}, got {:.15}, diff {:.2e}",
+            expected_ten,
+            computed_ten,
+            (computed_ten - expected_ten).abs()
+        );
     }
 }

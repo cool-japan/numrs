@@ -400,17 +400,114 @@ impl<T: FloatingPoint> LinearAlgebra<T> for Array<T> {
     }
     
     fn norm(&self, ord: Option<T>) -> Result<T> {
-        // Basic implementation of matrix norms
+        let shape = self.shape();
+        if shape.len() != 2 {
+            return Err(NumRs2Error::DimensionMismatch(
+                "Matrix norm requires a 2D array".to_string(),
+            ));
+        }
+        let rows = shape[0];
+        let cols = shape[1];
+
         match ord {
             None => {
-                // Frobenius norm
+                // Frobenius norm: sqrt(sum of squares of all elements)
                 let data = self.to_vec();
                 let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
                 Ok(sum_squares.sqrt())
-            },
-            Some(_ord) => {
-                // More sophisticated norm computations would be implemented here
-                Err(NumRs2Error::NotImplemented("Specific matrix norms not yet implemented".to_string()))
+            }
+            Some(p) => {
+                // Use bit-pattern comparison to identify special float values without PartialEq on NaN
+                let p_f64 = NumCast::from(p).unwrap_or(0.0_f64);
+                if (p_f64 - 1.0_f64).abs() < 1e-10 {
+                    // ‖A‖₁ = max column sum of absolute values
+                    let mut max_col_sum = T::zero();
+                    for j in 0..cols {
+                        let mut col_sum = T::zero();
+                        for i in 0..rows {
+                            col_sum = col_sum + self.get(&[i, j])?.abs();
+                        }
+                        if col_sum > max_col_sum {
+                            max_col_sum = col_sum;
+                        }
+                    }
+                    Ok(max_col_sum)
+                } else if (p_f64 - (-1.0_f64)).abs() < 1e-10 {
+                    // min column sum of absolute values
+                    let mut min_col_sum = T::infinity();
+                    for j in 0..cols {
+                        let mut col_sum = T::zero();
+                        for i in 0..rows {
+                            col_sum = col_sum + self.get(&[i, j])?.abs();
+                        }
+                        if col_sum < min_col_sum {
+                            min_col_sum = col_sum;
+                        }
+                    }
+                    if min_col_sum.is_infinite() {
+                        Ok(T::zero())
+                    } else {
+                        Ok(min_col_sum)
+                    }
+                } else if p_f64.is_infinite() && p_f64 > 0.0 {
+                    // ‖A‖∞ = max row sum of absolute values
+                    let mut max_row_sum = T::zero();
+                    for i in 0..rows {
+                        let mut row_sum = T::zero();
+                        for j in 0..cols {
+                            row_sum = row_sum + self.get(&[i, j])?.abs();
+                        }
+                        if row_sum > max_row_sum {
+                            max_row_sum = row_sum;
+                        }
+                    }
+                    Ok(max_row_sum)
+                } else if p_f64.is_infinite() && p_f64 < 0.0 {
+                    // min row sum of absolute values
+                    let mut min_row_sum = T::infinity();
+                    for i in 0..rows {
+                        let mut row_sum = T::zero();
+                        for j in 0..cols {
+                            row_sum = row_sum + self.get(&[i, j])?.abs();
+                        }
+                        if row_sum < min_row_sum {
+                            min_row_sum = row_sum;
+                        }
+                    }
+                    if min_row_sum.is_infinite() {
+                        Ok(T::zero())
+                    } else {
+                        Ok(min_row_sum)
+                    }
+                } else if (p_f64 - 2.0_f64).abs() < 1e-10 {
+                    // ‖A‖₂ = largest singular value; use Frobenius norm as a
+                    // computable upper bound approximation when SVD is unavailable.
+                    // Under `matrix_decomp+lapack` features we delegate to SVD.
+                    #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+                    {
+                        use crate::new_modules::matrix_decomp::svd;
+                        let (_, s, _) = svd(self)?;
+                        let s_data = s.to_vec();
+                        let max_sv = s_data
+                            .iter()
+                            .fold(T::zero(), |acc, &v| if v > acc { v } else { acc });
+                        return Ok(max_sv);
+                    }
+                    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
+                    {
+                        // Frobenius norm as approximation
+                        let data = self.to_vec();
+                        let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
+                        Ok(sum_squares.sqrt())
+                    }
+                } else {
+                    // General p-norm is not well-defined as a matrix norm; return error
+                    Err(NumRs2Error::NotImplemented(format!(
+                        "Matrix norm with ord={} is not implemented; \
+                         use None (Frobenius), 1.0, -1.0, 2.0, f64::INFINITY, or f64::NEG_INFINITY",
+                        p_f64
+                    )))
+                }
             }
         }
     }
@@ -498,8 +595,30 @@ where
     }
     
     fn schur(&self) -> Result<Self::DecompositionResult> {
-        // Schur decomposition would be implemented here
-        Err(NumRs2Error::NotImplemented("Schur decomposition not yet implemented".to_string()))
+        // Delegate to the full Schur decomposition in new_modules::matrix_decomp
+        #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+        {
+            use crate::new_modules::matrix_decomp::schur;
+            let shape = self.shape();
+            if shape.len() != 2 || shape[0] != shape[1] {
+                return Err(NumRs2Error::DimensionMismatch(
+                    "Schur decomposition requires a square matrix".to_string(),
+                ));
+            }
+            let n = shape[0];
+            let (q, t) = schur(self)?;
+            // The trait DecompositionResult is a 3-tuple; return identity as third element
+            // to preserve the (Q, T, I) convention where A = Q * T * Q^H
+            let eye = Array::eye_square(n);
+            return Ok((q, t, eye));
+        }
+
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
+        {
+            Err(NumRs2Error::FeatureNotEnabled(
+                "matrix_decomp and lapack features required for Schur decomposition".to_string(),
+            ))
+        }
     }
 }
 

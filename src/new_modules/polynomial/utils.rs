@@ -203,16 +203,77 @@ where
     let window_c = window_vec[0];
     let d = window_vec[1];
 
-    // Transform x from [a, b] to [c, d]
-    // x_new = (d - c) / (b - a) * (x - a) + c
-    // This is equivalent to composing the polynomial with the linear transformation
+    if b == a {
+        return Err(NumRs2Error::InvalidOperation(
+            "Domain interval [a, b] must have a != b".to_string(),
+        ));
+    }
 
-    let _scale = (d - window_c) / (b - a);
-    let _shift = window_c - _scale * a;
+    // The goal is to produce a polynomial q expressed in the *window* variable,
+    // such that q(y) = p(T_inv(y)) for y in [c, d], where T_inv is the map
+    // from window [c, d] back to the domain [a, b]:
+    //   T_inv(y) = (b - a) / (d - c) * (y - c) + a  =  scale * y + shift
+    //   scale = (b - a) / (d - c)
+    //   shift = a - scale * c
+    //
+    // We compute p(scale*y + shift) by polynomial composition in the standard
+    // power basis (descending coefficient order: coeffs[0] is the leading term).
+    //
+    // Algorithm:
+    //   Maintain `asc_power` = coefficients of (scale*y + shift)^k in ascending order.
+    //   For each degree k (0 .. degree), accumulate coeffs_asc[k] * (scale*y+shift)^k
+    //   into the ascending-order result, then update asc_power by multiplying by
+    //   (shift + scale*y).  Convert to descending order at the end.
 
-    // For now, return the input coefficients as this is a complex transformation
-    // A full implementation would require polynomial composition
-    Ok(c.clone())
+    let coeffs = c.to_vec();
+    let n = coeffs.len(); // length = degree + 1
+
+    let scale = (b - a) / (d - window_c);
+    let shift = a - scale * window_c;
+
+    // Work in ascending-order internally: asc_result[k] = coefficient of x^k in p(T(x))
+    let mut asc_result = vec![T::zero(); n];
+
+    // asc_power[k] = coefficient of x^k in (scale*x + shift)^power
+    // Initially (scale*x + shift)^0 = 1
+    let mut asc_power = vec![T::zero(); n];
+    asc_power[0] = T::one();
+
+    // Original polynomial in ascending order: asc_coeffs[k] = coefficient of x^k
+    // coeffs is descending: coeffs[i] is the coefficient of x^(n-1-i)
+    for k in 0..n {
+        let coeff_k = coeffs[n - 1 - k]; // coefficient of x^k in original
+
+        // Accumulate coeff_k * (scale*x + shift)^k into result
+        if coeff_k != T::zero() {
+            for idx in 0..n {
+                asc_result[idx] = asc_result[idx] + coeff_k * asc_power[idx];
+            }
+        }
+
+        // Update asc_power: multiply by (shift + scale*x)
+        // new_power[j] = shift * asc_power[j] + scale * asc_power[j-1]
+        if k + 1 < n {
+            let mut new_power = vec![T::zero(); n];
+            for idx in 0..n {
+                // multiply by shift
+                new_power[idx] = new_power[idx] + shift * asc_power[idx];
+                // multiply by scale*x  (shifts indices up by 1)
+                if idx + 1 < n {
+                    new_power[idx + 1] = new_power[idx + 1] + scale * asc_power[idx];
+                }
+            }
+            asc_power = new_power;
+        }
+    }
+
+    // Convert ascending result back to descending order
+    let mut desc_result = vec![T::zero(); n];
+    for idx in 0..n {
+        desc_result[n - 1 - idx] = asc_result[idx];
+    }
+
+    Ok(Array::from_vec(desc_result))
 }
 
 /// Generate a Vandermonde matrix
@@ -805,6 +866,62 @@ mod tests {
         assert_relative_eq!(data[0], 1.0, epsilon = 1e-10);
         assert_relative_eq!(data[1], 2.0, epsilon = 1e-10);
         assert_relative_eq!(data[2], 3.0, epsilon = 1e-10);
+    }
+
+    // polyscale: mapping [0, 1] → [0, 1] is the identity transformation (scale=1, shift=0)
+    // so the coefficients must come back unchanged.
+    #[test]
+    fn test_polyscale_identity() {
+        // p(x) = x^2 + 2x + 1  (descending order: [1, 2, 1])
+        let c = Array::from_vec(vec![1.0_f64, 2.0, 1.0]);
+        let domain = Array::from_vec(vec![0.0_f64, 1.0]);
+        let window = Array::from_vec(vec![0.0_f64, 1.0]);
+
+        let q = polyscale(&c, &domain, &window).expect("test: polyscale identity should succeed");
+
+        let q_data = q.to_vec();
+        let c_data = c.to_vec();
+        assert_eq!(q_data.len(), c_data.len());
+        for (qi, ci) in q_data.iter().zip(c_data.iter()) {
+            assert_relative_eq!(qi, ci, epsilon = 1e-10);
+        }
+    }
+
+    // polyscale: take p(x) = x^2 + 2x + 1, map domain=[-1,1] to window=[0,1].
+    // The resulting polynomial q satisfies q(y) = p(2y - 1) for y in [0, 1].
+    //   T_inv(y) = 2y - 1  (maps [0,1] → [-1,1])
+    // Verify at several sample points.
+    #[test]
+    fn test_polyscale_evaluation() {
+        // p(x) = x^2 + 2x + 1 = (x+1)^2, descending order: [1, 2, 1]
+        let c = Array::from_vec(vec![1.0_f64, 2.0, 1.0]);
+        let domain = Array::from_vec(vec![-1.0_f64, 1.0]);
+        let window = Array::from_vec(vec![0.0_f64, 1.0]);
+
+        let q_arr =
+            polyscale(&c, &domain, &window).expect("test: polyscale evaluation should succeed");
+
+        let q_data = q_arr.to_vec();
+        // Evaluate q at sample points using Horner's method (descending order)
+        let eval_q = |x: f64| -> f64 {
+            let mut result = q_data[0];
+            for &coeff in &q_data[1..] {
+                result = result * x + coeff;
+            }
+            result
+        };
+        // p(2y-1) for reference
+        let eval_p = |t: f64| -> f64 { t * t + 2.0 * t + 1.0 };
+        let eval_p_transformed = |y: f64| -> f64 { eval_p(2.0 * y - 1.0) };
+
+        for &y in &[0.0_f64, 0.25, 0.5, 0.75, 1.0] {
+            assert_relative_eq!(
+                eval_q(y),
+                eval_p_transformed(y),
+                epsilon = 1e-10,
+                max_relative = 1e-10
+            );
+        }
     }
 
     #[test]

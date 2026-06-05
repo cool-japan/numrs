@@ -105,27 +105,41 @@ fn test_layer_norm_dimension_mismatch() {
     assert!(result.is_err());
 }
 
-// FIXME: instance_norm function not implemented yet
-// #[test]
-// fn test_instance_norm_basic() {
-//     // Create a 2x3 input
-//     let x = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
-//     let epsilon = 1e-5_f64;
-//
-//     let y = instance_norm(&x.view(), epsilon).expect("instance_norm failed");
-//
-//     assert_eq!(y.shape(), x.shape());
-//
-//     // Each row should be normalized independently
-//     for i in 0..y.nrows() {
-//         let row = y.row(i);
-//         let mean: f64 = row.iter().sum::<f64>() / row.len() as f64;
-//         let var: f64 = row.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / row.len() as f64;
-//
-//         assert!(mean.abs() < EPSILON * 10.0_f64);
-//         assert!((var - 1.0_f64).abs() < EPSILON * 100.0_f64); // Variance should be ~1
-//     }
-// }
+#[test]
+fn test_instance_norm_basic() {
+    // Create a 2x3 input
+    let x = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
+    let epsilon = 1e-5_f64;
+
+    let y = instance_norm(&x.view(), epsilon).expect("instance_norm failed");
+
+    assert_eq!(y.shape(), x.shape());
+
+    // Each row should be normalized independently: mean ≈ 0, variance ≈ 1
+    for i in 0..y.nrows() {
+        let row = y.row(i);
+        let mean: f64 = row.iter().sum::<f64>() / row.len() as f64;
+        let var: f64 =
+            row.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / row.len() as f64;
+
+        assert!(
+            mean.abs() < EPSILON * 10.0_f64,
+            "row {i} mean {mean} should be ~0"
+        );
+        assert!(
+            (var - 1.0_f64).abs() < EPSILON * 100.0_f64,
+            "row {i} variance {var} should be ~1"
+        );
+    }
+}
+
+#[test]
+fn test_instance_norm_empty_fails() {
+    use scirs2_core::ndarray::Array2;
+    let x: Array2<f64> = Array2::zeros((0, 3));
+    let result = instance_norm(&x.view(), 1e-5);
+    assert!(result.is_err(), "instance_norm on empty array should fail");
+}
 
 #[test]
 fn test_dropout_basic() {

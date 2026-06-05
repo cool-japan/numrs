@@ -1,84 +1,209 @@
 //! Statistics operations for Python bindings
 
+use crate::array::Array;
+use crate::axis_ops::AxisOps;
 use crate::python::array::PyArray;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::cmp::Ordering;
 
 /// Compute the mean of array elements
+///
+/// When `axis` is None, returns a scalar f64.
+/// When `axis` is Some(ax), reduces along that axis and returns a PyArray.
 #[pyfunction]
-fn mean(a: &PyArray, axis: Option<usize>) -> PyResult<f64> {
-    if axis.is_some() {
-        return Err(PyValueError::new_err("axis parameter not yet supported"));
+fn mean(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny>> {
+    match axis {
+        None => {
+            let v = a.mean();
+            Ok(v.into_pyobject(py)?.into_any().unbind())
+        }
+        Some(ax) => {
+            let result = a
+                .inner
+                .mean_axis(Some(ax))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let py_arr = PyArray { inner: result };
+            py_arr.into_pyobject(py).map(|b| b.into_any().unbind())
+        }
     }
-    Ok(a.mean())
 }
 
 /// Compute the median of array elements
+///
+/// When `axis` is None, returns a scalar f64.
+/// When `axis` is Some(ax), sorts each 1-D slice along that axis and returns the median
+/// for each slice as a PyArray.
 #[pyfunction]
-fn median(a: &PyArray, axis: Option<usize>) -> PyResult<f64> {
-    if axis.is_some() {
-        return Err(PyValueError::new_err("axis parameter not yet supported"));
-    }
+fn median(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny>> {
+    match axis {
+        None => {
+            let mut data = a.tolist();
+            if data.is_empty() {
+                return Err(PyValueError::new_err(
+                    "Cannot compute median of empty array",
+                ));
+            }
+            data.sort_by(|x: &f64, y: &f64| x.partial_cmp(y).unwrap_or(Ordering::Equal));
+            let len = data.len();
+            let v = if len.is_multiple_of(2) {
+                (data[len / 2 - 1] + data[len / 2]) / 2.0
+            } else {
+                data[len / 2]
+            };
+            Ok(v.into_pyobject(py)?.into_any().unbind())
+        }
+        Some(ax) => {
+            let shape = a.inner.shape();
+            let ndim = a.inner.ndim();
+            if ax >= ndim {
+                return Err(PyValueError::new_err(format!(
+                    "Axis {} out of bounds for array of dimension {}",
+                    ax, ndim
+                )));
+            }
+            let axis_len = shape[ax];
+            if axis_len == 0 {
+                return Err(PyValueError::new_err("Cannot compute median of empty axis"));
+            }
 
-    let mut data = a.tolist();
-    if data.is_empty() {
-        return Err(PyValueError::new_err(
-            "Cannot compute median of empty array",
-        ));
-    }
+            // Build output shape (input shape with axis `ax` removed)
+            let mut out_shape = shape.clone();
+            out_shape.remove(ax);
+            let out_size: usize = out_shape.iter().product::<usize>().max(1);
 
-    data.sort_by(|a: &f64, b: &f64| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-    let len = data.len();
+            let data = a.inner.to_vec();
+            let mut result = vec![0.0_f64; out_size];
 
-    if len.is_multiple_of(2) {
-        Ok((data[len / 2 - 1] + data[len / 2]) / 2.0)
-    } else {
-        Ok(data[len / 2])
+            for out_i in 0..out_size {
+                // Reconstruct multi-dim output index
+                let mut out_idx = vec![0usize; out_shape.len()];
+                let mut tmp = out_i;
+                for d in (0..out_shape.len()).rev() {
+                    out_idx[d] = tmp % out_shape[d];
+                    tmp /= out_shape[d];
+                }
+
+                // Collect values along `ax`
+                let mut slice = Vec::with_capacity(axis_len);
+                for j in 0..axis_len {
+                    // Build full index
+                    let mut full_idx = out_idx.clone();
+                    full_idx.insert(ax, j);
+
+                    // Compute linear index
+                    let mut linear = 0usize;
+                    let mut stride = 1usize;
+                    for d in (0..shape.len()).rev() {
+                        linear += full_idx[d] * stride;
+                        stride *= shape[d];
+                    }
+                    slice.push(data[linear]);
+                }
+
+                slice.sort_by(|x, y| x.partial_cmp(y).unwrap_or(Ordering::Equal));
+                let n = slice.len();
+                result[out_i] = if n.is_multiple_of(2) {
+                    (slice[n / 2 - 1] + slice[n / 2]) / 2.0
+                } else {
+                    slice[n / 2]
+                };
+            }
+
+            let arr = Array::from_vec(result).reshape(&out_shape);
+            let py_arr = PyArray { inner: arr };
+            py_arr.into_pyobject(py).map(|b| b.into_any().unbind())
+        }
     }
 }
 
 /// Compute the standard deviation
+///
+/// When `axis` is None, returns a scalar f64.
+/// When `axis` is Some(ax), reduces along that axis returning a PyArray.
+/// `ddof` controls the degrees-of-freedom correction (default 0).
 #[pyfunction]
 #[pyo3(name = "std")]
-fn stddev(a: &PyArray, axis: Option<usize>, ddof: Option<usize>) -> PyResult<f64> {
-    if axis.is_some() {
-        return Err(PyValueError::new_err("axis parameter not yet supported"));
+fn stddev(
+    py: Python<'_>,
+    a: &PyArray,
+    axis: Option<usize>,
+    ddof: Option<usize>,
+) -> PyResult<Py<PyAny>> {
+    let ddof_val = ddof.unwrap_or(0);
+    match axis {
+        None => {
+            let data = a.tolist();
+            let n = data.len();
+            if n <= ddof_val {
+                return Err(PyValueError::new_err("Sample size is too small"));
+            }
+            let mean = data.iter().sum::<f64>() / n as f64;
+            let variance =
+                data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - ddof_val) as f64;
+            Ok(variance.sqrt().into_pyobject(py)?.into_any().unbind())
+        }
+        Some(ax) => {
+            // Use var_axis (population variance = ddof 0) then scale for ddof
+            let var_arr = a
+                .inner
+                .var_axis(Some(ax))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            // var_axis uses ddof=0 (divides by n). Scale to requested ddof.
+            let axis_n = a.inner.shape()[ax];
+            if axis_n <= ddof_val {
+                return Err(PyValueError::new_err("Sample size is too small"));
+            }
+            let scale = axis_n as f64 / (axis_n - ddof_val) as f64;
+            let scaled = var_arr.map(|v| (v * scale).sqrt());
+            let py_arr = PyArray { inner: scaled };
+            py_arr.into_pyobject(py).map(|b| b.into_any().unbind())
+        }
     }
-
-    let ddof = ddof.unwrap_or(0);
-    let data = a.tolist();
-    let n = data.len();
-
-    if n <= ddof {
-        return Err(PyValueError::new_err("Sample size is too small"));
-    }
-
-    let mean = data.iter().sum::<f64>() / n as f64;
-    let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - ddof) as f64;
-
-    Ok(variance.sqrt())
 }
 
 /// Compute the variance
+///
+/// When `axis` is None, returns a scalar f64.
+/// When `axis` is Some(ax), reduces along that axis returning a PyArray.
+/// `ddof` controls the degrees-of-freedom correction (default 0).
 #[pyfunction]
-fn var(a: &PyArray, axis: Option<usize>, ddof: Option<usize>) -> PyResult<f64> {
-    if axis.is_some() {
-        return Err(PyValueError::new_err("axis parameter not yet supported"));
+fn var(
+    py: Python<'_>,
+    a: &PyArray,
+    axis: Option<usize>,
+    ddof: Option<usize>,
+) -> PyResult<Py<PyAny>> {
+    let ddof_val = ddof.unwrap_or(0);
+    match axis {
+        None => {
+            let data = a.tolist();
+            let n = data.len();
+            if n <= ddof_val {
+                return Err(PyValueError::new_err("Sample size is too small"));
+            }
+            let mean = data.iter().sum::<f64>() / n as f64;
+            let variance =
+                data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - ddof_val) as f64;
+            Ok(variance.into_pyobject(py)?.into_any().unbind())
+        }
+        Some(ax) => {
+            // var_axis uses ddof=0; scale to requested ddof
+            let var_arr = a
+                .inner
+                .var_axis(Some(ax))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let axis_n = a.inner.shape()[ax];
+            if axis_n <= ddof_val {
+                return Err(PyValueError::new_err("Sample size is too small"));
+            }
+            let scale = axis_n as f64 / (axis_n - ddof_val) as f64;
+            let scaled = var_arr.map(|v| v * scale);
+            let py_arr = PyArray { inner: scaled };
+            py_arr.into_pyobject(py).map(|b| b.into_any().unbind())
+        }
     }
-
-    let ddof = ddof.unwrap_or(0);
-    let data = a.tolist();
-    let n = data.len();
-
-    if n <= ddof {
-        return Err(PyValueError::new_err("Sample size is too small"));
-    }
-
-    let mean = data.iter().sum::<f64>() / n as f64;
-    let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - ddof) as f64;
-
-    Ok(variance)
 }
 
 /// Compute the correlation coefficient
@@ -135,13 +260,14 @@ fn corrcoef(x: &PyArray, y: Option<&PyArray>) -> PyResult<PyArray> {
 }
 
 /// Compute covariance matrix
+///
+/// Delegates to `crate::stats::correlation::cov` which is fully implemented.
+/// `rowvar=true` (default): each row represents a variable.
 #[pyfunction]
 fn cov(m: &PyArray, rowvar: Option<bool>) -> PyResult<PyArray> {
-    let _rowvar = rowvar.unwrap_or(true);
-
-    Err(PyValueError::new_err(
-        "Covariance matrix calculation not yet implemented",
-    ))
+    let cov_matrix = crate::stats::correlation::cov::<f64>(&m.inner, None, rowvar, None, None)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(PyArray { inner: cov_matrix })
 }
 
 /// Compute histogram

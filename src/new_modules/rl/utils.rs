@@ -31,6 +31,19 @@ pub trait RLAgent {
 
     /// Get number of actions
     fn action_dim(&self) -> usize;
+
+    /// Return Q-values (or equivalent action scores) for all actions given `state`.
+    ///
+    /// The default implementation returns `NotImplemented` so that agents that do
+    /// not maintain an explicit Q-function (e.g. pure policy-gradient actors) can
+    /// still satisfy the trait without boilerplate.  Agents that do maintain
+    /// Q-values — such as `DQNAgent` — should override this method so that
+    /// `BoltzmannExploration` can sample proportionally to exp(Q / temperature).
+    fn action_values(&self, _state: &Array1<f64>) -> Result<Vec<f64>> {
+        Err(NumRs2Error::NotImplemented(
+            "action_values not implemented for this agent type".to_string(),
+        ))
+    }
 }
 
 /// Epsilon-greedy exploration strategy
@@ -193,11 +206,52 @@ impl ExplorationStrategy for BoltzmannExploration {
         &self,
         agent: &A,
         state: &Array1<f64>,
-        _rng: &mut R,
+        rng: &mut R,
     ) -> Result<usize> {
-        // This is a placeholder - actual implementation would need agent to return Q-values
-        // For now, fall back to greedy selection
-        agent.select_greedy_action(state)
+        // Attempt to obtain Q-values from the agent.  If the agent does not
+        // expose them (returns NotImplemented), fall back to greedy selection.
+        match agent.action_values(state) {
+            Ok(q_values) => {
+                if q_values.is_empty() {
+                    return Err(NumRs2Error::ValueError(
+                        "action_values returned empty Q-value vector".to_string(),
+                    ));
+                }
+                // Boltzmann probabilities: P(a) ∝ exp(Q(a) / T)
+                // Numerically stabilised by subtracting the maximum before
+                // exponentiating (does not change the relative probabilities).
+                let scaled: Vec<f64> = q_values.iter().map(|&q| q / self.temperature).collect();
+                let max_val = scaled.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                let exp_vals: Vec<f64> = scaled.iter().map(|&v| (v - max_val).exp()).collect();
+                let sum: f64 = exp_vals.iter().sum();
+
+                if !sum.is_finite() || sum == 0.0 {
+                    // Numerical degenerate case — fall back to greedy
+                    return agent.select_greedy_action(state);
+                }
+
+                let probs: Vec<f64> = exp_vals.iter().map(|&v| v / sum).collect();
+
+                // Sample from the categorical distribution via inverse CDF
+                let dist = Uniform::new(0.0, 1.0).map_err(|e| {
+                    NumRs2Error::ValueError(format!("Uniform distribution error: {}", e))
+                })?;
+                let threshold: f64 = dist.sample(rng);
+                let mut cumsum = 0.0;
+                for (i, &p) in probs.iter().enumerate() {
+                    cumsum += p;
+                    if threshold <= cumsum {
+                        return Ok(i);
+                    }
+                }
+                // Floating-point rounding guard
+                Ok(probs.len() - 1)
+            }
+            Err(_) => {
+                // Agent does not expose Q-values; degrade gracefully to greedy
+                agent.select_greedy_action(state)
+            }
+        }
     }
 
     fn decay(&mut self) {
@@ -505,6 +559,97 @@ mod tests {
         let values: Vec<f64> = vec![];
         let result = strategy.softmax(&values);
         assert!(result.is_err());
+        Ok(())
+    }
+
+    /// A stub agent that always reports predetermined Q-values.
+    /// Used to exercise `BoltzmannExploration::select_action` in isolation.
+    struct QValueStubAgent {
+        q_values: Vec<f64>,
+    }
+
+    impl RLAgent for QValueStubAgent {
+        fn select_greedy_action(&self, _state: &Array1<f64>) -> Result<usize> {
+            // Return the index of the maximum Q-value
+            self.q_values
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i)
+                .ok_or_else(|| NumRs2Error::ValueError("empty Q-values".to_string()))
+        }
+
+        fn action_dim(&self) -> usize {
+            self.q_values.len()
+        }
+
+        fn action_values(&self, _state: &Array1<f64>) -> Result<Vec<f64>> {
+            Ok(self.q_values.clone())
+        }
+    }
+
+    /// With a very low temperature, the Boltzmann policy concentrates almost
+    /// all probability mass on the highest-Q action.
+    #[test]
+    fn test_boltzmann_low_temperature() -> Result<()> {
+        // Q-values strongly favour action 2 (index 2)
+        let agent = QValueStubAgent {
+            q_values: vec![0.0, 0.0, 10.0],
+        };
+        // Very low temperature → almost-deterministic exploitation
+        let strategy = BoltzmannExploration::new(0.01, 0.001, 0.99)?;
+        let mut rng = thread_rng();
+        let state = Array1::zeros(2);
+
+        let n_samples = 1000;
+        let mut action_2_count = 0usize;
+        for _ in 0..n_samples {
+            let action = strategy.select_action(&agent, &state, &mut rng)?;
+            if action == 2 {
+                action_2_count += 1;
+            }
+        }
+
+        let fraction = action_2_count as f64 / n_samples as f64;
+        assert!(
+            fraction > 0.99,
+            "expected action 2 selected >99% of the time at T=0.01, got {:.3}",
+            fraction
+        );
+        Ok(())
+    }
+
+    /// With a very high temperature, the Boltzmann policy approaches uniform.
+    #[test]
+    fn test_boltzmann_high_temperature() -> Result<()> {
+        let agent = QValueStubAgent {
+            q_values: vec![0.0, 0.0, 10.0],
+        };
+        // Very high temperature → nearly uniform distribution over 3 actions
+        let strategy = BoltzmannExploration::new(100.0, 0.1, 0.99)?;
+        let mut rng = thread_rng();
+        let state = Array1::zeros(2);
+
+        let n_samples = 3000;
+        let mut counts = [0usize; 3];
+        for _ in 0..n_samples {
+            let action = strategy.select_action(&agent, &state, &mut rng)?;
+            if action < 3 {
+                counts[action] += 1;
+            }
+        }
+
+        let tolerance = 0.05; // ±5% around the expected 1/3 ≈ 0.333
+        for (i, &cnt) in counts.iter().enumerate() {
+            let freq = cnt as f64 / n_samples as f64;
+            assert!(
+                (freq - 1.0 / 3.0).abs() < tolerance,
+                "action {} frequency {:.3} not within {}% of uniform",
+                i,
+                freq,
+                tolerance * 100.0
+            );
+        }
         Ok(())
     }
 

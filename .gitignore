@@ -45,6 +45,9 @@ proptest-regressions/
 **/.DS_Store
 Thumbs.db
 **/*.rlib
++.rlib
 
 # Rustc ICE dumps
 rustc-ice-*.txt
+
+target
