@@ -333,3 +333,30 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
 ---
 
 **NumRS2 v0.4.1** - Production-ready numerical computing for Rust with SciRS2 v0.5.0 integration (COOLJAPAN Ecosystem)
+
+## Stubs to implement (added 2026-06-12 by /cooljapan-stub-check)
+
+- [ ] `numrs`: `examples/visualization.rs:7` — implement viz module so the disabled visualization example compiles and runs
+  - Priority: P2 | Scope: medium | Hint: none
+- [ ] `numrs`: `tests/test_fft_properties.rs:419,592` — fix FFT precision issues and re-enable the two skipped tests
+  - Priority: P2 | Scope: small | Hint: oxifft
+- [ ] `numrs`: `tests/test_special_reference.rs:89` — fix `erfinv` / `erfcinv` implementations to match reference values
+  - Priority: P2 | Scope: small | Hint: none
+- [ ] `numrs`: `tests/test_special_reference.rs:251` — fix `bessel_y` implementation to match reference values
+  - Priority: P2 | Scope: small | Hint: none
+- [ ] `numrs`: `tests/test_special_reference.rs:336` — fix `bessel_k` implementation to match reference values
+  - Priority: P2 | Scope: small | Hint: none
+- [ ] `numrs`: `tests/test_special_reference.rs:398,424` — fix `ellipk` / `ellipe` implementations to match reference values
+  - Priority: P2 | Scope: small | Hint: none
+- [ ] `numrs`: `tests/test_special_reference.rs:461` — fix `gammainc` implementation to match reference values
+  - Priority: P2 | Scope: small | Hint: none
+- [ ] `numrs`: `tests/test_linalg_reference.rs:745` — investigate and fix Schur decomposition precision issues
+  - Priority: P2 | Scope: medium | Hint: none
+- [ ] `numrs`: `tests/test_scirs_integration.rs:260` — fix set_seed() propagation to scirs2_stats distributions (Maxwell, other)
+  - Priority: P2 | Scope: small | Hint: none
+- [ ] `numrs`: `tests/nn/test_simd_ops.rs:248` — re-enable skipped f64 matmul SIMD test once scirs2-core issue resolved
+  - Priority: P2 | Scope: trivial | Hint: none
+- [ ] `numrs`: `bench/stats_benchmarks.rs:461` — implement skewness and kurtosis functions to unlock stats benchmarks
+  - Priority: P2 | Scope: small | Hint: none
+- [ ] `numrs`: `bench/bench_distributions.rs:96` — implement `f_dist` and `multivariate_normal_cholesky` distributions
+  - Priority: P2 | Scope: medium | Hint: none
