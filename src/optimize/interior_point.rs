@@ -305,47 +305,63 @@ fn compute_barrier_terms<T: Float + std::fmt::Display>(
 
         let grad_g = grad_ineq[i](x);
 
+        // Constraint Hessian Hess_g (the matrix of second partials of g_i). The
+        // analytic constraint Hessian is not supplied to this routine, so it is
+        // approximated by finite differences of the constraint gradient. This term
+        // is required for a mathematically complete barrier Hessian: for a barrier
+        // B(x) = phi(g(x)) the chain rule gives
+        //     Hess B = phi''(g) * grad_g grad_g^T + phi'(g) * Hess_g,
+        // and omitting the phi'(g) * Hess_g part yields an incorrect Hessian whenever
+        // the constraint is nonlinear (Hess_g != 0).
+        let hess_g = constraint_hessian_fd(grad_ineq[i], x)?;
+
         match barrier_type {
             BarrierType::Logarithmic => {
-                // Barrier: -μ * ln(-g)
+                // Barrier: B = -mu * ln(-g),  phi(g) = -mu * ln(-g)
+                //   phi'(g)  = -mu / g
+                //   phi''(g) =  mu / g^2
                 barrier_val = barrier_val - mu * (-g).ln();
 
-                // Gradient: -μ * grad_g / g
+                // Gradient: phi'(g) * grad_g = (-mu / g) * grad_g
                 let factor = -mu / g;
                 for j in 0..n {
                     barrier_grad[j] = barrier_grad[j] + factor * grad_g[j];
                 }
 
-                // Hessian: -μ * (grad_g * grad_g^T / g^2)
+                // Hessian: (mu / g^2) * grad_g grad_g^T  -  (mu / g) * Hess_g
+                let outer_coeff = mu / (g * g); // phi''(g)
+                let hess_coeff = -mu / g; // phi'(g)
                 for j in 0..n {
                     for k in 0..n {
-                        barrier_hess[j][k] =
-                            barrier_hess[j][k] - mu * grad_g[j] * grad_g[k] / (g * g);
+                        barrier_hess[j][k] = barrier_hess[j][k]
+                            + outer_coeff * grad_g[j] * grad_g[k]
+                            + hess_coeff * hess_g[j][k];
                     }
                 }
             }
             BarrierType::Inverse => {
-                // Barrier: -μ / g
+                // Barrier: B = -mu / g,  phi(g) = -mu / g
+                //   phi'(g)  =  mu / g^2
+                //   phi''(g) = -2 * mu / g^3
                 barrier_val = barrier_val - mu / g;
 
-                // Gradient: μ * grad_g / g^2
+                // Gradient: phi'(g) * grad_g = (mu / g^2) * grad_g
                 let factor = mu / (g * g);
                 for j in 0..n {
                     barrier_grad[j] = barrier_grad[j] + factor * grad_g[j];
                 }
 
-                // Hessian approximation (simplified)
+                // Hessian: (-2 * mu / g^3) * grad_g grad_g^T  +  (mu / g^2) * Hess_g
+                let two = T::from(2.0).ok_or_else(|| {
+                    NumRs2Error::ConversionError("Constant conversion failed".to_string())
+                })?;
+                let outer_coeff = -two * mu / (g * g * g); // phi''(g)
+                let hess_coeff = mu / (g * g); // phi'(g)
                 for j in 0..n {
                     for k in 0..n {
                         barrier_hess[j][k] = barrier_hess[j][k]
-                            + T::from(2.0).ok_or_else(|| {
-                                NumRs2Error::ConversionError(
-                                    "Constant conversion failed".to_string(),
-                                )
-                            })? * mu
-                                * grad_g[j]
-                                * grad_g[k]
-                                / (g * g * g);
+                            + outer_coeff * grad_g[j] * grad_g[k]
+                            + hess_coeff * hess_g[j][k];
                     }
                 }
             }
@@ -353,6 +369,73 @@ fn compute_barrier_terms<T: Float + std::fmt::Display>(
     }
 
     Ok((barrier_val, barrier_grad, barrier_hess))
+}
+
+/// Approximate the Hessian of a scalar constraint via central finite differences of
+/// its gradient.
+///
+/// Given a constraint gradient routine `grad_g` and a point `x`, the `(a, b)` entry of
+/// the constraint Hessian is `d(grad_g)_a / dx_b`. It is estimated columnwise with a
+/// central difference of the supplied gradient,
+///
+/// ```text
+///   Hess_g[a][b] ~= ( grad_g(x + h e_b)[a] - grad_g(x - h e_b)[a] ) / (2 h),
+/// ```
+///
+/// and the result is symmetrized as `(M + M^T) / 2` to remove the small asymmetry that
+/// independent column estimates introduce, since a true Hessian is symmetric. The step
+/// `h` scales with the magnitude of each coordinate, `h = sqrt(eps) * max(1, |x_b|)`,
+/// which balances truncation and round-off error.
+fn constraint_hessian_fd<T: Float>(grad_g: &ConstraintGradFn<T>, x: &[T]) -> Result<Vec<Vec<T>>> {
+    let n = x.len();
+
+    // Base step: sqrt of machine epsilon, scaled per-coordinate below.
+    let sqrt_eps = T::epsilon().sqrt();
+    let two = T::from(2.0)
+        .ok_or_else(|| NumRs2Error::ConversionError("Constant conversion failed".to_string()))?;
+
+    let mut hess = vec![vec![T::zero(); n]; n];
+
+    for b in 0..n {
+        // Coordinate-scaled step h_b = sqrt(eps) * max(1, |x_b|).
+        let scale = if x[b].abs() > T::one() {
+            x[b].abs()
+        } else {
+            T::one()
+        };
+        let h = sqrt_eps * scale;
+
+        // Guard against a degenerate (zero) step, which would divide by zero below.
+        if h <= T::zero() {
+            return Err(NumRs2Error::ComputationError(
+                "Finite-difference step collapsed to zero in constraint Hessian".to_string(),
+            ));
+        }
+
+        let mut x_plus = x.to_vec();
+        let mut x_minus = x.to_vec();
+        x_plus[b] = x[b] + h;
+        x_minus[b] = x[b] - h;
+
+        let grad_plus = grad_g(&x_plus);
+        let grad_minus = grad_g(&x_minus);
+
+        let denom = two * h;
+        for a in 0..n {
+            hess[a][b] = (grad_plus[a] - grad_minus[a]) / denom;
+        }
+    }
+
+    // Symmetrize: (M + M^T) / 2.
+    for a in 0..n {
+        for b in (a + 1)..n {
+            let avg = (hess[a][b] + hess[b][a]) / two;
+            hess[a][b] = avg;
+            hess[b][a] = avg;
+        }
+    }
+
+    Ok(hess)
 }
 
 /// Add two matrices

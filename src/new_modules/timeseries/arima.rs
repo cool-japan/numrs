@@ -259,7 +259,31 @@ impl Arima {
         }
     }
 
-    /// Estimate MA coefficients using innovations algorithm.
+    /// Estimate MA coefficients using the Hannan-Rissanen algorithm.
+    ///
+    /// The Hannan-Rissanen procedure provides consistent initial estimates for
+    /// the parameters of an ARMA(p, q) model in two least-squares stages:
+    ///
+    /// 1. **Long AR fit.** A high-order AR(`p_long`) model is fitted to the
+    ///    (mean-centered, differenced) series by ordinary least squares. Its
+    ///    residuals `ε̂_t` approximate the unobserved innovations `ε_t`.
+    ///
+    /// 2. **Joint ARMA regression.** The series `y_t` is regressed on its own
+    ///    lags `y_{t-1}, ..., y_{t-p}` (the AR part) **and** on the lagged
+    ///    estimated residuals `ε̂_{t-1}, ..., ε̂_{t-q}` (the MA part) by least
+    ///    squares. The coefficients of the residual lags are the MA estimates.
+    ///
+    /// The series is mean-centered up front, so the regressions are run through
+    /// the origin (the intercept is handled separately by the caller). The AR
+    /// block of the stage-2 regression is estimated jointly with the MA block
+    /// for consistency, but only the MA coefficients are returned to match the
+    /// function contract; the AR coefficients are supplied by the caller's
+    /// Yule-Walker estimate.
+    ///
+    /// # References
+    ///
+    /// Hannan, E. J., & Rissanen, J. (1982). Recursive estimation of mixed
+    /// autoregressive-moving average order. *Biometrika*, 69(1), 81-94.
     fn estimate_ma_innovations(
         &self,
         data: &ArrayView1<f64>,
@@ -269,53 +293,182 @@ impl Arima {
             return Ok(Array1::zeros(0));
         }
 
-        // Simplified estimation: use residuals from AR fit
-        let intercept = if self.include_intercept {
-            data.iter().sum::<f64>() / data.len() as f64
+        let _ = ar_coefs; // AR coefficients are re-estimated jointly below.
+
+        let n = data.len();
+        let p = self.p;
+        let q = self.q;
+
+        // Center the series; the intercept is handled by the caller.
+        let mean = if self.include_intercept {
+            data.iter().sum::<f64>() / n as f64
         } else {
             0.0
         };
+        let centered: Vec<f64> = data.iter().map(|&x| x - mean).collect();
 
-        let residuals = if self.p > 0 {
-            self.compute_ar_residuals(data, ar_coefs, intercept)?
-        } else {
-            data.iter().map(|&x| x - intercept).collect()
+        // ---------------------------------------------------------------------
+        // Stage 1: fit a long autoregression AR(p_long) by least squares to
+        // obtain residuals that approximate the innovations.
+        // ---------------------------------------------------------------------
+        // Order rule (matching the SciRS2 reference implementation): an order of
+        // O(sqrt(n)) is large enough to whiten an ARMA(p, q) process yet small
+        // enough to keep the stage-1 fit well-conditioned. A larger order
+        // over-fits in finite samples and destabilises the stage-2 estimates.
+        let p_long_target = ((n as f64).sqrt() as usize).max(p + q);
+        // Keep at least a few equations beyond the number of unknowns.
+        let p_long = p_long_target.min(n / 2).max(1).min(n.saturating_sub(2));
+
+        let innovations = self.long_ar_residuals(&centered, p_long)?;
+
+        // `innovations[t]` is aligned with `centered[t]` for t >= p_long and is
+        // zero for the presample region t < p_long (the innovations there are
+        // unobserved; using zeros is the standard Hannan-Rissanen convention).
+
+        // ---------------------------------------------------------------------
+        // Stage 2: regress y_t on its own lags (AR) and on lagged residuals (MA)
+        // by ordinary least squares.
+        // ---------------------------------------------------------------------
+        let max_lag = p.max(q);
+        // Start far enough in that all lagged residuals are genuine estimates.
+        let start = (p_long + max_lag).max(max_lag);
+
+        if start >= n {
+            return Err(NumRs2Error::ValueError(
+                "Insufficient data for Hannan-Rissanen MA estimation".to_string(),
+            ));
+        }
+
+        let n_rows = n - start;
+        let n_cols = p + q;
+
+        if n_rows <= n_cols {
+            // Not enough equations for a least-squares fit; fall back to a
+            // first-order innovations approximation rather than a placeholder.
+            return self.ma_from_residual_autocovariance(&innovations[..], start);
+        }
+
+        let mut design = Array2::<f64>::zeros((n_rows, n_cols));
+        let mut target = Array1::<f64>::zeros(n_rows);
+
+        for (row, t) in (start..n).enumerate() {
+            target[row] = centered[t];
+
+            // AR regressors: y_{t-1}, ..., y_{t-p}.
+            for j in 0..p {
+                design[[row, j]] = centered[t - j - 1];
+            }
+            // MA regressors: ε̂_{t-1}, ..., ε̂_{t-q}.
+            for j in 0..q {
+                design[[row, p + j]] = innovations[t - j - 1];
+            }
+        }
+
+        // Solve the joint least-squares problem via the crate's QR-based solver.
+        let solution = match scirs2_linalg::lstsq(&design.view(), &target.view(), None) {
+            Ok(result) => result.x,
+            Err(_) => {
+                // Fall back to the residual-autocovariance approximation if the
+                // design matrix is rank-deficient.
+                return self.ma_from_residual_autocovariance(&innovations[..], start);
+            }
         };
 
-        // Use autocorrelation of residuals for MA estimation
-        use crate::new_modules::timeseries::autocorrelation;
+        // Extract the MA block (coefficients of the lagged residual regressors).
+        let mut ma_coefs = Array1::zeros(q);
+        for j in 0..q {
+            ma_coefs[j] = solution[p + j];
+        }
 
-        let res_array = Array1::from_vec(residuals);
-        let res_acf = autocorrelation(&res_array.view(), self.q)?;
-
-        // Simplified MA coefficient estimation
-        let mut ma_coefs = Array1::zeros(self.q);
-        for i in 0..self.q {
-            ma_coefs[i] = -res_acf[i + 1]; // Negative of ACF
+        // Guard against non-finite estimates from an ill-conditioned solve.
+        if ma_coefs.iter().any(|c| !c.is_finite()) {
+            return self.ma_from_residual_autocovariance(&innovations[..], start);
         }
 
         Ok(ma_coefs)
     }
 
-    /// Compute residuals from AR model.
-    fn compute_ar_residuals(
-        &self,
-        data: &ArrayView1<f64>,
-        ar_coefs: &Array1<f64>,
-        intercept: f64,
-    ) -> Result<Vec<f64>> {
-        let n = data.len();
-        let mut residuals = Vec::with_capacity(n - self.p);
+    /// Fit a long autoregression AR(`order`) by ordinary least squares and
+    /// return its residuals aligned to the input series.
+    ///
+    /// The returned vector has the same length as `series`; entries before
+    /// `order` (the presample) are set to zero because the corresponding
+    /// innovations are unobservable.
+    fn long_ar_residuals(&self, series: &[f64], order: usize) -> Result<Vec<f64>> {
+        let n = series.len();
+        let mut residuals = vec![0.0; n];
 
-        for t in self.p..n {
-            let mut prediction = intercept;
-            for i in 0..self.p {
-                prediction += ar_coefs[i] * (data[t - i - 1] - intercept);
+        if order == 0 || n <= order {
+            // Degenerate case: treat the (centered) series itself as the noise.
+            residuals.copy_from_slice(series);
+            return Ok(residuals);
+        }
+
+        let n_rows = n - order;
+        let mut design = Array2::<f64>::zeros((n_rows, order));
+        let mut target = Array1::<f64>::zeros(n_rows);
+
+        for (row, t) in (order..n).enumerate() {
+            target[row] = series[t];
+            for j in 0..order {
+                design[[row, j]] = series[t - j - 1];
             }
-            residuals.push(data[t] - prediction);
+        }
+
+        let phi_long = match scirs2_linalg::lstsq(&design.view(), &target.view(), None) {
+            Ok(result) => result.x,
+            Err(_) => {
+                // If the long AR fit fails, approximate innovations by the
+                // centered series (white-noise assumption).
+                residuals.copy_from_slice(series);
+                return Ok(residuals);
+            }
+        };
+
+        // Compute residuals ε̂_t = y_t - Σ φ̂_i y_{t-i} for t >= order.
+        for t in order..n {
+            let mut prediction = 0.0;
+            for j in 0..order {
+                prediction += phi_long[j] * series[t - j - 1];
+            }
+            residuals[t] = series[t] - prediction;
         }
 
         Ok(residuals)
+    }
+
+    /// Fallback MA estimate from the autocovariance of the AR residuals.
+    ///
+    /// Used only when the joint Hannan-Rissanen regression cannot be solved
+    /// (rank deficiency or too few equations). Approximates the MA polynomial
+    /// from the residual autocorrelation structure.
+    fn ma_from_residual_autocovariance(
+        &self,
+        innovations: &[f64],
+        start: usize,
+    ) -> Result<Array1<f64>> {
+        use crate::new_modules::timeseries::autocorrelation;
+
+        let skip = start.min(innovations.len());
+        let usable: Vec<f64> = innovations.iter().skip(skip).copied().collect();
+        if usable.len() <= self.q {
+            return Ok(Array1::zeros(self.q));
+        }
+
+        let res_array = Array1::from_vec(usable);
+        // If the residuals are degenerate (near-constant), fall back to zeros
+        // rather than propagating an error from the autocorrelation routine.
+        let res_acf = match autocorrelation(&res_array.view(), self.q) {
+            Ok(acf) => acf,
+            Err(_) => return Ok(Array1::zeros(self.q)),
+        };
+
+        let mut ma_coefs = Array1::zeros(self.q);
+        for i in 0..self.q {
+            ma_coefs[i] = res_acf[i + 1];
+        }
+
+        Ok(ma_coefs)
     }
 
     /// Compute residuals from full ARIMA model.

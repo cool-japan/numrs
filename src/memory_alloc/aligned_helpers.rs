@@ -670,7 +670,8 @@ pub fn optimal_simd_alignment() -> usize {
     {
         if is_x86_feature_detected!("avx512f") {
             64
-        } else if is_x86_feature_detected!("avx2") || is_x86_feature_detected!("avx") {
+        } else if is_x86_feature_detected!("avx") {
+            // AVX2 implies AVX, so a single AVX check covers both (256-bit / 32-byte).
             32
         } else {
             16

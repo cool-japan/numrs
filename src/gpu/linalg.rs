@@ -200,7 +200,7 @@ pub fn matmul<T: Pod + Zeroable + 'static>(
     let shader_module = if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
         context.matmul_f32_shader()
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-        context.matmul_f64_shader()
+        context.matmul_f64_shader()?
     } else {
         return Err(NumRs2Error::TypeCastError(
             "Matrix multiplication only supports f32 and f64 types".to_string(),

@@ -732,7 +732,27 @@ impl SparseOpsAdvanced {
         Ok(result)
     }
 
-    /// Estimate the condition number of a sparse matrix using power iteration
+    /// Estimate the spectral condition number of a sparse matrix.
+    ///
+    /// The condition number is `κ = |λ_max| / |λ_min|`, where `λ_max` and `λ_min`
+    /// are the eigenvalues of largest and smallest magnitude. For a symmetric
+    /// positive-definite (SPD) matrix this equals the spectral 2-norm condition
+    /// number `‖A‖₂ · ‖A⁻¹‖₂`.
+    ///
+    /// The two extremal eigenvalues are estimated with complementary iterations:
+    /// * `λ_max` (largest magnitude) is obtained by classical **power iteration**:
+    ///   the Rayleigh quotient `vᵀ A v / vᵀ v` of the normalized iterate converges
+    ///   to the dominant eigenvalue.
+    /// * `λ_min` (smallest magnitude) is obtained by **inverse power iteration**:
+    ///   repeatedly solving `A x_{k+1} = x_k` and normalizing drives the iterate
+    ///   toward the eigenvector of smallest-magnitude eigenvalue, whose Rayleigh
+    ///   quotient then yields `λ_min`. Each inner solve `A x = b` is performed with
+    ///   the Conjugate Gradient solver ([`Self::solve_cg`]); this assumes `A` is
+    ///   SPD, which is also the regime in which the eigenvalue/condition-number
+    ///   interpretation above holds exactly.
+    ///
+    /// For a numerically singular matrix (`λ_min ≈ 0`) the condition number is
+    /// infinite and `T::infinity()` is returned.
     pub fn condition_number_estimate<T>(a: &SparseMatrix<T>, max_iter: usize, tol: T) -> Result<T>
     where
         T: Float + Clone + Debug,
@@ -745,8 +765,21 @@ impl SparseOpsAdvanced {
             ));
         }
 
-        // Estimate largest eigenvalue using power iteration
+        // --- Largest-magnitude eigenvalue via power iteration ------------------
+        // Iterate v_{k+1} = A v_k / ‖A v_k‖, then estimate the eigenvalue with the
+        // Rayleigh quotient of the normalized iterate: λ = vᵀ (A v) / vᵀ v.
         let mut v = Array::ones(&[n]);
+        // Normalize the initial vector so the Rayleigh quotient is well scaled.
+        {
+            let v_norm = Self::vector_norm(&v)?;
+            if v_norm > T::zero() {
+                for i in 0..n {
+                    let val = v.get(&[i])?;
+                    v.set(&[i], val / v_norm)?;
+                }
+            }
+        }
+
         let mut lambda_max = T::zero();
 
         for _ in 0..max_iter {
@@ -760,13 +793,14 @@ impl SparseOpsAdvanced {
                 ));
             }
 
-            // Normalize
+            // Rayleigh quotient with the *current* (unit-norm) iterate v.
+            let new_lambda = Self::dot_product(&v, &av)?;
+
+            // Normalize the new iterate for the next step.
             for i in 0..n {
                 let val = av.get(&[i])?;
                 v.set(&[i], val / norm)?;
             }
-
-            let new_lambda = Self::dot_product(&v, &av)?;
 
             if (new_lambda - lambda_max).abs() < tol {
                 lambda_max = new_lambda;
@@ -775,11 +809,72 @@ impl SparseOpsAdvanced {
             lambda_max = new_lambda;
         }
 
-        // For condition number, we would need smallest eigenvalue too
-        // For now, return an estimate based on largest eigenvalue
-        // This is a simplified implementation - full condition number estimation
-        // would require more sophisticated algorithms
-        Ok(lambda_max.abs())
+        // --- Smallest-magnitude eigenvalue via inverse power iteration ---------
+        // Iterate solve(A x = v_k), then v_{k+1} = x / ‖x‖. The iterate converges
+        // to the eigenvector of the smallest-magnitude eigenvalue of A, whose
+        // Rayleigh quotient λ_min = vᵀ (A v) / vᵀ v we track each step.
+        let mut w = Array::ones(&[n]);
+        {
+            let w_norm = Self::vector_norm(&w)?;
+            if w_norm > T::zero() {
+                for i in 0..n {
+                    let val = w.get(&[i])?;
+                    w.set(&[i], val / w_norm)?;
+                }
+            }
+        }
+
+        // Inner-solve tolerance: tie it to the requested accuracy but keep it
+        // comfortably small so the outer iteration converges cleanly.
+        let solve_tol = tol;
+        // Cap the inner CG iterations; n is a safe upper bound for an exact SPD solve.
+        let inner_max_iter = std::cmp::max(n, max_iter);
+
+        let mut lambda_min = T::zero();
+        let mut have_lambda_min = false;
+
+        for _ in 0..max_iter {
+            // Solve A x = w for the next (unnormalized) iterate.
+            let (x, _iters, _residual) =
+                Self::solve_cg(a, &w, Some(&w), solve_tol, inner_max_iter)?;
+
+            let x_norm = Self::vector_norm(&x)?;
+            if x_norm < T::epsilon() {
+                // A x collapses to zero: treat A as singular -> infinite condition.
+                return Ok(T::infinity());
+            }
+
+            // Normalize the iterate.
+            for i in 0..n {
+                let val = x.get(&[i])?;
+                w.set(&[i], val / x_norm)?;
+            }
+
+            // Rayleigh quotient λ_min = wᵀ A w (w is unit-norm).
+            let mut aw = Array::zeros(&[n]);
+            Self::spmv_dense(a, &w, &mut aw, T::one(), T::zero())?;
+            let new_lambda = Self::dot_product(&w, &aw)?;
+
+            if have_lambda_min && (new_lambda - lambda_min).abs() < tol {
+                lambda_min = new_lambda;
+                break;
+            }
+            lambda_min = new_lambda;
+            have_lambda_min = true;
+        }
+
+        // --- Form the condition number κ = |λ_max| / |λ_min| -------------------
+        let lambda_max_abs = lambda_max.abs();
+        let lambda_min_abs = lambda_min.abs();
+
+        // Guard against division by a (near-)zero smallest eigenvalue: such a
+        // matrix is singular / ill-conditioned, so the condition number diverges.
+        let singular_threshold = T::epsilon() * lambda_max_abs.max(T::one());
+        if lambda_min_abs <= singular_threshold {
+            return Ok(T::infinity());
+        }
+
+        Ok(lambda_max_abs / lambda_min_abs)
     }
 
     /// Compute the 2-norm of a vector

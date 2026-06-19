@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **Version 0.4.0** - Major release (2026-06-05): SciRS2 ecosystem updated to v0.5.0; adds skew/kurtosis, F-distribution sampling, instance normalization, BFGS Python optimizer, VECM Johansen fitting, FEM 2D point evaluation; real eigendecomposition via QR iteration with Wilkinson shifts; full Golub–Kahan bidiagonal SVD. Features 128+ SIMD-vectorized functions (AVX2, AVX512, ARM NEON), 3,921+ tests passing, 225,975+ lines of production Rust code, 5,813+ public API items, zero stubs, built on pure Rust SciRS2 v0.5.0 ecosystem.
+> **Version 0.4.0** - Major release (2026-06-05): SciRS2 ecosystem updated to v0.5.0; adds skew/kurtosis, F-distribution sampling, instance normalization, BFGS Python optimizer, VECM Johansen fitting, FEM 2D point evaluation; real eigendecomposition via QR iteration with Wilkinson shifts; full Golub–Kahan bidiagonal SVD. Features 128+ SIMD-vectorized functions (AVX2, AVX512, ARM NEON), 3,921+ tests passing, 225,975+ lines of production Rust code, 5,813+ public API items, built on pure Rust SciRS2 v0.5.0 ecosystem. The core array, linear algebra, SIMD, and autodiff paths are production-ready; some advanced modules (e.g. quantum and parts of the reinforcement-learning suite) are experimental.
 
 ## ✨ Architecture Highlights
 
@@ -47,7 +47,7 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
 - **Fast Fourier Transform**: Optimized FFT implementation with 1D/2D transforms, real FFT specialization, frequency shifting, and various windowing functions
 - **SIMD Acceleration**: Enhanced vectorized operations via SciRS2-Core with AVX2/AVX512/NEON support
 - **Parallel Computing**: Advanced multi-threaded execution with adaptive chunking and work-stealing
-- **GPU Acceleration**: Optional GPU-accelerated array operations using WGPU
+- **GPU Acceleration**: Optional GPU-accelerated array operations via the WGPU backend (cross-platform: runs on Vulkan, Metal, DirectX 12, and WebGPU)
 - **Mathematical Functions**: Comprehensive set of element-wise mathematical operations
 - **Statistical Analysis**: Descriptive statistics, probability distributions, and more
 - **Random Number Generation**: Modern interface for various distributions with fast generation and NumPy-compatible API
@@ -110,7 +110,7 @@ The GPU acceleration feature provides:
 - GPU-accelerated array operations for significant performance improvements
 - Seamless CPU/GPU interoperability with the same API
 - Support for various operations: arithmetic, matrix multiplication, element-wise functions, etc.
-- WGPU backend for cross-platform GPU support (Vulkan, Metal, DX12, WebGPU)
+- GPU acceleration via the WGPU backend (cross-platform: runs on Vulkan, Metal, DirectX 12, and WebGPU). NumRS2 does not ship native CUDA/ROCm/Metal/OpenCL backends; all GPU execution goes through WGPU.
 
 For examples, see [gpu_example.rs](examples/gpu_example.rs)
 
@@ -145,7 +145,7 @@ For examples, see [gpu_example.rs](examples/gpu_example.rs)
 - 3,921+ comprehensive tests (default features)
 - Enhanced scheduler with critical deadlock fix (1,143x speedup)
 - 225,975+ lines of production Rust code (674 Rust files)
-- 5,813+ public API items; zero unimplemented stubs
+- 5,813+ public API items; core array, linear algebra, SIMD, and autodiff paths are production-ready, with some advanced modules (e.g. quantum and parts of the reinforcement-learning suite) still experimental
 
 **Enhanced Modules**
 - Linear algebra: Extended iterative solvers (CG, GMRES, BiCGSTAB, FGMRES, MINRES)

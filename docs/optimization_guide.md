@@ -226,10 +226,12 @@ cargo run --example gpu_benchmark --features "gpu scirs"
 - Performance comparable to AVX2 on modern ARM chips
 
 ### GPU Considerations
-- NVIDIA GPUs: Best performance with CUDA backend
-- AMD GPUs: Good performance with ROCm backend
-- Intel GPUs: Supported through WebGPU
-- Apple GPUs: Metal backend provides native performance
+NumRS2's GPU path is WGPU-based; it does not ship native CUDA, ROCm, OpenCL, or Metal backends. WGPU dispatches to the platform's native graphics API:
+- NVIDIA GPUs: run via Vulkan or DirectX 12
+- AMD GPUs: run via Vulkan (or DirectX 12 on Windows)
+- Intel GPUs: run via Vulkan/DirectX 12, or WebGPU in the browser
+- Apple GPUs: run via Metal
+- Browser targets: run via WebGPU
 
 ## Example: Complete Optimization Pipeline
 

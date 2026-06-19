@@ -20,28 +20,37 @@ use crate::{prelude::Array, Result};
 use scirs2_core::ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 
 /// Get information about available optimizations
+///
+/// The SIMD, AVX2, AVX512, NEON, and parallel-thread lines describe optimizations
+/// that NumRS2 actually executes. The CUDA / OpenCL / Metal lines are reported
+/// purely as scirs2-core platform detection (informational): they indicate which
+/// devices the host exposes, not execution paths inside NumRS2. NumRS2's only GPU
+/// execution path is the WGPU backend (enabled via the `gpu` feature), which itself
+/// dispatches to Vulkan / Metal / DirectX 12 / WebGPU.
 pub fn get_optimization_info() -> String {
     let caps = PlatformCapabilities::detect();
     format!(
         "NumRS2 Optimizations Available:\n\
          - SIMD: {}\n\
-         - GPU: {}\n\
-         - CUDA: {}\n\
-         - OpenCL: {}\n\
-         - Metal: {}\n\
+         - GPU (WGPU backend, enable with the `gpu` feature): {}\n\
          - AVX2: {}\n\
          - AVX512: {}\n\
          - NEON: {}\n\
-         - Parallel threads: {}",
+         - Parallel threads: {}\n\
+         NumRS2 GPU execution uses the WGPU backend only.\n\
+         The following are scirs2-core platform detection (informational), not NumRS2 execution paths:\n\
+         - CUDA device detected: {}\n\
+         - OpenCL device detected: {}\n\
+         - Metal device detected: {}",
         caps.simd_available,
         caps.gpu_available,
-        caps.cuda_available,
-        caps.opencl_available,
-        caps.metal_available,
         caps.avx2_available,
         caps.avx512_available,
         caps.neon_available,
-        num_threads()
+        num_threads(),
+        caps.cuda_available,
+        caps.opencl_available,
+        caps.metal_available,
     )
 }
 

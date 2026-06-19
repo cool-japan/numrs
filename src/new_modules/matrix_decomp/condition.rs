@@ -262,14 +262,115 @@ where
                 // Matrix is singular or numerically singular
                 Ok((0, T::neg_infinity()))
             } else {
-                // For SVD, determinant is always positive since we're using |det|
-                // But we need to account for the actual sign of the determinant
-                // This requires more complex analysis, so we'll use a simple heuristic
-                let sign = 1; // Simplified for now - both branches were identical
+                // Singular values only carry the magnitude of the determinant, so the
+                // sign cannot be recovered from `s` alone. Recover the true sign with an
+                // independent LU factorization with partial pivoting:
+                //   sign(det) = (parity of the row permutation)
+                //               * (product of signs of the U diagonal pivots)
+                // `logdet` (= Σ ln(σ_i)) already holds the correct magnitude.
+                let sign = determinant_sign_via_lu(a)?;
                 Ok((sign, logdet))
             }
         }
     }
+}
+
+/// Compute only the sign (-1, 0, or 1) of the determinant of a square matrix via
+/// LU decomposition with partial pivoting.
+///
+/// This performs a self-contained Gaussian elimination with partial pivoting and
+/// tracks two quantities:
+/// 1. The parity of the row interchanges (each swap flips the sign).
+/// 2. The signs of the diagonal pivots of the resulting upper-triangular factor.
+///
+/// The product of these gives `sign(det(A))`. Only the sign is returned; the
+/// magnitude is intentionally ignored (callers obtain `log|det|` separately, e.g.
+/// from the singular values), which keeps this routine free of overflow/underflow
+/// concerns. A zero pivot indicates a singular matrix and yields a sign of `0`.
+fn determinant_sign_via_lu<T>(a: &Array<T>) -> Result<i8>
+where
+    T: Float + Clone + Debug,
+{
+    let shape = a.shape();
+    if shape.len() != 2 || shape[0] != shape[1] {
+        return Err(NumRs2Error::DimensionMismatch(
+            "determinant sign computation requires a square matrix".to_string(),
+        ));
+    }
+
+    let n = shape[0];
+
+    // Working copy of the matrix as a dense row-major buffer.
+    let mut m = vec![T::zero(); n * n];
+    for i in 0..n {
+        for j in 0..n {
+            m[i * n + j] = a.get(&[i, j])?;
+        }
+    }
+
+    // Tolerance for treating a pivot as numerically zero, scaled by the largest
+    // matrix entry so the threshold is dimensionally consistent.
+    let mut max_abs = T::zero();
+    for value in &m {
+        let abs_value = num_traits::Float::abs(*value);
+        if abs_value > max_abs {
+            max_abs = abs_value;
+        }
+    }
+    let eps = T::epsilon();
+    let pivot_threshold = if max_abs > T::zero() {
+        eps * T::from(n).unwrap_or_else(|| T::one()) * max_abs
+    } else {
+        eps
+    };
+
+    // Sign accumulator: starts positive, flips on each row swap and each negative pivot.
+    let mut sign: i8 = 1;
+
+    for k in 0..n {
+        // Partial pivoting: select the row with the largest magnitude in column k.
+        let mut pivot_row = k;
+        let mut pivot_val = num_traits::Float::abs(m[k * n + k]);
+        for i in (k + 1)..n {
+            let candidate = num_traits::Float::abs(m[i * n + k]);
+            if candidate > pivot_val {
+                pivot_val = candidate;
+                pivot_row = i;
+            }
+        }
+
+        // A zero column at this stage means the matrix is singular.
+        if pivot_val <= pivot_threshold {
+            return Ok(0);
+        }
+
+        // Swap rows if necessary, flipping the determinant sign each time.
+        if pivot_row != k {
+            for j in 0..n {
+                m.swap(k * n + j, pivot_row * n + j);
+            }
+            sign = -sign;
+        }
+
+        // Account for the sign of this pivot (the corresponding U diagonal entry).
+        if m[k * n + k] < T::zero() {
+            sign = -sign;
+        }
+
+        // Eliminate entries below the pivot.
+        let pivot = m[k * n + k];
+        for i in (k + 1)..n {
+            let factor = m[i * n + k] / pivot;
+            if factor != T::zero() {
+                for j in k..n {
+                    let update = factor * m[k * n + j];
+                    m[i * n + j] = m[i * n + j] - update;
+                }
+            }
+        }
+    }
+
+    Ok(sign)
 }
 
 /// Solve a linear least-squares problem using SVD decomposition.

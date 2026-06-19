@@ -196,7 +196,7 @@ pub fn matmul<T: bytemuck::Pod + bytemuck::Zeroable>(
     let shader = if std::mem::size_of::<T>() == 4 {
         context.matmul_f32_shader()
     } else {
-        context.matmul_f64_shader()
+        context.matmul_f64_shader()?
     };
 
     let pipeline_layout =
@@ -341,7 +341,7 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
         let shader = if std::mem::size_of::<T>() == 4 {
             context.element_wise_f32_shader()
         } else {
-            context.element_wise_f64_shader()
+            context.element_wise_f64_shader()?
         };
 
         let pipeline_layout =
@@ -495,7 +495,7 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     let shader = if std::mem::size_of::<T>() == 4 {
         context.element_wise_f32_shader()
     } else {
-        context.element_wise_f64_shader()
+        context.element_wise_f64_shader()?
     };
 
     // Create pipeline
@@ -863,7 +863,7 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
                 ],
             });
 
-    let shader = context.reduction_f64_shader();
+    let shader = context.reduction_f64_shader()?;
 
     // Create pipeline
     let pipeline_layout =
@@ -1047,7 +1047,7 @@ fn unary_element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     let shader = if std::mem::size_of::<T>() == 4 {
         context.element_wise_f32_shader()
     } else {
-        context.element_wise_f64_shader()
+        context.element_wise_f64_shader()?
     };
 
     // Create pipeline

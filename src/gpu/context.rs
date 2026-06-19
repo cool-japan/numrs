@@ -22,16 +22,28 @@ pub struct GpuContext {
     device: wgpu::Device,
     queue: wgpu::Queue,
     shader_modules: ShaderModules,
+    /// Whether the underlying device exposes the `SHADER_F64` feature.
+    ///
+    /// WGSL `f64`/`array<f64>` shaders require the `wgpu::Features::SHADER_F64`
+    /// device feature, which many GPUs do not support. When this is `false`,
+    /// the f64 shader modules are not compiled and any attempt to run an f64
+    /// GPU operation returns an error instead of silently producing wrong
+    /// results from an f32 kernel.
+    f64_supported: bool,
 }
 
 /// Stores compiled shader modules for reuse
+///
+/// The f64 modules are `None` when the device does not support the
+/// `SHADER_F64` feature; in that case f64 GPU operations are rejected at
+/// dispatch time rather than falling back to an f32 kernel.
 struct ShaderModules {
     element_wise_f32: wgpu::ShaderModule,
-    element_wise_f64: wgpu::ShaderModule,
+    element_wise_f64: Option<wgpu::ShaderModule>,
     reduction_f32: wgpu::ShaderModule,
-    reduction_f64: wgpu::ShaderModule,
+    reduction_f64: Option<wgpu::ShaderModule>,
     matmul_f32: wgpu::ShaderModule,
-    matmul_f64: wgpu::ShaderModule,
+    matmul_f64: Option<wgpu::ShaderModule>,
 }
 
 impl GpuContext {
@@ -56,11 +68,19 @@ impl GpuContext {
         let info = adapter.get_info();
         println!("Selected GPU: {} ({:?})", info.name, info.backend);
 
+        // Determine whether the adapter advertises 64-bit floating point shader
+        // support. WGSL `f64`/`array<f64>` kernels require the `SHADER_F64`
+        // device feature, which is unavailable on many GPUs. We request only the
+        // subset of `SHADER_F64` that the adapter actually exposes so that
+        // device creation never fails because of an unsupported feature.
+        let f64_supported = adapter.features().contains(wgpu::Features::SHADER_F64);
+        let required_features = adapter.features() & wgpu::Features::SHADER_F64;
+
         // Create the device and queue
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("NumRS2 GPU device"),
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::default(),
@@ -71,29 +91,45 @@ impl GpuContext {
                 NumRs2Error::RuntimeError(format!("Failed to create GPU device: {}", e))
             })?;
 
-        // Load all the shader modules
-        let shader_modules = Self::create_shader_modules(&device)?;
+        // Load all the shader modules. The real f64 shaders are only compiled
+        // when the device supports `SHADER_F64`.
+        let shader_modules = Self::create_shader_modules(&device, f64_supported)?;
 
         Ok(Self {
             device,
             queue,
             shader_modules,
+            f64_supported,
         })
     }
 
     /// Creates all the shader modules needed for GPU operations
-    fn create_shader_modules(device: &wgpu::Device) -> Result<ShaderModules> {
+    ///
+    /// When `f64_supported` is `true`, the genuine f64 WGSL shaders are
+    /// compiled. When it is `false`, the f64 modules are left uncompiled
+    /// (`None`) so that f64 GPU operations fail with a clear error instead of
+    /// silently running an f32 kernel and returning wrong results.
+    fn create_shader_modules(device: &wgpu::Device, f64_supported: bool) -> Result<ShaderModules> {
         // Load element-wise operation shaders
         let element_wise_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Element-wise F32 Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/element_wise_f32.wgsl").into()),
         });
 
-        // Create a dummy f64 shader for now - we'll fail at runtime if f64 is used without GPU support
-        let element_wise_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Element-wise F64 Shader stub"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/element_wise_f32.wgsl").into()),
-        });
+        // Compile the genuine f64 element-wise shader only when the device
+        // supports 64-bit floating point shaders. Otherwise leave it
+        // uncompiled so f64 operations are rejected rather than silently
+        // running the f32 kernel.
+        let element_wise_f64 = if f64_supported {
+            Some(device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Element-wise F64 Shader"),
+                source: wgpu::ShaderSource::Wgsl(
+                    include_str!("shaders/element_wise_f64.wgsl").into(),
+                ),
+            }))
+        } else {
+            None
+        };
 
         // Load reduction operation shaders
         let reduction_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -101,10 +137,14 @@ impl GpuContext {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f32.wgsl").into()),
         });
 
-        let reduction_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Reduction F64 Shader stub"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f32.wgsl").into()),
-        });
+        let reduction_f64 = if f64_supported {
+            Some(device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Reduction F64 Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f64.wgsl").into()),
+            }))
+        } else {
+            None
+        };
 
         // Load matrix multiplication shaders
         let matmul_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -112,10 +152,14 @@ impl GpuContext {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/matmul_f32.wgsl").into()),
         });
 
-        let matmul_f64 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Matrix Multiplication F64 Shader stub"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/matmul_f32.wgsl").into()),
-        });
+        let matmul_f64 = if f64_supported {
+            Some(device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Matrix Multiplication F64 Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/matmul_f64.wgsl").into()),
+            }))
+        } else {
+            None
+        };
 
         Ok(ShaderModules {
             element_wise_f32,
@@ -142,9 +186,22 @@ impl GpuContext {
         &self.shader_modules.element_wise_f32
     }
 
+    /// Returns whether this context's device supports 64-bit floating point
+    /// (`SHADER_F64`) GPU shaders.
+    pub fn f64_supported(&self) -> bool {
+        self.f64_supported
+    }
+
     /// Get a reference to the element-wise shader for f64
-    pub fn element_wise_f64_shader(&self) -> &wgpu::ShaderModule {
-        &self.shader_modules.element_wise_f64
+    ///
+    /// Returns an error when the device does not support the `SHADER_F64`
+    /// feature, ensuring f64 operations never silently fall back to an f32
+    /// kernel.
+    pub fn element_wise_f64_shader(&self) -> Result<&wgpu::ShaderModule> {
+        self.shader_modules
+            .element_wise_f64
+            .as_ref()
+            .ok_or_else(Self::f64_unsupported_error)
     }
 
     /// Get a reference to the reduction shader for f32
@@ -153,8 +210,15 @@ impl GpuContext {
     }
 
     /// Get a reference to the reduction shader for f64
-    pub fn reduction_f64_shader(&self) -> &wgpu::ShaderModule {
-        &self.shader_modules.reduction_f64
+    ///
+    /// Returns an error when the device does not support the `SHADER_F64`
+    /// feature, ensuring f64 operations never silently fall back to an f32
+    /// kernel.
+    pub fn reduction_f64_shader(&self) -> Result<&wgpu::ShaderModule> {
+        self.shader_modules
+            .reduction_f64
+            .as_ref()
+            .ok_or_else(Self::f64_unsupported_error)
     }
 
     /// Get a reference to the matrix multiplication shader for f32
@@ -163,8 +227,26 @@ impl GpuContext {
     }
 
     /// Get a reference to the matrix multiplication shader for f64
-    pub fn matmul_f64_shader(&self) -> &wgpu::ShaderModule {
-        &self.shader_modules.matmul_f64
+    ///
+    /// Returns an error when the device does not support the `SHADER_F64`
+    /// feature, ensuring f64 operations never silently fall back to an f32
+    /// kernel.
+    pub fn matmul_f64_shader(&self) -> Result<&wgpu::ShaderModule> {
+        self.shader_modules
+            .matmul_f64
+            .as_ref()
+            .ok_or_else(Self::f64_unsupported_error)
+    }
+
+    /// Builds the error returned when an f64 GPU operation is requested on a
+    /// device that does not support the `SHADER_F64` feature.
+    fn f64_unsupported_error() -> NumRs2Error {
+        NumRs2Error::FeatureNotEnabled(
+            "f64 GPU operations require the wgpu `SHADER_F64` device feature, \
+             which is not supported by the selected GPU adapter. Use f32 GPU \
+             arrays or run the computation on the CPU."
+                .to_string(),
+        )
     }
 
     /// Creates a GPU buffer with the given data

@@ -20,6 +20,75 @@ This document outlines the development status and roadmap for NumRS2, a high-per
 - **Performance**: Stable SVD/eigen now work for all matrix sizes (Jacobi + bidiagonalization); Schur with Francis double-shift QR
 - **Latest Enhancement**: v0.4.0 - Major feature additions: autodiff, distributed, viz, WASM, RL, quantum, model I/O, serving, CMA-ES, Bayesian opt, CV, geometry, FEM, wavelets, graph, information theory, control, physical constants; correctness fixes for large-matrix stable eigen/SVD, quantum partial trace, polynomial domain mapping, FEM general det/inv, Boltzmann exploration, gamma_ln accuracy
 
+## Code Audit & Remediation (2026-06-19)
+
+A thorough source audit was performed in response to external code-reading criticism
+(Reddit) of the SciRS2/NumRS2 ecosystem. Findings and actions for NumRS2 v0.4.1:
+
+### Verdict on the criticisms
+- **"`todo!()`/`unimplemented!()` left in place"**: NOT APPLICABLE — 0 such macros in `src/`.
+- **"Ignores Rust trait system / const generics"**: LARGELY NOT VALID — the array type is
+  generic over element type via a sound trait hierarchy; dynamic shapes are correct for a
+  NumPy-like library. Build is clean (0 warnings), all files <2000 lines, SciRS2/workspace
+  policies honored, GPU/SIMD routed through scirs2-core.
+- **"Many simplified/stub implementations"**: PARTIALLY VALID — a set of numerical routines
+  were genuinely simplified or mathematically wrong. Fixed below.
+- **"GPU is name-only"**: PARTIALLY VALID — the f64 GPU path loaded f32 shaders (silent wrong
+  results); docs overstated native CUDA/ROCm. Fixed below.
+- **"Allocation-heavy / non-Rust-like"**: SUBSTANTIALLY VALID — core hot paths allocate via
+  pervasive `.to_vec()`. Tracked below for a dedicated performance pass (Tier C).
+
+### Fixed — correctness bugs (verified: `cargo build` 0 warnings [default + gpu]; `cargo clippy --all-targets` clean; `cargo nextest` 3994/3994 passing)
+- [x] `ode.rs`: implicit Euler & BDF2 now use real Newton iteration (finite-difference Jacobian
+      + Gaussian elimination with partial pivoting), replacing fixed-point iteration that
+      diverged on stiff systems (the very case these solvers exist for). Removed dead code.
+- [x] `optimize/sqp.rs`: `solve_qp_subproblem` now solves the real constrained QP (KKT system +
+      active-set for inequalities, real Lagrange multipliers), replacing the unconstrained
+      `p = -H⁻¹g` stub that ignored all constraints.
+- [x] `optimize/interior_point.rs`: barrier Hessian completed — added the missing
+      constraint-curvature term and corrected the sign of the existing terms.
+- [x] `sparse_enhanced.rs`: spectral condition number is now κ = λ_max/λ_min (λ_min via inverse
+      power iteration using the existing CG solve), not just λ_max.
+- [x] `new_modules/matrix_decomp/condition.rs`: `slogdet` sign computed via LU decomposition
+      (permutation parity × pivot signs), replacing the hardcoded `sign = 1`.
+- [x] `gpu/context.rs`: real f64 WGSL shaders are loaded when the device reports `SHADER_F64`;
+      otherwise f64 GPU ops return a clear error (no silent f32 fallback → no wrong results).
+- [x] `new_modules/rl/agents.rs`: `SimpleNetwork::update` now performs real backpropagation
+      (forward cache + chain rule), replacing the fake uniform `+= lr*signal*0.01` update.
+- [x] `new_modules/timeseries/arima.rs`: MA coefficients estimated via the Hannan-Rissanen
+      algorithm (long-AR residuals + joint LS), replacing the placeholder that returned ~zeros.
+- [x] `new_modules/frequency_analysis.rs`: real DPSS (Slepian) tapers via the symmetric
+      tridiagonal eigenformulation (QL eigensolver) with true concentration eigenvalues,
+      replacing the sinc approximation + hardcoded eigenvalues.
+- [x] `new_modules/quantum/algorithms.rs`: `multi_controlled_z` now a correct MCX/MCZ
+      decomposition; VQE uses parameter-shift gradients + Adam; QPE applies real
+      controlled-U^(2^k) with the power assignment and readout bit-reversal matched to
+      the project's (bit-reversed) QFT convention, giving deterministic exact readout.
+
+### Fixed — false advertising / docs
+- [x] `README.md`: removed absolute "zero stubs" claims; GPU described accurately (WGPU
+      backend across Vulkan/Metal/DX12/WebGPU; no native CUDA/ROCm/TPU shipped).
+- [x] `docs/optimization_guide.md`: corrected "CUDA/ROCm backend" claims to the real WGPU mapping.
+- [x] `src/optimized_ops.rs`: `get_optimization_info` no longer implies native CUDA/OpenCL/Metal
+      execution (relabeled as scirs2-core platform detection; WGPU is NumRS2's only GPU path).
+
+### Tracked — dedicated performance pass (Tier C, NOT yet done)
+The "allocation-heavy" criticism is valid for core hot paths. Replace pervasive `.to_vec()` /
+double-allocation patterns with borrowed slices / iterators (keep SIMD dispatch, operate on
+borrowed data), and benchmark before/after with criterion to prove no regression:
+- [ ] `ufuncs.rs` — `to_array_view`/`from_array1`: 2–3 allocations per SIMD op
+- [ ] `simd.rs` — `to_ndarray_1d` + result recovery per op
+- [ ] `array/operations.rs` — `map`/`zip_with`/`par_map`/`sum_axis`/`product` each `to_vec()` first
+- [ ] `array/linalg.rs` — `matmul_2d` (3× `to_vec`), `dot_simd` (2× `to_vec`)
+- [ ] `traits/implementations.rs` — reductions `to_vec()`
+
+### Tracked — lower-priority simplifications (noted, not yet addressed)
+- [ ] `new_modules/quantum`: multi-qubit gate fusion; full controlled-U for arbitrary U
+- [ ] `new_modules/control/stability.rs`: simplified Lyapunov / eigenvalue / root-locus
+- [ ] `new_modules/special`: simplified `bessel_k` (K₁), hypergeometric ₂F₁ continuation
+- [ ] `new_modules/nn/graph.rs`: LSTM aggregator uses mean pooling
+- [ ] `new_modules/probabilistic/graphical.rs`: topological-order assumption in sampling
+
 ### Core Features (Complete)
 - ✅ N-dimensional array operations with NumPy compatibility
 - ✅ Broadcasting and advanced indexing
