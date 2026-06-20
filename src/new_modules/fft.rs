@@ -899,7 +899,10 @@ where
     // Combine: merge results
     for k in 0..n / 2 {
         let angle = -2.0 * PI * k as f64 / n as f64;
-        let twiddle = Complex::new(<T as From<f64>>::from(angle.cos()), <T as From<f64>>::from(angle.sin()));
+        let twiddle = Complex::new(
+            <T as From<f64>>::from(angle.cos()),
+            <T as From<f64>>::from(angle.sin()),
+        );
 
         let p = even[k];
         let q = odd[k] * twiddle;

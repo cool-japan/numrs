@@ -251,7 +251,8 @@ where
         // For Y_0: series_sum += -H_k * term  (term already has (-1)^k built in)
         let contrib = -h_k * term;
         series_sum = series_sum + contrib;
-        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2") {
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
             break;
         }
     }
@@ -291,7 +292,8 @@ where
         h_k1 = h_k1 + T::one() / k1_t;
         let contrib = (h_k + h_k1) * term;
         series_sum = series_sum + contrib;
-        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2") {
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
             break;
         }
     }
@@ -450,7 +452,8 @@ where
         h_k = h_k + T::one() / k_t;
         let contrib = h_k * term;
         series_sum = series_sum + contrib;
-        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2") {
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
             break;
         }
     }
@@ -492,7 +495,8 @@ where
         h_k1 = h_k1 + T::one() / k1_t;
         let contrib = (h_k + h_k1) * term;
         series_sum = series_sum + contrib;
-        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2") {
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
             break;
         }
     }

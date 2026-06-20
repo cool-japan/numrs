@@ -20,7 +20,7 @@
 //! # }
 //! ```
 
-use super::{PlotConfig, VizError, VizResult, PlotBackend, LineStyle, MarkerStyle, LineWidth};
+use super::{LineStyle, LineWidth, MarkerStyle, PlotBackend, PlotConfig, VizError, VizResult};
 use plotters::coord::Shift;
 use plotters::prelude::*;
 use scirs2_core::ndarray::Array1;
@@ -300,10 +300,7 @@ impl Plot2D {
     }
 
     /// Render the plot to a drawing area
-    fn render_plot<DB: DrawingBackend>(
-        &self,
-        root: DrawingArea<DB, Shift>,
-    ) -> VizResult<()>
+    fn render_plot<DB: DrawingBackend>(&self, root: DrawingArea<DB, Shift>) -> VizResult<()>
     where
         DB::ErrorType: 'static,
     {

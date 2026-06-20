@@ -441,10 +441,8 @@ where
                         all_qubits.sort_unstable();
 
                         // Embed both gates into the combined space
-                        let g1_big =
-                            embed_gate_in_space(&g1.gate, &g1.target_qubits, &all_qubits)?;
-                        let g2_big =
-                            embed_gate_in_space(&g2.gate, &g2.target_qubits, &all_qubits)?;
+                        let g1_big = embed_gate_in_space(&g1.gate, &g1.target_qubits, &all_qubits)?;
+                        let g2_big = embed_gate_in_space(&g2.gate, &g2.target_qubits, &all_qubits)?;
 
                         // Fused = G2 * G1 (G1 applied first)
                         let fused_gate = multiply_square_gates(&g2_big, &g1_big)?;

@@ -203,8 +203,7 @@ where
         T::from(1.0_f64).expect("Cody erfc large Q6"),
     ];
     let pval = ((((p[5] * t + p[4]) * t + p[3]) * t + p[2]) * t + p[1]) * t + p[0];
-    let qval =
-        (((((q[6] * t + q[5]) * t + q[4]) * t + q[3]) * t + q[2]) * t + q[1]) * t + q[0];
+    let qval = (((((q[6] * t + q[5]) * t + q[4]) * t + q[3]) * t + q[2]) * t + q[1]) * t + q[0];
     (-xsq).exp() * pval / (qval * abs_x)
 }
 
@@ -232,7 +231,11 @@ where
     } else {
         erfc_positive(abs_x)
     };
-    if x < zero { two - e } else { e }
+    if x < zero {
+        two - e
+    } else {
+        e
+    }
 }
 
 /// Robust inverse error function using Halley iteration with high-quality initial guess.
@@ -302,7 +305,7 @@ where
         } else {
             one_minus_x2
         };
-        let w = one_minus_x2_safe.ln();  // negative value
+        let w = one_minus_x2_safe.ln(); // negative value
 
         // inner = 2/(π·a) + w/2  (w is negative, so this reduces the term)
         let inner = two / (pi * a) + w / two;

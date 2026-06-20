@@ -78,11 +78,11 @@ fn test_erfinv_reference() {
 
     // Known values of erfinv(x) — verified against scipy.special.erfinv
     let expected_values = [
-        0.0f64,                  // erfinv(0)
-        0.4769362762044699f64,   // erfinv(0.5)
-        0.9061938024368232f64,   // erfinv(0.8)
-        -0.4769362762044699f64,  // erfinv(-0.5)
-        -0.9061938024368232f64,  // erfinv(-0.8)
+        0.0f64,                 // erfinv(0)
+        0.4769362762044699f64,  // erfinv(0.5)
+        0.9061938024368232f64,  // erfinv(0.8)
+        -0.4769362762044699f64, // erfinv(-0.5)
+        -0.9061938024368232f64, // erfinv(-0.8)
     ];
 
     for (i, &expected) in expected_values.iter().enumerate() {
@@ -106,11 +106,11 @@ fn test_erfcinv_reference() {
 
     // Known values of erfcinv(x)
     let expected_values = [
-        0.0f64,                  // erfcinv(1) = erfinv(0) = 0
-        0.4769362762044699f64,   // erfcinv(0.5) = erfinv(0.5)
-        0.9061938024368232f64,   // erfcinv(0.2) = erfinv(0.8)
-        -0.4769362762044699f64,  // erfcinv(1.5) = erfinv(-0.5)
-        -0.9061938024368232f64,  // erfcinv(1.8) = erfinv(-0.8)
+        0.0f64,                 // erfcinv(1) = erfinv(0) = 0
+        0.4769362762044699f64,  // erfcinv(0.5) = erfinv(0.5)
+        0.9061938024368232f64,  // erfcinv(0.2) = erfinv(0.8)
+        -0.4769362762044699f64, // erfcinv(1.5) = erfinv(-0.5)
+        -0.9061938024368232f64, // erfcinv(1.8) = erfinv(-0.8)
     ];
 
     for (i, &expected) in expected_values.iter().enumerate() {
@@ -312,10 +312,10 @@ fn test_bessel_k_reference() {
     // Test K_1(x)
     let k1 = bessel_k(1, &x);
     let k1_expected = [
-        9.853844780870606f64,     // K_1(0.1)
-        0.6019072301972346f64,    // K_1(1)
-        0.13986588181652242f64,   // K_1(2)
-        0.004044613445452163f64,  // K_1(5) — verified via scipy.special.kv(1, 5.0)
+        9.853844780870606f64,    // K_1(0.1)
+        0.6019072301972346f64,   // K_1(1)
+        0.13986588181652242f64,  // K_1(2)
+        0.004044613445452163f64, // K_1(5) — verified via scipy.special.kv(1, 5.0)
     ];
 
     let k1_tolerances = [1e-5_f64, 1e-8_f64, 1e-8_f64, 1e-8_f64]; // x = [0.1, 1.0, 2.0, 5.0]
@@ -374,10 +374,10 @@ fn test_gammainc_reference() {
 
     // Known values for gammainc(a, a) — verified against scipy.special.gammainc
     let expected_values = [
-        0.6321205588285577f64,  // gammainc(1, 1): exact = 1 - 1/e
-        0.5939941502901616f64,  // gammainc(2, 2): scipy = 0.5939941502901616
-        0.5768099188731565f64,  // gammainc(3, 3): exact = 1 - e^{-3}*(1+3+4.5)
-        0.5665298796332910f64,  // gammainc(4, 4): scipy = 0.5665298796332910
+        0.6321205588285577f64, // gammainc(1, 1): exact = 1 - 1/e
+        0.5939941502901616f64, // gammainc(2, 2): scipy = 0.5939941502901616
+        0.5768099188731565f64, // gammainc(3, 3): exact = 1 - e^{-3}*(1+3+4.5)
+        0.5665298796332910f64, // gammainc(4, 4): scipy = 0.5665298796332910
     ];
 
     // gammainc(a, x) assertions — series/CF converges to ~1e-10

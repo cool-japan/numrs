@@ -117,9 +117,7 @@ fn scatter_plot_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std:
 }
 
 /// Example 3: Multiple Series
-fn multiple_series_example(
-    output_dir: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn multiple_series_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     let x = Array1::linspace(0.0, 2.0 * PI, 100);
     let y1 = x.mapv(|v| v.sin());
     let y2 = x.mapv(|v| v.cos());
