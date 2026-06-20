@@ -3,7 +3,7 @@
 //! This module provides utilities for exporting plots to various formats
 //! including PNG, SVG, HTML, and LaTeX/TikZ.
 
-use super::*;
+use super::{VizError, VizResult};
 use std::path::Path;
 
 /// Export format enumeration

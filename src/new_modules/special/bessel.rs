@@ -423,12 +423,12 @@ where
     k_curr
 }
 
-/// K_0(x) via DLMF 10.31.1 series for x < 2, asymptotic for x >= 2
+/// K_0(x) via DLMF 10.31.1 series for x < 8, asymptotic for x >= 8
 fn bessel_k0_scalar<T>(x: T, euler_gamma: T) -> T
 where
     T: Float + Debug,
 {
-    if x >= T::from(2.0_f64).expect("2 converts to float") {
+    if x >= T::from(8.0_f64).expect("8 converts to float") {
         return bessel_k_asymptotic(0, x);
     }
 
@@ -458,16 +458,16 @@ where
     -(ln_half_x + euler_gamma) * i0_sum + series_sum
 }
 
-/// K_1(x) via DLMF 10.31.2 series for x < 2, asymptotic for x >= 2
+/// K_1(x) via DLMF 10.31.2 series for x < 8, asymptotic for x >= 8
 fn bessel_k1_scalar<T>(x: T, euler_gamma: T) -> T
 where
     T: Float + Debug,
 {
-    if x >= T::from(2.0_f64).expect("2 converts to float") {
+    if x >= T::from(8.0_f64).expect("8 converts to float") {
         return bessel_k_asymptotic(1, x);
     }
 
-    // DLMF 10.31.2: K_1(x) = 1/x + (ln(x/2)+γ-1/2)*I_1(x)
+    // DLMF 10.31.2: K_1(x) = 1/x + (ln(x/2)+γ)*I_1(x)
     //                          - (x/4) * Σ_{k=0}^∞ (H_k+H_{k+1})*(x²/4)^k/(k!(k+1)!)
     // I_1(x) = (x/2) * Σ_{k=0}^∞ (x²/4)^k/(k!(k+1)!)
     let half_x = x / T::from(2.0_f64).expect("2 converts to float");
@@ -500,7 +500,8 @@ where
     let i1 = half_x * i1_inner;
     let half = T::from(0.5_f64).expect("0.5 converts to float");
 
-    T::one() / x + (ln_half_x + euler_gamma - half) * i1 - half_x * half * series_sum
+    // DLMF 10.31.2: K_1(x) = 1/x + (ln(x/2)+γ)*I_1(x) - (x/4)*Σ(H_k+H_{k+1})(x²/4)^k/(k!(k+1)!)
+    T::one() / x + (ln_half_x + euler_gamma) * i1 - half_x * half * series_sum
 }
 
 /// Asymptotic expansion of K_n(x) for x >= 2:

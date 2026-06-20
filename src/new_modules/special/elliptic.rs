@@ -196,8 +196,9 @@ where
     let mut a = T::one();
     let mut g = one_minus_m.sqrt();
 
-    // Convergence criterion
-    let eps = T::from(1e-10).expect("1e-10 should convert to float type");
+    // Convergence criterion: converge to near machine epsilon
+    let eps = T::epsilon() * T::from(4.0_f64).expect("4.0 converts to float")
+        + T::from(1e-14_f64).expect("1e-14 converts to float");
 
     // Iterate until convergence
     while (a - g).abs() > a * eps {
@@ -216,7 +217,6 @@ pub(crate) fn ellipe_scalar<T>(m: T) -> T
 where
     T: Float + Debug,
 {
-    // Check input range
     if m > T::one() {
         return T::nan();
     }
@@ -224,38 +224,42 @@ where
         return T::one();
     }
     if m == T::zero() {
-        return T::from(std::f64::consts::PI / 2.0).expect("PI/2 should convert to float type");
+        return T::from(std::f64::consts::PI / 2.0).expect("PI/2 converts to float");
     }
 
-    // Implementation using arithmetic-geometric mean method
-    let pi = T::from(std::f64::consts::PI).expect("PI should convert to float type");
-    let one_minus_m = T::one() - m;
+    let pi = T::from(std::f64::consts::PI).expect("PI converts to float");
+    let two = T::from(2.0_f64).expect("2 converts to float");
+    let half = T::from(0.5_f64).expect("0.5 converts to float");
 
-    // Initialize arithmetic and geometric means
+    // AGM method for E(m):
+    // E(m) = K(m) * (1 - Σ_{n=0}^∞ 2^{n-1} * c_n^2)
+    // where a_0=1, b_0=sqrt(1-m), c_0=sqrt(m)
+    // iteration: a_{n+1}=(a_n+b_n)/2, b_{n+1}=sqrt(a_n*b_n), c_{n+1}=(a_n-b_n)/2
     let mut a = T::one();
-    let mut g = one_minus_m.sqrt();
-    let mut e = m;
+    let mut b = (T::one() - m).sqrt();
+    let mut c = m.sqrt();
+    let eps = T::from(1e-15_f64).expect("1e-15 converts to float");
 
-    // Convergence criterion
-    let eps = T::from(1e-10).expect("1e-10 should convert to float type");
+    // First term: n=0, power = 2^{-1} = 0.5
+    let mut power = half;
+    let mut e_sum = power * c * c;
 
-    // Iterate until convergence
-    let mut n = T::one();
-
-    while (a - g).abs() > a * eps {
-        let a_next = (a + g) / T::from(2.0).expect("2.0 should convert to float type");
-        let g_next = (a * g).sqrt();
-        let e_next =
-            e - n * (a - g) * (a - g) / T::from(2.0).expect("2.0 should convert to float type");
-
-        a = a_next;
-        g = g_next;
-        e = e_next;
-        n = n * T::from(2.0).expect("2.0 should convert to float type");
+    for _ in 0..50 {
+        let a_new = (a + b) * half;
+        let b_new = (a * b).sqrt();
+        let c_new = (a - b) * half;
+        a = a_new;
+        b = b_new;
+        c = c_new;
+        power = power * two; // next power is 2^n for n=1,2,...
+        e_sum = e_sum + power * c * c;
+        if c.abs() <= eps * a.abs() {
+            break;
+        }
     }
 
-    pi * (T::one() - e / (T::from(2.0).expect("2.0 should convert to float type") * a))
-        / (T::from(2.0).expect("2.0 should convert to float type") * a)
+    // K = pi/(2*a) at convergence
+    pi / (two * a) * (T::one() - e_sum)
 }
 
 /// Scalar incomplete elliptic integral of the first kind

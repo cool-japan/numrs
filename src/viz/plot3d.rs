@@ -3,9 +3,8 @@
 //! This module provides 3D visualization including surface plots,
 //! contour plots, and 3D scatter plots.
 
-use super::*;
+use super::{PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
 use scirs2_core::ndarray::{Array1, Array2};
 use std::path::Path;
 

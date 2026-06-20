@@ -269,7 +269,7 @@ fn surface_plot_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std:
         for j in 0..n {
             let xi = x[j];
             let yi = y[i];
-            z[[i, j]] = (-(xi * xi + yi * yi) / 2.0).exp();
+            z[[i, j]] = (-(xi * xi + yi * yi) / 2.0_f64).exp();
         }
     }
 

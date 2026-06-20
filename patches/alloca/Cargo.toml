@@ -1,0 +1,6 @@
+[package]
+name = "alloca"
+version = "0.4.0"
+edition = "2021"
+description = "Pure-Rust drop-in patch for alloca (no C deps)"
+license = "MIT"

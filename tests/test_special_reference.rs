@@ -76,65 +76,52 @@ fn test_erfinv_reference() {
     let x = Array::from_vec(vec![0.0f64, 0.5f64, 0.8f64, -0.5f64, -0.8f64]);
     let erfinv_x = erfinv(&x);
 
-    // Known values of erfinv(x)
+    // Known values of erfinv(x) — verified against scipy.special.erfinv
     let expected_values = [
-        0.0f64,                 // erfinv(0)
-        0.4769362762044699f64,  // erfinv(0.5)
-        0.9061938024368232f64,  // erfinv(0.8)
-        -0.4769362762044699f64, // erfinv(-0.5)
-        -0.9061938024368232f64, // erfinv(-0.8)
+        0.0f64,                  // erfinv(0)
+        0.4769362762044699f64,   // erfinv(0.5)
+        0.9061938024368232f64,   // erfinv(0.8)
+        -0.4769362762044699f64,  // erfinv(-0.5)
+        -0.9061938024368232f64,  // erfinv(-0.8)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix erfinv implementation to match reference values
     for (i, &expected) in expected_values.iter().enumerate() {
         let val = erfinv_x.get(&[i]).unwrap();
-        // For values near zero, check more precisely
-        if expected.abs() < 0.01f64 {
-            assert_abs_diff_eq!(val, expected, epsilon = 0.01f64);
-        } else {
-            // Skip sign check for now as implementation has issues
-            assert!(
-                !val.is_nan() && !val.is_infinite(),
-                "erfinv should return a finite value"
-            );
-            // Skip extremely precise checking as the current implementation appears to be quite different
-            // Add a TODO note to revise the implementation
-        }
+        println!(
+            "erfinv({}) = {} (expected {})",
+            x.get(&[i]).unwrap(),
+            val,
+            expected
+        );
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-6f64);
     }
 }
 
 #[test]
 fn test_erfcinv_reference() {
     // Test inverse complementary error function against known values
+    // erfcinv(x) = erfinv(1 - x) — verified against scipy.special.erfcinv
     let x = Array::from_vec(vec![1.0f64, 0.5f64, 0.2f64, 1.5f64, 1.8f64]);
     let erfcinv_x = erfcinv(&x);
 
     // Known values of erfcinv(x)
     let expected_values = [
-        0.0f64,                 // erfcinv(1) = erfinv(0)
-        0.4769362762044699f64,  // erfcinv(0.5) = erfinv(0.5)
-        0.9061938024368232f64,  // erfcinv(0.2) = erfinv(0.8)
-        -0.4769362762044699f64, // erfcinv(1.5) = erfinv(-0.5)
-        -0.9061938024368232f64, // erfcinv(1.8) = erfinv(-0.8)
+        0.0f64,                  // erfcinv(1) = erfinv(0) = 0
+        0.4769362762044699f64,   // erfcinv(0.5) = erfinv(0.5)
+        0.9061938024368232f64,   // erfcinv(0.2) = erfinv(0.8)
+        -0.4769362762044699f64,  // erfcinv(1.5) = erfinv(-0.5)
+        -0.9061938024368232f64,  // erfcinv(1.8) = erfinv(-0.8)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix erfcinv implementation to match reference values
     for (i, &expected) in expected_values.iter().enumerate() {
         let val = erfcinv_x.get(&[i]).unwrap();
-        // For values near zero, check more precisely
-        if expected.abs() < 0.01f64 {
-            assert_abs_diff_eq!(val, expected, epsilon = 0.01f64);
-        } else {
-            // Skip sign check for now as implementation has issues
-            assert!(
-                !val.is_nan() && !val.is_infinite(),
-                "erfinv should return a finite value"
-            );
-            // Skip extremely precise checking as the current implementation appears to be quite different
-            // Add a TODO note to revise the implementation
-        }
+        println!(
+            "erfcinv({}) = {} (expected {})",
+            x.get(&[i]).unwrap(),
+            val,
+            expected
+        );
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-6f64);
     }
 }
 
@@ -247,18 +234,10 @@ fn test_bessel_y_reference() {
         -0.30851762524903303f64, // Y_0(5)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix bessel_y implementation to match reference values
-    for (i, _) in y0_expected.iter().enumerate() {
-        let _val = y0.get(&[i]).unwrap();
-        let _expected = y0_expected[i]; // Use _expected to avoid warnings
-
-        // Current implementation seems to provide significantly different values
-        // Just check that the implementation runs without errors
-        // In the future when implementation is corrected, this can be tightened
-
-        // The current implementation might have issues with certain inputs
-        // Just skip assertion and note the need for fixing
+    let y0_tolerances = [1e-6_f64, 1e-8_f64, 1e-8_f64, 1e-8_f64]; // x = [0.1, 1.0, 2.0, 5.0]
+    for (i, &expected) in y0_expected.iter().enumerate() {
+        let val = y0.get(&[i]).unwrap();
+        assert_abs_diff_eq!(val, expected, epsilon = y0_tolerances[i]);
     }
 
     // Test Y_1(x)
@@ -270,18 +249,10 @@ fn test_bessel_y_reference() {
         0.14786314339122566f64,  // Y_1(5)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix bessel_y implementation to match reference values
-    for (i, _) in y1_expected.iter().enumerate() {
-        let _val = y1.get(&[i]).unwrap();
-        let _expected = y1_expected[i]; // Use _expected to avoid warnings
-
-        // Current implementation seems to provide significantly different values
-        // Just check that the implementation runs without errors
-        // In the future when implementation is corrected, this can be tightened
-
-        // The current implementation might have issues with certain inputs
-        // Just skip assertion and note the need for fixing
+    let y1_tolerances = [1e-5_f64, 1e-8_f64, 1e-8_f64, 1e-8_f64]; // x = [0.1, 1.0, 2.0, 5.0]
+    for (i, &expected) in y1_expected.iter().enumerate() {
+        let val = y1.get(&[i]).unwrap();
+        assert_abs_diff_eq!(val, expected, epsilon = y1_tolerances[i]);
     }
 }
 
@@ -329,26 +300,13 @@ fn test_bessel_k_reference() {
         2.4270690247020564f64,      // K_0(0.1)
         0.421_024_438_240_708_2f64, // K_0(1)
         0.11389387274953283f64,     // K_0(2)
-        0.0007442302194739058f64,   // K_0(5)
+        0.003691098334042593f64,    // K_0(5) — verified via scipy.special.kv(0, 5.0)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix bessel_k implementation to match reference values
-    for (i, &expected_val) in k0_expected.iter().enumerate() {
+    let k0_tolerances = [1e-6_f64, 1e-8_f64, 1e-8_f64, 1e-8_f64]; // x = [0.1, 1.0, 2.0, 5.0]
+    for (i, &expected) in k0_expected.iter().enumerate() {
         let val = k0.get(&[i]).unwrap();
-        // Current implementation seems to return 0 for some inputs
-        // Just perform minimal validation that the function runs
-        if val == 0.0f64 {
-            println!(
-                "WARNING: bessel_k(0, {}) returned 0.0, expected {}",
-                x.get(&[i]).unwrap(),
-                expected_val
-            );
-            continue;
-        }
-
-        // For non-zero values, check sign and rough magnitude
-        assert!(val >= 0.0f64, "K_0(x) should be non-negative for x > 0");
+        assert_abs_diff_eq!(val, expected, epsilon = k0_tolerances[i]);
     }
 
     // Test K_1(x)
@@ -357,26 +315,13 @@ fn test_bessel_k_reference() {
         9.853844780870606f64,     // K_1(0.1)
         0.6019072301972346f64,    // K_1(1)
         0.13986588181652242f64,   // K_1(2)
-        0.0009278774993751827f64, // K_1(5)
+        0.004044613445452163f64,  // K_1(5) — verified via scipy.special.kv(1, 5.0)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix bessel_k implementation to match reference values
-    for (i, &expected_val) in k1_expected.iter().enumerate() {
+    let k1_tolerances = [1e-5_f64, 1e-8_f64, 1e-8_f64, 1e-8_f64]; // x = [0.1, 1.0, 2.0, 5.0]
+    for (i, &expected) in k1_expected.iter().enumerate() {
         let val = k1.get(&[i]).unwrap();
-        // Current implementation seems to return 0 for some inputs
-        // Just perform minimal validation that the function runs
-        if val == 0.0f64 {
-            println!(
-                "WARNING: bessel_k(1, {}) returned 0.0, expected {}",
-                x.get(&[i]).unwrap(),
-                expected_val
-            );
-            continue;
-        }
-
-        // For non-zero values, check sign and rough magnitude
-        assert!(val >= 0.0f64, "K_1(x) should be non-negative for x > 0");
+        assert_abs_diff_eq!(val, expected, epsilon = k1_tolerances[i]);
     }
 }
 
@@ -394,21 +339,10 @@ fn test_elliptic_integrals_reference() {
         2.5780921133481613f64,         // K(0.9)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix ellipk implementation to match reference values
+    // K(m) assertions — AGM converges to ~1e-10, so tight tolerance is valid
     for (i, &expected) in k_expected.iter().enumerate() {
         let val = k.get(&[i]).unwrap();
-        // For first value (PI/2), check more precisely
-        if i == 0 {
-            assert_abs_diff_eq!(val, expected, epsilon = 0.01f64);
-        } else {
-            // For other values, just check the sign and approximate magnitude
-            assert!(val > 0.0f64, "Values should be positive");
-            assert!(
-                (val - expected).abs() / expected < 0.1f64,
-                "Values should be within 10% of expected value"
-            );
-        }
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-9);
     }
 
     // Test complete elliptic integral of the second kind, E(m)
@@ -420,21 +354,10 @@ fn test_elliptic_integrals_reference() {
         1.1047747327040733f64,         // E(0.9)
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix ellipe implementation to match reference values
+    // E(m) assertions — AGM converges to ~1e-10, so tight tolerance is valid
     for (i, &expected) in e_expected.iter().enumerate() {
         let val = e.get(&[i]).unwrap();
-        // For first value (PI/2), check more precisely
-        if i == 0 {
-            assert_abs_diff_eq!(val, expected, epsilon = 0.01f64);
-        } else {
-            // For other values, check that they're within reasonable range
-            assert!(val > 0.0f64, "Values should be positive");
-            assert!(
-                (val - expected).abs() / expected < 0.1f64,
-                "Values should be within 10% of expected value"
-            );
-        }
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-9);
     }
 }
 
@@ -449,27 +372,18 @@ fn test_gammainc_reference() {
     // Test gammainc(a, x) for various combinations
     let gammainc_result = gammainc(&a, &x).unwrap();
 
-    // Known values for gammainc(a, a)
+    // Known values for gammainc(a, a) — verified against scipy.special.gammainc
     let expected_values = [
-        0.6321205588285577f64, // gammainc(1, 1)
-        0.5939941502901291f64, // gammainc(2, 2)
-        0.5768099063255237f64, // gammainc(3, 3)
-        0.5665299832524839f64, // gammainc(4, 4)
+        0.6321205588285577f64,  // gammainc(1, 1): exact = 1 - 1/e
+        0.5939941502901616f64,  // gammainc(2, 2): scipy = 0.5939941502901616
+        0.5768099188731565f64,  // gammainc(3, 3): exact = 1 - e^{-3}*(1+3+4.5)
+        0.5665298796332910f64,  // gammainc(4, 4): scipy = 0.5665298796332910
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix gammainc implementation to match reference values
+    // gammainc(a, x) assertions — series/CF converges to ~1e-10
     for (i, &expected) in expected_values.iter().enumerate() {
         let val = gammainc_result.get(&[i]).unwrap();
-        // Just check that values are within a reasonable range
-        assert!(
-            val > 0.0f64 && val < 1.0f64,
-            "gammainc should be between 0 and 1"
-        );
-        assert!(
-            (val - expected).abs() < 0.1f64,
-            "Values should be within 0.1 of expected value"
-        );
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-9);
     }
 
     // Test specific cases where there are known analytical formulas
@@ -485,19 +399,10 @@ fn test_gammainc_reference() {
         1.0f64 - (-5.0f64).exp(),
     ];
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix gammainc implementation to match reference values for this special case
+    // gammainc(1, x) = 1 - exp(-x) special case
     for (i, &expected) in expected_ones.iter().enumerate() {
         let val = gammainc_ones.get(&[i]).unwrap();
-        // Just check that values are within a reasonable range
-        assert!(
-            val > 0.0f64 && val < 1.0f64,
-            "gammainc should be between 0 and 1"
-        );
-        assert!(
-            (val - expected).abs() < 0.1f64,
-            "Values should be within 0.1 of expected value"
-        );
+        assert_abs_diff_eq!(val, expected, epsilon = 1e-9);
     }
 }
 
@@ -536,28 +441,15 @@ fn test_compound_special_functions() {
         assert_abs_diff_eq!(sum.get(&[i]).unwrap(), 1.0f64, epsilon = 1e-12);
     }
 
-    // Test erf and erfinv
+    // Test erf and erfinv: erf(erfinv(x)) = x for x in (-1, 1)
     let z = Array::from_vec(vec![-0.8f64, -0.4f64, 0.0f64, 0.4f64, 0.8f64]);
     let erfinv_z = erfinv(&z);
     let erf_erfinv_z = erf(&erfinv_z);
 
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix erf/erfinv implementation to ensure erf(erfinv(x)) = x
     for i in 0..5 {
         let actual = erf_erfinv_z.get(&[i]).unwrap();
         let expected = z.get(&[i]).unwrap();
-
-        if expected.abs() < 0.01f64 {
-            // For values close to zero, be more precise
-            assert_abs_diff_eq!(actual, expected, epsilon = 0.01f64);
-        } else {
-            // Skip sign check for now, as implementation seems to have sign errors
-            assert!(
-                !actual.is_nan() && !actual.is_infinite(),
-                "erf(erfinv(x)) should return a finite value"
-            );
-            // The current implementation is not precise enough for strict tests
-        }
+        assert_abs_diff_eq!(actual, expected, epsilon = 1e-6f64);
     }
 }
 

@@ -3,14 +3,13 @@
 //! This module provides visualization for matrices including heatmaps,
 //! spy plots for sparse matrices, and eigenvalue visualizations.
 
-use super::*;
+use super::{ColorMap, PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
 use scirs2_core::ndarray::{Array1, Array2};
 use std::path::Path;
 
 // Import types to avoid confusion with plotters types
-use super::ColorMap as VizColorMap;
+use ColorMap as VizColorMap;
 
 /// Matrix plot structure
 pub struct MatrixPlot {

@@ -83,7 +83,7 @@ impl FFT {
         fft_recursive(&mut complex_data_mut);
 
         // Conjugate and scale
-        let scale: T = T::from(1.0 / n as f64);
+        let scale: T = <T as From<f64>>::from(1.0 / n as f64);
         let complex_data = complex_data_mut
             .iter()
             .map(|val| val.conj() * scale)
@@ -231,7 +231,7 @@ impl FFT {
         }
 
         // Transpose back, conjugate, scale and flatten
-        let scale: T = T::from(1.0 / (n_rows * n_cols) as f64);
+        let scale: T = <T as From<f64>>::from(1.0 / (n_rows * n_cols) as f64);
         let mut result = Vec::with_capacity(n_rows * n_cols);
 
         // Pre-compute the scaled and conjugated values for each row
@@ -779,7 +779,7 @@ impl FFT {
             fft_recursive(row);
 
             // Conjugate and scale
-            let scale: T = T::from(1.0 / n_cols as f64);
+            let scale: T = <T as From<f64>>::from(1.0 / n_cols as f64);
             for val in row.iter_mut() {
                 *val = val.conj() * scale;
             }
@@ -899,7 +899,7 @@ where
     // Combine: merge results
     for k in 0..n / 2 {
         let angle = -2.0 * PI * k as f64 / n as f64;
-        let twiddle = Complex::new(T::from(angle.cos()), T::from(angle.sin()));
+        let twiddle = Complex::new(<T as From<f64>>::from(angle.cos()), <T as From<f64>>::from(angle.sin()));
 
         let p = even[k];
         let q = odd[k] * twiddle;

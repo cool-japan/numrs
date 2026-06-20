@@ -3,11 +3,8 @@
 //! This module provides visualization for benchmark results, speedup curves,
 //! and scaling analysis.
 
-use super::*;
+use super::{PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
-use scirs2_core::ndarray::Array1;
-use std::collections::HashMap;
 use std::path::Path;
 
 /// Performance plot structure

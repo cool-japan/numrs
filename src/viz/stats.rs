@@ -3,10 +3,9 @@
 //! This module provides statistical visualization capabilities including
 //! histograms, box plots, violin plots, scatter matrices, and correlation heatmaps.
 
-use super::*;
+use super::{PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
-use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::ndarray::Array1;
 use std::path::Path;
 
 // Helper functions using scirs2_stats public API
