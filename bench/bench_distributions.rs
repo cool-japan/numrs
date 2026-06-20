@@ -15,6 +15,7 @@ extern crate criterion;
 use criterion::{BenchmarkId, Criterion};
 use numrs2::array::Array;
 use numrs2::random::distributions::*;
+use numrs2::random::multivariate_normal_cholesky;
 use std::hint::black_box;
 
 // Import the SciRS2 integration when available
@@ -93,10 +94,9 @@ fn bench_advanced_distributions(c: &mut Criterion) {
         );
 
         // Native NumRS2 F distribution
-        // TODO: f_dist is not yet implemented
-        // group.bench_with_input(BenchmarkId::new("NumRS2 f", size), size, |b, &size| {
-        //     b.iter(|| black_box(f_dist(5.0, 10.0, &[size])));
-        // });
+        group.bench_with_input(BenchmarkId::new("NumRS2 f", size), size, |b, &size| {
+            b.iter(|| black_box(f_dist(5.0, 10.0, &[size])));
+        });
 
         // NumRS2 noncentral F distribution (when available)
         #[cfg(not(feature = "scirs"))]
@@ -189,14 +189,13 @@ fn bench_multivariate_distributions(c: &mut Criterion) {
         );
 
         // NumRS2 multivariate normal with Cholesky decomposition
-        // TODO: multivariate_normal_cholesky is not yet implemented
-        // group.bench_with_input(
-        //     BenchmarkId::new("NumRS2 multivariate_normal_cholesky", size),
-        //     size,
-        //     |b, &size| {
-        //         b.iter(|| black_box(multivariate_normal_cholesky(&mean, &cov, size)));
-        //     },
-        // );
+        group.bench_with_input(
+            BenchmarkId::new("NumRS2 multivariate_normal_cholesky", size),
+            size,
+            |b, &size| {
+                b.iter(|| black_box(multivariate_normal_cholesky(&mean, &cov, size)));
+            },
+        );
 
         // SciRS2 multivariate normal with rotation (when available)
         #[cfg(feature = "scirs")]

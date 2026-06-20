@@ -16,7 +16,7 @@ use scirs2_core::SliceRandomExt;
 use scirs2_core::{Distribution as CoreDistribution, Pert};
 use scirs2_stats::distributions::{
     f::F as FDistribution, lognormal::Lognormal, Bernoulli, Beta, Binomial, Cauchy, ChiSquare,
-    Exponential, Gamma, Normal, Pareto, Poisson, StudentT, Weibull,
+    Exponential, Gamma, Pareto, Poisson, StudentT, Weibull,
 };
 use scirs2_stats::Distribution;
 use std::fmt::Debug;
@@ -179,14 +179,21 @@ impl RandomState {
             NumRs2Error::InvalidOperation("Failed to convert std to f64".to_string())
         })?;
 
-        let dist = Normal::new(mean_f64, std_f64).map_err(|e| {
-            NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
-        })?;
-
-        let rng = self.get_rng()?;
+        let mut rng = self.get_rng()?;
 
         for _ in 0..size {
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            // Box-Muller transform: drive sampling through the seeded RNG for reproducibility.
+            // Guard against u1 == 0.0 which would produce ln(0) = -∞.
+            let u1 = {
+                let mut u = rng.random::<f64>();
+                while u == 0.0 {
+                    u = rng.random::<f64>();
+                }
+                u
+            };
+            let u2 = rng.random::<f64>();
+            let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+            let val_f64 = mean_f64 + std_f64 * z;
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert normal sample to target type".to_string(),

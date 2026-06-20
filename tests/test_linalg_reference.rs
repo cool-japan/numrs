@@ -730,20 +730,27 @@ fn test_schur_decomposition_reference() {
     }
 
     // Check A = Q * T * Q^T
-    let _q_t_q_t = q.matmul(&t).unwrap().matmul(&q_t).unwrap();
+    let q_t_q_t = q.matmul(&t).unwrap().matmul(&q_t).unwrap();
 
-    // Note: The current Schur decomposition implementation may have precision issues
-    // For now, we verify that the decomposition returns reasonable values
-    // rather than perfect reconstruction
+    // Check reconstruction: A = Q·T·Qᵀ
+    let mut reconstruction_error = 0.0_f64;
+    for i in 0..3 {
+        for j in 0..3 {
+            let diff = (q_t_q_t.get(&[i, j]).unwrap() - m.get(&[i, j]).unwrap()).abs();
+            if diff > reconstruction_error {
+                reconstruction_error = diff;
+            }
+        }
+    }
+    assert!(
+        reconstruction_error < TOLERANCE,
+        "Schur reconstruction error: {}",
+        reconstruction_error
+    );
 
     // Check that Q and T are the right shapes
     assert_eq!(q.shape(), &[3, 3]);
     assert_eq!(t.shape(), &[3, 3]);
-
-    // For now, skip the exact reconstruction check due to implementation issues
-    // This test will pass to allow other functionality to work
-    // TODO: Investigate and fix Schur decomposition precision issues
-    println!("Note: Schur decomposition test simplified due to precision issues with current implementation");
 }
 
 #[test]

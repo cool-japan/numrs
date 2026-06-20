@@ -333,6 +333,10 @@ name = "allocation_hotpath_benchmark"
 path = "bench/allocation_hotpath_benchmark.rs"
 harness = false
 
+[[example]]
+name = "visualization"
+required-features = ["visualization"]
+
 # ===================================================================
 # PATCH: Use local oxiarc workspace (crates.io version missing progress/cancel modules)
 # ===================================================================

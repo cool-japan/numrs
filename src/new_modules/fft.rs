@@ -83,7 +83,7 @@ impl FFT {
         fft_recursive(&mut complex_data_mut);
 
         // Conjugate and scale
-        let scale: T = <T as NumCast>::from(1.0 / n as f64).unwrap_or(T::zero());
+        let scale: T = T::from(1.0 / n as f64);
         let complex_data = complex_data_mut
             .iter()
             .map(|val| val.conj() * scale)
@@ -231,7 +231,7 @@ impl FFT {
         }
 
         // Transpose back, conjugate, scale and flatten
-        let scale: T = <T as NumCast>::from(1.0 / (n_rows * n_cols) as f64).unwrap_or(T::zero());
+        let scale: T = T::from(1.0 / (n_rows * n_cols) as f64);
         let mut result = Vec::with_capacity(n_rows * n_cols);
 
         // Pre-compute the scaled and conjugated values for each row
@@ -622,8 +622,11 @@ impl FFT {
         let mut fft_data = Vec::with_capacity(n);
         fft_data.extend_from_slice(&rfft_data);
 
-        // Add the complex conjugates for negative frequencies
-        for i in 1..rfft_size - 1 + (n % 2) {
+        // Add the complex conjugates for negative frequencies.
+        // For even n, skip the Nyquist bin (index rfft_size-1) when mirroring;
+        // for odd n, mirror all non-DC bins (1..rfft_size).
+        let mirror_start = if n % 2 == 0 { 2usize } else { 1usize };
+        for i in mirror_start..rfft_size {
             fft_data.push(rfft_data[rfft_size - i].conj());
         }
 
@@ -756,8 +759,9 @@ impl FFT {
             let mut full_row = Vec::with_capacity(n_cols);
             full_row.extend_from_slice(&row);
 
-            // Add conjugates for negative frequencies
-            for i in 1..rfft_cols - 1 + (n_cols % 2) {
+            // Add conjugates for negative frequencies (same even/odd fix as irfft).
+            let mirror_start = if n_cols % 2 == 0 { 2usize } else { 1usize };
+            for i in mirror_start..rfft_cols {
                 full_row.push(row[rfft_cols - i].conj());
             }
 
@@ -775,7 +779,7 @@ impl FFT {
             fft_recursive(row);
 
             // Conjugate and scale
-            let scale: T = <T as NumCast>::from(1.0 / n_cols as f64).unwrap_or(T::zero());
+            let scale: T = T::from(1.0 / n_cols as f64);
             for val in row.iter_mut() {
                 *val = val.conj() * scale;
             }
@@ -895,10 +899,7 @@ where
     // Combine: merge results
     for k in 0..n / 2 {
         let angle = -2.0 * PI * k as f64 / n as f64;
-        let twiddle = Complex::new(
-            <T as NumCast>::from(angle.cos()).unwrap_or(T::zero()),
-            <T as NumCast>::from(angle.sin()).unwrap_or(T::zero()),
-        );
+        let twiddle = Complex::new(T::from(angle.cos()), T::from(angle.sin()));
 
         let p = even[k];
         let q = odd[k] * twiddle;

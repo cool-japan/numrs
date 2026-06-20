@@ -12,9 +12,9 @@
 use approx::assert_relative_eq;
 use numrs2::array::Array;
 use numrs2::interop::scirs_compat::*;
-use numrs2::random::advanced_distributions::{maxwell, vonmises};
+use numrs2::random::advanced_distributions::vonmises;
 use numrs2::random::distributions::{multivariate_normal_with_rotation, set_seed};
-use numrs2::random::distributions_enhanced::truncated_normal;
+use numrs2::random::distributions_enhanced::{maxwell, truncated_normal};
 use std::f64::consts::PI;
 
 /// Test that the noncentral chi-square distribution generates valid values and
@@ -226,7 +226,6 @@ fn test_distribution_shapes() {
 
 /// Test the repeatability of random generation when using the same seed
 #[test]
-#[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
 fn test_seed_repeatability() {
     // Use a very specific seed that's unlikely to conflict with other tests
     let test_seed = 987654321u64;
@@ -256,14 +255,7 @@ fn test_seed_repeatability() {
         "Different seeds should produce different results"
     );
 
-    // Test 3: Test with Maxwell distribution which is simpler than von Mises
-    // TODO: Maxwell and other scirs2_stats distributions use their own RNG state
-    // and are not currently affected by set_seed(). This needs architectural changes.
-    // For now, we skip this test to allow release.
-    // Issue tracked for future fix.
-    #[allow(unreachable_code)]
-    if false
-    // TODO: scirs2_stats distributions use separate RNG - fix in future release
+    // Test 3: Maxwell distribution - now uses seeded RNG via Box-Muller for reproducibility
     {
         let get_maxwell_sample = || {
             set_seed(test_seed);
@@ -273,7 +265,7 @@ fn test_seed_repeatability() {
         let maxwell1 = get_maxwell_sample();
         let maxwell2 = get_maxwell_sample();
 
-        // Maxwell uses Box-Muller which should be deterministic
+        // Maxwell uses Box-Muller through the seeded RandomState::normal() — must be identical
         for (m1, m2) in maxwell1.iter().zip(maxwell2.iter()) {
             assert!(
                 (m1 - m2).abs() < 1e-14,
@@ -284,11 +276,7 @@ fn test_seed_repeatability() {
         }
     }
 
-    // Test 4: Test basic truncated normal
-    // TODO: Same issue as Maxwell - scirs2_stats distributions not affected by set_seed()
-    #[allow(unreachable_code)]
-    if false
-    // TODO: scirs2_stats distributions use separate RNG - fix in future release
+    // Test 4: Truncated normal - already uses seeded RNG via rejection sampling (Box-Muller + rng.random())
     {
         let get_truncnorm_sample = || {
             set_seed(test_seed);

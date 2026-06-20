@@ -453,6 +453,81 @@ where
     Ok(Array::from_vec(data).reshape(&[4, 4]))
 }
 
+/// Create a controlled-U gate for an arbitrary k-qubit unitary U with m control qubits.
+///
+/// Given a unitary U of shape [2^k, 2^k] and m control qubits, produces a (m+k)-qubit
+/// gate of shape [2^(m+k), 2^(m+k)] representing:
+///
+/// ```text
+/// CU = diag(I_{2^m * (2^k-1) rows}, U)
+/// ```
+///
+/// More precisely: the high bits of the basis state index are the control bits. When ALL
+/// m control bits are 1, the gate applies U to the low k-qubit register. Otherwise it
+/// acts as identity.
+///
+/// # Arguments
+///
+/// * `u` - Unitary matrix of shape [2^k, 2^k]
+/// * `num_controls` - Number of control qubits (m)
+///
+/// # Returns
+///
+/// A [2^(m+k), 2^(m+k)] controlled-U gate matrix.
+pub fn controlled_u_gate<T>(u: &Array<Complex<T>>, num_controls: usize) -> Result<Array<Complex<T>>>
+where
+    T: Float + Clone + Debug + Into<f64> + From<f64>,
+{
+    let u_shape = u.shape();
+    if u_shape.len() != 2 || u_shape[0] != u_shape[1] {
+        return Err(NumRs2Error::DimensionMismatch(
+            "controlled_u_gate: U must be a square 2D matrix".to_string(),
+        ));
+    }
+    let u_dim = u_shape[0];
+    // Validate u_dim is a power of 2
+    if u_dim == 0 || (u_dim & (u_dim - 1)) != 0 {
+        return Err(NumRs2Error::InvalidOperation(
+            "controlled_u_gate: U dimension must be a power of 2".to_string(),
+        ));
+    }
+    let k_qubits = u_dim.trailing_zeros() as usize; // log2(u_dim)
+    let total_qubits = num_controls + k_qubits;
+    let total_dim = 1usize << total_qubits;
+    let all_controls_mask = (1usize << num_controls).wrapping_sub(1);
+
+    let mut data = vec![Complex::new(T::zero(), T::zero()); total_dim * total_dim];
+
+    for row in 0..total_dim {
+        // High bits (num_controls bits) are control bits
+        let control_bits = row >> k_qubits;
+        let target_bits = row & (u_dim - 1);
+
+        if control_bits == all_controls_mask {
+            // All controls are 1 — apply U block
+            for col_target in 0..u_dim {
+                let col = (control_bits << k_qubits) | col_target;
+                let u_elem = u.get(&[target_bits, col_target]).map_err(|_| {
+                    NumRs2Error::IndexOutOfBounds("controlled_u_gate: invalid U access".to_string())
+                })?;
+                data[row * total_dim + col] = u_elem;
+            }
+        } else {
+            // Identity block
+            data[row * total_dim + row] = Complex::new(T::one(), T::zero());
+        }
+    }
+
+    let result = Array::from_vec(data).reshape(&[total_dim, total_dim]);
+
+    // Validate unitarity if runtime validation is enabled
+    if super::unitarity::is_runtime_validation_enabled() {
+        super::unitarity::validate_gate_unitarity(&result, 1e-10, Some("Controlled-U"))?;
+    }
+
+    Ok(result)
+}
+
 /// Identity gate for n qubits
 ///
 /// # Arguments

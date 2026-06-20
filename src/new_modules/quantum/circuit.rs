@@ -297,6 +297,40 @@ where
         self.add_gate(gate, vec![control, target1, target2], "Fredkin".to_string())
     }
 
+    /// Add a controlled-U gate with arbitrary unitary U.
+    ///
+    /// The gate applies `u` to `targets` when all `controls` qubits are |1⟩.
+    ///
+    /// # Arguments
+    ///
+    /// * `u` - Unitary matrix of shape [2^k, 2^k] for k = targets.len()
+    /// * `controls` - Control qubit indices
+    /// * `targets` - Target qubit indices
+    pub fn controlled_u(
+        &mut self,
+        u: Array<Complex<T>>,
+        controls: Vec<usize>,
+        targets: Vec<usize>,
+    ) -> Result<&mut Self> {
+        // Validate no overlap between controls and targets
+        for &c in &controls {
+            if targets.contains(&c) {
+                return Err(NumRs2Error::InvalidOperation(
+                    "controlled_u: control and target qubits must not overlap".to_string(),
+                ));
+            }
+        }
+
+        let cu = gates::controlled_u_gate(&u, controls.len())?;
+
+        // Qubit ordering: targets first (gate indices 0..k), then controls (gate indices k..k+m).
+        // This matches the controlled_u_gate convention where low bits are target bits.
+        let mut combined = targets.clone();
+        combined.extend_from_slice(&controls);
+
+        self.add_gate(cu, combined, "Controlled-U".to_string())
+    }
+
     /// Execute the circuit and return the final state
     ///
     /// Applies all gates in sequence to the initial state.
@@ -320,30 +354,37 @@ where
         self.clone()
     }
 
-    /// Optimize the circuit by fusing adjacent gates on the same qubits
+    /// Optimize the circuit by fusing adjacent gates.
     ///
-    /// This is a simple optimization that combines consecutive single-qubit gates
-    /// on the same qubit into a single gate.
+    /// Phase 1: Fuse consecutive single-qubit gates on the same qubit.
+    /// Phase 2: Fuse adjacent gate pairs whose qubit supports overlap.
     pub fn optimize(&mut self) -> Result<()> {
-        // Simple gate fusion optimization
-        let mut optimized_ops = Vec::new();
+        // Phase 1: single-qubit gate fusion (fast path, same as before)
+        self.fuse_single_qubit_chains()?;
+        // Phase 2: multi-qubit gate fusion (generalized)
+        self.fuse_adjacent_gates()?;
+        Ok(())
+    }
+
+    /// Fuse consecutive single-qubit gates on the same qubit.
+    fn fuse_single_qubit_chains(&mut self) -> Result<()> {
+        let mut optimized_ops: Vec<GateOperation<T>> = Vec::new();
         let mut i = 0;
 
         while i < self.operations.len() {
             let current = &self.operations[i];
 
-            // Only fuse single-qubit gates for now
             if current.target_qubits.len() == 1 {
                 let qubit = current.target_qubits[0];
                 let mut fused_gate = current.gate.clone();
+                let mut fused_name = current.name.clone();
                 let mut j = i + 1;
 
-                // Look for consecutive single-qubit gates on the same qubit
                 while j < self.operations.len() {
                     let next = &self.operations[j];
                     if next.target_qubits.len() == 1 && next.target_qubits[0] == qubit {
-                        // Multiply gates: result = next * fused
-                        fused_gate = multiply_2x2_gates(&next.gate, &fused_gate)?;
+                        fused_gate = multiply_square_gates(&next.gate, &fused_gate)?;
+                        fused_name = format!("Fused({}+{})", fused_name, next.name);
                         j += 1;
                     } else {
                         break;
@@ -353,9 +394,12 @@ where
                 optimized_ops.push(GateOperation {
                     gate: fused_gate,
                     target_qubits: vec![qubit],
-                    name: "Fused".to_string(),
+                    name: if j > i + 1 {
+                        fused_name
+                    } else {
+                        current.name.clone()
+                    },
                 });
-
                 i = j;
             } else {
                 optimized_ops.push(current.clone());
@@ -364,6 +408,71 @@ where
         }
 
         self.operations = optimized_ops;
+        Ok(())
+    }
+
+    /// Fuse adjacent gate pairs that share overlapping qubit support.
+    /// Runs to fixed-point (repeats until no more fusions are possible).
+    fn fuse_adjacent_gates(&mut self) -> Result<()> {
+        loop {
+            let mut fused_any = false;
+            let mut new_ops: Vec<GateOperation<T>> = Vec::new();
+            let mut i = 0;
+
+            while i < self.operations.len() {
+                if i + 1 < self.operations.len() {
+                    let g1 = &self.operations[i];
+                    let g2 = &self.operations[i + 1];
+
+                    // Check if their qubit sets overlap
+                    let overlaps = g1
+                        .target_qubits
+                        .iter()
+                        .any(|q| g2.target_qubits.contains(q));
+
+                    if overlaps {
+                        // Fuse: compute union of qubit sets (sorted)
+                        let mut all_qubits = g1.target_qubits.clone();
+                        for &q in &g2.target_qubits {
+                            if !all_qubits.contains(&q) {
+                                all_qubits.push(q);
+                            }
+                        }
+                        all_qubits.sort_unstable();
+
+                        // Embed both gates into the combined space
+                        let g1_big =
+                            embed_gate_in_space(&g1.gate, &g1.target_qubits, &all_qubits)?;
+                        let g2_big =
+                            embed_gate_in_space(&g2.gate, &g2.target_qubits, &all_qubits)?;
+
+                        // Fused = G2 * G1 (G1 applied first)
+                        let fused_gate = multiply_square_gates(&g2_big, &g1_big)?;
+                        let fused_name = format!("Fused({}+{})", g1.name, g2.name);
+
+                        new_ops.push(GateOperation {
+                            gate: fused_gate,
+                            target_qubits: all_qubits,
+                            name: fused_name,
+                        });
+
+                        fused_any = true;
+                        i += 2; // consumed both
+                        continue;
+                    }
+                }
+
+                new_ops.push(self.operations[i].clone());
+                i += 1;
+            }
+
+            self.operations = new_ops;
+
+            if !fused_any {
+                break;
+            }
+        }
+
         Ok(())
     }
 
@@ -378,30 +487,132 @@ where
     }
 }
 
-/// Multiply two 2×2 gate matrices
-fn multiply_2x2_gates<T>(a: &Array<Complex<T>>, b: &Array<Complex<T>>) -> Result<Array<Complex<T>>>
+/// Embed a gate acting on `gate_qubits` into the full Hilbert space spanned by `all_qubits`.
+///
+/// `all_qubits` must be sorted ascending. `gate_qubits` must be a subset of `all_qubits`.
+///
+/// The result is a 2^|all_qubits| × 2^|all_qubits| matrix consistent with the
+/// `statevector::apply_gate` convention: for `apply_gate(M, all_qubits)`, bit k of
+/// the gate index = value of circuit qubit `all_qubits[k]`.
+fn embed_gate_in_space<T>(
+    gate: &Array<Complex<T>>,
+    gate_qubits: &[usize],
+    all_qubits: &[usize],
+) -> Result<Array<Complex<T>>>
 where
     T: Float + Clone + Debug + Into<f64> + From<f64>,
 {
-    let mut result = vec![Complex::new(T::zero(), T::zero()); 4];
+    let num_all = all_qubits.len();
+    let num_gate = gate_qubits.len();
+    let big_dim = 1usize << num_all;
 
-    for i in 0..2 {
-        for j in 0..2 {
-            let mut sum = Complex::new(T::zero(), T::zero());
-            for k in 0..2 {
-                let a_ik = a.get(&[i, k]).map_err(|_| {
-                    NumRs2Error::IndexOutOfBounds("Invalid gate access".to_string())
-                })?;
-                let b_kj = b.get(&[k, j]).map_err(|_| {
-                    NumRs2Error::IndexOutOfBounds("Invalid gate access".to_string())
-                })?;
-                sum = sum + a_ik * b_kj;
+    // Map each gate qubit to its position in all_qubits
+    let mut pos_in_all = vec![0usize; num_gate];
+    for (g, &gq) in gate_qubits.iter().enumerate() {
+        let pos = all_qubits.iter().position(|&q| q == gq).ok_or_else(|| {
+            NumRs2Error::InvalidOperation(format!(
+                "embed_gate_in_space: gate qubit {} not found in all_qubits",
+                gq
+            ))
+        })?;
+        pos_in_all[g] = pos;
+    }
+
+    let mut data = vec![Complex::new(T::zero(), T::zero()); big_dim * big_dim];
+
+    for big_row in 0..big_dim {
+        for big_col in 0..big_dim {
+            // Extract gate-qubit bits from big_row and big_col
+            let mut gate_row = 0usize;
+            let mut gate_col = 0usize;
+            let mut identity_matches = true;
+
+            for g in 0..num_gate {
+                let bit_pos = pos_in_all[g];
+                let row_bit = (big_row >> bit_pos) & 1;
+                let col_bit = (big_col >> bit_pos) & 1;
+                gate_row |= row_bit << g;
+                gate_col |= col_bit << g;
             }
-            result[i * 2 + j] = sum;
+
+            // For non-gate qubits (positions not in pos_in_all), row and col must match
+            for p in 0..num_all {
+                if !pos_in_all.contains(&p) {
+                    let row_bit = (big_row >> p) & 1;
+                    let col_bit = (big_col >> p) & 1;
+                    if row_bit != col_bit {
+                        identity_matches = false;
+                        break;
+                    }
+                }
+            }
+
+            if identity_matches {
+                let val = gate.get(&[gate_row, gate_col]).map_err(|_| {
+                    NumRs2Error::IndexOutOfBounds(
+                        "embed_gate_in_space: invalid gate access".to_string(),
+                    )
+                })?;
+                data[big_row * big_dim + big_col] = val;
+            }
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[2, 2]))
+    Ok(Array::from_vec(data).reshape(&[big_dim, big_dim]))
+}
+
+/// Multiply two square gate matrices of the same size: result = a * b
+fn multiply_square_gates<T>(
+    a: &Array<Complex<T>>,
+    b: &Array<Complex<T>>,
+) -> Result<Array<Complex<T>>>
+where
+    T: Float + Clone + Debug + Into<f64> + From<f64>,
+{
+    let shape_a = a.shape();
+    let shape_b = b.shape();
+
+    if shape_a.len() != 2 || shape_b.len() != 2 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "multiply_square_gates: both matrices must be 2D".to_string(),
+        ));
+    }
+    if shape_a[0] != shape_a[1] || shape_b[0] != shape_b[1] {
+        return Err(NumRs2Error::DimensionMismatch(
+            "multiply_square_gates: both matrices must be square".to_string(),
+        ));
+    }
+    let n = shape_a[0];
+    if n != shape_b[0] {
+        return Err(NumRs2Error::DimensionMismatch(format!(
+            "multiply_square_gates: size mismatch {}x{} vs {}x{}",
+            shape_a[0], shape_a[1], shape_b[0], shape_b[1]
+        )));
+    }
+
+    let mut result = vec![Complex::new(T::zero(), T::zero()); n * n];
+
+    for i in 0..n {
+        for j in 0..n {
+            let mut sum = Complex::new(T::zero(), T::zero());
+            for k in 0..n {
+                let a_ik = a.get(&[i, k]).map_err(|_| {
+                    NumRs2Error::IndexOutOfBounds(
+                        "multiply_square_gates: invalid a access".to_string(),
+                    )
+                })?;
+                let b_kj = b.get(&[k, j]).map_err(|_| {
+                    NumRs2Error::IndexOutOfBounds(
+                        "multiply_square_gates: invalid b access".to_string(),
+                    )
+                })?;
+                sum = sum + a_ik * b_kj;
+            }
+            result[i * n + j] = sum;
+        }
+    }
+
+    Ok(Array::from_vec(result).reshape(&[n, n]))
 }
 
 #[cfg(test)]
@@ -558,6 +769,86 @@ mod tests {
         let mut circuit = QuantumCircuit::<f64>::new(3).expect("test: valid qubit count");
         circuit.fredkin(0, 1, 2).expect("test: valid qubit indices");
 
+        assert_eq!(circuit.num_gates(), 1);
+    }
+
+    #[test]
+    fn test_controlled_u_hadamard() {
+        use crate::new_modules::quantum::gates::hadamard;
+
+        let h = hadamard::<f64>().expect("test: valid Hadamard gate");
+
+        let mut circuit = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit.x(0).expect("test: flip qubit 0");
+        circuit.x(1).expect("test: flip qubit 1");
+        // Controlled-H: control=qubit 1, target=qubit 0
+        circuit
+            .controlled_u(h, vec![1], vec![0])
+            .expect("test: valid controlled_u");
+
+        let state = circuit.execute().expect("test: circuit execution succeeds");
+
+        // |10⟩ is index 2, |11⟩ is index 3 (qubit 1 is MSB)
+        let prob_10 = state.get_probability(2).expect("test: valid state index");
+        let prob_11 = state.get_probability(3).expect("test: valid state index");
+
+        assert_relative_eq!(prob_10, 0.5, epsilon = 1e-10);
+        assert_relative_eq!(prob_11, 0.5, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_multiqubit_fusion_correctness() {
+        // H on q0, then CNOT(control=0, target=1) creates Bell state
+        // After fusion, result should be identical to unfused circuit
+        let mut circuit_unfused = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit_unfused.h(0).expect("test: valid H gate");
+        circuit_unfused.cnot(0, 1).expect("test: valid CNOT gate");
+        let state_unfused = circuit_unfused.execute().expect("test: circuit execution");
+
+        let mut circuit_fused = QuantumCircuit::<f64>::new(2).expect("test: valid qubit count");
+        circuit_fused.h(0).expect("test: valid H gate");
+        circuit_fused.cnot(0, 1).expect("test: valid CNOT gate");
+        circuit_fused
+            .optimize()
+            .expect("test: circuit optimization succeeds");
+        let state_fused = circuit_fused.execute().expect("test: circuit execution");
+
+        // Bell state probabilities should match
+        let p00_unfused = state_unfused
+            .get_probability(0)
+            .expect("test: valid state index");
+        let p11_unfused = state_unfused
+            .get_probability(3)
+            .expect("test: valid state index");
+        let p00_fused = state_fused
+            .get_probability(0)
+            .expect("test: valid state index");
+        let p11_fused = state_fused
+            .get_probability(3)
+            .expect("test: valid state index");
+
+        assert_relative_eq!(p00_unfused, p00_fused, epsilon = 1e-10);
+        assert_relative_eq!(p11_unfused, p11_fused, epsilon = 1e-10);
+        assert_relative_eq!(p00_fused, 0.5, epsilon = 1e-10);
+        assert_relative_eq!(p11_fused, 0.5, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_fusion_reduces_op_count() {
+        // 4 consecutive H gates on the same qubit → fuse to 1 op
+        let mut circuit = QuantumCircuit::<f64>::new(1).expect("test: valid qubit count");
+        circuit.h(0).expect("test: valid gate");
+        circuit.h(0).expect("test: valid gate");
+        circuit.h(0).expect("test: valid gate");
+        circuit.h(0).expect("test: valid gate");
+
+        assert_eq!(circuit.num_gates(), 4);
+
+        circuit
+            .optimize()
+            .expect("test: circuit optimization succeeds");
+
+        // After fusion: 4 H gates on same qubit collapse to 1 (structurally 1 op)
         assert_eq!(circuit.num_gates(), 1);
     }
 }

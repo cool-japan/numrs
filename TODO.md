@@ -107,7 +107,12 @@ Sites converted:
       and SVD max-singular-value use `.array().iter()`.
 
 ### Tracked — lower-priority simplifications (noted, not yet addressed)
-- [ ] `new_modules/quantum`: multi-qubit gate fusion; full controlled-U for arbitrary U
+- [~] new_modules/quantum: multi-qubit gate fusion; full controlled-U for arbitrary U (planned 2026-06-20)
+  - **Goal:** generic `controlled_gate_n` for any 2^k×2^k U + m controls; generalized `optimize` that fuses multi-qubit adjacent gates via kron-embedding
+  - **Design:** block-diagonal `diag(I, U)` for controlled-U; qubit-support union + kron expansion for fusion; reuse bit-indexing from `statevector::apply_gate`; LSB/MSB qubit convention same as cnot/swap
+  - **Files:** src/new_modules/quantum/gates.rs, src/new_modules/quantum/circuit.rs
+  - **Tests:** controlled-U(H) correct; fused ≡ unfused on state vector; multi-qubit fusion reduces op count
+  - **Risk:** qubit-ordering convention mismatch (MSB/LSB reversal); unitarity validation call required
 - [ ] `new_modules/control/stability.rs`: simplified Lyapunov / eigenvalue / root-locus
 - [ ] `new_modules/special`: simplified `bessel_k` (K₁), hypergeometric ₂F₁ continuation
 - [ ] `new_modules/nn/graph.rs`: LSTM aggregator uses mean pooling
@@ -429,27 +434,82 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
 
 ## Stubs to implement (added 2026-06-12 by /cooljapan-stub-check)
 
-- [ ] `numrs`: `examples/visualization.rs:7` — implement viz module so the disabled visualization example compiles and runs
+- [~] examples/visualization.rs:7 — implement viz module so disabled viz example compiles/runs (planned 2026-06-20)
+  - **Goal:** uncomment the example body and wire the existing src/viz/ module to it; add [[example]] with required-features
+  - **Design:** viz module exists fully at src/viz/; stale TODO. Uncomment lines 11-14 and 24-424; replace stub main; add [[example]] name="visualization" required-features=["visualization"] to Cargo.toml
+  - **Files:** examples/visualization.rs, Cargo.toml
+  - **Tests:** `cargo run --example visualization --features visualization` succeeds
+  - **Risk:** gen_range/sample API friction with scirs2-core 0.5.0 prelude
   - Priority: P2 | Scope: medium | Hint: none
-- [ ] `numrs`: `tests/test_fft_properties.rs:419,592` — fix FFT precision issues and re-enable the two skipped tests
+- [x] tests/test_fft_properties.rs:419,592 — fix FFT precision issues, re-enable 2 skipped tests (planned 2026-06-20)
+  - **Goal:** correct irfft Hermitian-symmetry reconstruction; irfft(rfft(x))≈x + Parseval for general signals; restore both gutted test bodies
+  - **Design:** fix Nyquist/DC handling in irfft conjugate-symmetric rebuild (fft.rs:621-628); replace NumCast::unwrap_or(zero) twiddle conversions; rfft slice is fine, irfft rebuild is the bug
+  - **Files:** src/new_modules/fft.rs, tests/test_fft_properties.rs
+  - **Tests:** TOLERANCE=1e-8/TOLERANCE_HIGH=1e-6 restored in both test bodies
+  - **Risk:** odd/even-n Nyquist edge cases; accumulated rounding in 2D RFFT
   - Priority: P2 | Scope: small | Hint: oxifft
-- [ ] `numrs`: `tests/test_special_reference.rs:89` — fix `erfinv` / `erfcinv` implementations to match reference values
+- [~] tests/test_special_reference.rs:89 — fix erfinv/erfcinv to match reference values (planned 2026-06-20)
+  - **Goal:** erfinv/erfcinv accurate to ~1e-9; replace A&S 5-coeff erf with Cody rational Chebyshev ~1e-16
+  - **Design:** replace erf_scalar (error_functions.rs:165) rational approx with full Cody erf/erfc (minimax rational for 3 regions: |x|≤0.5, 0.5<|x|≤4, |x|>4); Newton/Halley refinement for erfinv then inherits the accuracy
+  - **Files:** src/new_modules/special/error_functions.rs, tests/test_special_reference.rs
+  - **Tests:** erfinv(0.5)=0.47693627620446987 ±1e-9; erfinv(0.8)=0.9061938024368232 ±1e-9
+  - **Risk:** erf_scalar change propagates to erf/erfc tests — run full special test suite
   - Priority: P2 | Scope: small | Hint: none
-- [ ] `numrs`: `tests/test_special_reference.rs:251` — fix `bessel_y` implementation to match reference values
+- [~] tests/test_special_reference.rs:251 — fix bessel_y to match reference values (planned 2026-06-20)
+  - **Goal:** correct integer-order Y_n(x); re-enable assertions Y₀(1)=0.08825696421567697, Y₁(1)=−0.7812128213002887 to ±1e-8
+  - **Design:** rewrite bessel_y_scalar: Y₀/Y₁ via DLMF 10.8.1 series (J·ln(x/2) term) for small x, asymptotic for large x; upward recurrence Y_{n+1}=(2n/x)Y_n−Y_{n-1} for n≥2; integer-order uses log-singularity formula, NOT sin(nπ) division
+  - **Files:** src/new_modules/special/bessel.rs, tests/test_special_reference.rs
+  - **Tests:** Y₀(1)≈0.08826 ±1e-8; Y₁(1)≈−0.78121 ±1e-8; Y₂(1) reference values
+  - **Risk:** DLMF series converges slowly for x close to 0; need sufficient terms; recurrence numerically stable upward for Y (unlike J)
   - Priority: P2 | Scope: small | Hint: none
-- [ ] `numrs`: `tests/test_special_reference.rs:336` — fix `bessel_k` implementation to match reference values
+- [~] tests/test_special_reference.rs:336 — fix bessel_k to match reference values (planned 2026-06-20)
+  - **Goal:** K₀/K₁/Kₙ accurate to ±1e-8; fix dead n=0 medium branch; fix n=1 monotonicity-only formula; no more 0.0 returns
+  - **Design:** rewrite bessel_k_scalar: K₀/K₁ via DLMF 10.31.1/10.31.2 series for x<2, asymptotic for x≥2 with enough correction terms; upward recurrence K_{n+1}=(2n/x)K_n+K_{n-1} (numerically stable upward); fix branch split to not use 8*n (breaks n=0)
+  - **Files:** src/new_modules/special/bessel.rs, tests/test_special_reference.rs
+  - **Tests:** K₀(1)=0.42102443824070834 ±1e-8; K₁(1)=0.6019072301972346 ±1e-8; K₀(0.1)=2.4270690247020564 ±1e-6
+  - **Risk:** x near 0 (log singularity for K₀); series vs asymptotic crossover accuracy; keep existing K for J tests unbroken
   - Priority: P2 | Scope: small | Hint: none
-- [ ] `numrs`: `tests/test_special_reference.rs:398,424` — fix `ellipk` / `ellipe` implementations to match reference values
+- [~] tests/test_special_reference.rs:398,424 — fix ellipk/ellipe to match reference values (planned 2026-06-20)
+  - **Goal:** tighten test from 10%/i==0-only to abs-diff ~1e-10; AGM impl already correct, just test relaxation to fix
+  - **Design:** verify K(0.5)=1.8540746773013719, E(0.5)=1.3506438810476755 with current AGM (eps=1e-10); lower eps toward machine epsilon if any miss; update test assertions to ±1e-10
+  - **Files:** src/new_modules/special/elliptic.rs (maybe), tests/test_special_reference.rs
+  - **Tests:** K(0.1)=1.6124413487202194 ±1e-10; K(0.5)=1.8540746773013719 ±1e-10; E(0.5)=1.3506438810476755 ±1e-10
+  - **Risk:** AGM eps=1e-10 may already suffice; only risk is if any reference value needs tighter convergence
   - Priority: P2 | Scope: small | Hint: none
-- [ ] `numrs`: `tests/test_special_reference.rs:461` — fix `gammainc` implementation to match reference values
+- [~] tests/test_special_reference.rs:461 — fix gammainc to match reference values (planned 2026-06-20)
+  - **Goal:** tighten test from 0.1 abs to ~1e-9; series+Lentz CF impl already correct
+  - **Design:** verify gammainc(1,1)=0.6321205588285577 with current impl; tighten test to ±1e-9; fix Lanczos gamma_scalar only if it limits accuracy
+  - **Files:** src/new_modules/special/gamma.rs (maybe), tests/test_special_reference.rs
+  - **Tests:** gammainc(1,1)=0.6321205588285577 ±1e-9; gammainc(2,2)=0.5939941502901291 ±1e-9
+  - **Risk:** Lanczos propagation may limit to ~1e-10; adjust tolerance if empirically needed
   - Priority: P2 | Scope: small | Hint: none
-- [ ] `numrs`: `tests/test_linalg_reference.rs:745` — investigate and fix Schur decomposition precision issues
+- [~] tests/test_linalg_reference.rs:745 — fix Schur decomposition precision issues (planned 2026-06-20)
+  - **Goal:** re-enable the A=Q·T·Qᵀ reconstruction assertion at TOLERANCE=1e-8; fix schur.rs if it fails
+  - **Design:** the reconstruction is computed at test:733 but assigned to _ and never asserted (stale). Re-enable assertion. Francis double-shift QR should already be accurate; if 2×2-block Rayleigh step (schur.rs:166) causes failure, fix it
+  - **Files:** tests/test_linalg_reference.rs, src/new_modules/matrix_decomp/schur.rs (if needed)
+  - **Tests:** Q·T·Qᵀ ≈ A at ±1e-8 for 3×3 symmetric tridiagonal [3,1,0;1,2,1;0,1,3] under matrix_decomp feature
+  - **Risk:** gated cfg(feature="matrix_decomp"); test must be run with that feature
   - Priority: P2 | Scope: medium | Hint: none
-- [ ] `numrs`: `tests/test_scirs_integration.rs:260` — fix set_seed() propagation to scirs2_stats distributions (Maxwell, other)
+- [x] tests/test_scirs_integration.rs:260 — fix set_seed() propagation to scirs2_stats distributions (planned 2026-06-20)
+  - **Goal:** set_seed makes maxwell, truncated_normal, uniform draws reproducible; remove #[ignore] and if-false dead block
+  - **Design:** replace dist.rvs(1)/thread_rng() calls in RandomState methods with sampling through the locked seeded StdRng (drive rand_distr samplers with &mut rng or inverse-CDF via rng.random::<f64>()); precedent: power() at distributions_enhanced.rs:543
+  - **Files:** src/random/state.rs, src/random/distributions_enhanced.rs, tests/test_scirs_integration.rs
+  - **Tests:** two draws after same set_seed are equal to 1e-14 for uniform, maxwell, truncated_normal; adjacent seed tests in test_vonmises_seed_issue.rs etc. don't regress
+  - **Risk:** scirs2-stats rvs() has no seeded hook — must drive rand_distr objects directly; ~18 rvs() call sites; von Mises needs same treatment
   - Priority: P2 | Scope: small | Hint: none
 - [ ] `numrs`: `tests/nn/test_simd_ops.rs:248` — re-enable skipped f64 matmul SIMD test once scirs2-core issue resolved
   - Priority: P2 | Scope: trivial | Hint: none
-- [ ] `numrs`: `bench/stats_benchmarks.rs:461` — implement skewness and kurtosis functions to unlock stats benchmarks
+- [x] bench/stats_benchmarks.rs:461 — implement skewness and kurtosis functions (planned 2026-06-20)
+  - **Goal:** uncomment bench_statistical_moments (lines 462-491) and add to criterion_group!; skew/kurtosis already exist in prelude
+  - **Design:** skew at src/math/statistics.rs:1379, kurtosis at :1522; both in prelude; bench call skew(&data, None)/kurtosis(&data, None) matches 2-arg signature exactly; just uncomment
+  - **Files:** bench/stats_benchmarks.rs
+  - **Tests:** `cargo build --benches` compiles clean
+  - **Risk:** criterion_group! macro may need updating to include the newly uncommented benchmark function
   - Priority: P2 | Scope: small | Hint: none
-- [ ] `numrs`: `bench/bench_distributions.rs:96` — implement `f_dist` and `multivariate_normal_cholesky` distributions
+- [x] bench/bench_distributions.rs:96 — implement f_dist and multivariate_normal_cholesky distributions (planned 2026-06-20)
+  - **Goal:** uncomment f_dist (lines 97-99) and multivariate_normal_cholesky (193-199) benchmarks; fix import for multivariate_normal_cholesky
+  - **Design:** f_dist at distributions.rs:707 is in the bench's existing glob; multivariate_normal_cholesky at distributions_enhanced.rs:149 is NOT — add `use numrs2::random::multivariate_normal_cholesky;` or equivalent
+  - **Files:** bench/bench_distributions.rs
+  - **Tests:** `cargo build --benches` compiles clean
+  - **Risk:** multivariate_normal_cholesky signature (means: &[T], cov: &Array<T>, size: usize) must match bench's call (&mean, &cov, size)
   - Priority: P2 | Scope: medium | Hint: none

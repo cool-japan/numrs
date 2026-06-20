@@ -41,7 +41,7 @@ pub mod stats;
 pub use export::{ExportConfig, ExportFormat, Exporter};
 pub use matrix::MatrixPlot;
 pub use perf::{BenchmarkResult, PerfPlot, ScalingPoint};
-pub use plot2d::Plot2D;
+pub use plot2d::{Plot2D, SeriesStyle};
 pub use plot3d::Plot3D;
 pub use stats::{BinStrategy, StatPlot};
 
