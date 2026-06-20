@@ -71,8 +71,7 @@ where
     type Error = NumRs2Error;
     
     fn sum(&self) -> T {
-        let data = self.to_vec();
-        data.into_iter().fold(T::zero(), |acc, x| acc + x)
+        self.array().iter().fold(T::zero(), |acc, &x| acc + x)
     }
     
     fn sum_axis(&self, axis: usize) -> Result<Self> {
@@ -116,13 +115,15 @@ where
         T: FloatingPoint 
     {
         let mean_val = self.mean();
-        let data = self.to_vec();
-        let variance = data.iter()
+        let variance = self
+            .array()
+            .iter()
             .map(|&x| {
                 let diff = x - mean_val;
                 diff * diff
             })
-            .fold(T::zero(), |acc, x| acc + x) / T::from(self.size());
+            .fold(T::zero(), |acc, x| acc + x)
+            / T::from(self.size());
         variance.sqrt()
     }
     
@@ -146,23 +147,48 @@ where
     where 
         T: PartialOrd 
     {
-        let data = self.to_vec();
-        data.into_iter().fold(data[0], |acc, x| if x < acc { x } else { acc })
+        let owned;
+        let data: &[T] = match self.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned = self.to_vec();
+                &owned
+            }
+        };
+        data.iter()
+            .copied()
+            .fold(data[0], |acc, x| if x < acc { x } else { acc })
     }
     
     fn max(&self) -> T 
     where 
         T: PartialOrd 
     {
-        let data = self.to_vec();
-        data.into_iter().fold(data[0], |acc, x| if x > acc { x } else { acc })
+        let owned;
+        let data: &[T] = match self.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned = self.to_vec();
+                &owned
+            }
+        };
+        data.iter()
+            .copied()
+            .fold(data[0], |acc, x| if x > acc { x } else { acc })
     }
     
     fn argmin(&self) -> usize 
     where 
         T: PartialOrd 
     {
-        let data = self.to_vec();
+        let owned;
+        let data: &[T] = match self.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned = self.to_vec();
+                &owned
+            }
+        };
         let mut min_idx = 0;
         let mut min_val = data[0];
         
@@ -179,7 +205,14 @@ where
     where 
         T: PartialOrd 
     {
-        let data = self.to_vec();
+        let owned;
+        let data: &[T] = match self.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned = self.to_vec();
+                &owned
+            }
+        };
         let mut max_idx = 0;
         let mut max_val = data[0];
         
@@ -305,10 +338,10 @@ where
             ));
         }
         
-        let self_data = self.to_vec();
-        let exp_data = exponents.to_vec();
-        let result_data: Vec<T> = self_data.iter()
-            .zip(exp_data.iter())
+        let result_data: Vec<T> = self
+            .array()
+            .iter()
+            .zip(exponents.array().iter())
             .map(|(&base, &exp)| base.powf(exp))
             .collect();
             
@@ -412,8 +445,10 @@ impl<T: FloatingPoint> LinearAlgebra<T> for Array<T> {
         match ord {
             None => {
                 // Frobenius norm: sqrt(sum of squares of all elements)
-                let data = self.to_vec();
-                let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
+                let sum_squares = self
+                    .array()
+                    .iter()
+                    .fold(T::zero(), |acc, &x| acc + x * x);
                 Ok(sum_squares.sqrt())
             }
             Some(p) => {
@@ -487,8 +522,8 @@ impl<T: FloatingPoint> LinearAlgebra<T> for Array<T> {
                     {
                         use crate::new_modules::matrix_decomp::svd;
                         let (_, s, _) = svd(self)?;
-                        let s_data = s.to_vec();
-                        let max_sv = s_data
+                        let max_sv = s
+                            .array()
                             .iter()
                             .fold(T::zero(), |acc, &v| if v > acc { v } else { acc });
                         return Ok(max_sv);
@@ -496,8 +531,10 @@ impl<T: FloatingPoint> LinearAlgebra<T> for Array<T> {
                     #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
                     {
                         // Frobenius norm as approximation
-                        let data = self.to_vec();
-                        let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
+                        let sum_squares = self
+                            .array()
+                            .iter()
+                            .fold(T::zero(), |acc, &x| acc + x * x);
                         Ok(sum_squares.sqrt())
                     }
                 } else {

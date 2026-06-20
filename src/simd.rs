@@ -14,7 +14,7 @@ use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 
 // SCIRS2 POLICY: Use scirs2_core::simd_ops instead of custom SIMD
-use scirs2_core::ndarray::{Array1, ArrayView1};
+use scirs2_core::ndarray::{Array1, ArrayView1, CowArray, Ix1};
 use scirs2_core::simd_ops::{PlatformCapabilities, SimdUnifiedOps};
 
 /// Trait for SIMD-accelerated operations on NumRS2 arrays
@@ -59,10 +59,12 @@ pub trait SimdOps<T> {
     fn simd_div_scalar(&self, scalar: T) -> Result<Array<T>>;
 }
 
-// Helper function to convert NumRS2 Array to ndarray Array1
-fn to_ndarray_1d<T: Clone>(arr: &Array<T>) -> Result<Array1<T>> {
-    let data = arr.to_vec();
-    Ok(Array1::from_vec(data))
+// Helper to borrow a NumRS2 Array as a 1-D ndarray view for SIMD kernels.
+// Returns a `CowArray`: a zero-copy view for contiguous arrays (the common
+// case) and an owned copy only for non-contiguous layouts. Wrapped in
+// `Result` so existing call sites using `?`/`.expect()` stay unchanged.
+fn to_ndarray_1d<T: Clone>(arr: &Array<T>) -> Result<CowArray<'_, T, Ix1>> {
+    Ok(arr.as_cow_1d())
 }
 
 // Implementation for f32
@@ -376,8 +378,7 @@ where
 /// SIMD-accelerated product of all elements
 pub fn simd_prod<T: Float + 'static>(a: &Array<T>) -> T {
     // Use scirs2 for f32/f64, fallback to scalar for others
-    let data = a.to_vec();
-    data.iter().copied().fold(T::one(), |acc, x| acc * x)
+    a.array().iter().copied().fold(T::one(), |acc, x| acc * x)
 }
 
 /// SIMD-accelerated exponential function
@@ -385,8 +386,8 @@ pub fn simd_exp<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     let shape = a.shape();
     // Use SimdUnifiedOps for f64
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-        let data = a.to_vec();
-        let data_f64: Vec<f64> = data
+        let data_f64: Vec<f64> = a
+            .array()
             .iter()
             .map(|&x| x.to_f64().expect("f64 conversion should succeed"))
             .collect();
@@ -400,8 +401,8 @@ pub fn simd_exp<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     }
     // Use SimdUnifiedOps for f32
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-        let data = a.to_vec();
-        let data_f32: Vec<f32> = data
+        let data_f32: Vec<f32> = a
+            .array()
             .iter()
             .map(|&x| x.to_f32().expect("f32 conversion should succeed"))
             .collect();
@@ -414,8 +415,7 @@ pub fn simd_exp<T: Float + 'static>(a: &Array<T>) -> Array<T> {
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Fallback for other types
-    let data = a.to_vec();
-    let result: Vec<T> = data.iter().map(|&x| x.exp()).collect();
+    let result: Vec<T> = a.array().iter().map(|&x| x.exp()).collect();
     Array::from_vec(result).reshape(&shape)
 }
 
@@ -424,8 +424,8 @@ pub fn simd_log<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     let shape = a.shape();
     // Use SimdUnifiedOps for f64
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-        let data = a.to_vec();
-        let data_f64: Vec<f64> = data
+        let data_f64: Vec<f64> = a
+            .array()
             .iter()
             .map(|&x| x.to_f64().expect("f64 conversion should succeed"))
             .collect();
@@ -439,8 +439,8 @@ pub fn simd_log<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     }
     // Use SimdUnifiedOps for f32
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-        let data = a.to_vec();
-        let data_f32: Vec<f32> = data
+        let data_f32: Vec<f32> = a
+            .array()
             .iter()
             .map(|&x| x.to_f32().expect("f32 conversion should succeed"))
             .collect();
@@ -453,8 +453,7 @@ pub fn simd_log<T: Float + 'static>(a: &Array<T>) -> Array<T> {
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Fallback for other types
-    let data = a.to_vec();
-    let result: Vec<T> = data.iter().map(|&x| x.ln()).collect();
+    let result: Vec<T> = a.array().iter().map(|&x| x.ln()).collect();
     Array::from_vec(result).reshape(&shape)
 }
 
@@ -463,8 +462,8 @@ pub fn simd_sqrt<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     let shape = a.shape();
     // Use SimdUnifiedOps for f64
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-        let data = a.to_vec();
-        let data_f64: Vec<f64> = data
+        let data_f64: Vec<f64> = a
+            .array()
             .iter()
             .map(|&x| x.to_f64().expect("f64 conversion should succeed"))
             .collect();
@@ -478,8 +477,8 @@ pub fn simd_sqrt<T: Float + 'static>(a: &Array<T>) -> Array<T> {
     }
     // Use SimdUnifiedOps for f32
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-        let data = a.to_vec();
-        let data_f32: Vec<f32> = data
+        let data_f32: Vec<f32> = a
+            .array()
             .iter()
             .map(|&x| x.to_f32().expect("f32 conversion should succeed"))
             .collect();
@@ -492,8 +491,7 @@ pub fn simd_sqrt<T: Float + 'static>(a: &Array<T>) -> Array<T> {
         return Array::from_vec(result_vec).reshape(&shape);
     }
     // Fallback for other types
-    let data = a.to_vec();
-    let result: Vec<T> = data.iter().map(|&x| x.sqrt()).collect();
+    let result: Vec<T> = a.array().iter().map(|&x| x.sqrt()).collect();
     Array::from_vec(result).reshape(&shape)
 }
 

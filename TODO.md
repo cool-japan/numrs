@@ -72,15 +72,39 @@ A thorough source audit was performed in response to external code-reading criti
 - [x] `src/optimized_ops.rs`: `get_optimization_info` no longer implies native CUDA/OpenCL/Metal
       execution (relabeled as scirs2-core platform detection; WGPU is NumRS2's only GPU path).
 
-### Tracked — dedicated performance pass (Tier C, NOT yet done)
-The "allocation-heavy" criticism is valid for core hot paths. Replace pervasive `.to_vec()` /
-double-allocation patterns with borrowed slices / iterators (keep SIMD dispatch, operate on
-borrowed data), and benchmark before/after with criterion to prove no regression:
-- [ ] `ufuncs.rs` — `to_array_view`/`from_array1`: 2–3 allocations per SIMD op
-- [ ] `simd.rs` — `to_ndarray_1d` + result recovery per op
-- [ ] `array/operations.rs` — `map`/`zip_with`/`par_map`/`sum_axis`/`product` each `to_vec()` first
-- [ ] `array/linalg.rs` — `matmul_2d` (3× `to_vec`), `dot_simd` (2× `to_vec`)
-- [ ] `traits/implementations.rs` — reductions `to_vec()`
+### DONE — dedicated performance pass (Tier C, completed 2026-06-20)
+The "allocation-heavy" criticism is valid for core hot paths. All five targeted paths have been
+refactored to route read-only access through zero-copy accessors (`Array::as_slice()` for plain
+slice iteration, `Array::as_cow_1d()` for SIMD dispatch) rather than cloning the entire input
+array via `to_vec()` before reading it. Criterion before/after benchmarks confirm improvements
+with 0 regressions on the 3994-test suite:
+
+New accessors added to `Array<T>` (`src/array/core.rs`):
+- `as_slice() -> Option<&[T]>`: zero-copy fast path for contiguous arrays
+- `as_slice_mut() -> Option<&mut [T]>`: mutable equivalent
+- `as_cow_1d() -> CowArray<'_, T, Ix1>` (pub crate): zero-copy 1D view for SIMD dispatch;
+  materialises an owned copy only for non-contiguous layouts.
+
+Sites converted:
+- [x] `ufuncs.rs` — `to_array_view` now returns `CowArray` via `as_cow_1d()`; all two-operand
+      fallbacks (`hypot`, `fma`, `lerp`, `logaddexp`, `dot`, `arctan2`, `copysign`, `prelu`) and
+      single-pass reductions (`norm_l2`, `norm_l1`, `sum`, `mean`) use `.array().iter()` or
+      `as_slice()` fallback; multi-pass paths (`var`, `softmax`, `log_softmax`) use `as_slice()`.
+      Criterion delta: `ufunc_hypot` −7% to −35% time (p=0.00 at all 4 sizes).
+- [x] `simd.rs` — `to_ndarray_1d` helper now returns `CowArray<'_, T, Ix1>` via `as_cow_1d()`
+      (was `Array1::from_vec(a.to_vec())`); `simd_prod`/`simd_exp`/`simd_log`/`simd_sqrt` use
+      `.array().iter()` directly.
+      Criterion delta: `simd_add` −45% to −64% time (p=0.00 at all 4 sizes).
+- [x] `array/operations.rs` — `map` uses `as_slice()` + plain `std::slice::Iter` (zero-copy and
+      vectorisable); `zip_with` same-shape branch uses `as_slice()` fallback for both operands;
+      `par_map`/`sum_axis`/`product` use `as_slice()` fallback or `.array().iter()`.
+      Criterion delta: no regression vs original `to_vec().iter()` baseline.
+- [x] `array/linalg.rs` — `matmul_2d` allocates output buffer directly (`vec![T::zero(); m*n]`)
+      and borrows A/B via `as_slice()` fallback; `dot` uses `.array().iter().zip(...)`; 
+      `dot_simd`/`norm_l2_simd`/`norm_l1_simd` use `as_cow_1d()`.
+- [x] `traits/implementations.rs` — all reductions (`sum`, `std`, `min`, `max`, `argmin`,
+      `argmax`) use `as_slice()` fallback; `powf` uses `.array().iter().zip(...)`; Frobenius norm
+      and SVD max-singular-value use `.array().iter()`.
 
 ### Tracked — lower-priority simplifications (noted, not yet addressed)
 - [ ] `new_modules/quantum`: multi-qubit gate fusion; full controlled-U for arbitrary U

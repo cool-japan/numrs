@@ -11,7 +11,7 @@ use super::core::LstsqResult;
 use super::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, Zero};
-use scirs2_core::ndarray::{Array1, IxDyn};
+use scirs2_core::ndarray::IxDyn;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::fmt;
 use std::fmt::Debug;
@@ -201,10 +201,26 @@ where
         // This provides significant performance improvements over naive O(n^3) algorithm
 
         // Cache-optimized implementation with improved memory access pattern
-        let result = Self::zeros(&[m, n]);
-        let a_data = self.to_vec();
-        let b_data = other.to_vec();
-        let mut c_data = result.to_vec();
+        // Borrow the contiguous operands without copying; only non-contiguous
+        // layouts incur a materializing copy. The output buffer is allocated
+        // directly instead of via a throwaway zeroed Array.
+        let mut c_data = vec![T::zero(); m * n];
+        let owned_a;
+        let a_data: &[T] = match self.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned_a = self.to_vec();
+                &owned_a
+            }
+        };
+        let owned_b;
+        let b_data: &[T] = match other.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned_b = other.to_vec();
+                &owned_b
+            }
+        };
 
         // Cache-optimized matrix multiplication with improved memory access pattern
         // Using i-k-j loop order for better cache locality
@@ -253,14 +269,12 @@ where
             });
         }
 
-        // Compute dot product
-        let a_data = self.to_vec();
-        let b_data = other.to_vec();
-        let mut result = T::zero();
-
-        for i in 0..a_shape[0] {
-            result = result + a_data[i].clone() * b_data[i].clone();
-        }
+        // Compute dot product via zero-copy iteration over both operands
+        let result = self
+            .array()
+            .iter()
+            .zip(other.array().iter())
+            .fold(T::zero(), |acc, (a, b)| acc + a.clone() * b.clone());
 
         Ok(result)
     }
@@ -288,23 +302,24 @@ impl Array<f64> {
             });
         }
 
-        // Use SimdUnifiedOps for platform-independent SIMD acceleration
-        let a_nd = Array1::from_vec(self.to_vec());
-        let b_nd = Array1::from_vec(other.to_vec());
+        // Use SimdUnifiedOps for platform-independent SIMD acceleration.
+        // `as_cow_1d` borrows contiguous operands without copying.
+        let a_nd = self.as_cow_1d();
+        let b_nd = other.as_cow_1d();
         Ok(f64::simd_dot(&a_nd.view(), &b_nd.view()))
     }
 
     /// Compute SIMD-optimized L2 norm (Euclidean norm)
     /// Uses SimdUnifiedOps for automatic platform detection
     pub fn norm_l2_simd(&self) -> f64 {
-        let nd_array = Array1::from_vec(self.to_vec());
+        let nd_array = self.as_cow_1d();
         f64::simd_norm(&nd_array.view())
     }
 
     /// Compute SIMD-optimized L1 norm (Manhattan norm)
     /// Uses SimdUnifiedOps for automatic platform detection
     pub fn norm_l1_simd(&self) -> f64 {
-        let nd_array = Array1::from_vec(self.to_vec());
+        let nd_array = self.as_cow_1d();
         f64::simd_norm_l1(&nd_array.view())
     }
 }

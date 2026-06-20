@@ -955,8 +955,168 @@ pub enum SageAggregator {
     Mean,
     /// Pool aggregator (max pooling after MLP)
     Pool,
-    /// LSTM aggregator (not fully implemented - uses mean for now)
+    /// LSTM aggregator: processes the (sorted) neighbor sequence through a single-layer
+    /// LSTM and uses the final hidden state as the aggregated neighborhood representation,
+    /// matching Hamilton et al. (2017) §3.3.
     Lstm,
+}
+
+/// Weight tensors for the LSTM aggregator used in GraphSAGE.
+///
+/// The combined weight matrix `weight` has shape `(input_size + hidden_size, 4 * hidden_size)`.
+/// Columns are ordered as [input gate | forget gate | cell gate | output gate] so that a single
+/// matrix-vector multiply computes all four gate pre-activations in one pass.
+///
+/// The forget gate bias is initialised to 1.0 (Jozefowicz et al., 2015), which prevents the cell
+/// from losing gradient signal at the start of training.
+#[derive(Debug, Clone)]
+pub struct LstmWeights<T: Float> {
+    /// Combined weight: shape (input_size + hidden_size, 4 * hidden_size)
+    pub weight: Array2<T>,
+    /// Bias vector: shape (4 * hidden_size,)
+    pub bias: Array1<T>,
+    /// LSTM hidden (= output) dimension; must equal `in_features` so the aggregated
+    /// representation has the same width as the input node features.
+    pub hidden_size: usize,
+}
+
+impl<T: Float> LstmWeights<T> {
+    /// Initialise LSTM weights with a Xavier-like scale.
+    pub fn new(input_size: usize, hidden_size: usize) -> Self {
+        let total_in = input_size + hidden_size;
+        let total_out = 4 * hidden_size;
+        let scale = (2.0 / (total_in + total_out) as f64).sqrt();
+
+        let weight = Array2::from_shape_fn((total_in, total_out), |(i, j)| {
+            let raw = (((i * total_out + j) % 200) as f64 - 100.0) / 100.0 * scale;
+            T::from(raw).unwrap_or(T::zero())
+        });
+
+        let mut bias = Array1::zeros(total_out);
+        // Forget gate (columns hidden_size..2*hidden_size) initialised to 1.
+        for j in hidden_size..(2 * hidden_size) {
+            bias[j] = T::one();
+        }
+
+        Self {
+            weight,
+            bias,
+            hidden_size,
+        }
+    }
+
+    #[inline]
+    fn sigmoid(x: T) -> T {
+        T::one() / (T::one() + (-x).exp())
+    }
+
+    /// Run one LSTM cell step and return the new (hidden, cell) pair.
+    fn step(&self, x: &Array1<T>, h: &Array1<T>, c: &Array1<T>) -> (Array1<T>, Array1<T>) {
+        let h_size = self.hidden_size;
+        let in_size = self.weight.nrows() - h_size;
+
+        // Concatenate [x, h] into a single input vector.
+        let mut xh = Array1::zeros(in_size + h_size);
+        for i in 0..in_size {
+            xh[i] = x[i];
+        }
+        for i in 0..h_size {
+            xh[in_size + i] = h[i];
+        }
+
+        // Gate pre-activations: g = W^T xh + b  (shape: 4*h_size)
+        let mut g = Array1::zeros(4 * h_size);
+        for j in 0..(4 * h_size) {
+            let mut v = self.bias[j];
+            for i in 0..(in_size + h_size) {
+                v = v + xh[i] * self.weight[[i, j]];
+            }
+            g[j] = v;
+        }
+
+        // Split into four gates and apply activations.
+        let mut h_new = Array1::zeros(h_size);
+        let mut c_new = Array1::zeros(h_size);
+        for i in 0..h_size {
+            let ig = Self::sigmoid(g[i]); // input gate
+            let fg = Self::sigmoid(g[h_size + i]); // forget gate
+            let cg = g[2 * h_size + i].tanh(); // cell gate
+            let og = Self::sigmoid(g[3 * h_size + i]); // output gate
+            c_new[i] = fg * c[i] + ig * cg;
+            h_new[i] = og * c_new[i].tanh();
+        }
+        (h_new, c_new)
+    }
+
+    /// Process a sequence of input vectors; return the final hidden state.
+    pub fn forward_sequence(&self, inputs: &[Array1<T>]) -> Array1<T> {
+        let mut h = Array1::zeros(self.hidden_size);
+        let mut c = Array1::zeros(self.hidden_size);
+        for x in inputs {
+            let (hn, cn) = self.step(x, &h, &c);
+            h = hn;
+            c = cn;
+        }
+        h
+    }
+}
+
+/// LSTM aggregation over neighbourhoods (Hamilton et al. 2017, GraphSAGE §3.3).
+///
+/// For each node, neighbours are sorted by index (deterministic ordering in lieu of
+/// the random permutation used during training), their feature vectors are fed through
+/// a single-layer LSTM, and the final hidden state is used as the aggregated
+/// neighbourhood representation.
+pub fn lstm_aggregation<T>(
+    adj: &SparseAdjacency<T>,
+    features: &ArrayView2<T>,
+    lstm: &LstmWeights<T>,
+) -> GraphResult<Array2<T>>
+where
+    T: Float + SimdUnifiedOps,
+{
+    if features.nrows() != adj.num_nodes {
+        return Err(NumRs2Error::ValueError(format!(
+            "Features has {} rows but adjacency has {} nodes",
+            features.nrows(),
+            adj.num_nodes
+        )));
+    }
+
+    let (num_nodes, feat_dim) = (features.nrows(), features.ncols());
+    let h_size = lstm.hidden_size;
+    let out_dim = feat_dim.min(h_size);
+    let mut aggregated = Array2::zeros((num_nodes, feat_dim));
+
+    for i in 0..num_nodes {
+        let (neighbors, _weights) = adj.neighbors(i)?;
+        if neighbors.is_empty() {
+            continue;
+        }
+
+        // Sort neighbours by index for a deterministic sequence order.
+        let mut sorted: Vec<usize> = neighbors.to_vec();
+        sorted.sort_unstable();
+
+        // Build the input sequence: one Array1<T> per neighbour.
+        let inputs: Vec<Array1<T>> = sorted
+            .iter()
+            .map(|&nb| {
+                let mut v = Array1::zeros(feat_dim);
+                for j in 0..feat_dim {
+                    v[j] = features[[nb, j]];
+                }
+                v
+            })
+            .collect();
+
+        let h = lstm.forward_sequence(&inputs);
+        for j in 0..out_dim {
+            aggregated[[i, j]] = h[j];
+        }
+    }
+
+    Ok(aggregated)
 }
 
 /// GraphSAGE layer
@@ -977,6 +1137,8 @@ pub struct GraphSageLayer<T: Float> {
     pub aggregator: SageAggregator,
     pub normalize: bool,
     pub weight: Array2<T>,
+    /// Present only when `aggregator == SageAggregator::Lstm`.
+    pub lstm_weights: Option<LstmWeights<T>>,
 }
 
 impl<T: Float + SimdUnifiedOps + 'static> GraphSageLayer<T> {
@@ -993,12 +1155,19 @@ impl<T: Float + SimdUnifiedOps + 'static> GraphSageLayer<T> {
             T::from(val).unwrap_or(T::zero())
         });
 
+        let lstm_weights = if aggregator == SageAggregator::Lstm {
+            Some(LstmWeights::new(in_features, in_features))
+        } else {
+            None
+        };
+
         Ok(Self {
             in_features,
             out_features,
             aggregator,
             normalize,
             weight,
+            lstm_weights,
         })
     }
 
@@ -1020,7 +1189,12 @@ impl<T: Float + SimdUnifiedOps + 'static> GraphSageLayer<T> {
         let aggregated = match self.aggregator {
             SageAggregator::Mean => mean_aggregation(adj, features)?,
             SageAggregator::Pool => max_pooling_aggregation(adj, features)?,
-            SageAggregator::Lstm => mean_aggregation(adj, features)?, // Simplified
+            SageAggregator::Lstm => {
+                let lstm = self.lstm_weights.as_ref().expect(
+                    "lstm_weights must be Some when aggregator == Lstm; this is a bug in GraphSageLayer::new",
+                );
+                lstm_aggregation(adj, features, lstm)?
+            }
         };
 
         // Concatenate self features with aggregated neighbor features

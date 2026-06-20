@@ -96,8 +96,16 @@ impl<T: Clone> Array<T> {
         // Initialize the result array
         let mut result = Self::zeros(&result_shape);
 
-        // Get the raw data
-        let data = self.to_vec();
+        // Get the raw data as a zero-copy contiguous slice when possible,
+        // materializing a copy only for non-contiguous layouts.
+        let owned_data;
+        let data: &[T] = match self.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned_data = self.to_vec();
+                &owned_data
+            }
+        };
 
         // Helper function to calculate indices
         let mut indices = vec![0; shape.len()];
@@ -156,8 +164,17 @@ impl<T: Clone> Array<T> {
         U: Send + Clone,
         F: Fn(T) -> U + Send + Sync,
     {
-        let vec_data = self.to_vec();
-        let result: Vec<U> = vec_data.par_iter().map(|x| f(x.clone())).collect();
+        // Zero-copy parallel iteration over the contiguous backing slice,
+        // falling back to a materialized copy only for non-contiguous layouts.
+        let owned_data;
+        let data: &[T] = match self.as_slice() {
+            Some(slice) => slice,
+            None => {
+                owned_data = self.to_vec();
+                &owned_data
+            }
+        };
+        let result: Vec<U> = data.par_iter().map(|x| f(x.clone())).collect();
 
         Array::from_vec(result).reshape(&self.shape())
     }
@@ -169,9 +186,17 @@ impl<T: Clone> Array<T> {
         F: Fn(T) -> U,
         T: Clone,
     {
-        let vec_data = self.to_vec();
-        let result: Vec<U> = vec_data.iter().map(|x| f(x.clone())).collect();
-
+        // Prefer a plain slice iterator (zero-copy, fully vectorisable) over the
+        // stride-aware ndarray NdIter; fall back to a materialising copy only for
+        // non-contiguous layouts.
+        let owned;
+        let result: Vec<U> = match self.as_slice() {
+            Some(slice) => slice.iter().map(|x| f(x.clone())).collect(),
+            None => {
+                owned = self.to_vec();
+                owned.iter().map(|x| f(x.clone())).collect()
+            }
+        };
         Array::from_vec(result).reshape(&self.shape())
     }
 
@@ -186,17 +211,31 @@ impl<T: Clone> Array<T> {
         let a_shape = self.shape();
         let b_shape = other.shape();
 
-        // If shapes are equal, apply function directly without broadcasting
+        // If shapes are equal, apply function directly without broadcasting.
+        // Use plain slice iterators when both arrays are contiguous — they are
+        // fully vectorisable and avoid the per-element overhead of NdIter.
         if a_shape == b_shape {
-            let self_data = self.to_vec();
-            let other_data = other.to_vec();
-
-            let result: Vec<V> = self_data
+            let owned_a;
+            let owned_b;
+            let a_slice: &[T] = match self.as_slice() {
+                Some(s) => s,
+                None => {
+                    owned_a = self.to_vec();
+                    &owned_a
+                }
+            };
+            let b_slice: &[U] = match other.as_slice() {
+                Some(s) => s,
+                None => {
+                    owned_b = other.to_vec();
+                    &owned_b
+                }
+            };
+            let result: Vec<V> = a_slice
                 .iter()
-                .zip(other_data.iter())
+                .zip(b_slice.iter())
                 .map(|(a, b)| f(a.clone(), b.clone()))
                 .collect();
-
             return Ok(Array::from_vec(result).reshape(&self.shape()));
         }
 
@@ -208,12 +247,10 @@ impl<T: Clone> Array<T> {
         let other_broadcast = other.broadcast_to(&broadcast_shape)?;
 
         // Now apply the function to the broadcasted arrays (which have the same shape)
-        let self_data = self_broadcast.to_vec();
-        let other_data = other_broadcast.to_vec();
-
-        let result: Vec<V> = self_data
+        let result: Vec<V> = self_broadcast
+            .array()
             .iter()
-            .zip(other_data.iter())
+            .zip(other_broadcast.array().iter())
             .map(|(a, b)| f(a.clone(), b.clone()))
             .collect();
 
@@ -259,7 +296,7 @@ where
         // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
         if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
             let data: Vec<f64> = self
-                .to_vec()
+                .array()
                 .iter()
                 .map(|x| {
                     // Safe type conversion through f64
@@ -274,7 +311,7 @@ where
         // Use SIMD for f32 arrays with sufficient size via SimdUnifiedOps
         if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
             let data: Vec<f32> = self
-                .to_vec()
+                .array()
                 .iter()
                 .map(|x| {
                     let ptr = x as *const T as *const f32;
@@ -285,15 +322,15 @@ where
             let result = f32::simd_sum(&nd_array.view());
             return unsafe { std::mem::transmute_copy(&result) };
         }
-        let data = self.to_vec();
-        data.iter().fold(T::zero(), |acc, x| acc + x.clone())
+        self.array()
+            .iter()
+            .fold(T::zero(), |acc, x| acc + x.clone())
     }
 
     /// Calculate the product of all elements in the array
     /// Note: Product reduction doesn't have direct SIMD support, uses scalar fallback
     pub fn product(&self) -> T {
-        let data = self.to_vec();
-        data.iter().fold(T::one(), |acc, x| acc * x.clone())
+        self.array().iter().fold(T::one(), |acc, x| acc * x.clone())
     }
 }
 

@@ -5,7 +5,7 @@
 //! size, strides, and memory layout.
 
 use crate::error::{NumRs2Error, Result};
-use scirs2_core::ndarray::{Array as NdArray, ArrayView, IxDyn};
+use scirs2_core::ndarray::{Array as NdArray, Array1, ArrayView, ArrayView1, CowArray, Ix1, IxDyn};
 use std::fmt;
 
 /// Type alias for least squares return type
@@ -169,6 +169,44 @@ impl<T: Clone> Array<T> {
     {
         let (raw_vec, _) = self.data.clone().into_raw_vec_and_offset();
         raw_vec
+    }
+
+    /// Borrow the underlying data as a contiguous slice without copying.
+    ///
+    /// Returns `Some(&[T])` when the array is stored in standard
+    /// (C-contiguous) layout, and `None` otherwise. This is the zero-copy
+    /// fast path: prefer it over [`Array::to_vec`] whenever the data only
+    /// needs to be read, falling back to `to_vec()` for the non-contiguous
+    /// case.
+    pub fn as_slice(&self) -> Option<&[T]> {
+        self.data.as_slice()
+    }
+
+    /// Mutably borrow the underlying data as a contiguous slice without
+    /// copying.
+    ///
+    /// Returns `Some(&mut [T])` when the array is stored in standard
+    /// (C-contiguous) layout, and `None` otherwise.
+    pub fn as_slice_mut(&mut self) -> Option<&mut [T]> {
+        self.data.as_slice_mut()
+    }
+
+    /// Borrow the flattened data as a 1-D `CowArray`, avoiding a copy when the
+    /// array is contiguous.
+    ///
+    /// This backs the SIMD-accelerated paths (in `simd.rs`, `ufuncs.rs` and
+    /// `linalg.rs`) which need an [`ArrayView1`] to hand to `scirs2-core`'s
+    /// `SimdUnifiedOps`. For the common contiguous case it borrows the
+    /// existing buffer with zero allocation; only non-contiguous layouts fall
+    /// back to materializing an owned copy via [`Array::to_vec`].
+    pub(crate) fn as_cow_1d(&self) -> CowArray<'_, T, Ix1>
+    where
+        T: Clone,
+    {
+        match self.as_slice() {
+            Some(slice) => CowArray::from(ArrayView1::from(slice)),
+            None => CowArray::from(Array1::from_vec(self.to_vec())),
+        }
     }
 
     /// Return the total number of elements (alias for size)

@@ -328,6 +328,11 @@ name = "complex_benchmark"
 path = "benches/complex_benchmark.rs"
 harness = false
 
+[[bench]]
+name = "allocation_hotpath_benchmark"
+path = "bench/allocation_hotpath_benchmark.rs"
+harness = false
+
 # ===================================================================
 # PATCH: Use local oxiarc workspace (crates.io version missing progress/cancel modules)
 # ===================================================================

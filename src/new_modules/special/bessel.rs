@@ -326,23 +326,50 @@ where
             let mut k1 = x_inv;
 
             if n == 1 {
-                // Simplified direct formula for K_1
-                k1 = x_inv
-                    + half_x
-                        * (x / T::from(2.0).expect("2.0 should convert to float type")).ln()
-                        * bessel_i_scalar(1, x);
-                for k in 1..16 {
-                    let k_t = T::from(k).expect("k should convert to float type");
-                    let term = T::from(0.5).expect("0.5 should convert to float type") * x * x
-                        / T::from(4.0).expect("4.0 should convert to float type")
-                        * T::from(k).expect("k should convert to float type")
-                        / (k_t * k_t * (k_t + T::one()));
-                    k1 = k1 + term;
+                // K₁(x) for small x, DLMF 10.31.2:
+                //   K₁(x) = 1/x + ln(x/2) · I₁(x)
+                //            − ½ Σ_{k=0}^∞ [ψ(k+1) + ψ(k+2)] (x/2)^{2k+1} / (k! (k+1)!)
+                //
+                // where ψ(1) = −γ (Euler–Mascheroni) and ψ(n+1) = ψ(n) + 1/n.
+                // The k-th term ratio compared to the (k-1)-th:
+                //   t_k / t_{k-1} = (x/2)² / (k(k+1))
+                // so the series converges rapidly for small x.
 
-                    if term.abs() < k1.abs() * T::epsilon() {
+                let gamma = T::from(0.577_215_664_901_532_86)
+                    .expect("Euler constant should convert to float type");
+                let two = T::from(2.0).expect("2.0 float");
+                let half = T::from(0.5).expect("0.5 float");
+                let x2 = x / two; // x/2
+                let ln_x2 = x2.ln();
+                let i1 = bessel_i_scalar(1, x);
+
+                // Accumulate the Σ term.
+                // psi_k1 = ψ(k+1), psi_k2 = ψ(k+2); start at k=0: ψ(1)=−γ, ψ(2)=1−γ.
+                let mut psi_k1 = -gamma;
+                let mut psi_k2 = T::one() - gamma;
+                let mut x2_pow = x2; // (x/2)^{2k+1} at k=0 is just x/2
+                let mut k_fact = T::one(); // k! at k=0
+                let mut k1_fact = T::one(); // (k+1)! at k=0
+                let x2_sq = x2 * x2;
+                let mut sum = T::zero();
+
+                for k in 0usize..20 {
+                    let term = (psi_k1 + psi_k2) * x2_pow / (k_fact * k1_fact);
+                    sum = sum + term;
+                    if term.abs() < sum.abs() * T::epsilon() {
                         break;
                     }
+                    // Advance to k+1.
+                    let k1_t = T::from(k + 1).expect("k+1 float");
+                    let k2_t = T::from(k + 2).expect("k+2 float");
+                    psi_k1 = psi_k2;
+                    psi_k2 = psi_k2 + T::one() / k2_t;
+                    x2_pow = x2_pow * x2_sq;
+                    k_fact = k_fact * k1_t;
+                    k1_fact = k1_fact * k2_t;
                 }
+
+                k1 = x_inv + ln_x2 * i1 - half * sum;
                 return k1;
             }
 

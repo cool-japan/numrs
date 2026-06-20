@@ -575,65 +575,126 @@ fn companion_matrix_eigenvalues(
     simple_eigenvalues(&companion)
 }
 
-/// Simplified eigenvalue computation
+/// Eigenvalue computation via Wilkinson-shifted QR iteration with deflation.
+///
+/// Uses the Wilkinson shift (eigenvalue of the bottom-right 2×2 submatrix closest
+/// to a[p-1][p-1]) at each step, which yields cubic convergence for the last
+/// off-diagonal element. Deflation is applied as sub-diagonal elements become
+/// negligible, so each eigenvalue (or conjugate pair) is resolved independently.
+/// This replaces the unshifted QR which converged only linearly.
 fn simple_eigenvalues(a: &Array2<f64>) -> ControlResult<Vec<Complex64>> {
     let n = a.nrows();
-    const MAX_ITER: usize = 100;
+    const MAX_ITER: usize = 300;
     const TOL: f64 = 1e-10;
 
     let mut ak = a.clone();
+    let mut eigenvalues: Vec<Complex64> = Vec::with_capacity(n);
+    let mut active = n; // size of the unreduced working block
 
-    for _ in 0..MAX_ITER {
-        let (q, r) = simple_qr(&ak)?;
-        let ak_new = matrix_mult_simple(&r, &q)?;
+    while active > 2 {
+        let mut deflated = false;
 
-        let mut converged = true;
-        for i in 0..n {
-            if (ak_new[[i, i]] - ak[[i, i]]).abs() > TOL {
-                converged = false;
+        for _ in 0..MAX_ITER {
+            // --- Wilkinson shift from bottom-right 2×2 of the active block ---
+            let p = active;
+            let a11 = ak[[p - 2, p - 2]];
+            let a12 = ak[[p - 2, p - 1]];
+            let a21 = ak[[p - 1, p - 2]];
+            let a22 = ak[[p - 1, p - 1]];
+            let delta = (a11 - a22) * 0.5;
+            let disc = delta * delta + a12 * a21;
+            let mu = if disc >= 0.0 {
+                // Real eigenvalues: pick the one closest to a22.
+                let sign = if delta >= 0.0 { 1.0 } else { -1.0 };
+                a22 - sign * a12 * a21 / (delta.abs() + disc.sqrt() + f64::EPSILON)
+            } else {
+                // Complex conjugate pair: shift by the real part (trace/2).
+                (a11 + a22) * 0.5
+            };
+
+            // Shift active block.
+            for i in 0..active {
+                ak[[i, i]] -= mu;
+            }
+
+            // QR step restricted to the active leading block.
+            let sub = extract_submatrix(&ak, active);
+            let (q, r) = simple_qr(&sub)?;
+            let rq = matrix_mult_simple(&r, &q)?;
+            for i in 0..active {
+                for j in 0..active {
+                    ak[[i, j]] = rq[[i, j]];
+                }
+            }
+
+            // Unshift.
+            for i in 0..active {
+                ak[[i, i]] += mu;
+            }
+
+            // Deflation: check whether the bottom sub-diagonal element is negligible.
+            let sub_diag = ak[[active - 1, active - 2]].abs();
+            let scale = ak[[active - 2, active - 2]].abs() + ak[[active - 1, active - 1]].abs();
+            if sub_diag < TOL * (scale + TOL) {
+                eigenvalues.push(Complex64::new(ak[[active - 1, active - 1]], 0.0));
+                active -= 1;
+                deflated = true;
                 break;
             }
         }
 
-        ak = ak_new;
-        if converged {
-            break;
+        if !deflated {
+            break; // Stagnated — fall through to extract remaining block.
         }
     }
 
-    // Extract eigenvalues
-    let mut eigenvalues = Vec::new();
-    let mut i = 0;
-    while i < n {
-        if i < n - 1 && ak[[i + 1, i]].abs() > TOL {
-            // 2x2 block
-            let a_val = ak[[i, i]];
-            let b = ak[[i, i + 1]];
-            let c = ak[[i + 1, i]];
-            let d = ak[[i + 1, i + 1]];
-
-            let trace = a_val + d;
-            let det = a_val * d - b * c;
-            let disc = trace * trace - 4.0 * det;
-
-            if disc < 0.0 {
-                let real = trace / 2.0;
-                let imag = (-disc).sqrt() / 2.0;
-                eigenvalues.push(Complex64::new(real, imag));
-                eigenvalues.push(Complex64::new(real, -imag));
+    // Extract eigenvalues from the remaining 1×1 or 2×2 active block.
+    if active == 1 {
+        eigenvalues.push(Complex64::new(ak[[0, 0]], 0.0));
+    } else {
+        // 2×2 block (or larger stagnated block — read it as independent 2×2 sub-blocks).
+        let mut i = 0;
+        while i < active {
+            if i + 1 < active
+                && ak[[i + 1, i]].abs() > TOL * (ak[[i, i]].abs() + ak[[i + 1, i + 1]].abs() + TOL)
+            {
+                let av = ak[[i, i]];
+                let b = ak[[i, i + 1]];
+                let c = ak[[i + 1, i]];
+                let d = ak[[i + 1, i + 1]];
+                let trace = av + d;
+                let det = av * d - b * c;
+                let disc = trace * trace - 4.0 * det;
+                if disc < 0.0 {
+                    let re = trace / 2.0;
+                    let im = (-disc).sqrt() / 2.0;
+                    eigenvalues.push(Complex64::new(re, im));
+                    eigenvalues.push(Complex64::new(re, -im));
+                } else {
+                    let sq = disc.sqrt();
+                    eigenvalues.push(Complex64::new((trace + sq) / 2.0, 0.0));
+                    eigenvalues.push(Complex64::new((trace - sq) / 2.0, 0.0));
+                }
+                i += 2;
             } else {
-                let sqrt_d = disc.sqrt();
-                eigenvalues.push(Complex64::new((trace + sqrt_d) / 2.0, 0.0));
-                eigenvalues.push(Complex64::new((trace - sqrt_d) / 2.0, 0.0));
+                eigenvalues.push(Complex64::new(ak[[i, i]], 0.0));
+                i += 1;
             }
-            i += 2;
-        } else {
-            eigenvalues.push(Complex64::new(ak[[i, i]], 0.0));
-            i += 1;
         }
     }
 
     Ok(eigenvalues)
+}
+
+/// Copy the leading `size × size` submatrix of `a` into an owned `Array2`.
+fn extract_submatrix(a: &Array2<f64>, size: usize) -> Array2<f64> {
+    let mut sub = Array2::zeros((size, size));
+    for i in 0..size {
+        for j in 0..size {
+            sub[[i, j]] = a[[i, j]];
+        }
+    }
+    sub
 }
 
 /// Simple QR decomposition

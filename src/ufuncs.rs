@@ -19,7 +19,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast};
-use scirs2_core::ndarray::{Array1, ArrayView1};
+use scirs2_core::ndarray::{Array1, ArrayView1, CowArray, Ix1};
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::fmt::{self, Debug};
 
@@ -44,9 +44,10 @@ const SIMD_THRESHOLD: usize = 64; // v0.3.0: Increased from 8 to 64 for better p
 // CONVERSION HELPERS
 // =============================================================================
 
-/// Convert NumRS2 Array to ndarray ArrayView1
-fn to_array_view<T: Clone>(arr: &Array<T>) -> Array1<T> {
-    Array1::from_vec(arr.to_vec())
+/// Borrow a NumRS2 Array as a 1-D ndarray `CowArray` for the SIMD kernels:
+/// zero-copy for contiguous arrays, owned copy only when non-contiguous.
+fn to_array_view<T: Clone>(arr: &Array<T>) -> CowArray<'_, T, Ix1> {
+    arr.as_cow_1d()
 }
 
 /// Convert ndarray Array1 to NumRS2 Array with shape preserved
@@ -595,11 +596,10 @@ pub fn arctan2(y: &Array<f64>, x: &Array<f64>) -> Result<Array<f64>> {
         let result = f64::simd_atan2(&y_nd.view(), &x_nd.view());
         return Ok(from_array1(result, &y.shape()));
     }
-    let y_data = y.to_vec();
-    let x_data = x.to_vec();
-    let result: Vec<f64> = y_data
+    let result: Vec<f64> = y
+        .array()
         .iter()
-        .zip(x_data.iter())
+        .zip(x.array().iter())
         .map(|(yi, xi)| yi.atan2(*xi))
         .collect();
     Ok(Array::from_vec(result).reshape(&y.shape()))
@@ -793,11 +793,10 @@ pub fn copysign(mag: &Array<f64>, sign: &Array<f64>) -> Result<Array<f64>> {
         let result = f64::simd_copysign(&mag_nd.view(), &sign_nd.view());
         return Ok(from_array1(result, &mag.shape()));
     }
-    let mag_data = mag.to_vec();
-    let sign_data = sign.to_vec();
-    let result: Vec<f64> = mag_data
+    let result: Vec<f64> = mag
+        .array()
         .iter()
-        .zip(sign_data.iter())
+        .zip(sign.array().iter())
         .map(|(m, s)| m.copysign(*s))
         .collect();
     Ok(Array::from_vec(result).reshape(&mag.shape()))
@@ -851,11 +850,10 @@ pub fn hypot(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
         let result = f64::simd_hypot(&a_nd.view(), &b_nd.view());
         return Ok(from_array1(result, &a.shape()));
     }
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-    let result: Vec<f64> = a_data
+    let result: Vec<f64> = a
+        .array()
         .iter()
-        .zip(b_data.iter())
+        .zip(b.array().iter())
         .map(|(ai, bi)| ai.hypot(*bi))
         .collect();
     Ok(Array::from_vec(result).reshape(&a.shape()))
@@ -880,13 +878,11 @@ pub fn fma(a: &Array<f64>, b: &Array<f64>, c: &Array<f64>) -> Result<Array<f64>>
         let result = f64::simd_fma(&a_nd.view(), &b_nd.view(), &c_nd.view());
         return Ok(from_array1(result, &a.shape()));
     }
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-    let c_data = c.to_vec();
-    let result: Vec<f64> = a_data
+    let result: Vec<f64> = a
+        .array()
         .iter()
-        .zip(b_data.iter())
-        .zip(c_data.iter())
+        .zip(b.array().iter())
+        .zip(c.array().iter())
         .map(|((ai, bi), ci)| ai.mul_add(*bi, *ci))
         .collect();
     Ok(Array::from_vec(result).reshape(&a.shape()))
@@ -906,11 +902,10 @@ pub fn lerp(a: &Array<f64>, b: &Array<f64>, t: f64) -> Result<Array<f64>> {
         let result = f64::simd_lerp(&a_nd.view(), &b_nd.view(), t);
         return Ok(from_array1(result, &a.shape()));
     }
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-    let result: Vec<f64> = a_data
+    let result: Vec<f64> = a
+        .array()
         .iter()
-        .zip(b_data.iter())
+        .zip(b.array().iter())
         .map(|(ai, bi)| ai + t * (bi - ai))
         .collect();
     Ok(Array::from_vec(result).reshape(&a.shape()))
@@ -930,11 +925,10 @@ pub fn logaddexp(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
         let result = f64::simd_logaddexp(&a_nd.view(), &b_nd.view());
         return Ok(from_array1(result, &a.shape()));
     }
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-    let result: Vec<f64> = a_data
+    let result: Vec<f64> = a
+        .array()
         .iter()
-        .zip(b_data.iter())
+        .zip(b.array().iter())
         .map(|(ai, bi)| {
             let max = ai.max(*bi);
             max + ((-(*ai - max).abs()).exp() + (-(*bi - max).abs()).exp()).ln()
@@ -960,11 +954,9 @@ pub fn dot(a: &Array<f64>, b: &Array<f64>) -> Result<f64> {
         let b_nd = to_array_view(b);
         return Ok(f64::simd_dot(&a_nd.view(), &b_nd.view()));
     }
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-    Ok(a_data
+    Ok(a.array()
         .iter()
-        .zip(b_data.iter())
+        .zip(b.array().iter())
         .map(|(ai, bi)| ai * bi)
         .sum())
 }
@@ -975,8 +967,7 @@ pub fn norm_l2(a: &Array<f64>) -> f64 {
         let a_nd = to_array_view(a);
         return f64::simd_norm(&a_nd.view());
     }
-    let data = a.to_vec();
-    data.iter().map(|x| x * x).sum::<f64>().sqrt()
+    a.array().iter().map(|x| x * x).sum::<f64>().sqrt()
 }
 
 /// L1 norm (Manhattan norm) using SIMD optimization
@@ -985,8 +976,7 @@ pub fn norm_l1(a: &Array<f64>) -> f64 {
         let a_nd = to_array_view(a);
         return f64::simd_norm_l1(&a_nd.view());
     }
-    let data = a.to_vec();
-    data.iter().map(|x| x.abs()).sum::<f64>()
+    a.array().iter().map(|x| x.abs()).sum::<f64>()
 }
 
 /// Sum of all elements using SIMD optimization
@@ -995,7 +985,7 @@ pub fn sum(a: &Array<f64>) -> f64 {
         let a_nd = to_array_view(a);
         return f64::simd_sum(&a_nd.view());
     }
-    a.to_vec().iter().sum()
+    a.array().iter().sum()
 }
 
 /// Mean of all elements using SIMD optimization
@@ -1004,8 +994,7 @@ pub fn mean(a: &Array<f64>) -> f64 {
         let a_nd = to_array_view(a);
         return f64::simd_mean(&a_nd.view());
     }
-    let data = a.to_vec();
-    data.iter().sum::<f64>() / data.len() as f64
+    a.array().iter().sum::<f64>() / a.len() as f64
 }
 
 /// Variance using SIMD optimization
@@ -1014,7 +1003,14 @@ pub fn var(a: &Array<f64>) -> f64 {
         let a_nd = to_array_view(a);
         return f64::simd_variance(&a_nd.view());
     }
-    let data = a.to_vec();
+    let owned;
+    let data: &[f64] = match a.as_slice() {
+        Some(slice) => slice,
+        None => {
+            owned = a.to_vec();
+            &owned
+        }
+    };
     let n = data.len() as f64;
     let mean = data.iter().sum::<f64>() / n;
     data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n
@@ -1352,11 +1348,10 @@ pub fn prelu(a: &Array<f64>, alpha: &Array<f64>) -> Result<Array<f64>> {
             actual: alpha.shape(),
         });
     }
-    let a_data = a.to_vec();
-    let alpha_data = alpha.to_vec();
-    let result: Vec<f64> = a_data
+    let result: Vec<f64> = a
+        .array()
         .iter()
-        .zip(alpha_data.iter())
+        .zip(alpha.array().iter())
         .map(|(x, alpha)| if *x > 0.0 { *x } else { alpha * x })
         .collect();
     Ok(Array::from_vec(result).reshape(&a.shape()))
@@ -1370,7 +1365,14 @@ pub fn log_softmax(a: &Array<f64>) -> Array<f64> {
         return from_array1(result, &a.shape());
     }
     // Numerically stable: x - max(x) - log(sum(exp(x - max(x))))
-    let data = a.to_vec();
+    let owned;
+    let data: &[f64] = match a.as_slice() {
+        Some(slice) => slice,
+        None => {
+            owned = a.to_vec();
+            &owned
+        }
+    };
     let max_val = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let shifted: Vec<f64> = data.iter().map(|x| x - max_val).collect();
     let log_sum_exp = shifted.iter().map(|x| x.exp()).sum::<f64>().ln();
@@ -1385,7 +1387,14 @@ pub fn softmax(a: &Array<f64>) -> Array<f64> {
         let result = f64::simd_softmax(&a_nd.view());
         return from_array1(result, &a.shape());
     }
-    let data = a.to_vec();
+    let owned;
+    let data: &[f64] = match a.as_slice() {
+        Some(slice) => slice,
+        None => {
+            owned = a.to_vec();
+            &owned
+        }
+    };
     let max_val = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let exps: Vec<f64> = data.iter().map(|x| (x - max_val).exp()).collect();
     let sum: f64 = exps.iter().sum();
