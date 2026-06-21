@@ -68,18 +68,21 @@ impl ArenaChunk {
 
     /// Try to allocate `size` bytes from this chunk
     fn allocate(&mut self, size: usize, alignment: usize) -> Option<NonNull<u8>> {
-        // Calculate aligned offset
+        // Compute alignment padding using absolute address (not relative offset)
+        // so that the returned pointer satisfies the requested alignment regardless
+        // of the chunk base pointer's own alignment.
+        let base_addr = self.ptr.as_ptr() as usize;
+        let current_addr = base_addr + self.offset;
         let align_mask = alignment - 1;
-        let aligned_offset = (self.offset + align_mask) & !align_mask;
+        let aligned_addr = (current_addr + align_mask) & !align_mask;
+        let aligned_offset = aligned_addr - base_addr;
 
         // Check if we have enough space
         if aligned_offset + size <= self.size {
-            // We have enough space
             let result = unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(aligned_offset)) };
             self.offset = aligned_offset + size;
             Some(result)
         } else {
-            // Not enough space
             None
         }
     }

@@ -1019,18 +1019,22 @@ mod tests {
         assert_eq!(splits[1].to_vec(), vec![3.0, 4.0]);
         assert_eq!(splits[2].to_vec(), vec![5.0, 6.0]);
 
-        let _a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
         // First, check if the split function is working correctly with multiple indices
         let splits_a =
             split(&a, &[2, 4], 0).expect("test: split with multiple indices should succeed");
         assert_eq!(splits_a.len(), 3);
 
-        // Skip this test temporarily since it's causing issues
-        // This will be fixed in a future implementation
-        /*
         let splits_axis1 = split(&a_2d, &[1], 1).expect("test: split along axis 1 should succeed");
         assert_eq!(splits_axis1.len(), 2);
-        */
+        // a_2d is [[1,2,3],[4,5,6]] with shape [2,3]
+        // Splitting at column index 1 yields:
+        //   splits_axis1[0]: shape [2,1] => [[1],[4]]
+        //   splits_axis1[1]: shape [2,2] => [[2,3],[5,6]]
+        assert_eq!(splits_axis1[0].shape(), vec![2, 1]);
+        assert_eq!(splits_axis1[1].shape(), vec![2, 2]);
+        assert_eq!(splits_axis1[0].to_vec(), vec![1.0, 4.0]);
+        assert_eq!(splits_axis1[1].to_vec(), vec![2.0, 3.0, 5.0, 6.0]);
 
         // Test expand_dims
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]);

@@ -204,7 +204,10 @@ where
     ];
     let pval = ((((p[5] * t + p[4]) * t + p[3]) * t + p[2]) * t + p[1]) * t + p[0];
     let qval = (((((q[6] * t + q[5]) * t + q[4]) * t + q[3]) * t + q[2]) * t + q[1]) * t + q[0];
-    (-xsq).exp() * pval / (qval * abs_x)
+    // The Cody P/Q coefficients approximate (1/sqrt(pi)) * (rational correction),
+    // so the complete formula requires dividing by sqrt(pi).
+    let sqrt_pi = T::from(1.772_453_850_905_516_f64).expect("sqrt(pi) converts to float");
+    (-xsq).exp() * pval / (qval * abs_x * sqrt_pi)
 }
 
 /// Complementary error function for a scalar value

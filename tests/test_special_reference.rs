@@ -374,10 +374,10 @@ fn test_gammainc_reference() {
 
     // Known values for gammainc(a, a) — verified against scipy.special.gammainc
     let expected_values = [
-        0.6321205588285577f64, // gammainc(1, 1): exact = 1 - 1/e
-        0.5939941502901616f64, // gammainc(2, 2): scipy = 0.5939941502901616
-        0.5768099188731565f64, // gammainc(3, 3): exact = 1 - e^{-3}*(1+3+4.5)
-        0.5665298796332910f64, // gammainc(4, 4): scipy = 0.5665298796332910
+        0.6321205588285577f64,     // gammainc(1, 1): exact = 1 - 1/e
+        0.5939941502901616f64,     // gammainc(2, 2): scipy = 0.5939941502901616
+        0.5768099188731565f64,     // gammainc(3, 3): exact = 1 - e^{-3}*(1+3+4.5)
+        0.566_529_879_633_291_f64, // gammainc(4, 4): scipy = 0.5665298796332910
     ];
 
     // gammainc(a, x) assertions — series/CF converges to ~1e-10
@@ -531,68 +531,68 @@ fn test_special_function_edge_cases() {
 fn test_special_functions_numerical_stability() {
     // Test numerical stability for special functions with challenging inputs
 
-    // Test erf for large values
+    // Test erf for large values (saturates to 1.0 for x >= 10)
     let large_values = Array::from_vec(vec![10.0f64, 20.0f64, 30.0f64]);
     let erf_large = erf(&large_values);
 
-    // Skipping precise comparison due to implementation differences
-    // TODO: Fix erf implementation to match reference values
     for i in 0..3 {
         let val = erf_large.get(&[i]).unwrap();
-        assert!(val > 0.9f64, "erf should approach 1 for large inputs");
+        assert_abs_diff_eq!(val, 1.0f64, epsilon = 1e-10);
     }
 
-    // Test erfc for large values (should approach 0 in a stable manner)
+    // Test erfc for large values (approaches 0 exponentially)
     let erfc_large = erfc(&large_values);
 
-    // Skipping precise comparison due to implementation differences
-    // TODO: Fix erfc implementation to match reference values
-    for i in 0..3 {
-        let val = erfc_large.get(&[i]).unwrap();
-        assert!(
-            (0.0f64..0.1f64).contains(&val),
-            "erfc should approach 0 for large inputs"
-        );
-    }
+    // erfc(10) ≈ 2.0885e-45 (true value); the Cody rational minimax for x > 4 achieves
+    // ~1–2% relative accuracy, so we use a 5% relative tolerance here.
+    // erfc(20) ≈ 5.396e-176 (very small positive in f64 or zero)
+    // erfc(30) = 0.0 exactly (x²=900 > 700, asymptotic returns 0.0)
+    let erfc_10 = erfc_large.get(&[0]).unwrap();
+    assert!(erfc_10 > 0.0f64, "erfc(10) must be positive, got {erfc_10}");
+    assert!(
+        (erfc_10 - 2.088_487_583_762_545e-45_f64).abs() < 2.088_487_583_762_545e-45_f64 * 5e-2_f64,
+        "erfc(10) = {erfc_10} is more than 5% off the true value 2.0885e-45"
+    );
+    // erfc(20): tiny subnormal or zero; erfc(30): exactly 0 (x² > 700 in impl)
+    let erfc_20 = erfc_large.get(&[1]).unwrap();
+    assert!(
+        (0.0f64..1e-170_f64).contains(&erfc_20),
+        "erfc(20) should be tiny, got {erfc_20}"
+    );
+    let erfc_30 = erfc_large.get(&[2]).unwrap();
+    assert_abs_diff_eq!(erfc_30, 0.0f64, epsilon = 1e-300_f64);
 
     // Test gamma for integer and half-integer values
     let integer_halfint = Array::from_vec(vec![5.0f64, 10.0f64, 7.5f64, 15.5f64]);
     let gamma_values = gamma(&integer_halfint);
 
-    // Expected values
-    let factorial_4 = 24.0f64;
-    let factorial_9 = 362880.0f64;
-    let gamma_7_5 = 11520.0f64 * std::f64::consts::PI.sqrt() / 256.0f64;
-    let gamma_15_5 = 9.434_754_548_989_185e9_f64 * std::f64::consts::PI.sqrt();
+    // gamma(5) = 4! = 24, gamma(10) = 9! = 362880
+    // gamma(7.5) = 6.5*5.5*4.5*3.5*2.5*1.5*0.5*sqrt(pi) = 1055.7421875*sqrt(pi) ≈ 1871.25430579779
+    // gamma(15.5) ≈ 334838609873.556 (verified via Python math.gamma)
+    let expected_gamma = [
+        24.0f64,
+        362880.0f64,
+        1_871.254_305_797_79_f64,
+        334_838_609_873.556_f64,
+    ];
 
-    let expected = [factorial_4, factorial_9, gamma_7_5, gamma_15_5];
-
-    // Skip precise comparison due to implementation differences
-    // TODO: Fix gamma implementation to match reference values more precisely
-    for i in 0..expected.len() {
+    for (i, &expected_val) in expected_gamma.iter().enumerate() {
         let val = gamma_values.get(&[i]).unwrap();
-
-        // Just check that the values are reasonable (positive and not NaN/infinite)
-        assert!(
-            val > 0.0f64 && !val.is_nan() && !val.is_infinite(),
-            "gamma should return positive finite values for positive inputs"
-        );
+        assert_abs_diff_eq!(val, expected_val, epsilon = expected_val * 1e-7);
     }
 
-    // Test K_n(x) for large x (should approach 0)
+    // Test K_n(x) for large x — decays exponentially, all values tiny positive
+    // K_0(20)≈5.94e-10, K_0(30)≈3.85e-14, K_0(40)≈2.52e-18 (similarly for n=1,2)
     let large_x = Array::from_vec(vec![20.0f64, 30.0f64, 40.0f64]);
+    let bessel_k_upper_bounds = [1e-9_f64, 1e-13_f64, 1e-17_f64];
 
-    // Skipping precise comparison due to implementation differences
-    // TODO: Fix bessel_k implementation to match reference values
     for n in 0..3 {
         let k_large = bessel_k(n, &large_x);
-
-        for i in 0..3 {
+        for (i, &upper) in bessel_k_upper_bounds.iter().enumerate() {
             let val = k_large.get(&[i]).unwrap();
-            // Just check that the values are not NaN, Infinity, or unreasonably large
             assert!(
-                !val.is_nan() && !val.is_infinite() && val.abs() < 10.0f64,
-                "K_n(x) should be stable for large x"
+                val >= 0.0f64 && val < upper,
+                "K_{n}(x[{i}]) = {val} should be in [0, {upper})"
             );
         }
     }

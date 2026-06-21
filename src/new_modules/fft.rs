@@ -625,7 +625,7 @@ impl FFT {
         // Add the complex conjugates for negative frequencies.
         // For even n, skip the Nyquist bin (index rfft_size-1) when mirroring;
         // for odd n, mirror all non-DC bins (1..rfft_size).
-        let mirror_start = if n % 2 == 0 { 2usize } else { 1usize };
+        let mirror_start = if n.is_multiple_of(2) { 2usize } else { 1usize };
         for i in mirror_start..rfft_size {
             fft_data.push(rfft_data[rfft_size - i].conj());
         }
@@ -760,7 +760,11 @@ impl FFT {
             full_row.extend_from_slice(&row);
 
             // Add conjugates for negative frequencies (same even/odd fix as irfft).
-            let mirror_start = if n_cols % 2 == 0 { 2usize } else { 1usize };
+            let mirror_start = if n_cols.is_multiple_of(2) {
+                2usize
+            } else {
+                1usize
+            };
             for i in mirror_start..rfft_cols {
                 full_row.push(row[rfft_cols - i].conj());
             }

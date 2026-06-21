@@ -7,7 +7,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **Version 0.4.0** - Major release (2026-06-05): SciRS2 ecosystem updated to v0.5.0; adds skew/kurtosis, F-distribution sampling, instance normalization, BFGS Python optimizer, VECM Johansen fitting, FEM 2D point evaluation; real eigendecomposition via QR iteration with Wilkinson shifts; full Golub–Kahan bidiagonal SVD. Features 128+ SIMD-vectorized functions (AVX2, AVX512, ARM NEON), 3,921+ tests passing, 225,975+ lines of production Rust code, 5,813+ public API items, built on pure Rust SciRS2 v0.5.0 ecosystem. The core array, linear algebra, SIMD, and autodiff paths are production-ready; some advanced modules (e.g. quantum and parts of the reinforcement-learning suite) are experimental.
+> **Version 0.4.1** - Patch release (2026-06-21): zero-copy `Array::as_slice()` / `as_cow_1d()` API; erfinv/Bessel Y_n/K_n precision fixes (Winitzki 2008 + DLMF recurrences); irfft Hermitian reconstruction corrected; generic controlled-U quantum gate + multi-qubit gate fusion; `ArrayView::iter()` restored; `split` axis=1 enabled; visualization example activated; benchmark suite completed; pure-Rust `alloca` patch unblocks criterion on Apple Silicon. Features 128+ SIMD-vectorized functions (AVX2, AVX512, ARM NEON), 4,223 tests passing, 297,657+ lines of production Rust code, built on pure Rust SciRS2 v0.5.0 ecosystem. The core array, linear algebra, SIMD, and autodiff paths are production-ready; some advanced modules (e.g. quantum and parts of the reinforcement-learning suite) are experimental.
 
 ## ✨ Architecture Highlights
 
@@ -142,9 +142,9 @@ For examples, see [gpu_example.rs](examples/gpu_example.rs)
 **Production-Ready Features**
 - Complete multi-array NPZ support for NumPy compatibility
 - Zero clippy warnings and zero critical errors
-- 3,921+ comprehensive tests (default features)
+- 4,223 tests passing across all features (0 failures)
 - Enhanced scheduler with critical deadlock fix (1,143x speedup)
-- 225,975+ lines of production Rust code (674 Rust files)
+- 297,657+ lines of production Rust code (676 Rust files)
 - 5,813+ public API items; core array, linear algebra, SIMD, and autodiff paths are production-ready, with some advanced modules (e.g. quantum and parts of the reinforcement-learning suite) still experimental
 
 **Enhanced Modules**

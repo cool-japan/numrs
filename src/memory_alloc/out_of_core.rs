@@ -134,13 +134,22 @@ impl<T: Copy> DataChunk<T> {
             })?;
 
         let mut file = File::open(disk_path)?;
-        let mut buffer = vec![0u8; self.metadata.element_count * std::mem::size_of::<T>()];
-        file.read_exact(&mut buffer)?;
+        let element_count = self.metadata.element_count;
+        let byte_size = element_count * std::mem::size_of::<T>();
 
-        // Convert bytes back to T
+        // Read directly into a properly-aligned Vec<T> buffer to avoid alignment UB.
+        // Vec<T> guarantees alignment for T; we reinterpret it as bytes only within
+        // the already-allocated, correctly-aligned memory.
         let data = unsafe {
-            let ptr = buffer.as_ptr() as *const T;
-            std::slice::from_raw_parts(ptr, self.metadata.element_count).to_vec()
+            let mut data: Vec<T> = Vec::with_capacity(element_count);
+            let byte_ptr = data.as_mut_ptr() as *mut u8;
+            // SAFETY: byte_ptr points to element_count * size_of::<T>() bytes of
+            // allocated memory properly aligned for T. We read exactly that many
+            // bytes from disk, then set the length to element_count.
+            let byte_slice = std::slice::from_raw_parts_mut(byte_ptr, byte_size);
+            file.read_exact(byte_slice)?;
+            data.set_len(element_count);
+            data
         };
 
         self.data = Some(data);

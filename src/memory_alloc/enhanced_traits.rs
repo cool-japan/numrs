@@ -163,7 +163,16 @@ impl NewMemoryAllocator for NumericalArrayAllocator {
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) -> Result<()> {
-        self.inner.deallocate(ptr, layout)
+        // SAFETY: Must match the aligned layout used in allocate() — the original layout
+        // alignment is upgraded to alignment_preference there, so we must match it here.
+        let aligned_layout = Layout::from_size_align(
+            layout.size(),
+            std::cmp::max(layout.align(), self.alignment_preference),
+        )
+        .map_err(|_| {
+            NumRs2Error::AllocationFailed("Invalid layout for deallocation".to_string())
+        })?;
+        self.inner.deallocate(ptr, aligned_layout)
     }
 
     unsafe fn reallocate(
@@ -172,7 +181,21 @@ impl NewMemoryAllocator for NumericalArrayAllocator {
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<u8>> {
-        self.inner.reallocate(ptr, old_layout, new_layout)
+        let aligned_old = Layout::from_size_align(
+            old_layout.size(),
+            std::cmp::max(old_layout.align(), self.alignment_preference),
+        )
+        .map_err(|_| {
+            NumRs2Error::AllocationFailed("Invalid old layout for reallocation".to_string())
+        })?;
+        let aligned_new = Layout::from_size_align(
+            new_layout.size(),
+            std::cmp::max(new_layout.align(), self.alignment_preference),
+        )
+        .map_err(|_| {
+            NumRs2Error::AllocationFailed("Invalid new layout for reallocation".to_string())
+        })?;
+        self.inner.reallocate(ptr, aligned_old, aligned_new)
     }
 
     fn statistics(&self) -> Option<AllocationStats> {

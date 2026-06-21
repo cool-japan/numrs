@@ -5,15 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-## [0.4.1] - Unreleased
+## [0.4.1] - 2026-06-21
 
 ### Added
+- `Array::as_slice()` / `Array::as_slice_mut()` — zero-copy contiguous-slice access; avoids heap
+  allocation on the common C-contiguous layout (falls back to `to_vec()` for non-contiguous arrays)
+- `Array::as_cow_1d()` (crate-internal) — zero-copy `CowArray<T, Ix1>` view for SIMD hot-paths in
+  `simd.rs`, `ufuncs.rs`, and `linalg.rs`
+- `patches/alloca/` — pure-Rust drop-in for the `alloca 0.4.0` crate (C VLA-based original causes
+  linker errors on aarch64-apple-darwin with criterion 0.8.2); wired via `[patch.crates-io]`
+- `bench/allocation_hotpath_benchmark.rs` — criterion benchmarks for `map`, `zip_with`, `sum`,
+  `ufuncs::hypot`, and `simd_add` hot-paths (measures the zero-copy refactor impact)
+- `[[example]] visualization` — visualization example is now fully activated with a proper
+  `required-features = ["visualization"]` entry in Cargo.toml
+- `QuantumCircuit::controlled_u` / `controlled_u_gate<T>` — generic multi-control gate accepting
+  any 2^k × 2^k unitary; emits block-diagonal diag(I, U) of size 2^(k+m) with unitarity check
+- `QuantumCircuit::multiply_square_gates`, `embed_gate_in_space`, `fuse_adjacent_gates` — general
+  n×n gate fusion with kron-embedding onto the union of qubit supports
+- `ArrayView::iter()` restored with correct `ArrayViewIterator<'_, T>` lifetime annotation;
+  five new unit tests cover round-trip iteration
 
 ### Changed
+- `oxiarc-archive` and `oxiarc-lz4` updated from 0.3.2 → 0.3.3
+- `scirs2-{core,stats,linalg,ndimage,spatial,special,fft}` workspace dependencies now use
+  `{ workspace = true }` (workspace policy compliance; versions still pinned at workspace root)
+- `bench/bench_distributions.rs`: `f_dist` and `multivariate_normal_cholesky` benchmarks
+  re-enabled; removed stale TODO stubs
+- `bench/stats_benchmarks.rs`: `bench_statistical_moments` (skewness, kurtosis) and
+  `bench_random_sampling` benchmarks re-enabled; fixed `shuffle`/`choice` import path
+- `examples/visualization.rs`: stub `main` replaced with full implementation; updated
+  `.sample(&mut rng)` → `rng.sample(...)` for modern `rand_distr` API
 
 ### Fixed
+- **erfinv / erfcinv precision** (`src/new_modules/special/error_functions.rs`): replaced
+  previous approximation with Winitzki 2008 initial guess + 8 Halley iterations; absolute error
+  reduced to < 1e-9 (previously ~1e-5)
+- **Bessel Y_n** (`src/new_modules/special/bessel.rs`): rewrote `bessel_y_scalar` with DLMF
+  10.8.1 series for small x and upward recurrence `Y_{n+1} = (2n/x)Y_n − Y_{n-1}`; previous
+  code divided by `sin(nπ) = 0` for integer orders, returning NaN
+- **Bessel K_n** (`src/new_modules/special/bessel.rs`): rewrote `bessel_k_scalar` with DLMF
+  10.31.1/10.31.2 series + upward recurrence; previous code had a dead `8·0 = 0` branch for K₀
+  and an inaccurate K₁ formula; both now achieve < 1e-8 absolute error
+- **Incomplete gamma tightened** (`src/new_modules/special/gamma.rs`): re-verified
+  series + Lentz CF implementation; tightened test assertions from ±0.1 to ~1e-9
+- **Elliptic integrals tightened** (`src/new_modules/special/elliptic.rs`): lowered AGM ε
+  toward machine epsilon; tightened test assertions from 10% to ~1e-10 abs-diff
+- **irfft / irfft2 Hermitian reconstruction** (`src/new_modules/fft.rs`): fixed `mirror_start`
+  (even n: start at bin 2, odd n: start at bin 1) so `irfft(rfft(x)) ≈ x` holds for all signal
+  lengths; replaced silent `NumCast::unwrap_or(zero)` twiddle conversions with proper casts
+- **`split` axis=1** (`src/lib.rs`, `src/array_ops/splitting.rs`): re-enabled previously-disabled
+  integration test; verified `ndarray::Axis` slicing works for all axes
+- **Numerical-stability test assertions** (`tests/test_special_reference.rs`): replaced four
+  stale TODO-gated range checks with tight abs-diff assertions against scipy-verified reference
+  values (erf, erfc, gamma, bessel_k)
+- **Schur reconstruction** (`tests/test_linalg_reference.rs`): re-enabled A = Q·T·Qᵀ assertion
+  at TOLERANCE = 1e-8 (was silently assigned to `_`)
+- **Criterion / alloca linker error on Apple Silicon**: `patches/alloca/` pure-Rust replacement
+  eliminates C VLA anonymous-symbol incompatibility with aarch64 rustc; all criterion benchmarks
+  now build and run on Apple M-series hardware
 
 ## [0.4.0] - 2026-06-05
 
@@ -216,3 +265,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All dependencies use stable, production-ready versions
 
 This initial release provides a comprehensive NumPy-like experience in Rust with production-ready quality, extensive test coverage, and pure Rust dependencies for maximum portability and safety.
+
+[0.4.1]: https://github.com/cool-japan/numrs/releases/tag/v0.4.1

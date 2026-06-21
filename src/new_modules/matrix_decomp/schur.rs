@@ -42,7 +42,7 @@ fn mat_mul_f64(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
 /// Returns (H, Q) where Q accumulates all reflectors.
 fn hessenberg_reduction(a: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
     let n = a.len();
-    let mut h: Vec<Vec<f64>> = a.iter().map(|r| r.clone()).collect();
+    let mut h: Vec<Vec<f64>> = a.to_vec();
     let mut q = identity_f64(n);
 
     for k in 0..n.saturating_sub(2) {
@@ -103,15 +103,7 @@ fn hessenberg_reduction(a: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
 /// Apply a Givens rotation G_{p,q}(c,s) from the left to rows p and q of h
 /// for columns col_start..n.
 #[inline]
-fn givens_left(
-    h: &mut Vec<Vec<f64>>,
-    p: usize,
-    q: usize,
-    c: f64,
-    s: f64,
-    col_start: usize,
-    n: usize,
-) {
+fn givens_left(h: &mut [Vec<f64>], p: usize, q: usize, c: f64, s: f64, col_start: usize, n: usize) {
     for j in col_start..n {
         let hp = h[p][j];
         let hq = h[q][j];
@@ -123,7 +115,7 @@ fn givens_left(
 /// Apply a Givens rotation G_{p,q}(c,s) from the right to columns p and q of h
 /// for rows 0..row_end.
 #[inline]
-fn givens_right(h: &mut Vec<Vec<f64>>, p: usize, q: usize, c: f64, s: f64, row_end: usize) {
+fn givens_right(h: &mut [Vec<f64>], p: usize, q: usize, c: f64, s: f64, row_end: usize) {
     for i in 0..row_end {
         let hp = h[i][p];
         let hq = h[i][q];
@@ -135,7 +127,7 @@ fn givens_right(h: &mut Vec<Vec<f64>>, p: usize, q: usize, c: f64, s: f64, row_e
 /// Apply a Givens rotation from the right to columns p and q of q_mat
 /// for rows 0..n (accumulate into Z).
 #[inline]
-fn givens_right_full(q_mat: &mut Vec<Vec<f64>>, p: usize, q_idx: usize, c: f64, s: f64, n: usize) {
+fn givens_right_full(q_mat: &mut [Vec<f64>], p: usize, q_idx: usize, c: f64, s: f64, n: usize) {
     for i in 0..n {
         let zp = q_mat[i][p];
         let zq = q_mat[i][q_idx];
@@ -164,8 +156,8 @@ fn givens_cs(a: f64, b: f64) -> (f64, f64) {
 /// Perform a Francis double-shift QR step when the active submatrix is 2×2.
 /// This is essentially a single-shift QR step using a Givens rotation.
 fn francis_2x2_step(
-    h: &mut Vec<Vec<f64>>,
-    z: &mut Vec<Vec<f64>>,
+    h: &mut [Vec<f64>],
+    z: &mut [Vec<f64>],
     p: usize, // top of active 2×2 block (row/col index p and p+1)
     n: usize,
 ) {
@@ -183,7 +175,7 @@ fn francis_2x2_step(
 /// Core Francis double-shift QR algorithm on an n×n upper Hessenberg matrix h.
 /// On entry  h  is upper Hessenberg; z is the identity (will accumulate Q).
 /// On exit   h  is in real Schur form (quasi-upper-triangular).
-fn francis_qr(h: &mut Vec<Vec<f64>>, z: &mut Vec<Vec<f64>>) {
+fn francis_qr(h: &mut [Vec<f64>], z: &mut [Vec<f64>]) {
     let n = h.len();
     if n <= 1 {
         return;
@@ -267,8 +259,8 @@ fn francis_qr(h: &mut Vec<Vec<f64>>, z: &mut Vec<Vec<f64>>) {
 /// Francis double-shift step on h[p_start..p_end][p_start..p_end],
 /// chasing the bulge within that window, updating global h and z.
 fn francis_double_shift_step_range(
-    h: &mut Vec<Vec<f64>>,
-    z: &mut Vec<Vec<f64>>,
+    h: &mut [Vec<f64>],
+    z: &mut [Vec<f64>],
     p_start: usize,
     p_end: usize,
     n: usize,
@@ -296,7 +288,7 @@ fn francis_double_shift_step_range(
     let y = h[r1][r0] * (h[r0][r0] + h[r1][r1] - s);
     let z_val = h[r2][r1] * h[r1][r0];
 
-    let mut v = vec![x, y, z_val];
+    let mut v = [x, y, z_val];
     let sigma: f64 = {
         let sq: f64 = v.iter().map(|&a| a * a).sum::<f64>().sqrt();
         if v[0] >= 0.0 {
@@ -587,9 +579,9 @@ mod tests {
         let d = [1.0_f64, 2.0, 3.0, 4.0];
         let mut a_data = vec![0.0_f64; 16];
         // Build Q explicitly
-        let mut q_data = vec![0.0_f64; 16];
-        q_data[0 * 4 + 0] = c;
-        q_data[0 * 4 + 1] = -s;
+        let mut q_data = [0.0_f64; 16];
+        q_data[0] = c;
+        q_data[1] = -s;
         q_data[1 * 4 + 0] = s;
         q_data[1 * 4 + 1] = c;
         q_data[2 * 4 + 2] = 1.0;

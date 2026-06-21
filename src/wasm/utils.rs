@@ -297,7 +297,7 @@ impl PerfTimer {
 ///
 /// This is automatically used when the wasm feature is enabled
 /// to provide a maintained pure-Rust allocator optimized for WebAssembly.
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 #[global_allocator]
 static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
 
