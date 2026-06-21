@@ -3,7 +3,6 @@ use numrs2::random::advanced_distributions::vonmises as direct_vonmises;
 use numrs2::random::distributions::{set_seed, vonmises as global_vonmises};
 
 #[test]
-#[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
 fn test_global_vs_direct_vonmises() {
     println!("Comparing global vonmises vs direct vonmises...");
 

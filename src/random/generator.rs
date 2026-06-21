@@ -43,12 +43,8 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast, ToPrimitive};
 // SCIRS2 POLICY COMPLIANT imports - always use SciRS2
-use scirs2_core::ndarray::distributions::uniform::SampleUniform;
+use scirs2_core::random::uniform::SampleUniform;
 use scirs2_core::random::prelude::*;
-use scirs2_stats::distributions::{
-    lognormal::Lognormal, Bernoulli, Beta, Binomial, ChiSquare, Exponential, Gamma, Normal,
-    Poisson, Uniform, Weibull,
-};
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
@@ -226,13 +222,14 @@ impl<B: BitGenerator> Generator<B> {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 
-        // Use SciRS2 uniform distribution for [0, 1)
-        let dist = Uniform::new(0.0, 1.0).map_err(|e| {
-            NumRs2Error::InvalidOperation(format!("Failed to create uniform distribution: {}", e))
-        })?;
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
+        let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            let val_f64 = dist.rvs(1).expect("uniform sampling failed")[0];
+            // Uniform values in [0, 1)
+            let val_f64: f64 = rng.random::<f64>();
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert uniform sample to target type".to_string(),
@@ -269,24 +266,22 @@ impl<B: BitGenerator> Generator<B> {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 
-        let bit_gen = self.get_bit_generator()?;
+        // Convert bounds to f64 once.
+        let low_f64 = low.clone().into().to_f64().ok_or_else(|| {
+            NumRs2Error::InvalidOperation("Failed to convert low bound to f64".to_string())
+        })?;
+        let high_f64 = high.clone().into().to_f64().ok_or_else(|| {
+            NumRs2Error::InvalidOperation("Failed to convert high bound to f64".to_string())
+        })?;
+
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
+        let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Convert bounds to f64, use SciRS2 uniform distribution, then convert back
-            let low_f64 = low
-                .clone()
-                .into()
-                .to_f64()
-                .expect("integers: low bound should be convertible to f64");
-            let high_f64 = high
-                .clone()
-                .into()
-                .to_f64()
-                .expect("integers: high bound should be convertible to f64");
-
-            let uniform_dist = Uniform::new(low_f64, high_f64)
-                .expect("integers: uniform distribution should be valid for given bounds");
-            let val_f64 = uniform_dist.rvs(1).expect("uniform sampling failed")[0];
+            // Uniform value in [low, high), floored to an integer.
+            let val_f64: f64 = rng.random_range(low_f64..high_f64);
             let val_i64 = val_f64.floor() as i64;
             let val = T::try_from(val_i64).map_err(|_| {
                 NumRs2Error::InvalidOperation(
@@ -326,12 +321,13 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_f64: f64 = rng.sample(dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert normal sample to target type".to_string(),
@@ -374,19 +370,20 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation("Failed to convert sigma to f64".to_string())
         })?;
 
-        let dist = Lognormal::new(mean_f64, sigma_f64, 0.0).map_err(|e| {
+        let dist = LogNormal::new(mean_f64, sigma_f64).map_err(|e| {
             NumRs2Error::InvalidOperation(format!(
                 "Failed to create log-normal distribution: {}",
                 e
             ))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_f64: f64 = rng.sample(dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert lognormal sample to target type".to_string(),
@@ -421,16 +418,17 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation("Failed to convert beta parameter to f64".to_string())
         })?;
 
-        let dist = Beta::new(a_f64, b_f64, 0.0, 1.0).map_err(|e| {
+        let dist = BetaDist::new(a_f64, b_f64).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create beta distribution: {}", e))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_f64: f64 = rng.sample(dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert beta sample to target type".to_string(),
@@ -461,19 +459,20 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation("Failed to convert degrees of freedom to f64".to_string())
         })?;
 
-        let dist = ChiSquare::new(df_f64, 0.0, 1.0).map_err(|e| {
+        let dist = ChiSquared::new(df_f64).map_err(|e| {
             NumRs2Error::InvalidOperation(format!(
                 "Failed to create chi-square distribution: {}",
                 e
             ))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_f64: f64 = rng.sample(dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert chi-square sample to target type".to_string(),
@@ -508,20 +507,18 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
         })?;
 
-        // WORKAROUND: SciRS2 Gamma has a bug where it passes 1/scale to rand_distr::Gamma
-        // rand_distr::Gamma expects (shape, scale) but SciRS2 passes (shape, 1/scale)
-        // To get the correct scale, we need to pass 1/scale to SciRS2 so it becomes 1/(1/scale) = scale
-        let corrected_scale = 1.0 / scale_f64;
-        let dist = Gamma::new(shape_f64, corrected_scale, 0.0).map_err(|e| {
+        // rand_distr::Gamma::new(shape, scale) takes the plain scale parameter.
+        let dist = Gamma::new(shape_f64, scale_f64).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create gamma distribution: {}", e))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..arr_size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_f64: f64 = rng.sample(dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert gamma sample to target type".to_string(),
@@ -552,22 +549,23 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
         })?;
 
-        // CORRECTED: SciRS2 Exponential::new(rate, location) expects rate = 1/scale
-        // For exponential distribution with scale s: rate = 1/s, mean = s, variance = s²
+        // rand_distr::Exp::new(rate) expects rate = 1/scale.
+        // For an exponential distribution with scale s: rate = 1/s, mean = s, variance = s².
         let rate = 1.0 / scale_f64;
-        let dist = Exponential::new(rate, 0.0).map_err(|e| {
+        let dist = scirs2_core::random::rand_distributions::Exp::new(rate).map_err(|e| {
             NumRs2Error::InvalidOperation(format!(
                 "Failed to create exponential distribution: {}",
                 e
             ))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_f64: f64 = rng.sample(dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert exponential sample to target type".to_string(),
@@ -602,16 +600,18 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation("Failed to convert scale to f64".to_string())
         })?;
 
-        let dist = Weibull::new(shape_f64, scale_f64, 0.0).map_err(|e| {
+        // rand_distr::Weibull::new(scale, shape) takes scale first, then shape.
+        let dist = Weibull::new(scale_f64, shape_f64).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create Weibull distribution: {}", e))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..arr_size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_f64: f64 = rng.sample(dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert Weibull sample to target type".to_string(),
@@ -633,20 +633,22 @@ impl<B: BitGenerator> Generator<B> {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 
-        let bit_gen = self.get_bit_generator()?;
+        // Convert bounds to f64 once.
+        let low_f64 = low.to_f64().ok_or_else(|| {
+            NumRs2Error::InvalidOperation("Failed to convert low bound to f64".to_string())
+        })?;
+        let high_f64 = high.to_f64().ok_or_else(|| {
+            NumRs2Error::InvalidOperation("Failed to convert high bound to f64".to_string())
+        })?;
+
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
+        let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Convert bounds to f64, use SciRS2 uniform distribution, then convert back
-            let low_f64 = low.to_f64().ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert low bound to f64".to_string())
-            })?;
-            let high_f64 = high.to_f64().ok_or_else(|| {
-                NumRs2Error::InvalidOperation("Failed to convert high bound to f64".to_string())
-            })?;
-
-            let uniform_dist = Uniform::new(low_f64, high_f64)
-                .expect("uniform: uniform distribution should be valid for given bounds");
-            let val_f64 = uniform_dist.rvs(1).expect("uniform sampling failed")[0];
+            // Uniform value in [low, high).
+            let val_f64: f64 = rng.random_range(low_f64..high_f64);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert uniform sample to target type".to_string(),
@@ -681,13 +683,13 @@ impl<B: BitGenerator> Generator<B> {
             NumRs2Error::InvalidOperation(format!("Failed to create Bernoulli distribution: {}", e))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_f64 = dist.rvs(1).expect("distribution sampling failed")[0];
-            let val_bool = val_f64 > 0.5; // Convert SciRS2 f64 result to bool
+            let val_bool: bool = rng.sample(dist);
             let val = if val_bool { T::one() } else { T::zero() };
             vec.push(val);
         }
@@ -711,17 +713,18 @@ impl<B: BitGenerator> Generator<B> {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 
-        let dist = Poisson::new(lam, 0.0).map_err(|e| {
+        let dist = Poisson::new(lam).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create Poisson distribution: {}", e))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_u64 = dist.rvs(1).expect("distribution sampling failed")[0];
-            let val = T::from(val_u64).ok_or_else(|| {
+            let val_f64: f64 = rng.sample(dist);
+            let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert Poisson sample to target type".to_string(),
                 )
@@ -749,16 +752,17 @@ impl<B: BitGenerator> Generator<B> {
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 
-        let dist = Binomial::new(n as usize, p).map_err(|e| {
+        let dist = Binomial::new(n, p).map_err(|e| {
             NumRs2Error::InvalidOperation(format!("Failed to create Binomial distribution: {}", e))
         })?;
 
+        // Seed a per-call RNG from the bit generator stream so output is
+        // reproducible from the global seed.
         let mut bit_gen = self.get_bit_generator()?;
+        let mut rng = StdRng::seed_from_u64(bit_gen.next_u64());
 
         for _ in 0..size {
-            // Create a temp RNG for the distribution using a random seed from our bit generator
-            let temp_rng = StdRng::seed_from_u64(bit_gen.next_u64());
-            let val_u64 = dist.rvs(1).expect("distribution sampling failed")[0];
+            let val_u64: u64 = rng.sample(dist);
             let val = T::from(val_u64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert Binomial sample to target type".to_string(),
@@ -876,7 +880,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
     fn test_seed_rng() {
         let rng1 = seed_rng(42);
         let arr1 = rng1
@@ -911,7 +914,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
     fn test_pcg64_seed_produces_same_output() {
         let rng1 = pcg64_seed_rng(42);
         let arr1 = rng1

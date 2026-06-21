@@ -230,6 +230,12 @@ fn test_lognormal_distribution_statistics() {
     let sample_mean = calculate_mean(&samples);
     let sample_variance = calculate_variance(&samples, sample_mean);
 
+    // Log-space statistics: ln(X) of a lognormal(mu, sigma) is Normal(mu, sigma),
+    // which gives low-variance, precise estimators for validation.
+    let log_vec: Vec<f64> = samples.to_vec().iter().map(|&x| f64::ln(x)).collect();
+    let log_mean = log_vec.iter().sum::<f64>() / log_vec.len() as f64;
+    let log_var = log_vec.iter().map(|v| (v - log_mean).powi(2)).sum::<f64>() / log_vec.len() as f64;
+
     // Expected values for lognormal distribution
     let expected_mean = (mu + sigma * sigma / 2.0).exp();
     let expected_variance = ((sigma * sigma).exp() - 1.0) * (2.0 * mu + sigma * sigma).exp();
@@ -242,12 +248,31 @@ fn test_lognormal_distribution_statistics() {
         sample_mean
     );
 
-    // Check if variance is within expected range (wider tolerance due to high variance of lognormal)
+    // X-space variance of lognormal(0,1) is a heavy-tailed estimator (excess kurtosis ~= 111),
+    // so its sampling SD is ~0.5 on the true value 4.6708. We use an absolute tolerance here;
+    // the log-space checks below are the precise, low-variance validation.
     assert!(
-        (sample_variance - expected_variance).abs() < 0.3 * expected_variance,
+        (sample_variance - expected_variance).abs() < 0.5,
         "Lognormal distribution: Expected variance close to {}, got {}",
         expected_variance,
         sample_variance
+    );
+
+    // Log-space mean check: ln(X) ~ Normal(mu, sigma); with mu = 0 and SE = 1/sqrt(10000) = 0.01,
+    // a 0.05 absolute tolerance is ~5 standard errors.
+    assert!(
+        log_mean.abs() < 0.05,
+        "Lognormal log-space mean: expected ~{}, got {}",
+        mu,
+        log_mean
+    );
+
+    // Log-space variance check: Var(ln(X)) = sigma^2 = 1; SE ~= sqrt(2/10000) ~= 0.014.
+    assert!(
+        (log_var - sigma * sigma).abs() < 0.06,
+        "Lognormal log-space variance: expected ~{}, got {}",
+        sigma * sigma,
+        log_var
     );
 
     // Check if all values are positive
@@ -380,7 +405,6 @@ fn test_poisson_distribution_statistics() {
 }
 
 #[test]
-#[ignore] // This test may fail due to concurrent test execution affecting global state
 fn test_seed_reproducibility() {
     // Test that setting the same seed produces the same results
     // NOTE: This test requires sequential execution as it uses global random state

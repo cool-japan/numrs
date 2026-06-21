@@ -1002,7 +1002,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
     fn test_set_seed() {
         // Test that the same seed produces the same sequence
         // by generating multiple arrays with the same seed

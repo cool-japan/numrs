@@ -141,7 +141,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
     fn test_random_state() {
         let rng1 = RandomState::with_seed(42);
         let rng2 = RandomState::with_seed(42);

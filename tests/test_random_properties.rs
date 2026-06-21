@@ -354,7 +354,6 @@ fn test_poisson_distribution_properties() {
 }
 
 #[test]
-#[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
 fn test_seed_reproducibility() {
     // Test that using the same seed produces the same sequence
     // While different seeds produce different sequences
