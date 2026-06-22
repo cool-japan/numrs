@@ -431,7 +431,10 @@ impl RandomState {
         for _ in 0..size {
             // Generate a standard normal random variable
             let standard_normal = Normal::new(0.0, 1.0).map_err(|e| {
-                NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
+                NumRs2Error::InvalidOperation(format!(
+                    "Failed to create normal distribution: {}",
+                    e
+                ))
             })?;
             let z: f64 = rng.sample(standard_normal);
 

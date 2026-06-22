@@ -7,8 +7,8 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast};
 // Note: Legacy module - may need fallback to rand for compatibility
-use scirs2_core::random::uniform::SampleUniform;
 use scirs2_core::random::prelude::*;
+use scirs2_core::random::uniform::SampleUniform;
 use scirs2_core::random::Exp;
 use scirs2_core::SliceRandomExt;
 use std::sync::{Arc, Mutex};

@@ -43,8 +43,8 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast, ToPrimitive};
 // SCIRS2 POLICY COMPLIANT imports - always use SciRS2
-use scirs2_core::random::uniform::SampleUniform;
 use scirs2_core::random::prelude::*;
+use scirs2_core::random::uniform::SampleUniform;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};

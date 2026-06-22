@@ -234,7 +234,8 @@ fn test_lognormal_distribution_statistics() {
     // which gives low-variance, precise estimators for validation.
     let log_vec: Vec<f64> = samples.to_vec().iter().map(|&x| f64::ln(x)).collect();
     let log_mean = log_vec.iter().sum::<f64>() / log_vec.len() as f64;
-    let log_var = log_vec.iter().map(|v| (v - log_mean).powi(2)).sum::<f64>() / log_vec.len() as f64;
+    let log_var =
+        log_vec.iter().map(|v| (v - log_mean).powi(2)).sum::<f64>() / log_vec.len() as f64;
 
     // Expected values for lognormal distribution
     let expected_mean = (mu + sigma * sigma / 2.0).exp();

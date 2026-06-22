@@ -12,10 +12,10 @@ use scirs2_core::ndarray::distributions::{
     uniform::SampleUniform, Distribution as NdArrayDistribution,
 };
 use scirs2_core::random::prelude::*;
-use scirs2_core::SliceRandomExt;
 use scirs2_core::random::Exp;
 use scirs2_core::Pareto;
 use scirs2_core::Pert;
+use scirs2_core::SliceRandomExt;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
