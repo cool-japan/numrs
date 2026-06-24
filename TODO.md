@@ -508,3 +508,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to NumRS2.
   - **Tests:** `cargo build --benches` compiles clean
   - **Risk:** multivariate_normal_cholesky signature (means: &[T], cov: &Array<T>, size: usize) must match bench's call (&mean, &cov, size)
   - Priority: P2 | Scope: medium | Hint: none
+
+## Stubs to implement (added 2026-06-22 by /cooljapan-stub-check)
+
+Captured from `rg 'TODO|FIXME|HACK|XXX'` across numrs (raw ~6 hits). The XXX matches in `src/char.rs:662,669` and `tests/test_string_ops.rs:585,588,592` are data-under-test (the regex-substitution replacement string `"XXX"` / expected `"helloXXXworld"`), not stubs. One genuinely actionable item:
+
+- [ ] **numrs** `numrs2`: `tests/nn/test_simd_ops.rs:248` — `TODO`: Re-enable when scirs2-core SIMD f64 matmul issue is resolved (`test_simd_matmul_f64` is `#[ignore]`d due to upstream issue in scirs2-core-0.1.5/src/simd/dot.rs:1167)
+  - **Priority:** P2  **Scope:** small  **Cross-project:** none
+  - **Approach:** Confirm the upstream scirs2-core SIMD f64 dot/matmul fix has landed (bump scirs2-core), then remove the `#[ignore]` on `test_simd_matmul_f64` and assert correctness against the known result `[[19,22],[43,50]]` within `EPSILON_F64`.
+  - **Risk:** Blocked on scirs2-core upstream (dot.rs:1167); only unignore once the bumped scirs2-core actually passes, otherwise the test will fail rather than skip.
+
+### Known external/upstream-blocked placeholders (not actionable)
+
+- `tests/nn/test_simd_ops.rs:248` is itself upstream-gated on **scirs2-core** `src/simd/dot.rs:1167` (f64 SIMD matmul). The item above stays open until that core fix is released and adopted here; no local numrs source change resolves it on its own.
