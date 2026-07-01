@@ -59,6 +59,11 @@ pub fn get_gpu_info() -> Option<String> {
         power_preference: wgpu::PowerPreference::HighPerformance,
         force_fallback_adapter: false,
         compatible_surface: None,
+        // Limit bucketing exists to reduce GPU fingerprinting when `wgpu` is
+        // exposed to untrusted web content; this is a native compute library
+        // with no such surface, so it is unneeded here (matches `wgpu`'s own
+        // `Default` behavior).
+        apply_limit_buckets: false,
     });
 
     let adapter = rt.block_on(adapter_future).ok()?;

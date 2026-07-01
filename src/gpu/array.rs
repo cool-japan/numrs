@@ -142,24 +142,41 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         rt.block_on(async {
             let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
             buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-                tx.send(result)
-                    .expect("Failed to send buffer mapping result - receiver dropped");
+                // The callback has no channel of its own to report a send
+                // failure through; if the receiver was already dropped there
+                // is nothing left to notify.
+                let _ = tx.send(result);
             });
 
             self.context
                 .device()
                 .poll(wgpu::PollType::wait_indefinitely())
-                .expect("GPU device poll failed during buffer mapping");
+                .map_err(|e| {
+                    NumRs2Error::RuntimeError(format!(
+                        "GPU device poll failed during buffer mapping: {}",
+                        e
+                    ))
+                })?;
 
             rx.receive()
                 .await
-                .expect("Failed to receive buffer mapping result - channel closed")
-                .expect("Buffer mapping operation failed");
+                .ok_or_else(|| {
+                    NumRs2Error::RuntimeError(
+                        "Failed to receive buffer mapping result - channel closed".to_string(),
+                    )
+                })?
+                .map_err(|e| {
+                    NumRs2Error::RuntimeError(format!("Buffer mapping operation failed: {}", e))
+                })?;
 
             // Copy the data from the staging buffer
-            let mapped_data = buffer_slice.get_mapped_range();
+            let mapped_data = buffer_slice.get_mapped_range().map_err(|e| {
+                NumRs2Error::RuntimeError(format!("Failed to get mapped buffer range: {}", e))
+            })?;
             data.copy_from_slice(&mapped_data);
-        });
+
+            Ok::<(), NumRs2Error>(())
+        })?;
 
         // Unmap the buffer
         staging_buffer.unmap();

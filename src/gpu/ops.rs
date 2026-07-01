@@ -780,7 +780,9 @@ fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
         })?
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
 
-    let data = buffer_slice.get_mapped_range();
+    let data = buffer_slice
+        .get_mapped_range()
+        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
     let partial_results: &[f32] = bytemuck::cast_slice(&data);
 
     // Perform final reduction on CPU
@@ -968,7 +970,9 @@ fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
         })?
         .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
 
-    let data = buffer_slice.get_mapped_range();
+    let data = buffer_slice
+        .get_mapped_range()
+        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
     let partial_results: &[f64] = bytemuck::cast_slice(&data);
 
     // Perform final reduction on CPU

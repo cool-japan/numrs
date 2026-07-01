@@ -38,7 +38,7 @@ impl PyArray {
         }
 
         // Try as list
-        if let Ok(list) = data.downcast::<PyList>() {
+        if let Ok(list) = data.cast::<PyList>() {
             let vec: Vec<f64> = list.extract()?;
             return Ok(PyArray {
                 inner: Array::from_vec(vec),
@@ -46,7 +46,7 @@ impl PyArray {
         }
 
         // Try as tuple
-        if let Ok(tuple) = data.downcast::<PyTuple>() {
+        if let Ok(tuple) = data.cast::<PyTuple>() {
             let vec: Vec<f64> = tuple.extract()?;
             return Ok(PyArray {
                 inner: Array::from_vec(vec),
