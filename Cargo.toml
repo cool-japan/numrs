@@ -71,8 +71,8 @@ serde_json = "1.0.150"
 csv = "1.4.0"
 oxicode = { version = "0.2.4", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
-oxiarc-archive = { version = "0.3.3" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
-oxiarc-lz4 = { version = "0.3.3", optional = true }   # Pure Rust LZ4 for distributed network transfer (COOLJAPAN Policy)
+oxiarc-archive = { version = "0.3.4" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
+oxiarc-lz4 = { version = "0.3.4", optional = true }   # Pure Rust LZ4 for distributed network transfer (COOLJAPAN Policy)
 # NPZ format support with pure Rust compression (DEFLATE via OxiARC)
 serde-pickle = "1.2.0" # Python pickle format support
 memmap2 = "0.9.11"      # Memory-mapped file I/O
