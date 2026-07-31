@@ -349,14 +349,14 @@ alloca = { path = "patches/alloca" }
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.6.4" }
-scirs2-stats = { version = "0.6.4" }
-scirs2-linalg = { version = "0.6.4" }
-scirs2-ndimage = { version = "0.6.4" }
-scirs2-spatial = { version = "0.6.4" }
-scirs2-special = { version = "0.6.4" }
-scirs2-fft = { version = "0.6.4" }
-scirs2-numpy = { version = "0.6.4" }
+scirs2-core = { version = "0.6.5" }
+scirs2-stats = { version = "0.6.5" }
+scirs2-linalg = { version = "0.6.5" }
+scirs2-ndimage = { version = "0.6.5" }
+scirs2-spatial = { version = "0.6.5" }
+scirs2-special = { version = "0.6.5" }
+scirs2-fft = { version = "0.6.5" }
+scirs2-numpy = { version = "0.6.5" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
 arrow = "59.0.0"
