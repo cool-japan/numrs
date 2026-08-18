@@ -18,6 +18,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
+use serial_test::serial;
+
 const SAMPLE_SIZE: usize = 10000;
 const REFERENCE_FILE: &str = "tests/py/distribution_reference_data.json";
 const EPSILON: f64 = 0.1; // Tolerance for statistical comparisons
@@ -157,6 +159,7 @@ fn assert_stats_close(rs_stats: &HashMap<String, f64>, ref_value: &Value, name: 
 }
 
 #[test]
+#[serial]
 fn test_normal_against_reference() {
     let ref_data = load_reference_data();
 
@@ -171,6 +174,7 @@ fn test_normal_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_beta_against_reference() {
     let ref_data = load_reference_data();
 
@@ -184,6 +188,7 @@ fn test_beta_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_cauchy_against_reference() {
     let ref_data = load_reference_data();
 
@@ -199,6 +204,7 @@ fn test_cauchy_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_chisquare_against_reference() {
     let ref_data = load_reference_data();
 
@@ -212,6 +218,7 @@ fn test_chisquare_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_exponential_against_reference() {
     let ref_data = load_reference_data();
 
@@ -225,6 +232,7 @@ fn test_exponential_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_gamma_against_reference() {
     let ref_data = load_reference_data();
 
@@ -238,6 +246,7 @@ fn test_gamma_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_lognormal_against_reference() {
     let ref_data = load_reference_data();
 
@@ -251,6 +260,7 @@ fn test_lognormal_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_student_t_against_reference() {
     let ref_data = load_reference_data();
 
@@ -264,6 +274,7 @@ fn test_student_t_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_uniform_against_reference() {
     let ref_data = load_reference_data();
 
@@ -277,6 +288,7 @@ fn test_uniform_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_binomial_against_reference() {
     let ref_data = load_reference_data();
 
@@ -290,6 +302,7 @@ fn test_binomial_against_reference() {
 }
 
 #[test]
+#[serial]
 fn test_poisson_against_reference() {
     let ref_data = load_reference_data();
 
@@ -308,6 +321,7 @@ mod scirs_tests {
     use super::*;
 
     #[test]
+    #[serial]
     fn test_noncentral_chisquare_against_reference() {
         let ref_data = load_reference_data();
 
@@ -325,6 +339,7 @@ mod scirs_tests {
     }
 
     #[test]
+    #[serial]
     #[ignore = "Flaky test - noncentral F has high variance, needs larger sample size or better implementation"]
     fn test_noncentral_f_against_reference() {
         let ref_data = load_reference_data();
@@ -339,6 +354,7 @@ mod scirs_tests {
     }
 
     #[test]
+    #[serial]
     fn test_vonmises_against_reference() {
         let ref_data = load_reference_data();
 
@@ -372,6 +388,7 @@ mod scirs_tests {
     }
 
     #[test]
+    #[serial]
     fn test_maxwell_against_reference() {
         let ref_data = load_reference_data();
 
@@ -385,6 +402,7 @@ mod scirs_tests {
     }
 
     #[test]
+    #[serial]
     fn test_truncated_normal_against_reference() {
         let ref_data = load_reference_data();
 
@@ -398,6 +416,7 @@ mod scirs_tests {
     }
 
     #[test]
+    #[serial]
     fn test_multivariate_normal_against_reference() {
         // This test is different since multivariate normal has different statistics
         let ref_data = load_reference_data();

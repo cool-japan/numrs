@@ -15,11 +15,13 @@ use numrs2::interop::scirs_compat::*;
 use numrs2::random::advanced_distributions::vonmises;
 use numrs2::random::distributions::{multivariate_normal_with_rotation, set_seed};
 use numrs2::random::distributions_enhanced::{maxwell, truncated_normal};
+use serial_test::serial;
 use std::f64::consts::PI;
 
 /// Test that the noncentral chi-square distribution generates valid values and
 /// respects the expected statistical properties
 #[test]
+#[serial]
 fn test_noncentral_chisquare() {
     // Set a seed for reproducibility
     set_seed(12345);
@@ -53,6 +55,7 @@ fn test_noncentral_chisquare() {
 
 /// Test that the noncentral F distribution generates valid values
 #[test]
+#[serial]
 fn test_noncentral_f() {
     // Set a seed for reproducibility
     set_seed(12345);
@@ -79,6 +82,7 @@ fn test_noncentral_f() {
 
 /// Test that the von Mises distribution generates valid values
 #[test]
+#[serial]
 fn test_vonmises() {
     // Set a seed for reproducibility
     set_seed(12345);
@@ -112,6 +116,7 @@ fn test_vonmises() {
 
 /// Test that the Maxwell distribution generates valid values
 #[test]
+#[serial]
 fn test_maxwell() {
     // Set a seed for reproducibility
     set_seed(12345);
@@ -143,6 +148,7 @@ fn test_maxwell() {
 
 /// Test that the truncated normal distribution generates valid values
 #[test]
+#[serial]
 fn test_truncated_normal() {
     // Set a seed for reproducibility
     set_seed(12345);
@@ -170,6 +176,7 @@ fn test_truncated_normal() {
 
 /// Test that the multivariate normal with rotation distribution generates valid values
 #[test]
+#[serial]
 fn test_multivariate_normal_with_rotation() {
     // Set a seed for reproducibility
     set_seed(12345);
@@ -207,6 +214,7 @@ fn test_multivariate_normal_with_rotation() {
 
 /// Test generating arrays of different shapes with SciRS2 distributions
 #[test]
+#[serial]
 fn test_distribution_shapes() {
     // Set a seed for reproducibility
     set_seed(12345);
@@ -226,6 +234,7 @@ fn test_distribution_shapes() {
 
 /// Test the repeatability of random generation when using the same seed
 #[test]
+#[serial]
 fn test_seed_repeatability() {
     // Use a very specific seed that's unlikely to conflict with other tests
     let test_seed = 987654321u64;
@@ -301,6 +310,7 @@ fn test_seed_repeatability() {
 
 /// Test the conversion between NumRS2 and SciRS2 types
 #[test]
+#[serial]
 fn test_type_conversions() {
     // Test with f64
     let samples_f64 = maxwell(1.0f64, &[10]).unwrap();

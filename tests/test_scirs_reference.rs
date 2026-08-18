@@ -14,6 +14,7 @@ use numrs2::interop::scirs_compat::*;
 use numrs2::random::advanced_distributions::maxwell;
 use numrs2::random::distributions::{multivariate_normal_with_rotation, set_seed, vonmises};
 use numrs2::random::distributions_enhanced::truncated_normal;
+use serial_test::serial;
 use std::f64::consts::PI;
 
 /// Utility function to calculate the mean of a sample
@@ -30,6 +31,7 @@ fn calculate_variance(data: &[f64]) -> f64 {
 
 /// Test that noncentral chi-square distribution produces correct statistical properties
 #[test]
+#[serial]
 fn test_noncentral_chisquare_statistics() {
     // Fix seed for reproducibility
     set_seed(12345);
@@ -62,6 +64,7 @@ fn test_noncentral_chisquare_statistics() {
 
 /// Test that noncentral F distribution produces correct statistical properties
 #[test]
+#[serial]
 fn test_noncentral_f_statistics() {
     // Fix seed for reproducibility
     set_seed(12345);
@@ -87,6 +90,7 @@ fn test_noncentral_f_statistics() {
 
 /// Test that von Mises distribution produces correct concentration around the mean
 #[test]
+#[serial]
 fn test_vonmises_concentration() {
     // Fix seed for reproducibility
     set_seed(12345);
@@ -164,6 +168,7 @@ fn test_vonmises_concentration() {
 
 /// Test that Maxwell-Boltzmann distribution produces correct statistical properties
 #[test]
+#[serial]
 fn test_maxwell_statistics() {
     // Fix seed for reproducibility
     set_seed(12345);
@@ -199,6 +204,7 @@ fn test_maxwell_statistics() {
 
 /// Test that truncated normal distribution produces correct results
 #[test]
+#[serial]
 fn test_truncated_normal_statistics() {
     // Fix seed for reproducibility
     set_seed(12345);
@@ -265,6 +271,7 @@ fn test_truncated_normal_statistics() {
 
 /// Test that multivariate normal with rotation produces correct correlations
 #[test]
+#[serial]
 fn test_multivariate_normal_rotation() {
     // Fix seed for reproducibility
     set_seed(12345);

@@ -1,5 +1,6 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
+use serial_test::serial;
 
 // This file contains statistical property tests for random distributions.
 // Instead of testing specific values, we test that the distributions
@@ -22,6 +23,7 @@ fn calculate_variance(arr: &Array<f64>, mean: f64) -> f64 {
 }
 
 #[test]
+#[serial]
 fn test_normal_distribution_statistics() {
     // Test normal distributions with different parameters
     let mean = 3.0;
@@ -53,6 +55,7 @@ fn test_normal_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_uniform_distribution_statistics() {
     // Test uniform distribution
     let low = 2.0;
@@ -96,6 +99,7 @@ fn test_uniform_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_beta_distribution_statistics() {
     // Test beta distribution
     let alpha = 2.0;
@@ -137,6 +141,7 @@ fn test_beta_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_exponential_distribution_statistics() {
     // Test exponential distribution
     let scale = 3.0;
@@ -177,6 +182,7 @@ fn test_exponential_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_gamma_distribution_statistics() {
     // Test gamma distribution
     let shape = 3.0;
@@ -218,6 +224,7 @@ fn test_gamma_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_lognormal_distribution_statistics() {
     // Test lognormal distribution
     let mu = 0.0;
@@ -285,6 +292,7 @@ fn test_lognormal_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_weibull_distribution_statistics() {
     // Test Weibull distribution
     let shape = 2.0;
@@ -318,6 +326,7 @@ fn test_weibull_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_binomial_distribution_statistics() {
     // Test binomial distribution
     let n = 20u64;
@@ -363,6 +372,7 @@ fn test_binomial_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_poisson_distribution_statistics() {
     // Test Poisson distribution
     let lambda = 5.0;
@@ -406,6 +416,7 @@ fn test_poisson_distribution_statistics() {
 }
 
 #[test]
+#[serial]
 fn test_seed_reproducibility() {
     // Test that setting the same seed produces the same results
     // NOTE: This test requires sequential execution as it uses global random state

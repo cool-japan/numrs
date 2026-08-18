@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - 2026-06-21
+## [0.4.1] - 2026-08-18
 
 ### Added
 - `Array::as_slice()` / `Array::as_slice_mut()` — zero-copy contiguous-slice access; avoids heap
@@ -26,9 +26,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   five new unit tests cover round-trip iteration
 
 ### Changed
-- `oxiarc-archive` and `oxiarc-lz4` updated from 0.3.2 → 0.3.3
-- `scirs2-{core,stats,linalg,ndimage,spatial,special,fft}` workspace dependencies now use
+- `scirs2-core`, `scirs2-stats`, `scirs2-linalg`, `scirs2-ndimage`, `scirs2-spatial`,
+  `scirs2-special`, `scirs2-fft` updated from 0.5.0 → 0.6.5; these workspace dependencies now use
   `{ workspace = true }` (workspace policy compliance; versions still pinned at workspace root)
+- `oxiarc-archive` and `oxiarc-lz4` updated from 0.3.2 → 0.4.1
+- `oxicode` updated from 0.2.4 → 0.2.6
+- `wgpu` updated 29.0.3 → 30.0.0 (upstream `BufferSlice::get_mapped_range()` now returns
+  `Result` instead of panicking internally; `RequestAdapterOptions` gained `apply_limit_buckets`);
+  `pyo3` 0.28 → 0.29; `wasm-bindgen` 0.2.125 → 0.2.126, `wasm-bindgen-futures` 0.4.75 → 0.4.76,
+  `js-sys` / `web-sys` 0.3.102 → 0.3.103, `wasm-bindgen-test` 0.3.75 → 0.3.76;
+  `memmap2` 0.9.10 → 0.9.11
+- Random-number generation migrated from `scirs2_stats::distributions` to `scirs2_core::random`
+  (`Rng::sample` / `Rng::random_range`); `NonCentralChiSquared::sample`, `NonCentralF::sample`,
+  `VonMises::sample`, `Maxwell::sample`, `Wald::sample` (`numrs2::random::advanced_distributions`)
+  now take an explicit `&mut StdRng` parameter instead of drawing from an internal `thread_rng()`
+  call, improving reproducibility from a seeded generator — **breaking** for direct callers of
+  these `.sample()` methods; the crate-level `noncentral_chisquare()` / `vonmises()` / `maxwell()`
+  / `wald()` functions keep their existing public signatures
 - `bench/bench_distributions.rs`: `f_dist` and `multivariate_normal_cholesky` benchmarks
   re-enabled; removed stale TODO stubs
 - `bench/stats_benchmarks.rs`: `bench_statistical_moments` (skewness, kurtosis) and
@@ -63,6 +77,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Criterion / alloca linker error on Apple Silicon**: `patches/alloca/` pure-Rust replacement
   eliminates C VLA anonymous-symbol incompatibility with aarch64 rustc; all criterion benchmarks
   now build and run on Apple M-series hardware
+- **Gamma distribution scale parameter** (`src/random/legacy.rs`, `src/random/state.rs`,
+  `src/random/generator.rs`): removed the `1/scale` double-inversion workaround for a since-fixed
+  upstream `scirs2_core::Gamma` scale bug; gamma sampling now passes `scale` directly to
+  `Gamma::new`
+- **RNG seeding reproducibility**: `Generator::random()` now seeds a per-call RNG from the bit
+  generator stream instead of drawing directly from a `Uniform` distribution, so output is
+  reproducible from the global seed; re-enabled 8 previously-`#[ignore]`d seeding tests across
+  `src/random/distributions.rs` (`test_set_seed`) and `tests/test_complex_seed_scenario.rs`,
+  `tests/test_global_vs_direct_vonmises.rs`, `tests/test_random_advanced_distributions.rs` (×2),
+  `tests/test_random_properties.rs`, `tests/test_random_state.rs`,
+  `tests/test_vonmises_randomness_consumption.rs`, `tests/test_vonmises_seed_issue.rs`
+- **GPU buffer-mapping error handling** (`src/gpu/array.rs`, `src/gpu/ops.rs`,
+  `src/gpu/context.rs`): replaced `.expect()` panics on `wgpu` device-poll/buffer-mapping failures
+  with proper `Result` / `NumRs2Error::RuntimeError` propagation, required by the `wgpu` 30.0.0
+  API surface (`get_mapped_range()` is now fallible) and consistent with the no-`unwrap()`-in-
+  production policy
+- **Flaky global-RNG test races**: 11 test files (`src/random/distributions.rs`,
+  `advanced_distributions.rs`, `distributions_enhanced.rs`; `tests/test_random_advanced.rs`,
+  `test_distribution_reference.rs`, `test_random_advanced_distributions.rs`,
+  `test_random_statistical.rs`, `test_random_reference.rs`, `test_random_properties.rs`,
+  `test_scirs_integration.rs`, `test_scirs_reference.rs`) had multiple `#[test]` functions calling
+  `set_seed()` and sampling the shared `GLOBAL_RANDOM_STATE` with no `#[serial]` isolation, so
+  parallel test execution could let one test's reseed corrupt another's in-flight deterministic
+  sequence (observed: `test_uniform_sum_to_approximate_normal` intermittently failing a
+  goodness-of-fit assertion under `cargo nextest run`, passing reliably in isolation); added
+  `#[serial]` (existing `serial_test` dev-dependency, precedented in `src/error_handling.rs`) to
+  every affected test function
 
 ## [0.4.0] - 2026-06-05
 

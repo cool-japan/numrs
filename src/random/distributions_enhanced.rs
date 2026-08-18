@@ -1148,8 +1148,10 @@ fn student_t_cdf(x: f64, df: usize) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_truncated_normal() {
         let mean = 0.0;
         let std = 1.0;
@@ -1176,6 +1178,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_vonmises() {
         let mu = 0.0;
         let kappa = 2.0;
@@ -1209,6 +1212,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_latin_hypercube() {
         let dim = 2;
         let n = 10;
@@ -1236,6 +1240,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     #[ignore = "Performance optimization needed - function works but is too slow for CI"]
     fn test_mixture_of_normals() {
         let weights = vec![0.3, 0.7];

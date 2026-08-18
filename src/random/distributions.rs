@@ -960,26 +960,31 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_beta_distribution() {
         let arr = beta(2.0, 5.0, &[10]).expect("test: beta should succeed");
         assert_eq!(arr.shape(), vec![10]);
     }
 
     #[test]
+    #[serial]
     fn test_normal_distribution() {
         let arr = normal(0.0, 1.0, &[5, 5]).expect("test: normal should succeed");
         assert_eq!(arr.shape(), vec![5, 5]);
     }
 
     #[test]
+    #[serial]
     fn test_standard_normal_distribution() {
         let arr = standard_normal::<f64>(&[3, 3]).expect("test: standard_normal should succeed");
         assert_eq!(arr.shape(), vec![3, 3]);
     }
 
     #[test]
+    #[serial]
     fn test_binomial_distribution() {
         let arr = binomial::<u64>(10, 0.5, &[5]).expect("test: binomial should succeed");
         assert_eq!(arr.shape(), vec![5]);
@@ -991,6 +996,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_gamma_distribution() {
         let arr = gamma(2.0, 2.0, &[10]).expect("test: gamma should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -1002,6 +1008,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_set_seed() {
         // Test that the same seed produces the same sequence
         // by generating multiple arrays with the same seed
@@ -1043,6 +1050,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_pareto_distribution() {
         let arr = pareto(2.0, &[10]).expect("test: pareto should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -1054,6 +1062,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_triangular_distribution() {
         // Now using our own implementation instead of rand_distr
         let result = triangular(0.0, 2.0, 10.0, &[10]);
@@ -1067,6 +1076,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_pert_distribution() {
         let arr = pert(0.0, 5.0, 10.0, &[10]).expect("test: pert should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -1078,6 +1088,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multivariate_normal_distribution() {
         let mean = vec![0.0, 0.0];
         let cov_data = vec![1.0, 0.5, 0.5, 1.0];
@@ -1089,12 +1100,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_laplace_distribution() {
         let arr = laplace(0.0, 1.0, &[10]).expect("test: laplace should succeed");
         assert_eq!(arr.shape(), vec![10]);
     }
 
     #[test]
+    #[serial]
     fn test_negative_binomial_distribution() {
         let arr = negative_binomial::<u64>(5.0, 0.5, &[10])
             .expect("test: negative_binomial should succeed");
@@ -1102,6 +1115,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multinomial_distribution() {
         let pvals = vec![0.2, 0.3, 0.5];
         let arr = multinomial::<u64>(10, &pvals, None).expect("test: multinomial should succeed");
@@ -1113,6 +1127,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_noncentral_chisquare_distribution() {
         let arr = noncentral_chisquare(2.0, 1.0, &[10])
             .expect("test: noncentral_chisquare should succeed");
@@ -1125,6 +1140,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_noncentral_f_distribution() {
         let arr = noncentral_f(2.0, 5.0, 1.0, &[10]).expect("test: noncentral_f should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -1136,6 +1152,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_vonmises_distribution() {
         let arr = vonmises(0.0, 1.0, &[10]).expect("test: vonmises should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -1147,6 +1164,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_maxwell_distribution() {
         let arr = maxwell(1.0, &[10]).expect("test: maxwell should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -1158,6 +1176,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_truncated_normal_distribution() {
         let low = -2.0;
         let high = 2.0;
@@ -1172,6 +1191,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multivariate_normal_with_rotation() {
         let mean = vec![0.0, 0.0];
         let cov_data = vec![1.0, 0.5, 0.5, 1.0];
@@ -1197,6 +1217,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multivariate_t_distribution() {
         let mean = vec![0.0, 0.0];
         let cov_data = vec![1.0, 0.3, 0.3, 1.0];
@@ -1214,6 +1235,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multivariate_t_parameter_validation() {
         let mean = vec![0.0, 0.0];
         let cov_data = vec![1.0, 0.3, 0.3, 1.0];
@@ -1240,6 +1262,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_wishart_distribution() {
         let scale_data = vec![1.0, 0.2, 0.2, 1.0];
         let scale = Array::from_vec(scale_data).reshape(&[2, 2]);
@@ -1256,6 +1279,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_wishart_parameter_validation() {
         let scale_data = vec![1.0, 0.2, 0.2, 1.0];
         let scale = Array::from_vec(scale_data).reshape(&[2, 2]);
@@ -1284,6 +1308,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_frechet_distribution() {
         let arr = frechet(2.0, 0.0, 1.0, &[100]).expect("test: frechet should succeed");
         assert_eq!(arr.shape(), vec![100]);
@@ -1296,6 +1321,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_frechet_parameter_validation() {
         // Test with invalid shape parameter (alpha <= 0)
         let result = frechet::<f64>(0.0, 0.0, 1.0, &[10]);
@@ -1313,6 +1339,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_frechet_with_different_parameters() {
         // Test with different location parameter
         let arr = frechet(3.0, 5.0, 2.0, &[50]).expect("test: frechet with loc=5 should succeed");
@@ -1325,6 +1352,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_gev_distribution_gumbel() {
         // Test Gumbel case (shape ≈ 0)
         let arr = gev(0.0, 0.0, 1.0, &[100]).expect("test: gev (Gumbel) should succeed");
@@ -1336,6 +1364,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_gev_distribution_frechet() {
         // Test Frechet case (shape > 0)
         let arr = gev(0.5, 0.0, 1.0, &[100]).expect("test: gev (Frechet) should succeed");
@@ -1347,6 +1376,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_gev_distribution_weibull() {
         // Test Weibull case (shape < 0)
         let arr = gev(-0.5, 0.0, 1.0, &[100]).expect("test: gev (Weibull) should succeed");
@@ -1358,6 +1388,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_gev_parameter_validation() {
         // Test with invalid scale parameter (scale <= 0)
         let result = gev::<f64>(0.0, 0.0, 0.0, &[10]);
@@ -1368,6 +1399,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_gev_with_different_parameters() {
         // Test with different location and scale
         let arr = gev(0.2, 10.0, 2.0, &[50]).expect("test: gev with custom params should succeed");
@@ -1378,6 +1410,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_f_dist_shape() {
         let arr = f_dist(2.0_f64, 10.0, &[20]).expect("f_dist should succeed");
         assert_eq!(
@@ -1388,6 +1421,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_f_dist_values_nonnegative() {
         // F-distributed values are always ≥ 0
         let arr = f_dist(3.0_f64, 5.0, &[100]).expect("f_dist should succeed");
@@ -1400,6 +1434,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_f_dist_invalid_dfnum() {
         let result = f_dist::<f64>(0.0, 10.0, &[5]);
         assert!(
@@ -1409,6 +1444,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_f_dist_invalid_dfden() {
         let result = f_dist::<f64>(2.0, -1.0, &[5]);
         assert!(

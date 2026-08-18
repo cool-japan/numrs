@@ -545,6 +545,7 @@ pub fn wald<T: Float + NumCast + Clone + Debug + Display>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_vonmises_basic() {
@@ -562,6 +563,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_noncentral_chisquare() {
         let arr = noncentral_chisquare(2.0, 1.0, &[10])
             .expect("test: noncentral_chisquare should succeed");
@@ -574,6 +576,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_noncentral_f() {
         let arr = noncentral_f(2.0, 3.0, 1.0, &[10]).expect("test: noncentral_f should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -585,6 +588,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_vonmises() {
         let arr = vonmises(0.0, 1.0, &[10]).expect("test: vonmises should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -595,6 +599,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_maxwell() {
         let arr = maxwell(1.0, &[10]).expect("test: maxwell should succeed");
         assert_eq!(arr.shape(), vec![10]);
@@ -606,6 +611,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_wald() {
         let arr = wald(1.0, 1.0, &[10]).expect("test: wald should succeed");
         assert_eq!(arr.shape(), vec![10]);

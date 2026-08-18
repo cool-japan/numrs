@@ -4,10 +4,11 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.4.0** - Major release (2026-06-05): Major feature additions including skew/kurtosis,
-//! F-distribution sampling, instance normalization, BFGS optimizer, VECM Johansen fitting,
-//! FEM 2D point evaluation, real eigendecomposition via QR iteration, full Golub-Kahan SVD,
-//! and SciRS2 ecosystem update to v0.5.0.
+//! **Version 0.4.1** - Patch release (2026-08-18): zero-copy `Array::as_slice()` / `as_cow_1d()`
+//! API; erfinv/Bessel Y_n/K_n precision fixes; irfft Hermitian reconstruction corrected; generic
+//! controlled-U quantum gate and multi-qubit gate fusion; random-number generation migrated to
+//! `scirs2_core::random` with reproducible seeding; GPU buffer-mapping errors now propagate via
+//! `Result` instead of panicking; SciRS2 ecosystem updated to v0.6.5.
 //!
 //! ## Quick Start
 //!

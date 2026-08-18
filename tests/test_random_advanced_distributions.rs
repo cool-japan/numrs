@@ -1,5 +1,6 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
+use serial_test::serial;
 //use approx::assert_abs_diff_eq; // Using standard assertions instead
 
 // This file implements property-based testing for advanced distributions in the random module.
@@ -46,6 +47,7 @@ fn is_within_bounds(value: f64, expected: f64, tolerance: f64) -> bool {
 }
 
 #[test]
+#[serial]
 fn test_pareto_distribution_properties() {
     // Test Pareto distribution properties
     let alpha = 3.0;
@@ -88,6 +90,7 @@ fn test_pareto_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_cauchy_distribution_properties() {
     // Test Cauchy distribution properties
     // The Cauchy distribution has undefined mean and variance
@@ -135,6 +138,7 @@ fn test_cauchy_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_wald_distribution_properties() {
     // Test Wald (Inverse Gaussian) distribution properties
     let mean = 2.0;
@@ -177,6 +181,7 @@ fn test_wald_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_laplace_distribution_properties() {
     // Test Laplace (double exponential) distribution properties
     let loc = 3.0;
@@ -222,6 +227,7 @@ fn test_laplace_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_gumbel_distribution_properties() {
     // Test Gumbel distribution properties
     let loc = 1.0;
@@ -258,6 +264,7 @@ fn test_gumbel_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_logistic_distribution_properties() {
     // Test Logistic distribution properties
     let loc = 2.0;
@@ -293,6 +300,7 @@ fn test_logistic_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_rayleigh_distribution_properties() {
     // Test Rayleigh distribution properties
     let scale = 2.0;
@@ -331,6 +339,7 @@ fn test_rayleigh_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_negative_binomial_distribution_properties() {
     // Test Negative Binomial distribution properties
     let n = 5.0; // Number of successes
@@ -372,6 +381,7 @@ fn test_negative_binomial_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_multinomial_distribution_properties() {
     // Test Multinomial distribution properties
     let n = 20; // Number of trials
@@ -420,6 +430,7 @@ fn test_multinomial_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_triangular_distribution_properties() {
     // Test Triangular distribution properties
     // Note: This is a tentative test and might need adjustments due to
@@ -471,6 +482,7 @@ fn test_triangular_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_pert_distribution_properties() {
     // Test PERT distribution properties
     let min = 0.0;
@@ -506,6 +518,7 @@ fn test_pert_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_hypergeometric_distribution_properties() {
     // Test Hypergeometric distribution properties
     let ngood = 50; // Number of success states in population
@@ -558,6 +571,7 @@ fn test_hypergeometric_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_multivariate_normal_distribution_properties() {
     // Test Multivariate Normal distribution properties
     let mean = vec![1.0, 2.0];
@@ -621,6 +635,7 @@ fn test_multivariate_normal_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_distribution_parameter_boundaries() {
     // Test behavior at parameter boundaries
 
@@ -668,6 +683,7 @@ fn test_distribution_parameter_boundaries() {
 }
 
 #[test]
+#[serial]
 fn test_zipf_distribution_properties() {
     // Test Zipf distribution properties
     let a = 2.0; // Distribution parameter
