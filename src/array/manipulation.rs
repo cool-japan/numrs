@@ -62,73 +62,28 @@ impl<T: Clone> Array<T> {
     ///    dimensions of the input arrays
     /// 3. An input array can be broadcast along a dimension if its size in that dimension is 1 or
     ///    the same as the output size
+    ///
+    /// Returns `Err(NumRs2Error::ShapeMismatch)` if `self`'s shape cannot be
+    /// broadcast to `shape` under the rules above (this never panics).
     pub fn broadcast_to(&self, shape: &[usize]) -> Result<Self>
     where
         T: Clone,
     {
-        use scirs2_core::ndarray::Array as NdArray;
-
-        let orig_shape = self.shape();
-
-        // Calculate the number of dims to add (to the left)
-        let n_dims_to_add = if shape.len() > orig_shape.len() {
-            shape.len() - orig_shape.len()
-        } else {
-            0
-        };
-
-        // Expand dimensions if needed (prepend dimensions of size 1)
-        let mut expanded_array = self.clone();
-        if n_dims_to_add > 0 {
-            // Create shape with leading 1s and then add original shape
-            let mut new_shape = Vec::with_capacity(shape.len());
-            new_shape.extend(std::iter::repeat_n(1, n_dims_to_add));
-            new_shape.extend_from_slice(&orig_shape);
-            expanded_array = self.reshape(&new_shape);
+        // Delegate to ndarray's own (well-tested) broadcasting implementation
+        // instead of a hand-rolled index computation: `ArrayBase::broadcast`
+        // implements exactly the NumPy `broadcast_to` rules documented above
+        // -- including right-aligning and prepending size-1 dimensions -- and
+        // returns `None` for incompatible shapes instead of silently tiling
+        // or reading out of bounds.
+        match self.data.broadcast(IxDyn(shape)) {
+            Some(view) => Ok(Self {
+                data: view.to_owned(),
+            }),
+            None => Err(NumRs2Error::ShapeMismatch {
+                expected: shape.to_vec(),
+                actual: self.shape(),
+            }),
         }
-
-        // Create a new array with broadcast shape and replicate values
-        let mut result = NdArray::<T, IxDyn>::from_elem(
-            IxDyn(shape),
-            self.array()
-                .first()
-                .cloned()
-                .unwrap_or_else(|| panic!("Empty array")),
-        );
-
-        // This is a simplified implementation - for a full implementation, we would use
-        // more efficient broadcasting algorithms provided by ndarray
-        // For now, we'll manually broadcast by iterating over the result and assigning values
-
-        // Get the original array shape for broadcasting rules
-        let current_shape = expanded_array.shape();
-
-        // Apply broadcasting rules
-        for (idx, val) in result.indexed_iter_mut() {
-            let mut broadcast_idx = Vec::with_capacity(current_shape.len());
-
-            // Calculate the broadcasted indices (modulo the original shape)
-            for (i, &dim) in idx.slice().iter().enumerate() {
-                // Get index; 0 if beyond array dims or if dim size is 1
-                let broadcast_dim = if i >= current_shape.len() || current_shape[i] == 1 {
-                    0
-                } else {
-                    dim % current_shape[i]
-                };
-                broadcast_idx.push(broadcast_dim);
-            }
-
-            // Get the value from the original array using the broadcast indices
-            let original_val = expanded_array
-                .array()
-                .get(IxDyn(&broadcast_idx))
-                .cloned()
-                .unwrap_or_else(|| panic!("Invalid broadcast index"));
-
-            *val = original_val;
-        }
-
-        Ok(Self { data: result })
     }
 
     /// Reshape the array
@@ -151,7 +106,28 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(b.shape(), vec![2, 3]);
     /// assert_eq!(b.to_vec(), vec![1, 2, 3, 4, 5, 6]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `shape`'s total element count does not match `self.size()`.
+    /// Use [`Array::try_reshape`] for a non-panicking version that returns a
+    /// [`crate::error::NumRs2Error`].
     pub fn reshape(&self, shape: &[usize]) -> Self
+    where
+        T: Clone,
+    {
+        self.try_reshape(shape).unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// Non-panicking version of [`Array::reshape`].
+    ///
+    /// Returns `Err` if `shape`'s total element count does not match
+    /// `self.size()` instead of panicking. Never panics: if the in-place
+    /// reshape ndarray offers is not possible for this array's memory
+    /// layout (e.g. a non-contiguous view produced by
+    /// [`Array::transpose_axis`]), this falls back to a logical-order copy
+    /// rather than failing.
+    pub fn try_reshape(&self, shape: &[usize]) -> Result<Self>
     where
         T: Clone,
     {
@@ -160,18 +136,33 @@ impl<T: Clone> Array<T> {
         let new_size: usize = shape.iter().product();
 
         if current_size != new_size {
-            panic!(
-                "Cannot reshape array of size {} into shape with size {}",
-                current_size, new_size
-            );
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: shape.to_vec(),
+                actual: self.shape(),
+            });
         }
 
-        let reshaped = self
-            .data
-            .clone()
-            .into_shape_with_order(IxDyn(shape))
-            .unwrap_or_else(|_| panic!("Failed to reshape array"));
-        Self { data: reshaped }
+        match self.data.clone().into_shape_with_order(IxDyn(shape)) {
+            Ok(reshaped) => Ok(Self { data: reshaped }),
+            Err(_) => {
+                // `into_shape_with_order` only succeeds without copying when
+                // the array's memory layout is compatible with the new
+                // shape; a non-contiguous array (e.g. after
+                // `transpose_axis`) lands here instead. Fall back to a copy
+                // built by iterating in *logical* order (`.iter()`, which
+                // respects strides) rather than `to_vec()`, which returns
+                // the raw backing buffer in *physical* memory order and
+                // would silently scramble the data for such arrays.
+                let logical_order: Vec<T> = self.array().iter().cloned().collect();
+                let fresh = Self::from_vec(logical_order);
+                match fresh.data.into_shape_with_order(IxDyn(shape)) {
+                    Ok(reshaped) => Ok(Self { data: reshaped }),
+                    Err(e) => Err(NumRs2Error::InvalidOperation(format!(
+                        "Failed to reshape array: {e}"
+                    ))),
+                }
+            }
+        }
     }
 
     /// Reshape the array with an option to copy or share the underlying data
@@ -202,7 +193,25 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(c.shape(), vec![3, 2]);
     /// assert_eq!(c.to_vec(), vec![1, 2, 3, 4, 5, 6]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `shape`'s total element count does not match `self.size()`.
+    /// Use [`Array::try_reshape_with`] for a non-panicking version that
+    /// returns a [`crate::error::NumRs2Error`].
     pub fn reshape_with(&self, shape: &[usize], copy: bool) -> Self
+    where
+        T: Clone,
+    {
+        self.try_reshape_with(shape, copy)
+            .unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// Non-panicking version of [`Array::reshape_with`].
+    ///
+    /// Returns `Err` if `shape`'s total element count does not match
+    /// `self.size()` instead of panicking.
+    pub fn try_reshape_with(&self, shape: &[usize], copy: bool) -> Result<Self>
     where
         T: Clone,
     {
@@ -211,24 +220,24 @@ impl<T: Clone> Array<T> {
         let new_size: usize = shape.iter().product();
 
         if current_size != new_size {
-            panic!(
-                "Cannot reshape array of size {} into shape with size {}",
-                current_size, new_size
-            );
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: shape.to_vec(),
+                actual: self.shape(),
+            });
         }
 
         if copy {
-            // Always make a copy
-            let data_vec = self.to_vec();
-            Self::from_vec(data_vec).reshape(shape)
+            // Always make a copy. Iterate in logical order (respecting
+            // strides) rather than using `to_vec()`, which returns the raw
+            // backing buffer in physical memory order and would silently
+            // scramble data for a non-contiguous array.
+            let logical_order: Vec<T> = self.array().iter().cloned().collect();
+            Self::from_vec(logical_order).try_reshape(shape)
         } else {
-            // Try to reshape in-place if possible
-            let reshaped = self
-                .data
-                .clone()
-                .into_shape_with_order(IxDyn(shape))
-                .unwrap_or_else(|_| panic!("Failed to reshape array"));
-            Self { data: reshaped }
+            // Try to reshape in-place if possible; `try_reshape` already
+            // falls back to a logical-order copy for layouts that cannot be
+            // reshaped in place, so this never panics.
+            self.try_reshape(shape)
         }
     }
 
@@ -257,7 +266,24 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(flat_c.shape(), vec![6]);
     /// assert_eq!(flat_c.to_vec(), vec![1, 2, 3, 4, 5, 6]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `order` is `Some` value other than `"C"` or `"F"`. Use
+    /// [`Array::try_flatten`] for a non-panicking version that returns a
+    /// [`crate::error::NumRs2Error`].
     pub fn flatten(&self, order: Option<&str>) -> Self
+    where
+        T: Clone,
+    {
+        self.try_flatten(order).unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// Non-panicking version of [`Array::flatten`].
+    ///
+    /// Returns `Err` if `order` is a `Some` value other than `"C"` or `"F"`
+    /// instead of panicking.
+    pub fn try_flatten(&self, order: Option<&str>) -> Result<Self>
     where
         T: Clone,
     {
@@ -266,7 +292,7 @@ impl<T: Clone> Array<T> {
         match order_str {
             "C" => {
                 // Row-major (C-style) order
-                self.reshape(&[self.size()])
+                self.try_reshape(&[self.size()])
             }
             "F" => {
                 // Column-major (Fortran-style) order
@@ -274,7 +300,7 @@ impl<T: Clone> Array<T> {
 
                 if shape.len() <= 1 {
                     // 0D or 1D arrays are the same in both orders
-                    return self.reshape(&[self.size()]);
+                    return self.try_reshape(&[self.size()]);
                 }
 
                 // For 2D and higher arrays, we need to transpose and then ravel
@@ -288,11 +314,12 @@ impl<T: Clone> Array<T> {
                 // For now, just do a simple flatten
                 // let transposed = self.transpose(&indices).expect("valid transpose indices");
                 let transposed = self.clone();
-                transposed.reshape(&[transposed.size()])
+                transposed.try_reshape(&[transposed.size()])
             }
-            _ => {
-                panic!("Invalid order parameter: {}. Must be 'C' or 'F'", order_str);
-            }
+            _ => Err(NumRs2Error::InvalidInput(format!(
+                "Invalid order parameter: {}. Must be 'C' or 'F'",
+                order_str
+            ))),
         }
     }
 
@@ -432,23 +459,40 @@ impl<T: Clone> Array<T> {
     /// let b = a.transpose_axis(0, 1);
     /// assert_eq!(b.shape(), vec![3, 2]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `axis1` or `axis2` is out of bounds for `self`'s number of
+    /// dimensions. Use [`Array::try_transpose_axis`] for a non-panicking
+    /// version that returns a [`crate::error::NumRs2Error`].
     pub fn transpose_axis(&self, axis1: usize, axis2: usize) -> Self
+    where
+        T: Clone,
+    {
+        self.try_transpose_axis(axis1, axis2)
+            .unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// Non-panicking version of [`Array::transpose_axis`].
+    ///
+    /// Returns `Err` if `axis1` or `axis2` is out of bounds for `self`'s
+    /// number of dimensions instead of panicking.
+    pub fn try_transpose_axis(&self, axis1: usize, axis2: usize) -> Result<Self>
     where
         T: Clone,
     {
         let ndim = self.ndim();
 
-        // If axes are out of bounds, panic
         if axis1 >= ndim || axis2 >= ndim {
-            panic!(
+            return Err(NumRs2Error::IndexOutOfBounds(format!(
                 "Axis out of bounds: dimensions are {}, got axes {} and {}",
                 ndim, axis1, axis2
-            );
+            )));
         }
 
         // If axes are the same, return a clone
         if axis1 == axis2 {
-            return self.clone();
+            return Ok(self.clone());
         }
 
         // Create a permutation that swaps the given axes
@@ -457,9 +501,9 @@ impl<T: Clone> Array<T> {
 
         // Permute the axes
         let permuted_data = self.data.clone().permuted_axes(IxDyn(&perm));
-        Self {
+        Ok(Self {
             data: permuted_data,
-        }
+        })
     }
 
     /// Get a 2D view of the underlying ndarray data

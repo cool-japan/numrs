@@ -11,17 +11,19 @@ documentation = "https://docs.rs/numrs2"
 readme = "README.md"
 keywords = ["numpy", "numerical", "array", "linear-algebra", "mathematics"]
 categories = ["science"]
+exclude = ["*.bak", "**/*.bak", "output.csv", "output.txt", ".DS_Store", "**/.DS_Store"]
 
 [lib]
 name = "numrs2"
-# Note: For Python extension, use maturin to build. cdylib is not needed in Cargo.toml
-# as maturin handles this automatically. Only rlib is needed for Rust library usage.
+crate-type = ["cdylib", "rlib"]
+# cdylib: required so maturin/pyo3 can build the Python extension module.
+# rlib: keeps normal Rust usage (binaries, other crates depending on numrs2) working.
 
 [lints]
 workspace = true
 
 [features]
-default = ["matrix_decomp", "scirs"]
+default = ["matrix_decomp", "scirs", "lapack"]
 matrix_decomp = []
 validation = []
 unstable = []
@@ -40,7 +42,7 @@ bson = ["dep:bson"]  # BSON format support (pure Rust)
 io-all = ["arrow", "parquet", "netcdf", "matlab", "messagepack", "bson"]  # Enable all I/O formats
 wasm = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:dlmalloc"]  # WebAssembly support
 distributed = ["dep:tokio", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread", "tokio/macros", "tokio/time", "dep:oxiarc-lz4"]  # Distributed computing support (Pure Rust, no MPI)
-visualization = ["dep:plotters", "dep:plotters-backend", "dep:plotters-svg", "dep:resvg", "dep:usvg", "dep:tiny-skia", "dep:rgb"]  # Advanced visualization tools (pure Rust)
+visualization = ["dep:plotters", "dep:plotters-backend", "dep:plotters-svg", "dep:resvg", "dep:usvg", "dep:tiny-skia", "dep:rgb", "dep:oxifont-bundled"]  # Advanced visualization tools (pure Rust)
 ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without external dependencies
 
 [dependencies]
@@ -131,13 +133,21 @@ console_error_panic_hook = { version = "0.1.7", optional = true }  # Better pani
 dlmalloc = { version = "0.2", features = ["global"], optional = true }  # Maintained pure-Rust allocator for WASM
 
 # Optional Visualization dependencies (Pure Rust - COOLJAPAN Policy)
-plotters = { version = "0.3.7", optional = true }  # High-performance plotting library
+# plotters: default-features off, cherry-picked pure-Rust feature set only.
+# Notably EXCLUDES plotters' default "ttf" feature (font-kit -> freetype-sys /
+# yeslogic-fontconfig-sys C/FFI font discovery). Text rendering instead goes
+# through plotters' pure-Rust "ab_glyph" font backend, which requires a font to
+# be registered explicitly (see oxifont-bundled below and src/viz/mod.rs).
+# "bitmap_encoder" is required (not optional): without it, BitMapBackend's
+# present() is a silent no-op and PNG files are never written to disk.
+plotters = { version = "0.3.7", optional = true, default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "all_series", "all_elements", "ab_glyph"] }  # High-performance plotting library (pure Rust font backend)
 plotters-backend = { version = "0.3.7", optional = true }  # Plotters backend API
 plotters-svg = { version = "0.3.7", optional = true }  # SVG backend for plotters
-resvg = { version = "0.47.0", optional = true }  # SVG rendering library
-usvg = { version = "0.47.0", optional = true }  # SVG simplification library
+resvg = { version = "0.48.1", optional = true }  # SVG rendering library
+usvg = { version = "0.48.1", optional = true }  # SVG simplification library
 tiny-skia = { version = "0.12.0", optional = true }  # Tiny Skia subset for rendering
 rgb = { version = "0.8.53", optional = true }  # RGB color types
+oxifont-bundled = { version = "0.2.2", optional = true, default-features = false, features = ["bundled-noto"] }  # Pure-Rust bundled Noto Sans (SIL OFL-1.1), COOLJAPAN oxifont ecosystem — supplies the "sans-serif" face plotters' ab_glyph backend needs (see src/viz/mod.rs::ensure_fonts_registered)
 
 # Note: polars dependency has been removed to improve build speed
 
@@ -159,7 +169,7 @@ criterion = "0.8.2"  # Benchmarking library
 approx = "0.5.1"     # Approximate floating-point comparisons for tests
 tempfile = "3.27.0"   # Temporary files for testing I/O functionality
 proptest = "1.11.0"   # Property-based testing for mathematical invariants
-serial_test = "3.5.0"  # For tests that require serial execution (global state)
+serial_test = "4.0.1"  # For tests that require serial execution (global state)
 wasm-bindgen-test = "0.3.76"  # Testing framework for WebAssembly
 # For performance benchmarks in bench.rs
 serde_json = "1.0.150"  # For loading NumPy benchmark results
@@ -338,10 +348,53 @@ name = "visualization"
 required-features = ["visualization"]
 
 # ===================================================================
+# FEATURE-GATED EXAMPLES
+# ===================================================================
+# Examples whose content is only meaningful (or, for some, only compiles
+# usefully) under a non-default feature. required-features makes cargo skip
+# these cleanly under default features instead of running a "feature not
+# enabled" stub / exiting non-zero.
+[[example]]
+name = "gpu_acceleration"
+required-features = ["gpu"]
+
+[[example]]
+name = "gpu_batching"
+required-features = ["gpu"]
+
+[[example]]
+name = "gpu_benchmark"
+required-features = ["gpu"]
+
+[[example]]
+name = "gpu_example"
+required-features = ["gpu"]
+
+[[example]]
+name = "arrow_example"
+required-features = ["arrow"]
+
+[[example]]
+name = "distributed_basics"
+required-features = ["distributed"]
+
+[[example]]
+name = "distributed_computing"
+required-features = ["distributed"]
+
+# ===================================================================
 # PATCH: Use local oxiarc workspace (crates.io version missing progress/cancel modules)
 # ===================================================================
 [patch.crates-io]
 # Pure-Rust replacement for alloca (criterion dep) — no C/VLA, no linker errors on aarch64-apple-darwin
+# NOTE (2026-08-19 manifest audit): re-verified this is still required. criterion
+# 0.8.2's own published Cargo.toml has
+# `[target."cfg(any(windows, unix))".dependencies.alloca] version = "0.4"`,
+# and `cargo tree -i alloca --all-features` on this workspace resolves
+# alloca -> criterion 0.8.2 -> numrs2 (dev-dependency) right now. Do not remove
+# this patch (or patches/alloca/) while criterion 0.8.2 is pinned in
+# [dev-dependencies] — doing so reintroduces the real C-backed `alloca` crate
+# on every windows/unix target, including this machine (aarch64-apple-darwin).
 alloca = { path = "patches/alloca" }
 
 # ===================================================================

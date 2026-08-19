@@ -464,8 +464,12 @@ where
 ///
 /// * `array` - Array to be sorted
 /// * `axis` - Axis along which to sort. If None, the array is flattened before sorting
-/// * `kind` - Sorting algorithm (currently only supports default stable sort)
-/// * `order` - Not used (for NumPy compatibility)
+/// * `kind` - Sorting algorithm. `None`, `"quicksort"`, and `"heapsort"` select an unstable
+///   sort; `"mergesort"` and `"stable"` select a stable sort (ties keep their original relative
+///   order). The exact underlying algorithm is unspecified beyond that stability guarantee.
+///   Any other value returns an error.
+/// * `order` - Structured-array field names to sort by. Plain `Array<T>` has no named fields,
+///   so passing `Some(_)` returns an error instead of silently ignoring it.
 ///
 /// # Returns
 ///
@@ -485,12 +489,31 @@ where
 pub fn sort<T>(
     array: &Array<T>,
     axis: Option<isize>,
-    _kind: Option<&str>,
-    _order: Option<&[&str]>,
+    kind: Option<&str>,
+    order: Option<&[&str]>,
 ) -> Result<Array<T>>
 where
     T: PartialOrd + Clone + Zero,
 {
+    if order.is_some() {
+        return Err(NumRs2Error::NotImplemented(
+            "sort: `order` (structured-array sort keys) is not supported for a plain Array<T>; \
+             there are no named fields to sort by"
+                .to_string(),
+        ));
+    }
+    let stable = match kind {
+        None | Some("quicksort") | Some("heapsort") => false,
+        Some("mergesort") | Some("stable") => true,
+        Some(other) => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "sort: kind must be one of 'quicksort', 'heapsort', 'mergesort', 'stable' \
+                 (got {:?})",
+                other
+            )));
+        }
+    };
+
     if array.is_empty() {
         return Ok(array.clone());
     }
@@ -499,7 +522,11 @@ where
         None => {
             // Sort flattened array
             let mut data = array.to_vec();
-            data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            if stable {
+                data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            } else {
+                data.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            }
             Ok(Array::from_vec(data))
         }
         Some(ax) => {
@@ -554,7 +581,13 @@ where
                 }
 
                 // Sort values
-                values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                if stable {
+                    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                } else {
+                    values.sort_unstable_by(|a, b| {
+                        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                }
 
                 // Place sorted values in result
                 for (k, val) in values.into_iter().enumerate() {
@@ -580,8 +613,12 @@ where
 /// * `array` - Input array
 /// * `kth` - Element index to partition by. The element at this index will be in its final sorted position
 /// * `axis` - Axis along which to sort. If None, the array is flattened
-/// * `kind` - Selection algorithm (currently only supports default)
-/// * `order` - Not used (for NumPy compatibility)
+/// * `kind` - Selection algorithm. Only `None` or `"introselect"` are accepted: this path
+///   always uses an introselect-style selection (`slice::select_nth_unstable_by`), so there is
+///   no separate algorithm to switch to. Any other value returns an error rather than being
+///   silently accepted and ignored.
+/// * `order` - Structured-array field names to partition by. Plain `Array<T>` has no named
+///   fields, so passing `Some(_)` returns an error instead of silently ignoring it.
 ///
 /// # Returns
 ///
@@ -601,12 +638,27 @@ pub fn argpartition<T>(
     array: &Array<T>,
     kth: usize,
     axis: Option<isize>,
-    _kind: Option<&str>,
-    _order: Option<&[&str]>,
+    kind: Option<&str>,
+    order: Option<&[&str]>,
 ) -> Result<Array<usize>>
 where
     T: PartialOrd + Clone + Zero,
 {
+    if order.is_some() {
+        return Err(NumRs2Error::NotImplemented(
+            "argpartition: `order` (structured-array sort keys) is not supported for a plain \
+             Array<T>; there are no named fields to partition by"
+                .to_string(),
+        ));
+    }
+    if !matches!(kind, None | Some("introselect")) {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "argpartition: kind must be `None` or \"introselect\" (got {:?}); this path always \
+             uses an introselect-style selection",
+            kind
+        )));
+    }
+
     let axis = if let Some(ax) = axis {
         if ax < 0 {
             (array.ndim() as isize + ax) as usize
@@ -743,26 +795,32 @@ where
     Ok(array.map(|x| x.round()))
 }
 
-/// Alias for cumsum - Return the cumulative sum of array elements
+/// Alias for cumsum - Return the cumulative sum of array elements.
+///
+/// `out`, when provided, is honored exactly as in [`cumsum`]: its shape must match the
+/// result's shape, the result is written into it, and the same array is returned.
 pub fn cumulative_sum<T>(
     array: &Array<T>,
     axis: Option<isize>,
-    _out: Option<&mut Array<T>>,
+    out: Option<&mut Array<T>>,
 ) -> Result<Array<T>>
 where
     T: Float + Clone + Add<Output = T> + Send + Sync + 'static,
 {
-    cumsum(array, axis, _out)
+    cumsum(array, axis, out)
 }
 
-/// Alias for cumprod - Return the cumulative product of array elements
+/// Alias for cumprod - Return the cumulative product of array elements.
+///
+/// `out`, when provided, is honored exactly as in [`cumprod`]: its shape must match the
+/// result's shape, the result is written into it, and the same array is returned.
 pub fn cumulative_prod<T>(
     array: &Array<T>,
     axis: Option<isize>,
-    _out: Option<&mut Array<T>>,
+    out: Option<&mut Array<T>>,
 ) -> Result<Array<T>>
 where
     T: Float + Clone + Mul<Output = T> + Send + Sync,
 {
-    cumprod(array, axis, _out)
+    cumprod(array, axis, out)
 }

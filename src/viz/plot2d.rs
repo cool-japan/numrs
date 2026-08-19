@@ -304,6 +304,8 @@ impl Plot2D {
     where
         DB::ErrorType: 'static,
     {
+        super::ensure_fonts_registered();
+
         root.fill(&WHITE)
             .map_err(|e| VizError::RenderError(format!("Failed to fill background: {:?}", e)))?;
 

@@ -222,14 +222,22 @@ impl<T: Clone + num_traits::Zero> Array<T> {
                     });
                 }
                 IndexSpec::Indices(_) | IndexSpec::Mask(_) => {
-                    // These should have been handled above
+                    // INVARIANT: unreachable. Any `Mask` spec in
+                    // `filtered_specs` triggers an early `return` a few
+                    // lines above (the `bool_index` loop), and any
+                    // `Indices` spec sets `has_fancy_indexing`, which also
+                    // triggers an early `return` (via `fancy_index`) before
+                    // this loop runs. So by the time this `match` executes,
+                    // `filtered_specs` cannot contain either variant.
                     unreachable!();
                 }
                 IndexSpec::Ellipsis => {
                     // Ellipsis is handled separately below
                 }
                 IndexSpec::NewAxis => {
-                    // NewAxis is handled separately - already filtered out
+                    // INVARIANT: unreachable. `filtered_specs` is built a
+                    // few lines above by filtering `NewAxis` out of
+                    // `index_specs`, so it can never contain this variant.
                     unreachable!();
                 }
             }

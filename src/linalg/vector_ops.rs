@@ -576,7 +576,12 @@ pub fn cross<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
                     "Cross product only supports 2D and 3D vectors".to_string(),
                 ))
             } else {
-                // Should not reach here due to pattern matching above
+                // INVARIANT: unreachable. This arm requires
+                // `2 <= a_len <= 3` (the `if`/`else if` above), but the
+                // `(2, 2)` and `(3, 3)` match arms earlier in this same
+                // `match` already consumed those exact cases -- Rust match
+                // arms are tried in order, so this guarded arm only ever
+                // runs when `a_len == b_len` and `a_len` is neither 2 nor 3.
                 unreachable!()
             }
         }

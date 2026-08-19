@@ -523,16 +523,26 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
 /// * `a` - Input array
 /// * `weights` - Optional weights for each value
 /// * `axis` - Optional axis along which to average
-/// * `returned` - If True, also return the sum of weights
 ///
 /// # Returns
 ///
-/// The weighted average or (average, sum of weights) if returned is true
+/// The weighted average.
+///
+/// For NumPy's `average(..., returned=True)` semantics — getting the average *and* the sum
+/// of weights back — call [`average_with_weights`] instead, which returns
+/// `(weighted_average, sum_of_weights)` directly rather than silently dropping the weight sum.
+///
+/// # Breaking change (pre-1.0)
+///
+/// This function used to take a fourth `returned: Option<bool>` parameter, but both the
+/// `Some(true)` and `Some(false)`/`None` branches returned the identical value — the weight
+/// sum was computed and then thrown away, so `returned=True` never actually worked. The dead
+/// parameter has been removed rather than fixed in place, since [`average_with_weights`]
+/// already provides the correct, honest implementation of that behavior.
 pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
     a: &Array<T>,
     weights: Option<&Array<T>>,
     axis: Option<usize>,
-    returned: Option<bool>,
 ) -> Result<Array<T>> {
     // If no weights provided, return mean
     if weights.is_none() {
@@ -592,13 +602,7 @@ pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
 
         let avg = Array::from_vec(result).reshape(&weight_sum.shape());
 
-        if returned.unwrap_or(false) {
-            // Return both the average and the sum of weights
-            // In a real implementation, we would have a way to return multiple arrays
-            Ok(avg)
-        } else {
-            Ok(avg)
-        }
+        Ok(avg)
     } else {
         // Overall weighted average
         let mut weighted_sum = T::zero();
@@ -615,13 +619,7 @@ pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
             weighted_sum / weight_sum
         };
 
-        if returned.unwrap_or(false) {
-            // Return both the average and the sum of weights
-            // In a real implementation, we would have a way to return multiple arrays
-            Ok(Array::from_vec(vec![avg]))
-        } else {
-            Ok(Array::from_vec(vec![avg]))
-        }
+        Ok(Array::from_vec(vec![avg]))
     }
 }
 

@@ -123,6 +123,43 @@ pub struct MmapArrayMeta {
     pub modified_at: u64,
 }
 
+/// Verifies that `meta` (persisted metadata read back from an mmap-backed
+/// array file) describes exactly the type `T` the caller is about to
+/// reinterpret the file's raw bytes as.
+///
+/// Comparing `type_name` alone is not sufficient: `std::any::type_name`'s
+/// documentation explicitly disclaims being a stable or unique identifier
+/// of a type. Also comparing `type_size` closes the "no size check" gap
+/// that would otherwise leave: a metadata record whose name happened to
+/// (mis)match but whose size did not would let the raw-byte reads in
+/// [`MmapArray::get`]/[`MmapArray::set`] read past the end of a value of a
+/// different, mismatched type. `TypeId` is not used here (nor could it
+/// be persisted): it requires `T: 'static`, which would ripple out through
+/// every generic caller of [`MmapArray`], and its value is not guaranteed
+/// stable across separate compilations anyway -- unlike `type_name`, which
+/// is exactly the kind of "same process family, self-consistency" check
+/// this on-disk format needs.
+pub(crate) fn check_meta_type<T>(meta: &MmapArrayMeta) -> Result<()> {
+    let expected_name = std::any::type_name::<T>();
+    let expected_size = mem::size_of::<T>();
+
+    if meta.type_name != expected_name {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Type mismatch: file contains '{}', but requested '{}'",
+            meta.type_name, expected_name
+        )));
+    }
+
+    if meta.type_size != expected_size {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "Type size mismatch: file contains type '{}' ({} bytes), but requested '{}' ({} bytes)",
+            meta.type_name, meta.type_size, expected_name, expected_size
+        )));
+    }
+
+    Ok(())
+}
+
 impl Default for MmapConfig {
     fn default() -> Self {
         Self {
@@ -223,13 +260,7 @@ impl<T: Copy> MmapArray<T> {
                     .map_err(|e| NumRs2Error::DeserializationError(e.to_string()))?;
 
             // Verify metadata
-            if meta.type_name != std::any::type_name::<T>() {
-                return Err(NumRs2Error::InvalidOperation(format!(
-                    "Type mismatch: file contains '{}', but requested '{}'",
-                    meta.type_name,
-                    std::any::type_name::<T>()
-                )));
-            }
+            check_meta_type::<T>(&meta)?;
 
             if meta.shape != shape {
                 return Err(NumRs2Error::ShapeMismatch {
@@ -789,4 +820,71 @@ pub fn open_mmap_info<P: AsRef<Path>>(path: &P) -> Result<MmapArrayMeta> {
         .map_err(|e| NumRs2Error::DeserializationError(e.to_string()))?;
 
     Ok(meta)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_meta(type_name: &str, type_size: usize) -> MmapArrayMeta {
+        MmapArrayMeta {
+            type_name: type_name.to_string(),
+            type_size,
+            shape: vec![4],
+            size: 4,
+            version: 1,
+            config: None,
+            checksum: None,
+            created_at: 0,
+            modified_at: 0,
+        }
+    }
+
+    #[test]
+    fn test_check_meta_type_accepts_matching_type() {
+        let meta = sample_meta(std::any::type_name::<f64>(), mem::size_of::<f64>());
+        assert!(check_meta_type::<f64>(&meta).is_ok());
+    }
+
+    #[test]
+    fn test_check_meta_type_rejects_name_mismatch() {
+        let meta = sample_meta(std::any::type_name::<f32>(), mem::size_of::<f32>());
+        assert!(check_meta_type::<f64>(&meta).is_err());
+    }
+
+    #[test]
+    fn test_check_meta_type_rejects_size_mismatch_with_matching_name() {
+        // A metadata record whose *name* matches the requested type but
+        // whose *size* was corrupted to disagree (as could happen with a
+        // foreign/legacy file, or if two distinct types were ever to
+        // produce the same `type_name`). This is the "no size check" gap
+        // the name-only comparison used to leave open: without checking
+        // `type_size` too, this would be accepted and the raw-byte reads
+        // in `get`/`set` would read past the end of an 4-byte value while
+        // believing it is 8 bytes.
+        let meta = sample_meta(std::any::type_name::<f64>(), 4);
+        assert!(check_meta_type::<f64>(&meta).is_err());
+    }
+
+    #[test]
+    fn test_mmap_array_reopen_with_wrong_type_is_rejected() {
+        let path = std::env::temp_dir().join(format!(
+            "numrs2_mmap_type_mismatch_{}.tmp",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        {
+            let _created =
+                MmapArray::<f64>::new(&path, &[3], true).expect("failed to create mmap file");
+        }
+
+        let reopened = MmapArray::<i32>::new(&path, &[3], false);
+        assert!(
+            reopened.is_err(),
+            "reopening an f64-typed mmap file as i32 must fail"
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
 }

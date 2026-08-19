@@ -104,7 +104,9 @@ pub mod transfer_function;
 
 // Re-exports
 pub use pid::{PIDController, TuningMethod};
-pub use stability::{BodePlotData, NyquistPlotData, RouthHurwitz, StabilityMargins};
+pub use stability::{
+    solve_lyapunov, BodePlotData, NyquistPlotData, RouthHurwitz, StabilityMargins,
+};
 pub use state_space::StateSpace;
 pub use transfer_function::TransferFunction;
 

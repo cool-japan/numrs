@@ -100,12 +100,24 @@ where
 ///
 /// * `array` - The input array
 /// * `shape` - The shape of the new view
-/// * `strides` - The strides for the new view (in bytes)
+/// * `strides` - The strides for the new view, **in elements** (not bytes).
+///   The value at output multi-index `idx` is
+///   `flat(array)[sum(idx[d] * strides[d] for d in 0..shape.len())]`, where
+///   `flat(array)` is `array`'s data read in row-major (C) order. A stride
+///   of `0` along an axis is allowed and repeats the same element for every
+///   index on that axis -- this is the mechanism `broadcast_to` is built on.
+///   Negative strides are allowed as long as every reachable offset stays
+///   within `[0, array.size())`; since index `0` always contributes offset
+///   `0` on every axis, a negative stride only stays in-bounds when its own
+///   axis has size `1` (compare `set_strides`, which rejects stride `0`
+///   outright because it slices rather than gathers).
 ///
 /// # Returns
 ///
 /// * `Ok(Array<T>)` - A view of the input array with the specified shape and strides
-/// * `Err(NumRs2Error)` - Error if parameters are invalid
+/// * `Err(NumRs2Error)` - Error if `shape` and `strides` have different lengths,
+///   or if any offset reachable by `shape`/`strides` would fall outside the
+///   input array's data
 ///
 /// # Examples
 ///
@@ -114,17 +126,23 @@ where
 ///
 /// let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).reshape(&[3, 3]);
 ///
-/// // Create a view with shape [2, 2] and strides that skip elements
-/// let strided = as_strided(&array, &[2, 2], &[2, 2]).expect("as_strided should succeed");
+/// // Sample every other row and column. [6, 2] is 2x the array's natural
+/// // (element) strides [3, 1], so this yields the four corners of the grid.
+/// let strided = as_strided(&array, &[2, 2], &[6, 2]).expect("as_strided should succeed");
 /// assert_eq!(strided.shape(), vec![2, 2]);
+/// assert_eq!(strided.to_vec(), vec![1, 3, 7, 9]);
 /// ```
 ///
 /// # Safety
 ///
-/// This function can be unsafe as it allows creating views that might go beyond
-/// the bounds of the original array if used incorrectly. The function attempts
-/// to validate the shape and strides, but it's the caller's responsibility to
-/// ensure they are valid for the given array.
+/// This function reads `array`'s data via `Array::to_vec()`, which flattens
+/// it in row-major (C) order; `strides` are interpreted against that
+/// flattened buffer, not against `array`'s own internal memory layout. Every
+/// offset reachable by `shape`/`strides` is bounds-checked before any data
+/// is read, so out-of-range parameters return `Err` rather than panicking or
+/// silently producing garbage -- but nothing stops `shape`/`strides` from
+/// describing a view whose elements overlap or repeat, which is inherent to
+/// `as_strided` and is the caller's responsibility to use correctly.
 pub fn as_strided<T>(array: &Array<T>, shape: &[usize], strides: &[isize]) -> Result<Array<T>>
 where
     T: Clone + Debug,
@@ -137,108 +155,89 @@ where
         )));
     }
 
-    // For simplicity and safety, we'll create a new array with the desired shape
-    // This is less efficient but more portable than direct stride manipulation
-
-    // First, create a flattened copy of the original array
+    // Read the array's data in row-major (C) order; `strides` are
+    // interpreted against this flattened buffer (see the Safety section
+    // above), independently of `array`'s own ndim or internal layout.
     let flat_data = array.to_vec();
+    let n = flat_data.len();
 
-    // Create a new array with the desired shape
-    let mut result_data = Vec::with_capacity(shape.iter().product());
-
-    // Simple case for 1D arrays being converted to 2D
-    if array.ndim() == 1 && shape.len() == 2 {
-        let arr_len = array.size();
-        let stride1 = strides[0] as usize;
-        let stride2 = strides[1] as usize;
-
-        // Validate strides and shape to ensure we're within bounds
-        if stride1 * (shape[0] - 1) + stride2 * (shape[1] - 1) >= arr_len {
-            return Err(NumRs2Error::InvalidOperation(
-                "Strides and shape would access beyond array bounds".to_string(),
-            ));
-        }
-
-        // Fill the result data based on the strides
-        for i in 0..shape[0] {
-            for j in 0..shape[1] {
-                let idx = i * stride1 + j * stride2;
-                result_data.push(flat_data[idx].clone());
-            }
-        }
-
-        return Ok(Array::from_vec(result_data).reshape(shape));
+    // A shape with any zero-sized dimension has zero total elements: there
+    // is nothing to gather, and no meaningful bounds to check.
+    let total_size: usize = shape.iter().product();
+    if total_size == 0 {
+        return Ok(Array::from_vec(Vec::new()).reshape(shape));
     }
 
-    // For other dimensions, we need more complex logic
-    // For now, just return a dummy implementation for the example
-    match (array.ndim(), shape.len()) {
-        // Special case for the sliding window example
-        (1, 2) => {
-            let window_size = shape[1];
-            let step = strides[0] as usize;
-            let arr_len = array.size();
-
-            if window_size > arr_len {
-                return Err(NumRs2Error::InvalidOperation(format!(
-                    "Window size {} exceeds array length {}",
-                    window_size, arr_len
-                )));
-            }
-
-            let valid_windows = (arr_len - window_size) / step + 1;
-
-            // Create sliding windows
-            for i in 0..valid_windows {
-                let start = i * step;
-                for j in 0..window_size {
-                    result_data.push(flat_data[start + j].clone());
-                }
-            }
-
-            Ok(Array::from_vec(result_data).reshape(shape))
-        }
-        // Special case for the 2D to 4D sliding window example
-        (2, 4)
-            if array.shape()[0] == 4
-                && array.shape()[1] == 4
-                && shape[0] == 3
-                && shape[1] == 3
-                && shape[2] == 2
-                && shape[3] == 2 =>
-        {
-            // Create a 3x3 grid of 2x2 windows for the example
-            let arr_shape = array.shape();
-            let rows = arr_shape[0];
-            let cols = arr_shape[1];
-
-            // Create sliding windows
-            for r in 0..shape[0] {
-                for c in 0..shape[1] {
-                    // Extract a 2x2 window starting at (r,c)
-                    for wr in 0..shape[2] {
-                        for wc in 0..shape[3] {
-                            if r + wr < rows && c + wc < cols {
-                                let idx = (r + wr) * cols + (c + wc);
-                                result_data.push(flat_data[idx].clone());
-                            } else {
-                                // Padding if needed
-                                result_data.push(flat_data[0].clone());
-                            }
-                        }
-                    }
-                }
-            }
-
-            Ok(Array::from_vec(result_data).reshape(shape))
-        }
-        _ => {
-            // For other cases, create a dummy array of the right shape
-            let total_size: usize = shape.iter().product();
-            let dummy_data = vec![flat_data[0].clone(); total_size];
-            Ok(Array::from_vec(dummy_data).reshape(shape))
+    // offset(idx) = sum(idx[d] * strides[d]) is a sum of independent
+    // per-axis terms: idx[d] ranges freely over 0..shape[d] regardless of
+    // the other axes. So the true minimum/maximum offset reachable across
+    // the *entire* output index space is exactly the sum of each axis's own
+    // minimum/maximum contribution -- and both extremes are always actually
+    // visited, since the index space is a full grid product.
+    let mut min_offset: isize = 0;
+    let mut max_offset: isize = 0;
+    for (&dim, &stride) in shape.iter().zip(strides.iter()) {
+        let extent = (dim as isize - 1) * stride;
+        if extent >= 0 {
+            max_offset += extent;
+        } else {
+            min_offset += extent;
         }
     }
+
+    if min_offset < 0 || max_offset >= n as isize {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "as_strided: shape {:?} with strides {:?} would access offsets in [{}, {}], \
+             out of bounds for an array of {} elements",
+            shape, strides, min_offset, max_offset, n
+        )));
+    }
+
+    // General N-D strided gather: for each output multi-index (recovered by
+    // unraveling the row-major linear index), read the element at the
+    // corresponding flat offset.
+    let mut result_data = Vec::with_capacity(total_size);
+    for linear in 0..total_size {
+        let idx = unravel_index(linear, shape);
+        let offset: isize = idx
+            .iter()
+            .zip(strides.iter())
+            .map(|(&i, &s)| i as isize * s)
+            .sum();
+        // In-bounds by construction: for every possible `idx`, `offset` is
+        // bracketed by [min_offset, max_offset] ⊆ [0, n), as validated above.
+        result_data.push(flat_data[offset as usize].clone());
+    }
+
+    Ok(Array::from_vec(result_data).reshape(shape))
+}
+
+/// Convert a linear (row-major) index into a multi-dimensional index for
+/// `shape` -- the inverse of C-order flattening. The last axis varies
+/// fastest, matching `Array::to_vec()` / `Array::reshape()`'s row-major
+/// convention.
+fn unravel_index(mut linear: usize, shape: &[usize]) -> Vec<usize> {
+    let mut idx = vec![0usize; shape.len()];
+    for d in (0..shape.len()).rev() {
+        let dim = shape[d];
+        if dim > 0 {
+            idx[d] = linear % dim;
+            linear /= dim;
+        }
+    }
+    idx
+}
+
+/// Compute the row-major (C-order) element strides for `shape`: the strides
+/// a freshly-allocated, densely-packed array of this shape would have (the
+/// last axis has stride `1`, and each preceding axis's stride is the
+/// product of all the dimension sizes to its right).
+fn row_major_strides(shape: &[usize]) -> Vec<isize> {
+    let mut strides = vec![1isize; shape.len()];
+    for d in (0..shape.len().saturating_sub(1)).rev() {
+        strides[d] = strides[d + 1] * shape[d + 1] as isize;
+    }
+    strides
 }
 
 /// Create a sliding window view of an array.
@@ -269,6 +268,10 @@ where
 /// // Create a 2x2 sliding window view of the array
 /// let windows = sliding_window_view(&array, &[2, 2], None).expect("sliding_window_view should succeed");
 /// assert_eq!(windows.shape(), vec![2, 2, 2, 2]);
+/// assert_eq!(
+///     windows.to_vec(),
+///     vec![1, 2, 4, 5, 2, 3, 5, 6, 4, 5, 7, 8, 5, 6, 8, 9]
+/// );
 /// ```
 pub fn sliding_window_view<T>(
     array: &Array<T>,
@@ -287,6 +290,11 @@ where
                     array.ndim()
                 )));
             }
+            if s.iter().any(|&v| v == 0) {
+                return Err(NumRs2Error::InvalidOperation(
+                    "Step sizes must be greater than zero".to_string(),
+                ));
+            }
             s.to_vec()
         }
         None => vec![1; array.ndim()],
@@ -300,11 +308,12 @@ where
         )));
     }
 
-    // Calculate the output shape
+    // Calculate the number of valid window positions along each dimension.
     let array_shape = array.shape();
-    let mut output_shape = Vec::with_capacity(array.ndim() * 2);
+    let ndim = array.ndim();
+    let mut n_windows = Vec::with_capacity(ndim);
 
-    for i in 0..array.ndim() {
+    for i in 0..ndim {
         let window_size = window_shape[i];
         let step_size = step_values[i];
         let dim_size = array_shape[i];
@@ -316,72 +325,28 @@ where
             )));
         }
 
-        // Calculate number of valid windows in this dimension
-        let n_windows = (dim_size - window_size) / step_size + 1;
-        output_shape.push(n_windows);
+        n_windows.push((dim_size - window_size) / step_size + 1);
     }
 
-    // Append window shape to output shape
+    // Output shape is (n_windows..., window_shape...): one axis per input
+    // dimension counting window positions, followed by one axis per input
+    // dimension spanning the window itself.
+    let mut output_shape = n_windows;
     output_shape.extend_from_slice(window_shape);
 
-    // Simple implementation for 1D arrays
-    if array.ndim() == 1 {
-        let data = array.to_vec();
-        let window_size = window_shape[0];
-        let step_size = step_values[0];
-        let n_windows = output_shape[0];
-
-        let mut result_data = Vec::with_capacity(n_windows * window_size);
-
-        for i in 0..n_windows {
-            let start = i * step_size;
-            for j in 0..window_size {
-                result_data.push(data[start + j].clone());
-            }
-        }
-
-        return Ok(Array::from_vec(result_data).reshape(&output_shape));
+    // Reuse as_strided (general for any ndim): the "window count" axes step
+    // through the array at `step * natural_stride`, and the appended
+    // "window shape" axes step one element at a time along the same
+    // original axis (natural_stride) -- exactly how NumPy implements
+    // sliding_window_view via as_strided.
+    let natural_stride = row_major_strides(&array_shape);
+    let mut combined_strides = Vec::with_capacity(ndim * 2);
+    for i in 0..ndim {
+        combined_strides.push(natural_stride[i] * step_values[i] as isize);
     }
+    combined_strides.extend_from_slice(&natural_stride);
 
-    // Special case for 2D arrays with 2D windows
-    if array.ndim() == 2 && window_shape.len() == 2 {
-        let arr_shape = array.shape();
-        let _rows = arr_shape[0];
-        let cols = arr_shape[1];
-        let window_rows = window_shape[0];
-        let window_cols = window_shape[1];
-        let row_step = step_values[0];
-        let col_step = step_values[1];
-
-        let n_row_windows = output_shape[0];
-        let n_col_windows = output_shape[1];
-
-        let data = array.to_vec();
-        let mut result_data =
-            Vec::with_capacity(n_row_windows * n_col_windows * window_rows * window_cols);
-
-        for i in 0..n_row_windows {
-            let row_start = i * row_step;
-            for j in 0..n_col_windows {
-                let col_start = j * col_step;
-
-                for wi in 0..window_rows {
-                    for wj in 0..window_cols {
-                        let idx = (row_start + wi) * cols + (col_start + wj);
-                        result_data.push(data[idx].clone());
-                    }
-                }
-            }
-        }
-
-        return Ok(Array::from_vec(result_data).reshape(&output_shape));
-    }
-
-    // For higher dimensions or more complex cases, we'd need a more general implementation
-    Err(NumRs2Error::InvalidOperation(format!(
-        "Sliding window view not implemented for arrays with {} dimensions",
-        array.ndim()
-    )))
+    as_strided(array, &output_shape, &combined_strides)
 }
 
 /// Returns the byte strides of an array.
@@ -445,6 +410,8 @@ where
 /// let result = broadcast_arrays(&[&a, &b]).expect("broadcast_arrays should succeed");
 /// assert_eq!(result.len(), 2);
 /// assert_eq!(result[0].shape(), result[1].shape());
+/// assert_eq!(result[0].to_vec(), vec![1, 2, 3, 1, 2, 3, 1, 2, 3]);
+/// assert_eq!(result[1].to_vec(), vec![4, 4, 4, 5, 5, 5, 6, 6, 6]);
 /// ```
 pub fn broadcast_arrays<T>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>>
 where
@@ -495,6 +462,7 @@ where
 /// // Broadcast to shape [3, 3]
 /// let result = broadcast_to(&array, &[3, 3]).expect("broadcast_to should succeed");
 /// assert_eq!(result.shape(), vec![3, 3]);
+/// assert_eq!(result.to_vec(), vec![1, 2, 3, 1, 2, 3, 1, 2, 3]);
 /// ```
 pub fn broadcast_to<T>(array: &Array<T>, shape: &[usize]) -> Result<Array<T>>
 where
@@ -508,9 +476,12 @@ where
         });
     }
 
-    // Get the original shape and strides
+    // Get the original shape and its natural (element) strides. `as_strided`
+    // interprets strides as element offsets into the row-major flattened
+    // buffer (see its docs), so these must be element strides -- not the
+    // byte strides `byte_strides()` returns.
     let orig_shape = array.shape();
-    let byte_strides = byte_strides(array);
+    let elem_strides = row_major_strides(&orig_shape);
 
     // Calculate the new strides for the broadcast array
     let mut new_strides = Vec::with_capacity(shape.len());
@@ -527,7 +498,7 @@ where
             new_strides.push(0);
         } else {
             // Keep original stride for non-broadcast dimensions
-            new_strides.push(byte_strides[i] as isize);
+            new_strides.push(elem_strides[i]);
         }
     }
 

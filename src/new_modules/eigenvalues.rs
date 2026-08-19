@@ -16,10 +16,59 @@ use std::fmt::Debug;
 /// Type alias for eigenvalue/eigenvector result to reduce complexity
 pub type EigResult<T> = (Array<Complex<T>>, Array<Complex<T>>);
 
+/// Builds a genuinely symmetric `f64` matrix by mirroring the triangle of
+/// `a` named by `uplo` onto the other triangle, discarding whatever is
+/// currently stored in the unused triangle.
+///
+/// `eig_symmetric`/`eigvals_symmetric` do not themselves restrict their
+/// read to a single triangle, so passing the raw (possibly asymmetric)
+/// matrix through unchanged would silently let garbage in the unused
+/// triangle influence the result -- exactly the LAPACK `uplo` convention
+/// this function is meant to honor. Accepts `"U"`/`"upper"` or
+/// `"L"`/`"lower"` (case-insensitive, matched on the first character);
+/// any other value is an error rather than a silent fallback.
+#[cfg(feature = "lapack")]
+fn symmetrize_from_uplo(
+    a: &ArrayView2<f64>,
+    uplo: &str,
+) -> Result<scirs2_core::ndarray::Array2<f64>> {
+    let n = a.nrows();
+    let mut sym = scirs2_core::ndarray::Array2::<f64>::zeros((n, n));
+
+    match uplo.to_ascii_lowercase().chars().next() {
+        Some('u') => {
+            for i in 0..n {
+                for j in i..n {
+                    let v = a[[i, j]];
+                    sym[[i, j]] = v;
+                    sym[[j, i]] = v;
+                }
+            }
+        }
+        Some('l') => {
+            for i in 0..n {
+                for j in 0..=i {
+                    let v = a[[i, j]];
+                    sym[[i, j]] = v;
+                    sym[[j, i]] = v;
+                }
+            }
+        }
+        _ => {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "uplo must be \"U\"/\"upper\" or \"L\"/\"lower\", got {:?}",
+                uplo
+            )))
+        }
+    }
+
+    Ok(sym)
+}
+
 /// Enhanced eigenvalue and eigenvector computation using OxiBLAS
 /// Compute eigenvalues and eigenvectors of a symmetric/Hermitian matrix
 #[cfg(feature = "lapack")]
-pub fn eigh<T>(a: &Array<T>, _uplo: &str) -> Result<(Array<T>, Array<T>)>
+pub fn eigh<T>(a: &Array<T>, uplo: &str) -> Result<(Array<T>, Array<T>)>
 where
     T: Float + Clone + Debug + 'static,
 {
@@ -38,9 +87,10 @@ where
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
         // Cast to f64 array
         let a_f64 = unsafe { std::mem::transmute::<ArrayView2<T>, ArrayView2<f64>>(a_view) };
+        let sym_f64 = symmetrize_from_uplo(&a_f64, uplo)?;
 
         // Compute eigenvalues and eigenvectors for a symmetric matrix using OxiBLAS
-        let result = eig_symmetric(&a_f64.to_owned()).map_err(|e| {
+        let result = eig_symmetric(&sym_f64).map_err(|e| {
             NumRs2Error::ComputationError(format!("Eigendecomposition failed: {:?}", e))
         })?;
 
@@ -72,8 +122,9 @@ where
             })?;
         }
     }
+    let sym_f64 = symmetrize_from_uplo(&a_f64.view(), uplo)?;
 
-    let result = eig_symmetric(&a_f64).map_err(|e| {
+    let result = eig_symmetric(&sym_f64).map_err(|e| {
         NumRs2Error::ComputationError(format!("Eigendecomposition failed: {:?}", e))
     })?;
 
@@ -104,7 +155,7 @@ where
 
 /// Compute eigenvalues of a symmetric/Hermitian matrix
 #[cfg(feature = "lapack")]
-pub fn eigvalsh<T>(a: &Array<T>, _uplo: &str) -> Result<Array<T>>
+pub fn eigvalsh<T>(a: &Array<T>, uplo: &str) -> Result<Array<T>>
 where
     T: Float + Clone + Debug + 'static,
 {
@@ -122,8 +173,9 @@ where
     // For f64, use OxiBLAS directly
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
         let a_f64 = unsafe { std::mem::transmute::<ArrayView2<T>, ArrayView2<f64>>(a_view) };
+        let sym_f64 = symmetrize_from_uplo(&a_f64, uplo)?;
 
-        let result = eigvals_symmetric(&a_f64.to_owned()).map_err(|e| {
+        let result = eigvals_symmetric(&sym_f64).map_err(|e| {
             NumRs2Error::ComputationError(format!("Eigenvalue computation failed: {:?}", e))
         })?;
 
@@ -145,8 +197,9 @@ where
             })?;
         }
     }
+    let sym_f64 = symmetrize_from_uplo(&a_f64.view(), uplo)?;
 
-    let result = eigvals_symmetric(&a_f64).map_err(|e| {
+    let result = eigvals_symmetric(&sym_f64).map_err(|e| {
         NumRs2Error::ComputationError(format!("Eigenvalue computation failed: {:?}", e))
     })?;
 

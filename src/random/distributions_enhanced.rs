@@ -5,9 +5,12 @@
 
 use crate::array::Array;
 use crate::error::Result;
+use crate::linalg_stable::StableDecompositions;
+use crate::new_modules::special::error_functions::erf_scalar;
 use crate::random::state::RandomState;
 use num_traits::{Float, NumCast};
 use scirs2_core::random::prelude::Rng;
+use scirs2_special::betainc_regularized;
 use std::fmt::{Debug, Display};
 
 /// Get a reference to the global random state
@@ -254,6 +257,118 @@ where
 {
     let rng = get_global_random_state()?;
     rng.copula(corr, n, copula_type)
+}
+
+/// Number of bits used to represent each Sobol direction number. Matches the
+/// `2f64.powi(32)` scaling used when converting a generated point to `[0,1)`.
+const SOBOL_BITS: usize = 32;
+
+/// Maximum Sobol dimensionality supported by [`SOBOL_DIRECTION_DATA`].
+const SOBOL_MAX_DIM: usize = 40;
+
+/// Joe & Kuo (2008) "new-joe-kuo-6.21201" primitive polynomial coefficients and
+/// initial direction numbers for Sobol dimensions 2 through 40 (search
+/// criterion 6 — the default used by `scipy.stats.qmc.Sobol`).
+///
+/// Row `k` (0-indexed) describes dimension `k + 2`: `.0` is the primitive
+/// polynomial's middle coefficients `a_1..a_{s-1}` packed into a single
+/// integer (`a_1` in the most-significant bit of the `s - 1`-bit value), and
+/// `.1` is the degree-`s` slice of initial direction numbers `m_1..m_s`.
+/// Dimension 1 is the trivial base-2 (van der Corput) sequence and is
+/// generated directly by [`sobol_direction_numbers`] without this table.
+///
+/// These values were extracted from `scipy`'s own
+/// `_sobol_direction_numbers.npz` data file and the resulting sequences were
+/// verified bit-for-bit against unscrambled `scipy.stats.qmc.Sobol` output
+/// for dimensions 1, 2, 3, 5, 9, 17, 33 and 40.
+#[rustfmt::skip]
+const SOBOL_DIRECTION_DATA: [(u32, &[u32]); 39] = [
+    (0,  &[1]),                              // dim=2,  s=1
+    (1,  &[1, 3]),                           // dim=3,  s=2
+    (1,  &[1, 3, 1]),                        // dim=4,  s=3
+    (2,  &[1, 1, 1]),                        // dim=5,  s=3
+    (1,  &[1, 1, 3, 3]),                     // dim=6,  s=4
+    (4,  &[1, 3, 5, 13]),                    // dim=7,  s=4
+    (2,  &[1, 1, 5, 5, 17]),                 // dim=8,  s=5
+    (4,  &[1, 1, 5, 5, 5]),                  // dim=9,  s=5
+    (7,  &[1, 1, 7, 11, 19]),                // dim=10, s=5
+    (11, &[1, 1, 5, 1, 1]),                  // dim=11, s=5
+    (13, &[1, 1, 1, 3, 11]),                 // dim=12, s=5
+    (14, &[1, 3, 5, 5, 31]),                 // dim=13, s=5
+    (1,  &[1, 3, 3, 9, 7, 49]),              // dim=14, s=6
+    (13, &[1, 1, 1, 15, 21, 21]),            // dim=15, s=6
+    (16, &[1, 3, 1, 13, 27, 49]),            // dim=16, s=6
+    (19, &[1, 1, 1, 15, 7, 5]),              // dim=17, s=6
+    (22, &[1, 3, 1, 15, 13, 25]),            // dim=18, s=6
+    (25, &[1, 1, 5, 5, 19, 61]),             // dim=19, s=6
+    (1,  &[1, 3, 7, 11, 23, 15, 103]),       // dim=20, s=7
+    (4,  &[1, 3, 7, 13, 13, 15, 69]),        // dim=21, s=7
+    (7,  &[1, 1, 3, 13, 7, 35, 63]),         // dim=22, s=7
+    (8,  &[1, 3, 5, 9, 1, 25, 53]),          // dim=23, s=7
+    (14, &[1, 3, 1, 13, 9, 35, 107]),        // dim=24, s=7
+    (19, &[1, 3, 1, 5, 27, 61, 31]),         // dim=25, s=7
+    (21, &[1, 1, 5, 11, 19, 41, 61]),        // dim=26, s=7
+    (28, &[1, 3, 5, 3, 3, 13, 69]),          // dim=27, s=7
+    (31, &[1, 1, 7, 13, 1, 19, 1]),          // dim=28, s=7
+    (32, &[1, 3, 7, 5, 13, 19, 59]),         // dim=29, s=7
+    (37, &[1, 1, 3, 9, 25, 29, 41]),         // dim=30, s=7
+    (41, &[1, 3, 5, 13, 23, 1, 55]),         // dim=31, s=7
+    (42, &[1, 3, 7, 3, 13, 59, 17]),         // dim=32, s=7
+    (50, &[1, 3, 1, 3, 5, 53, 69]),          // dim=33, s=7
+    (55, &[1, 1, 5, 5, 23, 33, 13]),         // dim=34, s=7
+    (56, &[1, 1, 7, 7, 1, 61, 123]),         // dim=35, s=7
+    (59, &[1, 1, 7, 9, 13, 61, 49]),         // dim=36, s=7
+    (62, &[1, 3, 3, 5, 3, 55, 33]),          // dim=37, s=7
+    (14, &[1, 3, 1, 15, 31, 13, 49, 245]),   // dim=38, s=8
+    (21, &[1, 3, 5, 15, 31, 59, 63, 97]),    // dim=39, s=8
+    (22, &[1, 3, 1, 11, 11, 11, 77, 249]),   // dim=40, s=8
+];
+
+/// Build the `SOBOL_BITS`-bit direction numbers `V[1..=SOBOL_BITS]` for one
+/// Sobol dimension (1-indexed, `1..=SOBOL_MAX_DIM`).
+///
+/// `dim == 1` is the trivial base-2 sequence: `V[j] = 1 << (SOBOL_BITS - j)`
+/// directly. For `dim >= 2`, the standard Bratley-Fox / Joe-Kuo recurrence is
+/// used with the degree-`s` primitive polynomial and initial direction
+/// numbers `m_1..m_s` looked up from [`SOBOL_DIRECTION_DATA`]:
+///
+/// ```text
+/// V[j] = m_j << (SOBOL_BITS - j)                                    for j <= s
+/// V[j] = V[j-s] ^ (V[j-s] >> s) ^ XOR_{k=1}^{s-1} (a_k * V[j-k])     for j >  s
+/// ```
+///
+/// where `a_k` is bit `s - 1 - k` of the packed polynomial coefficient.
+/// Returned as a plain array indexed `0..SOBOL_BITS`, where index `j - 1`
+/// holds `V[j]`.
+fn sobol_direction_numbers(dim: usize) -> [u32; SOBOL_BITS] {
+    let mut v = [0u32; SOBOL_BITS];
+
+    if dim == 1 {
+        for j in 1..=SOBOL_BITS {
+            v[j - 1] = 1u32 << (SOBOL_BITS - j);
+        }
+        return v;
+    }
+
+    let (a, m) = SOBOL_DIRECTION_DATA[dim - 2];
+    let s = m.len();
+
+    for (j, &m_j) in (1..=s).zip(m.iter()) {
+        v[j - 1] = m_j << (SOBOL_BITS - j);
+    }
+
+    for j in (s + 1)..=SOBOL_BITS {
+        let mut val = v[j - 1 - s] ^ (v[j - 1 - s] >> s);
+        for k in 1..s {
+            let bit = (a >> (s - 1 - k)) & 1;
+            if bit != 0 {
+                val ^= v[j - 1 - k];
+            }
+        }
+        v[j - 1] = val;
+    }
+
+    v
 }
 
 /// Extend RandomState with enhanced distribution methods
@@ -663,82 +778,11 @@ impl RandomState {
             }
         }
 
-        // Convert to nearest correlation matrix using projection
-        // This is a simplified approximation - in practice, more sophisticated
-        // algorithms like the alternating projections method would be used.
-
-        // 1. Set all diagonal elements to 1
-        for i in 0..n {
-            sym_matrix[i * n + i] = <T as NumCast>::from(1.0).unwrap_or(T::zero());
-        }
-
-        // 2. Iteratively adjust non-diagonal elements to ensure positive-definiteness
-        let mut corr_matrix = sym_matrix.clone();
-        let max_iter = 10;
-
-        for _ in 0..max_iter {
-            // Check if matrix is positive definite via Cholesky decomposition
-            let mut is_pd = true;
-            let mut chol = vec![T::zero(); n * n];
-
-            'decomp: for i in 0..n {
-                for j in 0..=i {
-                    let mut s = T::zero();
-                    for k in 0..j {
-                        s = s + chol[i * n + k] * chol[j * n + k];
-                    }
-
-                    if i == j {
-                        let val = corr_matrix[i * n + i] - s;
-                        if val <= T::zero() {
-                            is_pd = false;
-                            break 'decomp;
-                        }
-                        chol[i * n + j] = val.sqrt();
-                    } else {
-                        chol[i * n + j] = (corr_matrix[i * n + j] - s) / chol[j * n + j];
-                    }
-                }
-            }
-
-            if is_pd {
-                break;
-            }
-
-            // If not positive definite, adjust non-diagonal elements
-            let factor = <T as NumCast>::from(0.9).unwrap_or(T::zero());
-            for i in 0..n {
-                for j in 0..n {
-                    if i != j {
-                        corr_matrix[i * n + j] = corr_matrix[i * n + j] * factor;
-                    }
-                }
-            }
-        }
-
-        // Normalize to ensure diagonal is exactly 1.0
-        for i in 0..n {
-            let diag_val = corr_matrix[i * n + i].sqrt();
-            for j in 0..n {
-                corr_matrix[i * n + j] = corr_matrix[i * n + j] / diag_val;
-                corr_matrix[j * n + i] = corr_matrix[j * n + i] / diag_val;
-            }
-        }
-
-        // Final normalization pass
-        for i in 0..n {
-            for j in 0..n {
-                corr_matrix[i * n + j] = corr_matrix[i * n + j]
-                    / (corr_matrix[i * n + i].sqrt() * corr_matrix[j * n + j].sqrt());
-            }
-        }
-
-        // Set diagonal to exactly 1.0
-        for i in 0..n {
-            corr_matrix[i * n + i] = <T as NumCast>::from(1.0).unwrap_or(T::zero());
-        }
-
-        Ok(Array::from_vec(corr_matrix).reshape(&[n, n]))
+        // Project the random symmetric matrix onto the nearest valid
+        // correlation matrix (symmetric, PSD, unit diagonal) using Higham's
+        // alternating projections algorithm.
+        let sym_array = Array::from_vec(sym_matrix).reshape(&[n, n]);
+        nearest_correlation_matrix(&sym_array)
     }
 
     /// Generate random samples from a mixture of distributions
@@ -850,14 +894,20 @@ impl RandomState {
     }
 
     /// Generate Sobol sequence for quasi-Monte Carlo methods
+    ///
+    /// Uses the Joe & Kuo (2008) "new-joe-kuo-6.21201" primitive polynomials and
+    /// initial direction numbers (search criterion 6) for dimensions 1 through 40,
+    /// matching the unscrambled output of `scipy.stats.qmc.Sobol` bit-for-bit.
+    /// This is a fully deterministic, low-discrepancy sequence: no part of it
+    /// falls back to pseudorandom values, and no random state is consumed.
     pub fn sobol_sequence<T>(&self, dim: usize, n: usize) -> Result<Array<T>>
     where
         T: Float + NumCast + Clone + Debug + Display,
     {
-        if !(1..=40).contains(&dim) {
+        if !(1..=SOBOL_MAX_DIM).contains(&dim) {
             return Err(crate::error::NumRs2Error::InvalidOperation(format!(
-                "Dimension must be between 1 and 40, got {}",
-                dim
+                "Dimension must be between 1 and {}, got {}",
+                SOBOL_MAX_DIM, dim
             )));
         }
 
@@ -867,49 +917,29 @@ impl RandomState {
             ));
         }
 
-        // Direction numbers (first few values for each dimension)
-        // These are based on Joe & Kuo's direction numbers
-        let direction_numbers: Vec<Vec<u32>> = vec![
-            vec![1],                       // First dimension trivial sequence
-            vec![1, 3],                    // Second dimension
-            vec![1, 3, 5],                 // Third dimension
-            vec![1, 3, 5, 15],             // Fourth dimension
-            vec![1, 3, 5, 15, 17],         // Fifth dimension
-            vec![1, 3, 5, 15, 17, 51],     // Sixth dimension
-            vec![1, 3, 5, 15, 17, 51, 85], // Seventh dimension
-            vec![1, 3, 5, 15, 17, 51, 85, 255], // Eighth dimension
-                                           // Additional dimensions would be added here in a complete implementation
-        ];
+        // Build the full L-bit direction-number table for each requested dimension.
+        let direction_numbers: Vec<[u32; SOBOL_BITS]> =
+            (1..=dim).map(sobol_direction_numbers).collect();
 
+        let scale = 2f64.powi(SOBOL_BITS as i32);
         let mut result = vec![T::zero(); n * dim];
 
-        // Generate Sobol sequence
+        // Generate Sobol sequence points via the Gray-code construction:
+        // X_i = XOR of V[j] over every bit (j-1) set in Gray(i) = i ^ (i >> 1).
         for i in 0..n {
-            // Convert i to gray code
             let g = i ^ (i >> 1);
 
-            for d in 0..std::cmp::min(dim, direction_numbers.len()) {
+            for (d, v) in direction_numbers.iter().enumerate() {
                 let mut x = 0u32;
-                let mut mask = 1u32;
-
-                for j in 0..32 {
-                    if j < direction_numbers[d].len() && (g & (mask as usize)) != 0 {
-                        x ^= direction_numbers[d][j];
+                for j in 1..=SOBOL_BITS {
+                    if (g >> (j - 1)) & 1 != 0 {
+                        x ^= v[j - 1];
                     }
-                    mask <<= 1;
                 }
 
                 // Convert to [0,1) range
-                let val = <T as NumCast>::from(x as f64 / 2f64.powi(32)).unwrap_or(T::zero());
+                let val = <T as NumCast>::from(x as f64 / scale).unwrap_or(T::zero());
                 result[i * dim + d] = val;
-            }
-
-            // For dimensions beyond the provided direction numbers, use random values
-            // This is a fallback - a proper implementation would have all direction numbers
-            let mut rng = self.get_rng()?;
-            for d in direction_numbers.len()..dim {
-                result[i * dim + d] =
-                    <T as NumCast>::from(rng.random::<f64>()).unwrap_or(T::zero());
             }
         }
 
@@ -1102,44 +1132,178 @@ fn normal_inv_cdf(p: f64) -> f64 {
     ret
 }
 
-/// Error function approximation
+/// Error function.
+///
+/// Delegates to the crate's shared high-precision implementation
+/// (`new_modules::special::error_functions::erf_scalar`) so the crate has a
+/// single erf accuracy instead of a second, lower-precision copy living here.
 fn erf(x: f64) -> f64 {
-    // Constants for Abramowitz and Stegun approximation 7.1.26
-    let a1 = 0.254829592;
-    let a2 = -0.284496736;
-    let a3 = 1.421413741;
-    let a4 = -1.453152027;
-    let a5 = 1.061405429;
-    let p = 0.3275911;
-
-    let sign = if x < 0.0 { -1.0 } else { 1.0 };
-    let x = x.abs();
-
-    let t = 1.0 / (1.0 + p * x);
-    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
-
-    sign * y
+    erf_scalar(x)
 }
 
-/// Student's t cumulative distribution function
+/// Student's t-distribution cumulative distribution function.
+///
+/// Computed via the regularized incomplete beta function `I_x(a, b)`:
+///
+/// ```text
+/// x_beta = df / (df + x^2)
+/// cdf    = 1 - 0.5 * I_{x_beta}(df/2, 1/2)   for x > 0
+/// cdf    =     0.5 * I_{x_beta}(df/2, 1/2)   for x < 0
+/// cdf    = 0.5                               for x == 0
+/// ```
+///
+/// which is exact for all `df > 0` (no large-`df` normal approximation is
+/// needed, unlike the previous implementation here).
 fn student_t_cdf(x: f64, df: usize) -> f64 {
-    // Simplified approximation
     if x == 0.0 {
         return 0.5;
     }
 
-    // For large df, t-distribution approaches normal distribution
-    if df > 100 {
-        return normal_cdf(x);
+    let df_f64 = df as f64;
+    if df_f64 <= 0.0 {
+        return 0.5;
     }
 
-    // Simple approximation using the regularized incomplete beta function
-    let df_f64 = df as f64;
-    let t = x / (df_f64 + x * x).sqrt();
-    let u = 0.5 + 0.5 * t * (1.0 - t * t / (df_f64 + 2.0)).sqrt();
+    let x_beta = df_f64 / (df_f64 + x * x);
+    let beta_val = match betainc_regularized(x_beta, df_f64 / 2.0, 0.5) {
+        Ok(v) => v,
+        Err(_) => return 0.5,
+    };
 
-    // Clamp to valid probability range
-    u.clamp(0.0, 1.0)
+    let cdf = if x > 0.0 {
+        1.0 - 0.5 * beta_val
+    } else {
+        0.5 * beta_val
+    };
+
+    cdf.clamp(0.0, 1.0)
+}
+
+/// Convergence tolerance for [`nearest_correlation_matrix`]'s alternating
+/// projections: iteration stops once the Frobenius norm of the change
+/// between successive iterates drops below this value.
+const NEAREST_CORRELATION_TOL: f64 = 1e-10;
+
+/// Maximum number of alternating-projection iterations for
+/// [`nearest_correlation_matrix`] before giving up and returning an error.
+const NEAREST_CORRELATION_MAX_ITER: usize = 200;
+
+/// Project an arbitrary symmetric matrix onto the nearest valid correlation
+/// matrix (symmetric, positive semi-definite, unit diagonal) in Frobenius
+/// norm.
+///
+/// Implements Higham's (2002) alternating projections algorithm with
+/// Dykstra's correction: at each iteration the current iterate `Y_k` (minus
+/// the accumulated correction `ΔS_k`) is projected onto the cone of
+/// positive-semidefinite matrices (via eigenvalue clipping), the correction
+/// is updated, and the result is projected onto the affine set of
+/// unit-diagonal matrices (by resetting the diagonal to 1). Iteration stops
+/// once `‖Y_k - Y_{k-1}‖_F < 1e-10`, or fails with an error after 200
+/// iterations.
+///
+/// # Errors
+///
+/// Returns an error if `matrix` is not square or empty, or if the iteration
+/// fails to converge within 200 iterations.
+pub fn nearest_correlation_matrix<T>(matrix: &Array<T>) -> Result<Array<T>>
+where
+    T: Float + NumCast + Clone + Debug + Display,
+{
+    let shape = matrix.shape();
+    if shape.len() != 2 || shape[0] != shape[1] {
+        return Err(crate::error::NumRs2Error::InvalidOperation(
+            "nearest_correlation_matrix requires a square matrix".to_string(),
+        ));
+    }
+    let n = shape[0];
+    if n == 0 {
+        return Err(crate::error::NumRs2Error::InvalidOperation(
+            "nearest_correlation_matrix requires a non-empty matrix".to_string(),
+        ));
+    }
+
+    // Work in f64 for numerically robust eigendecomposition, converting back
+    // to T only for the final result.
+    let a_data: Vec<f64> = matrix
+        .to_vec()
+        .into_iter()
+        .map(|v| v.to_f64().unwrap_or(0.0))
+        .collect();
+
+    let mut y = a_data;
+    let mut delta_s = vec![0.0f64; n * n];
+    let mut converged = false;
+
+    for _ in 0..NEAREST_CORRELATION_MAX_ITER {
+        // R_k = Y_k - ΔS_k
+        let r: Vec<f64> = y
+            .iter()
+            .zip(delta_s.iter())
+            .map(|(&yv, &dv)| yv - dv)
+            .collect();
+
+        // PSD projection of R_k via eigenvalue clipping: R = V diag(λ) V^T,
+        // X = V diag(max(λ, 0)) V^T.
+        let r_array = Array::from_vec(r.clone()).reshape(&[n, n]);
+        let (eigenvalues, eigenvectors) =
+            StableDecompositions::symmetric_eigendecomposition(&r_array)?;
+        let evec: Vec<f64> = eigenvectors.to_vec();
+        let clipped: Vec<f64> = eigenvalues.iter().map(|&e: &f64| e.max(0.0)).collect();
+
+        // Reconstruct X = V * diag(clipped) * V^T (eigenvectors are the
+        // columns of `eigenvectors`, i.e. evec[i * n + k] == V[i, k]).
+        let mut x = vec![0.0f64; n * n];
+        for i in 0..n {
+            for j in i..n {
+                let mut s = 0.0f64;
+                for (k, &lambda) in clipped.iter().enumerate() {
+                    s += evec[i * n + k] * lambda * evec[j * n + k];
+                }
+                x[i * n + j] = s;
+                x[j * n + i] = s;
+            }
+        }
+
+        // ΔS_{k+1} = X_k - R_k
+        for idx in 0..(n * n) {
+            delta_s[idx] = x[idx] - r[idx];
+        }
+
+        // Y_{k+1} = projection of X_k onto the unit-diagonal affine set.
+        let mut y_new = x;
+        for i in 0..n {
+            y_new[i * n + i] = 1.0;
+        }
+
+        // Convergence check: Frobenius norm of the iterate-to-iterate change.
+        let diff: f64 = y_new
+            .iter()
+            .zip(y.iter())
+            .map(|(&a, &b)| (a - b) * (a - b))
+            .sum::<f64>()
+            .sqrt();
+
+        y = y_new;
+
+        if diff < NEAREST_CORRELATION_TOL {
+            converged = true;
+            break;
+        }
+    }
+
+    if !converged {
+        return Err(crate::error::NumRs2Error::NumericalError(format!(
+            "nearest_correlation_matrix did not converge within {} iterations",
+            NEAREST_CORRELATION_MAX_ITER
+        )));
+    }
+
+    let result: Vec<T> = y
+        .into_iter()
+        .map(|v| <T as NumCast>::from(v).unwrap_or(T::zero()))
+        .collect();
+
+    Ok(Array::from_vec(result).reshape(&[n, n]))
 }
 
 // Enhanced distributions directly exported by the parent module, no need to re-export here
@@ -1270,5 +1434,170 @@ mod tests {
         // the 75th percentile to be positive
         assert!(p25 < 0.0, "25th percentile should be negative, got {}", p25);
         assert!(p75 > 0.0, "75th percentile should be positive, got {}", p75);
+    }
+
+    // ------------------------------------------------------------------
+    // erf: crate-wide single accuracy (delegates to
+    // new_modules::special::error_functions::erf_scalar).
+    //
+    // erf_scalar uses a full-precision Taylor series for |x| <= 0.5 and a
+    // Cody rational minimax approximation for |x| > 4 (both ~1e-15), but
+    // its `erfc_positive` branch for 0.5 < |x| <= 4 still uses the A&S
+    // 7.1.26 rational approximation (~1e-7 absolute error) — see
+    // src/new_modules/special/error_functions.rs:167-180. erf(1) and
+    // erf(2) below fall in that mid-range branch, so their tolerance
+    // reflects what is actually achievable today rather than the crate's
+    // best-case precision (asserted tightly at erf(0.5) and erf(5), which
+    // exercise the high-precision branches).
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_erf_reference_values() {
+        // scipy.special.erf / math.erf reference values.
+        let cases_high_precision: [(f64, f64, f64); 3] = [
+            (0.0, 0.0, 1e-15),
+            (0.5, 0.5204998778130465, 1e-12),
+            (5.0, 0.9999999999984626, 1e-12),
+        ];
+        for (x, expected, tol) in cases_high_precision {
+            let got = erf(x);
+            assert!(
+                (got - expected).abs() < tol,
+                "erf({x}) = {got}, expected {expected} within {tol}"
+            );
+        }
+
+        // Mid-range (0.5 < |x| <= 4): erfc_positive's A&S 7.1.26 branch,
+        // ~1e-7 absolute error. See comment above.
+        let cases_mid_range: [(f64, f64, f64); 2] = [
+            (1.0, 0.8427007929497148, 2e-7),
+            (2.0, 0.9953222650189527, 2e-7),
+        ];
+        for (x, expected, tol) in cases_mid_range {
+            let got = erf(x);
+            assert!(
+                (got - expected).abs() < tol,
+                "erf({x}) = {got}, expected {expected} within {tol}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_erf_odd_symmetry() {
+        for &x in &[0.3, 1.0, 2.0, 3.7] {
+            assert!(
+                (erf(-x) + erf(x)).abs() < 1e-12,
+                "erf should be odd at x={x}"
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // student_t_cdf: regularized incomplete beta reimplementation.
+    // Reference values from scipy.stats.t.cdf.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_student_t_cdf_reference_values() {
+        // (df, x, expected, tolerance)
+        let cases: [(usize, f64, f64, f64); 6] = [
+            (1, 1.0, 0.75, 1e-9),  // Cauchy: exact
+            (1, -1.0, 0.25, 1e-9), // Cauchy: exact
+            (2, 0.0, 0.5, 1e-12),
+            (10, 1.812, 0.9499623689670764, 1e-9),
+            (5, 2.5, 0.9727549503288119, 1e-9),
+            (3, -2.0, 0.06966298427942152, 1e-9),
+        ];
+        for (df, x, expected, tol) in cases {
+            let got = student_t_cdf(x, df);
+            assert!(
+                (got - expected).abs() < tol,
+                "student_t_cdf(x={x}, df={df}) = {got}, expected {expected} within {tol}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_student_t_cdf_large_df_close_to_normal() {
+        // As df -> infinity, the t distribution approaches the standard
+        // normal. scipy: t.cdf(1.96, 200) = 0.9743075795770934,
+        // norm.cdf(1.96) = 0.9750021048517795 (diff ~6.9e-4).
+        let got = student_t_cdf(1.96, 200);
+        let expected = 0.9743075795770934;
+        assert!(
+            (got - expected).abs() < 1e-6,
+            "student_t_cdf(1.96, 200) = {got}, expected {expected}"
+        );
+        let normal = normal_cdf(1.96);
+        assert!(
+            (got - normal).abs() < 1e-2,
+            "df=200 t CDF should be close to normal CDF: t={got}, normal={normal}"
+        );
+    }
+
+    #[test]
+    fn test_student_t_cdf_large_x_saturates() {
+        // Large |x| should saturate towards 1 / 0 without producing NaN or
+        // an out-of-range value (regression for copula()'s use of
+        // student_t_cdf with large z-scores).
+        let hi = student_t_cdf(100.0, 4);
+        let lo = student_t_cdf(-100.0, 4);
+        assert!((0.0..=1.0).contains(&hi), "hi={hi} out of [0,1]");
+        assert!((0.0..=1.0).contains(&lo), "lo={lo} out of [0,1]");
+        assert!(hi > 0.999, "hi={hi} should be close to 1");
+        assert!(lo < 0.001, "lo={lo} should be close to 0");
+        assert!(!hi.is_nan() && !lo.is_nan());
+    }
+
+    // ------------------------------------------------------------------
+    // Sobol direction numbers: internal sanity checks on the embedded
+    // Joe-Kuo table (the full scipy cross-validation and stratification
+    // property tests live in tests/test_random_quality.rs, since they only
+    // need the public `sobol_sequence` API).
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_sobol_direction_data_table_shape() {
+        assert_eq!(SOBOL_DIRECTION_DATA.len(), SOBOL_MAX_DIM - 1);
+        for (idx, (_, m)) in SOBOL_DIRECTION_DATA.iter().enumerate() {
+            let dim = idx + 2;
+            assert!(
+                !m.is_empty() && m.len() <= 9,
+                "dim={dim} has unexpected degree {}",
+                m.len()
+            );
+            // Initial direction numbers m_i must be odd (Joe-Kuo requirement).
+            for (i, &mi) in m.iter().enumerate() {
+                assert_eq!(mi % 2, 1, "dim={dim} m_{} = {mi} must be odd", i + 1);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sobol_direction_numbers_dim1_is_trivial() {
+        let v = sobol_direction_numbers(1);
+        for (j, &vj) in v.iter().enumerate() {
+            let expected = 1u32 << (SOBOL_BITS - (j + 1));
+            assert_eq!(vj, expected, "V[{}] mismatch for trivial dim 1", j + 1);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // nearest_correlation_matrix: internal access is not required (the
+    // function is pub), but a quick smoke test lives here too; the
+    // detailed literature-matching test is in tests/test_random_quality.rs.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_nearest_correlation_matrix_identity_is_fixed_point() {
+        let identity =
+            Array::from_vec(vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).reshape(&[3, 3]);
+        let result = nearest_correlation_matrix(&identity)
+            .expect("test: nearest_correlation_matrix should succeed on the identity");
+        let data = result.to_vec();
+        let expected = identity.to_vec();
+        for (got, want) in data.iter().zip(expected.iter()) {
+            assert!((got - want).abs() < 1e-9, "got={got}, want={want}");
+        }
     }
 }

@@ -10,7 +10,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::sparse::{SparseMatrix, SparseMatrixFormat};
-use num_traits::{Float, One, Zero};
+use num_traits::{Float, NumCast, One, Zero};
 use std::fmt::Debug;
 
 /// Enhanced sparse matrix operations with advanced algorithms
@@ -642,9 +642,25 @@ impl SparseOpsAdvanced {
     }
 
     /// Incomplete LU decomposition for preconditioning
+    ///
+    /// Implements the dual-threshold ILUT(p, tau) scheme of Saad (1994),
+    /// "ILUT: A dual threshold incomplete LU factorization technique,"
+    /// Numerical Linear Algebra with Applications, 1(4), 387-402.
+    ///
+    /// `fill_factor` (clamped to `>= 1.0`) controls how many entries beyond
+    /// each row's original sparsity pattern in `a` may survive in `L`/`U`:
+    /// for row `i`, the number of kept off-diagonal entries on each side
+    /// (strictly-lower for `L`, strictly-upper for `U`) is capped at
+    /// `original_count + ceil((fill_factor - 1) * max(original_count, 1))`,
+    /// keeping only the largest-magnitude candidates. `fill_factor == 1.0`
+    /// therefore reproduces classic ILU(0) (no fill-in survives beyond
+    /// `a`'s own nonzero pattern); larger values progressively approach
+    /// exact (dense) LU as more fill-in is retained. A small fixed
+    /// relative drop tolerance additionally discards numerically
+    /// negligible entries irrespective of the fill cap.
     pub fn incomplete_lu<T>(
         a: &SparseMatrix<T>,
-        _fill_factor: f64,
+        fill_factor: f64,
     ) -> Result<(SparseMatrix<T>, SparseMatrix<T>)>
     where
         T: Float + Clone + Debug + Zero + One,
@@ -657,52 +673,112 @@ impl SparseOpsAdvanced {
             ));
         }
 
-        // Create L and U matrices
-        let mut l = SparseMatrix::new(&[n, n])?;
-        let mut u = SparseMatrix::new(&[n, n])?;
+        let fill_factor = fill_factor.max(1.0);
+        let relative_drop_tol: T = T::from(1e-10).unwrap_or_else(T::epsilon);
 
-        // Initialize L with identity on diagonal
-        for i in 0..n {
-            l.set(i, i, T::one())?;
-        }
-
-        // Copy upper triangular part to U, lower to L
-        for (indices, value) in &a.array.data {
+        // Baseline per-row nonzero counts of the ORIGINAL matrix, split at
+        // the diagonal; this is the "lfil" budget each row's L/U part may
+        // exceed by (fill_factor - 1) times itself.
+        let mut orig_lower_nnz = vec![0usize; n];
+        let mut orig_upper_off_diag_nnz = vec![0usize; n];
+        for indices in a.array.data.keys() {
             let i = indices[0];
             let j = indices[1];
-
-            if i <= j {
-                u.set(i, j, *value)?;
-            } else {
-                l.set(i, j, *value)?;
+            if j < i {
+                orig_lower_nnz[i] += 1;
+            } else if j > i {
+                orig_upper_off_diag_nnz[i] += 1;
             }
         }
 
-        // Simplified ILU(0) - only process existing sparsity pattern
-        for k in 0..n {
-            let u_kk = u.get(k, k)?;
-            if u_kk.abs() < T::epsilon() {
+        let mut l: SparseMatrix<T> = SparseMatrix::new(&[n, n])?;
+        let mut u: SparseMatrix<T> = SparseMatrix::new(&[n, n])?;
+        let mut w = vec![T::zero(); n];
+
+        for i in 0..n {
+            // Load row i of A into a dense working row.
+            for (j, slot) in w.iter_mut().enumerate() {
+                *slot = a.get(i, j)?;
+            }
+            let row_norm = w.iter().fold(T::zero(), |acc, &v| acc + v * v).sqrt();
+            let abs_drop = relative_drop_tol * (row_norm + T::one());
+
+            // Eliminate using previously computed pivot rows k < i, exactly
+            // as in Gaussian elimination, but dropping any multiplier whose
+            // magnitude is negligible relative to the row (and skipping the
+            // corresponding update, per the ILUT dropping rule).
+            for k in 0..i {
+                if w[k] == T::zero() {
+                    continue;
+                }
+                let u_kk = u.get(k, k)?;
+                if u_kk.abs() < T::epsilon() {
+                    return Err(NumRs2Error::ComputationError(
+                        "ILU decomposition failed: zero pivot".to_string(),
+                    ));
+                }
+                let factor = w[k] / u_kk;
+                if factor.abs() < abs_drop {
+                    w[k] = T::zero();
+                    continue;
+                }
+                w[k] = factor;
+                for j in (k + 1)..n {
+                    let u_kj = u.get(k, j)?;
+                    if u_kj != T::zero() {
+                        w[j] = w[j] - factor * u_kj;
+                    }
+                }
+            }
+
+            // Split the eliminated row into its L (j < i) and U (j >= i)
+            // parts and apply the dual-threshold drop rule to each
+            // independently: drop numerically negligible entries, then keep
+            // only the `cap` largest-magnitude survivors.
+            let fill_cap = |orig: usize| -> usize {
+                orig + ((fill_factor - 1.0) * (orig.max(1) as f64)).ceil() as usize
+            };
+
+            let mut lower: Vec<(usize, T)> = (0..i)
+                .filter_map(|j| {
+                    let v = w[j];
+                    (v != T::zero() && v.abs() >= abs_drop).then_some((j, v))
+                })
+                .collect();
+            lower.sort_by(|a, b| {
+                b.1.abs()
+                    .partial_cmp(&a.1.abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            lower.truncate(fill_cap(orig_lower_nnz[i]));
+
+            let diag = w[i];
+            if diag.abs() < T::epsilon() {
                 return Err(NumRs2Error::ComputationError(
                     "ILU decomposition failed: zero pivot".to_string(),
                 ));
             }
 
-            // Process elements below diagonal in column k
-            for i in (k + 1)..n {
-                let l_ik = l.get(i, k)?;
-                if l_ik != T::zero() {
-                    let factor = l_ik / u_kk;
-                    l.set(i, k, factor)?;
+            let mut upper: Vec<(usize, T)> = ((i + 1)..n)
+                .filter_map(|j| {
+                    let v = w[j];
+                    (v != T::zero() && v.abs() >= abs_drop).then_some((j, v))
+                })
+                .collect();
+            upper.sort_by(|a, b| {
+                b.1.abs()
+                    .partial_cmp(&a.1.abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            upper.truncate(fill_cap(orig_upper_off_diag_nnz[i]));
 
-                    // Update row i of U
-                    for j in (k + 1)..n {
-                        let u_kj = u.get(k, j)?;
-                        if u_kj != T::zero() {
-                            let u_ij = u.get(i, j)?;
-                            u.set(i, j, u_ij - factor * u_kj)?;
-                        }
-                    }
-                }
+            l.set(i, i, T::one())?;
+            for (j, v) in lower {
+                l.set(i, j, v)?;
+            }
+            u.set(i, i, diag)?;
+            for (j, v) in upper {
+                u.set(i, j, v)?;
             }
         }
 

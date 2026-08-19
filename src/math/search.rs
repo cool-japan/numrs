@@ -170,8 +170,12 @@ where
 /// * `array` - Input array
 /// * `kth` - Index of element to partition by
 /// * `axis` - Axis along which to sort
-/// * `kind` - Selection algorithm (currently ignored)
-/// * `order` - Not used, for compatibility
+/// * `kind` - Selection algorithm. Only `None` or `"introselect"` are accepted: this path
+///   always uses an introselect-style selection (`slice::select_nth_unstable_by`), so there is
+///   no separate algorithm to switch to. Any other value returns an error rather than being
+///   silently accepted and ignored.
+/// * `order` - Structured-array field names to partition by. Plain `Array<T>` has no named
+///   fields, so passing `Some(_)` returns an error instead of silently ignoring it.
 ///
 /// # Returns
 ///
@@ -190,12 +194,27 @@ pub fn partition<T>(
     array: &Array<T>,
     kth: usize,
     axis: Option<isize>,
-    _kind: Option<&str>,
-    _order: Option<&[&str]>,
+    kind: Option<&str>,
+    order: Option<&[&str]>,
 ) -> Result<Array<T>>
 where
     T: Float + Clone + PartialOrd,
 {
+    if order.is_some() {
+        return Err(NumRs2Error::NotImplemented(
+            "partition: `order` (structured-array sort keys) is not supported for a plain \
+             Array<T>; there are no named fields to partition by"
+                .to_string(),
+        ));
+    }
+    if !matches!(kind, None | Some("introselect")) {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "partition: kind must be `None` or \"introselect\" (got {:?}); this path always \
+             uses an introselect-style selection",
+            kind
+        )));
+    }
+
     let mut result = array.clone();
 
     if let Some(axis_val) = axis {

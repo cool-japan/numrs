@@ -259,27 +259,87 @@ mod array_manipulation_tests {
         // Swap axes 0 and 1
         let swapped = swapaxes(&arr, 0, 1).unwrap();
         assert_eq!(swapped.shape(), vec![3, 2]);
+        // NumPy: np.array([[1,2,3],[4,5,6]]).swapaxes(0, 1).flatten()
+        //     == [1, 4, 2, 5, 3, 6]
+        assert_eq!(swapped.to_vec(), vec![1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
 
-        // Check that swapping back gives original shape
+        // Check that swapping back gives original shape and values
         let swapped_back = swapaxes(&swapped, 0, 1).unwrap();
         assert_eq!(swapped_back.shape(), arr.shape());
+        assert_eq!(swapped_back.to_vec(), arr.to_vec());
     }
 
     #[test]
     fn test_moveaxis_operations() {
         let arr = Array::from_vec(vec![1.0; 24]).reshape(&[2, 3, 4]);
 
-        // Move axis 0 to position 2 - actual result is [4, 2, 3]
+        // Move axis 0 to position 2: NumPy `np.moveaxis(a, [0], [2]).shape == (3, 4, 2)`
         let moved = moveaxis(&arr, &[0], &[2]).unwrap();
-        assert_eq!(moved.shape(), vec![4, 2, 3]); // Fixed expected shape
+        assert_eq!(moved.shape(), vec![3, 4, 2]);
 
-        // Move axis 2 to position 0 - verify this works
+        // Move axis 2 to position 0: NumPy `np.moveaxis(a, [2], [0]).shape == (4, 2, 3)`
         let moved2 = moveaxis(&arr, &[2], &[0]).unwrap();
-        assert_eq!(moved2.shape(), vec![3, 4, 2]); // Corrected based on actual result
+        assert_eq!(moved2.shape(), vec![4, 2, 3]);
 
         // Check that original shape is preserved
         assert_eq!(arr.shape(), vec![2, 3, 4]);
         assert_eq!(moved.size(), arr.size()); // Same number of elements
+    }
+
+    #[test]
+    fn test_moveaxis_values_match_numpy() {
+        // Ground truth computed with NumPy 2.4:
+        //   a = np.arange(24).reshape(2, 3, 4)
+        let arr = Array::from_vec((0..24).collect::<Vec<i32>>()).reshape(&[2, 3, 4]);
+
+        // np.moveaxis(a, [0], [2]) -> shape (3, 4, 2)
+        let moved = moveaxis(&arr, &[0], &[2]).unwrap();
+        assert_eq!(moved.shape(), vec![3, 4, 2]);
+        assert_eq!(
+            moved.to_vec(),
+            vec![
+                0, 12, 1, 13, 2, 14, 3, 15, 4, 16, 5, 17, 6, 18, 7, 19, 8, 20, 9, 21, 10, 22, 11,
+                23
+            ]
+        );
+
+        // np.moveaxis(a, [2], [0]) -> shape (4, 2, 3)
+        let moved2 = moveaxis(&arr, &[2], &[0]).unwrap();
+        assert_eq!(moved2.shape(), vec![4, 2, 3]);
+        assert_eq!(
+            moved2.to_vec(),
+            vec![
+                0, 4, 8, 12, 16, 20, 1, 5, 9, 13, 17, 21, 2, 6, 10, 14, 18, 22, 3, 7, 11, 15, 19,
+                23
+            ]
+        );
+
+        // np.moveaxis(a, [0, 1], [2, 0]) -> shape (3, 4, 2): axis 0 goes to
+        // position 2, axis 1 goes to position 0, axis 2 (unmoved) fills the
+        // one remaining slot at position 1 - same flat pattern as moving
+        // axis 0 alone to position 2.
+        let moved3 = moveaxis(&arr, &[0, 1], &[2, 0]).unwrap();
+        assert_eq!(moved3.shape(), vec![3, 4, 2]);
+        assert_eq!(
+            moved3.to_vec(),
+            vec![
+                0, 12, 1, 13, 2, 14, 3, 15, 4, 16, 5, 17, 6, 18, 7, 19, 8, 20, 9, 21, 10, 22, 11,
+                23
+            ]
+        );
+    }
+
+    #[test]
+    fn test_rollaxis_values_match_numpy() {
+        // `rollaxis` must resolve to the array_ops implementation (not a
+        // stale duplicate), verified against NumPy 2.4 ground truth:
+        //   a = np.arange(12).reshape(2, 2, 3)
+        //   np.rollaxis(a, 2, 0) -> shape (3, 2, 2)
+        let arr = Array::from_vec((0..12).collect::<Vec<i32>>()).reshape(&[2, 2, 3]);
+
+        let rolled = rollaxis(&arr, 2, 0).unwrap();
+        assert_eq!(rolled.shape(), vec![3, 2, 2]);
+        assert_eq!(rolled.to_vec(), vec![0, 3, 6, 9, 1, 4, 7, 10, 2, 5, 8, 11]);
     }
 }
 
@@ -1118,19 +1178,47 @@ mod repeat_tile_tests {
     fn test_tile_multidimensional() {
         let arr = Array::from_vec(vec![1, 2]);
 
-        // Tile to create 2D array - actual result is [3, 6] not [3, 4]
+        // NumPy: np.tile(np.array([1, 2]), [3, 2]) -> shape (3, 4). The 1-D
+        // input shape (2,) is left-padded with a leading 1 to (1, 2) so it
+        // matches `len(reps) == 2`, giving output shape (1*3, 2*2) = (3, 4).
         let tiled = tile(&arr, &[3, 2]).unwrap();
-        assert_eq!(tiled.shape(), vec![3, 6]); // Fixed: 3 rows, actual columns from implementation
-        assert_eq!(tiled.size(), 18); // Updated size
+        assert_eq!(tiled.shape(), vec![3, 4]);
+        assert_eq!(tiled.size(), 12);
+        assert_eq!(tiled.to_vec(), vec![1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2]);
+    }
 
-        // Check that the pattern repeats correctly
-        let tiled_vec = tiled.to_vec();
-        assert_eq!(tiled_vec.len(), 18);
-        // Should have multiple 1s and 2s in the right pattern
-        let count_1 = tiled_vec.iter().filter(|&&x| x == 1).count();
-        let count_2 = tiled_vec.iter().filter(|&&x| x == 2).count();
-        assert_eq!(count_1 + count_2, 18); // All elements should be 1 or 2
-        assert!(count_1 > 0 && count_2 > 0); // Both values should be present
+    #[test]
+    fn test_tile_matches_numpy() {
+        // Ground truth computed with NumPy 2.4.
+
+        // 2-D tiled by [1, 2]: np.tile([[1,2],[3,4]], [1, 2]) -> shape (2, 4)
+        let arr2d = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+        let t = tile(&arr2d, &[1, 2]).unwrap();
+        assert_eq!(t.shape(), vec![2, 4]);
+        assert_eq!(t.to_vec(), vec![1, 2, 1, 2, 3, 4, 3, 4]);
+
+        // 2-D tiled by [2, 1]: np.tile([[1,2],[3,4]], [2, 1]) -> shape (4, 2)
+        let t2 = tile(&arr2d, &[2, 1]).unwrap();
+        assert_eq!(t2.shape(), vec![4, 2]);
+        assert_eq!(t2.to_vec(), vec![1, 2, 3, 4, 1, 2, 3, 4]);
+
+        // 1-D tiled by [2]: np.tile([1, 2, 3], [2]) -> shape (6,)
+        let arr1d = Array::from_vec(vec![1, 2, 3]);
+        let t3 = tile(&arr1d, &[2]).unwrap();
+        assert_eq!(t3.shape(), vec![6]);
+        assert_eq!(t3.to_vec(), vec![1, 2, 3, 1, 2, 3]);
+
+        // Single-element array tiled by [3]: np.tile([7], [3]) -> shape (3,)
+        let arr1 = Array::from_vec(vec![7]);
+        let t4 = tile(&arr1, &[3]).unwrap();
+        assert_eq!(t4.shape(), vec![3]);
+        assert_eq!(t4.to_vec(), vec![7, 7, 7]);
+
+        // 2-D tiled by a single "int rep" [3]: np.tile([[1,2],[3,4]], 3)
+        // left-pads reps to [1, 3], tiling only along the last axis.
+        let t5 = tile(&arr2d, &[3]).unwrap();
+        assert_eq!(t5.shape(), vec![2, 6]);
+        assert_eq!(t5.to_vec(), vec![1, 2, 1, 2, 1, 2, 3, 4, 3, 4, 3, 4]);
     }
 }
 

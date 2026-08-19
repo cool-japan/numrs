@@ -1,6 +1,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::Zero;
+use scirs2_core::ndarray::IxDyn;
 
 /// Roll the specified axis to a new position
 ///
@@ -72,9 +73,17 @@ pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) ->
 
     let mut result_data = vec![T::zero(); array.size()];
 
-    // Iterate through all elements of the array
+    // Iterate through all elements of the array. Force standard
+    // (C-contiguous) layout first so `as_slice()` below is guaranteed to
+    // succeed even if `array` is itself a permuted/strided view (e.g. the
+    // result of a prior `moveaxis`/`swapaxes` call).
     let source_size = array.size();
-    let source_array = array.array();
+    let standard = array.to_c_layout();
+    let source_slice = standard.array().as_slice().ok_or_else(|| {
+        NumRs2Error::InvalidOperation(
+            "Failed to obtain a contiguous slice of the input array".into(),
+        )
+    })?;
 
     for i in 0..source_size {
         // Convert flat index to multi-dimensional indices
@@ -100,10 +109,7 @@ pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) ->
         }
 
         // Copy the value
-        result_data[target_flat_index] = source_array
-            .as_slice()
-            .expect("source array should be contiguous and sliceable")[i]
-            .clone();
+        result_data[target_flat_index] = source_slice[i].clone();
     }
 
     // Create the result array
@@ -148,36 +154,12 @@ pub fn swapaxes<T: Clone>(array: &Array<T>, axis1: usize, axis2: usize) -> Resul
         return Ok(array.clone());
     }
 
-    // Create the new shape and permutation array
-    let mut permutation = Vec::with_capacity(ndim);
-    for i in 0..ndim {
-        if i == axis1 {
-            permutation.push(axis2);
-        } else if i == axis2 {
-            permutation.push(axis1);
-        } else {
-            permutation.push(i);
-        }
-    }
-
-    // Transpose according to the permutation
-    let mut result = array.clone();
-
-    // Permute the axes
-    for i in 0..ndim {
-        if permutation[i] != i {
-            // Find where the i-th axis should go
-            let j = permutation[i];
-
-            // Swap axes i and j in the result
-            result = result.transpose_axis(i, j);
-
-            // Update the permutation to reflect the swap
-            permutation.swap(i, j);
-        }
-    }
-
-    Ok(result)
+    // Swapping two axes is a single transposition, so one call to
+    // `transpose_axis` realizes it directly. The result is forced into
+    // standard (C-contiguous) layout so that `to_vec()`/`as_slice()` observe
+    // the data in the new logical (row-major) order rather than the raw
+    // memory order of the underlying permuted view.
+    Ok(array.transpose_axis(axis1, axis2).to_c_layout())
 }
 
 /// Move the axes of an array to new positions.
@@ -190,16 +172,18 @@ pub fn swapaxes<T: Clone>(array: &Array<T>, axis1: usize, axis2: usize) -> Resul
 ///
 /// # Returns
 ///
-/// A view of the array with axes moved
+/// A new array with the given axes moved to their destination positions.
 ///
 /// # Examples
 ///
 /// ```
 /// use numrs2::prelude::*;
 ///
-/// let a = Array::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8]).reshape(&[2, 2, 2]);
+/// // NumPy: np.moveaxis(np.arange(24).reshape(2, 3, 4), [0], [2]).shape == (3, 4, 2)
+/// let a = Array::from_vec((0..24).collect::<Vec<i32>>()).reshape(&[2, 3, 4]);
 /// let b = moveaxis(&a, &[0], &[2]).expect("operation should succeed");
-/// assert_eq!(b.shape(), vec![2, 2, 2]);
+/// assert_eq!(b.shape(), vec![3, 4, 2]);
+/// assert_eq!(&b.to_vec()[0..4], &[0, 12, 1, 13]);
 /// ```
 pub fn moveaxis<T: Clone>(
     array: &Array<T>,
@@ -227,43 +211,30 @@ pub fn moveaxis<T: Clone>(
         }
     }
 
-    // Create an array to track the new positions of the axes
-    let mut perm = Vec::with_capacity(ndim);
-    for i in 0..ndim {
-        perm.push(i);
+    // Build the gather permutation using NumPy's `moveaxis` algorithm: start
+    // with the axes that are *not* being moved (in their relative order),
+    // then insert each moved axis at its destination position, processing
+    // the (destination, source) pairs in ascending destination order.
+    // `order[i]` names the source axis that ends up at output position `i`,
+    // i.e. `result.shape()[i] == array.shape()[order[i]]`.
+    let mut order: Vec<usize> = (0..ndim).filter(|axis| !source.contains(axis)).collect();
+
+    let mut pairs: Vec<(usize, usize)> = destination
+        .iter()
+        .copied()
+        .zip(source.iter().copied())
+        .collect();
+    pairs.sort_by_key(|&(dest, _)| dest);
+
+    for (dest, src) in pairs {
+        let pos = dest.min(order.len());
+        order.insert(pos, src);
     }
 
-    // Move the axes to their destination positions
-    for (&src, &dst) in source.iter().zip(destination.iter()) {
-        // Remove the source axis
-        let src_axis = perm.remove(src);
-
-        // Insert it at the destination position
-        if dst < perm.len() {
-            perm.insert(dst, src_axis);
-        } else {
-            perm.push(src_axis);
-        }
-    }
-
-    // Permute the axes according to perm
-    let mut result = array.clone();
-
-    // Apply the permutation
-    for i in 0..ndim {
-        if perm[i] != i {
-            // Find where the i-th axis should go
-            let j = perm.iter().position(|&p| p == i).expect(
-                "axis i should exist in permutation array as perm contains all axes 0..ndim",
-            );
-
-            // Swap axes i and j in the result
-            result = result.transpose_axis(i, j);
-
-            // Update the permutation to reflect the swap
-            perm.swap(i, j);
-        }
-    }
-
-    Ok(result)
+    // Transpose directly by `order`, then force standard (C-contiguous)
+    // layout so `to_vec()`/`as_slice()` observe the data in the array's new
+    // logical (row-major) order rather than the permuted view's raw memory
+    // order.
+    let permuted = array.array().clone().permuted_axes(IxDyn(&order));
+    Ok(Array::from_ndarray(permuted).to_c_layout())
 }

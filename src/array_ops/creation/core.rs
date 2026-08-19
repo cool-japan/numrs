@@ -270,7 +270,7 @@ pub fn frommemmap<T: Copy + Clone + Default>(
     order: Option<&str>,
 ) -> Result<Array<T>> {
     // Import the memory-mapped array module
-    use crate::mmap::{open_mmap_info, MmapArray};
+    use crate::mmap::{check_meta_type, open_mmap_info, MmapArray};
 
     let _offset = offset.unwrap_or(0);
     let _order = order.unwrap_or("C");
@@ -295,14 +295,9 @@ pub fn frommemmap<T: Copy + Clone + Default>(
         None => meta.shape.clone(),
     };
 
-    // Verify type compatibility
-    if meta.type_name != std::any::type_name::<T>() {
-        return Err(NumRs2Error::InvalidOperation(format!(
-            "Type mismatch: file contains '{}', but requested '{}'",
-            meta.type_name,
-            std::any::type_name::<T>()
-        )));
-    }
+    // Verify type compatibility (name and size; see `check_meta_type` docs
+    // for why both are checked)
+    check_meta_type::<T>(&meta)?;
 
     // Create a memory-mapped array to read the data
     let mmap_array = MmapArray::<T>::new(&path, &array_shape, false)?;
@@ -512,6 +507,30 @@ mod tests {
         assert!(result.is_err());
 
         // Cleanup
+        cleanup();
+    }
+
+    #[test]
+    fn test_frommemmap_type_mismatch_is_rejected() {
+        // A file created for f64 data must not be readable as i32 through
+        // `frommemmap` (see `crate::mmap::check_meta_type`, which this
+        // function delegates its type/size verification to).
+        let test_path = std::env::temp_dir().join(format!(
+            "numrs2_frommemmap_type_mismatch_{}.tmp",
+            std::process::id()
+        ));
+        let path = test_path.as_path();
+        let cleanup = || {
+            let _ = fs::remove_file(path);
+        };
+        cleanup();
+
+        let array = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+        let _mmap_array = MmapArray::from_array(&array, &path).expect("operation should succeed");
+
+        let result = frommemmap::<i32>(path, "r", None, None, None);
+        assert!(result.is_err());
+
         cleanup();
     }
 }

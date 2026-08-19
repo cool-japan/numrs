@@ -39,6 +39,8 @@ impl MatrixPlot {
             return Err(VizError::InvalidData("Empty matrix".to_string()));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -117,6 +119,8 @@ impl MatrixPlot {
             return Err(VizError::InvalidData("Empty matrix".to_string()));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -164,6 +168,8 @@ impl MatrixPlot {
         if eigenvalues.is_empty() {
             return Err(VizError::InvalidData("No eigenvalues".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();

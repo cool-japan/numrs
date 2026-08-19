@@ -488,17 +488,32 @@ impl<T: Clone> MaskedArray<T> {
 impl<T: Clone + Add<Output = T>> Add for &MaskedArray<T> {
     type Output = MaskedArray<T>;
 
+    /// # Panics
+    ///
+    /// Panics if `self` and `other` have shapes that cannot be broadcast
+    /// together. `std::ops::Add` cannot return a `Result`, so there is no
+    /// non-panicking version of this operator; construct the result via
+    /// [`Array::add_broadcast`] directly (on the `.data`/`.mask` fields) if
+    /// you need to handle a shape mismatch without panicking.
     fn add(self, other: &MaskedArray<T>) -> MaskedArray<T> {
         // Add the data arrays
         let result_data = match self.data.add_broadcast(&other.data) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to add arrays with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to add MaskedArrays with incompatible shapes: {:?} vs {:?}",
+                self.data.shape(),
+                other.data.shape()
+            ),
         };
 
         // Combine the masks - an element is masked if it is masked in either input
         let mask_combined = match self.mask.zip_with(&other.mask, |a, b| a || b) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to combine masks with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
+                self.mask.shape(),
+                other.mask.shape()
+            ),
         };
 
         MaskedArray {
@@ -513,17 +528,32 @@ impl<T: Clone + Add<Output = T>> Add for &MaskedArray<T> {
 impl<T: Clone + Sub<Output = T>> Sub for &MaskedArray<T> {
     type Output = MaskedArray<T>;
 
+    /// # Panics
+    ///
+    /// Panics if `self` and `other` have shapes that cannot be broadcast
+    /// together. `std::ops::Sub` cannot return a `Result`, so there is no
+    /// non-panicking version of this operator; construct the result via
+    /// [`Array::subtract_broadcast`] directly (on the `.data`/`.mask`
+    /// fields) if you need to handle a shape mismatch without panicking.
     fn sub(self, other: &MaskedArray<T>) -> MaskedArray<T> {
         // Subtract the data arrays
         let result_data = match self.data.subtract_broadcast(&other.data) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to subtract arrays with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to subtract MaskedArrays with incompatible shapes: {:?} vs {:?}",
+                self.data.shape(),
+                other.data.shape()
+            ),
         };
 
         // Combine the masks - an element is masked if it is masked in either input
         let mask_combined = match self.mask.zip_with(&other.mask, |a, b| a || b) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to combine masks with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
+                self.mask.shape(),
+                other.mask.shape()
+            ),
         };
 
         MaskedArray {
@@ -538,17 +568,32 @@ impl<T: Clone + Sub<Output = T>> Sub for &MaskedArray<T> {
 impl<T: Clone + Mul<Output = T>> Mul for &MaskedArray<T> {
     type Output = MaskedArray<T>;
 
+    /// # Panics
+    ///
+    /// Panics if `self` and `other` have shapes that cannot be broadcast
+    /// together. `std::ops::Mul` cannot return a `Result`, so there is no
+    /// non-panicking version of this operator; construct the result via
+    /// [`Array::multiply_broadcast`] directly (on the `.data`/`.mask`
+    /// fields) if you need to handle a shape mismatch without panicking.
     fn mul(self, other: &MaskedArray<T>) -> MaskedArray<T> {
         // Multiply the data arrays
         let result_data = match self.data.multiply_broadcast(&other.data) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to multiply arrays with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to multiply MaskedArrays with incompatible shapes: {:?} vs {:?}",
+                self.data.shape(),
+                other.data.shape()
+            ),
         };
 
         // Combine the masks - an element is masked if it is masked in either input
         let mask_combined = match self.mask.zip_with(&other.mask, |a, b| a || b) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to combine masks with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
+                self.mask.shape(),
+                other.mask.shape()
+            ),
         };
 
         MaskedArray {
@@ -563,6 +608,15 @@ impl<T: Clone + Mul<Output = T>> Mul for &MaskedArray<T> {
 impl<T: Clone + Div<Output = T> + PartialEq + Zero> Div for &MaskedArray<T> {
     type Output = MaskedArray<T>;
 
+    /// # Panics
+    ///
+    /// Panics if `self` and `other` have shapes that cannot be broadcast
+    /// together. `std::ops::Div` cannot return a `Result`, so there is no
+    /// non-panicking version of this operator; construct the result via
+    /// [`Array::divide_broadcast`] directly (on the `.data`/`.mask` fields)
+    /// if you need to handle a shape mismatch without panicking. Division by
+    /// a zero element does not panic: that element is masked instead (see
+    /// `division_mask` below).
     fn div(self, other: &MaskedArray<T>) -> MaskedArray<T> {
         // Check for divisions by zero and mask them
         let zero = T::zero();
@@ -579,13 +633,21 @@ impl<T: Clone + Div<Output = T> + PartialEq + Zero> Div for &MaskedArray<T> {
         // Divide the data arrays
         let result_data = match self.data.divide_broadcast(&other.data) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to divide arrays with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to divide MaskedArrays with incompatible shapes: {:?} vs {:?}",
+                self.data.shape(),
+                other.data.shape()
+            ),
         };
 
         // Combine the masks - an element is masked if it is masked in either input or if divisor is zero
         let mask_combined = match self.mask.zip_with(&division_mask, |a, b| a || b) {
             Ok(res) => res,
-            Err(_) => panic!("Failed to combine masks with incompatible shapes"),
+            Err(_) => panic!(
+                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
+                self.mask.shape(),
+                division_mask.shape()
+            ),
         };
 
         MaskedArray {

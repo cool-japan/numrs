@@ -8,6 +8,7 @@
 //! - from_vec
 
 use super::Array;
+use crate::error::{NumRs2Error, Result};
 use num_traits::{One, Zero};
 use scirs2_core::ndarray::{Array as NdArray, IxDyn};
 
@@ -248,6 +249,9 @@ impl<T: Clone> Array<T> {
 
         for i in 0..n {
             for j in 0..m {
+                // INVARIANT: `result` was just created as `zeros(&[n, m])`, and
+                // `i`/`j` are bounded by `0..n`/`0..m`, so `[i, j]` is always a
+                // valid index into `result` and `set` cannot return `Err` here.
                 // NumPy's tri returns 1s on or below the diagonal (i-j <= k)
                 if (j as isize) <= (i as isize) + k {
                     result.set(&[i, j], value.clone()).unwrap_or_else(|_| {
@@ -294,12 +298,30 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(strictly_lower.shape(), vec![3, 3]);
     /// assert_eq!(strictly_lower.to_vec(), vec![0, 0, 0, 4, 0, 0, 7, 8, 0]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is not a 2D array. Use [`Array::try_tril`] for a
+    /// non-panicking version that returns a [`crate::error::NumRs2Error`].
     pub fn tril(&self, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        self.try_tril(k)
+            .unwrap_or_else(|e| panic!("tril requires a 2D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::tril`].
+    ///
+    /// Returns `Err` if `self` is not a 2D array instead of panicking.
+    pub fn try_tril(&self, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if self.ndim() != 2 {
-            panic!("tril requires a 2D array");
+            return Err(NumRs2Error::DimensionMismatch(
+                "tril requires a 2D array".to_string(),
+            ));
         }
 
         let shape = self.shape();
@@ -314,17 +336,12 @@ impl<T: Clone> Array<T> {
                 // Zero out elements above the k-th diagonal
                 // In NumPy, the condition is j > i + k
                 if (j as isize) > (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
-                        panic!(
-                            "Internal error: failed to set element at [{}, {}] in tril function",
-                            i, j
-                        )
-                    });
+                    result.set(&[i, j], zero.clone())?;
                 }
             }
         }
 
-        result
+        Ok(result)
     }
 
     /// Create an upper triangular matrix or extract the upper triangle from an existing matrix
@@ -351,12 +368,30 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(strictly_upper.shape(), vec![3, 3]);
     /// assert_eq!(strictly_upper.to_vec(), vec![0, 2, 3, 0, 0, 6, 0, 0, 0]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is not a 2D array. Use [`Array::try_triu`] for a
+    /// non-panicking version that returns a [`crate::error::NumRs2Error`].
     pub fn triu(&self, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        self.try_triu(k)
+            .unwrap_or_else(|e| panic!("triu requires a 2D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::triu`].
+    ///
+    /// Returns `Err` if `self` is not a 2D array instead of panicking.
+    pub fn try_triu(&self, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if self.ndim() != 2 {
-            panic!("triu requires a 2D array");
+            return Err(NumRs2Error::DimensionMismatch(
+                "triu requires a 2D array".to_string(),
+            ));
         }
 
         let shape = self.shape();
@@ -371,17 +406,12 @@ impl<T: Clone> Array<T> {
                 // Zero out elements below the k-th diagonal
                 // In NumPy, the condition is j < i + k
                 if (j as isize) < (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
-                        panic!(
-                            "Internal error: failed to set element at [{}, {}] in triu function",
-                            i, j
-                        )
-                    });
+                    result.set(&[i, j], zero.clone())?;
                 }
             }
         }
 
-        result
+        Ok(result)
     }
 
     /// Create a new array with a specific shape, filled with ones
@@ -504,6 +534,14 @@ impl<T: Clone> Array<T> {
             .min(n_cols.saturating_sub(diagonal_col_start));
 
         // Set ones on the specified diagonal efficiently
+        //
+        // INVARIANT: `max_diagonal_length` is `min(n_rows - diagonal_start,
+        // n_cols - diagonal_col_start)` (saturating), so for every
+        // `i < max_diagonal_length`, `row = diagonal_start + i < n_rows` and
+        // `col = diagonal_col_start + i < n_cols`. `result` has shape
+        // `[n_rows, n_cols]`, so `set` cannot return `Err` here; the
+        // `row < n_rows && col < n_cols` check below is a defensive
+        // restatement of that same invariant, not evidence it can fail.
         for i in 0..max_diagonal_length {
             let row = diagonal_start + i;
             let col = diagonal_col_start + i;
@@ -537,14 +575,31 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(diag_above.shape(), vec![4, 4]);
     /// assert_eq!(diag_above.to_vec(), vec![0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 0, 0, 0]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `v` is not a 1D array. Use
+    /// [`Array::try_create_diagonal_matrix_helper`] for a non-panicking
+    /// version that returns a [`crate::error::NumRs2Error`].
     pub fn create_diagonal_matrix_helper(v: &Array<T>, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        Self::try_create_diagonal_matrix_helper(v, k)
+            .unwrap_or_else(|e| panic!("diag requires a 1D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::create_diagonal_matrix_helper`].
+    ///
+    /// Returns `Err` if `v` is not a 1D array instead of panicking.
+    pub fn try_create_diagonal_matrix_helper(v: &Array<T>, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if v.ndim() != 1 {
-            // In a real implementation, we should return a Result, but for simplicity,
-            // we'll panic with a clear message
-            panic!("diag requires a 1D array");
+            return Err(NumRs2Error::DimensionMismatch(
+                "diag requires a 1D array".to_string(),
+            ));
         }
 
         let diag_len = v.size();
@@ -557,43 +612,29 @@ impl<T: Clone> Array<T> {
             if k >= 0 {
                 let j = i + k as usize;
                 if j < size {
-                    result
-                        .set(
-                            &[i, j],
-                            v.array()
-                                .get([i])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        )
-                        .unwrap_or_else(|_| {
-                            panic!(
-                                "Internal error: failed to set element at [{}, {}] in diag function",
-                                i, j
-                            )
-                        });
+                    let value = v.array().get([i]).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "diag: failed to read source element at [{}]",
+                            i
+                        ))
+                    })?;
+                    result.set(&[i, j], value.clone())?;
                 }
             } else {
                 let i_offset = (-k) as usize;
                 if i + i_offset < size {
-                    result
-                        .set(
-                            &[i + i_offset, i],
-                            v.array()
-                                .get([i])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        )
-                        .unwrap_or_else(|_| {
-                            panic!(
-                                "Internal error: failed to set element at [{}, {}] in diag function",
-                                i + i_offset, i
-                            )
-                        });
+                    let value = v.array().get([i]).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "diag: failed to read source element at [{}]",
+                            i
+                        ))
+                    })?;
+                    result.set(&[i + i_offset, i], value.clone())?;
                 }
             }
         }
 
-        result
+        Ok(result)
     }
 
     /// Extract a diagonal from a 2D array or create a diagonal matrix from a 1D array
@@ -629,14 +670,32 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(above_diag.shape(), vec![2]);
     /// assert_eq!(above_diag.to_vec(), vec![2, 6]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `v` is neither a 1D nor a 2D array. Use
+    /// [`Array::try_create_diagonal_matrix`] for a non-panicking version
+    /// that returns a [`crate::error::NumRs2Error`].
     // This needs a different name to avoid conflict with the instance method in indexing.rs
     pub fn create_diagonal_matrix(v: &Array<T>, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        Self::try_create_diagonal_matrix(v, k)
+            .unwrap_or_else(|e| panic!("diag requires a 1D or 2D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::create_diagonal_matrix`].
+    ///
+    /// Returns `Err` if `v` is neither a 1D nor a 2D array instead of
+    /// panicking.
+    pub fn try_create_diagonal_matrix(v: &Array<T>, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if v.ndim() == 1 {
             // Create a diagonal matrix
-            Self::create_diagonal_matrix_helper(v, k)
+            Self::try_create_diagonal_matrix_helper(v, k)
         } else if v.ndim() == 2 {
             // Extract the diagonal
             let shape = v.shape();
@@ -657,30 +716,35 @@ impl<T: Clone> Array<T> {
                 if k >= 0 {
                     let j = i + k as usize;
                     if j < n_cols {
-                        diag_elements.push(
-                            v.array()
-                                .get([i, j])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        );
+                        let value = v.array().get([i, j]).ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "diag: failed to read source element at [{}, {}]",
+                                i, j
+                            ))
+                        })?;
+                        diag_elements.push(value.clone());
                     }
                 } else {
                     let i_offset = (-k) as usize;
                     if i + i_offset < n_rows {
-                        diag_elements.push(
-                            v.array()
-                                .get([i + i_offset, i])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        );
+                        let value = v.array().get([i + i_offset, i]).ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "diag: failed to read source element at [{}, {}]",
+                                i + i_offset,
+                                i
+                            ))
+                        })?;
+                        diag_elements.push(value.clone());
                     }
                 }
             }
 
             // Return as a 1D array
-            Self::from_vec(diag_elements)
+            Ok(Self::from_vec(diag_elements))
         } else {
-            panic!("diag requires a 1D or 2D array");
+            Err(NumRs2Error::DimensionMismatch(
+                "diag requires a 1D or 2D array".to_string(),
+            ))
         }
     }
 

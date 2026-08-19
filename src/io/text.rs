@@ -343,19 +343,23 @@ where
 /// ```rust
 /// use numrs2::prelude::*;
 /// use numrs2::io::text::{savetxt, SaveTxtOptions};
-/// use std::path::Path;
+/// use std::env;
 ///
 /// let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 ///
-/// // Save with default options
-/// savetxt(Path::new("output.txt"), &array, SaveTxtOptions::default()).expect("Failed to save text file");
+/// // Save with default options (unique file under the OS temp dir, cleaned up after)
+/// let txt_path = env::temp_dir().join(format!("numrs2_savetxt_doctest_{}.txt", std::process::id()));
+/// savetxt(&txt_path, &array, SaveTxtOptions::default()).expect("Failed to save text file");
+/// let _ = std::fs::remove_file(&txt_path);
 ///
 /// // Save with custom format and delimiter
 /// let mut options = SaveTxtOptions::default();
 /// options.fmt = "%.6f".to_string();
 /// options.delimiter = ",".to_string();
 /// options.header = Some("x,y".to_string());
-/// savetxt(Path::new("output.csv"), &array, options).expect("Failed to save text file");
+/// let csv_path = env::temp_dir().join(format!("numrs2_savetxt_doctest_{}.csv", std::process::id()));
+/// savetxt(&csv_path, &array, options).expect("Failed to save text file");
+/// let _ = std::fs::remove_file(&csv_path);
 /// ```
 #[allow(non_snake_case)]
 pub fn savetxt<T>(fname: &Path, X: &Array<T>, options: SaveTxtOptions) -> Result<()>

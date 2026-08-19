@@ -534,6 +534,12 @@ pub fn ravel_multi_index(
                 }
                 "wrap" => coord % dims[dim],
                 "clip" => coord.min(dims[dim].saturating_sub(1)),
+                // INVARIANT: unreachable. `mode_str` is validated at the
+                // top of `ravel_multi_index` (`mode_str != "raise" &&
+                // mode_str != "wrap" && mode_str != "clip"` returns `Err`
+                // before this loop runs) and is never reassigned, so by the
+                // time this `match` executes it can only be one of those
+                // three strings.
                 _ => unreachable!(),
             };
 

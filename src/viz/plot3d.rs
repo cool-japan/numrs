@@ -40,6 +40,8 @@ impl Plot3D {
             )));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -123,6 +125,8 @@ impl Plot3D {
                 z.ncols()
             )));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -216,6 +220,8 @@ impl Plot3D {
                 z.len()
             )));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();

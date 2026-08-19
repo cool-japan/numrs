@@ -71,7 +71,6 @@
 pub mod algorithms;
 pub mod array;
 pub mod array_ops;
-pub mod array_ops_legacy;
 pub mod arrays;
 #[cfg(feature = "arrow")]
 pub mod arrow;
@@ -170,8 +169,6 @@ pub mod doctests {}
 pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
-    // Import specific non-conflicting functions from legacy module
-    pub use crate::array_ops_legacy::rollaxis;
     // String and character operations
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
@@ -331,7 +328,7 @@ pub mod prelude {
         IntegerElement, LinearAlgebra, MatrixDecomposition, NumericElement,
     };
     // Explicit ufunc imports
-    // Note: clip, copysign, std, var already exported from array_ops_legacy
+    // Note: clip, copysign, std, var already exported from crate::math above
     pub use crate::ufuncs::{
         absolute, add, add_scalar, arctan2, cbrt, divide, divide_scalar, dot, exp2, expm1, fma,
         hypot, log10, log1p, log2, maximum, minimum, multiply, multiply_scalar, negative, norm_l1,

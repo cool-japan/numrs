@@ -1,17 +1,33 @@
 //! NetCDF-3 format support for NumRS2 arrays
 //!
-//! This module provides pure Rust implementation for reading and writing
-//! NumRS2 arrays to/from NetCDF-3 files using the netcdf3 crate.
+//! This module provides a pure Rust implementation for reading and writing
+//! NumRS2 arrays to/from real NetCDF-3 classic files, backed by the
+//! [`netcdf3`](https://docs.rs/netcdf3) crate.
 //!
 //! NetCDF (Network Common Data Form) is a self-describing, machine-independent
 //! data format widely used in scientific computing, especially for climate and
-//! atmospheric data.
+//! atmospheric data. Files written by this module are genuine NetCDF-3
+//! classic files (they start with the `CDF\x01` magic bytes) and can be
+//! read by any conforming NetCDF-3 reader, not just this module.
+//!
+//! # Type mapping
+//!
+//! The classic NetCDF-3 format has exactly six native variable types:
+//! `NC_BYTE` (i8), `NC_CHAR` (u8), `NC_SHORT` (i16), `NC_INT` (i32),
+//! `NC_FLOAT` (f32) and `NC_DOUBLE` (f64). NumRS2's `i8`, `u8`, `i16`,
+//! `i32`, `f32` and `f64` element types map directly onto these. There is
+//! no native 64-bit integer or unsigned 32/64-bit integer type in classic
+//! NetCDF-3, so `write_netcdf`/`read_netcdf` for `i64`, `u32` and `u64`
+//! return a clear [`NumRs2Error::TypeCastError`] instead of silently
+//! narrowing or widening the data.
+//!
+//! Each array axis becomes its own fixed-size NetCDF dimension, named
+//! `dim0`, `dim1`, ... in axis order.
 //!
 //! # Features
-//! - Read/write NumRS2 arrays to/from NetCDF-3 files
-//! - Support for dimensions, variables, and attributes
-//! - Type-safe conversions for numeric types
-//! - Metadata preservation
+//! - Read/write NumRS2 arrays to/from real NetCDF-3 classic files
+//! - Dimensions derived from the array's shape; variable names round-trip
+//! - String-valued variable attributes
 //! - Pure Rust implementation (no C dependencies)
 //!
 //! # Example
@@ -34,11 +50,9 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+use netcdf3::{DataSet, DataType as Nc3DataType, FileReader, FileWriter, Version};
 use std::collections::HashMap;
 use std::path::Path;
-
-// Note: netcdf3 crate will be used for actual implementation
-// For now, providing interface and basic structure
 
 /// Write a NumRS2 array to a NetCDF file
 ///
@@ -121,106 +135,160 @@ pub trait NetCdfReadable: Clone {
     fn read_from_netcdf(path: &Path, var_name: &str) -> Result<Array<Self>>;
 }
 
-// Macro to implement NetCDF I/O for numeric types
-macro_rules! impl_netcdf_io {
-    ($type:ty, $type_name:expr) => {
-        impl NetCdfWritable for $type {
+/// Name of the NetCDF dimension for a given (0-based) array axis.
+fn dim_name_for_axis(axis: usize) -> String {
+    format!("dim{}", axis)
+}
+
+/// Builds a [`DataSet`] describing a single variable `var_name` of type
+/// `data_type` over an array of the given `shape`, with one fixed-size
+/// dimension per axis (see [`dim_name_for_axis`]).
+fn build_data_set(shape: &[usize], var_name: &str, data_type: Nc3DataType) -> Result<DataSet> {
+    if !netcdf3::is_valid_name(var_name) {
+        return Err(NumRs2Error::InvalidInput(format!(
+            "'{}' is not a valid NetCDF-3 variable name",
+            var_name
+        )));
+    }
+
+    let mut data_set = DataSet::new();
+    let mut dim_names: Vec<String> = Vec::with_capacity(shape.len());
+    for (axis, &size) in shape.iter().enumerate() {
+        if size == 0 {
+            return Err(NumRs2Error::InvalidInput(format!(
+                "NetCDF-3 classic does not support a zero-length dimension (axis {} of variable '{}')",
+                axis, var_name
+            )));
+        }
+        let dim_name = dim_name_for_axis(axis);
+        data_set.add_fixed_dim(&dim_name, size).map_err(|e| {
+            NumRs2Error::IOError(format!(
+                "Failed to define NetCDF dimension '{}': {:?}",
+                dim_name, e
+            ))
+        })?;
+        dim_names.push(dim_name);
+    }
+
+    data_set
+        .add_var(var_name, &dim_names, data_type)
+        .map_err(|e| {
+            NumRs2Error::IOError(format!(
+                "Failed to define NetCDF variable '{}': {:?}",
+                var_name, e
+            ))
+        })?;
+
+    Ok(data_set)
+}
+
+/// Attaches string-valued attributes to `var_name` in `data_set`.
+fn apply_attrs(
+    data_set: &mut DataSet,
+    var_name: &str,
+    attrs: &HashMap<String, String>,
+) -> Result<()> {
+    for (key, value) in attrs {
+        if !netcdf3::is_valid_name(key) {
+            return Err(NumRs2Error::InvalidInput(format!(
+                "'{}' is not a valid NetCDF-3 attribute name",
+                key
+            )));
+        }
+        data_set
+            .add_var_attr_string(var_name, key, value)
+            .map_err(|e| {
+                NumRs2Error::IOError(format!(
+                    "Failed to set NetCDF attribute '{}' on variable '{}': {:?}",
+                    key, var_name, e
+                ))
+            })?;
+    }
+    Ok(())
+}
+
+// Implements `NetCdfWritable`/`NetCdfReadable` for a Rust numeric type that
+// has a direct, native NetCDF-3 classic counterpart.
+macro_rules! impl_netcdf_native {
+    ($rust_type:ty, $nc_type:expr, $write_var_fn:ident, $read_var_fn:ident) => {
+        impl NetCdfWritable for $rust_type {
             fn write_to_netcdf(
                 array: &Array<Self>,
                 path: &Path,
                 var_name: &str,
                 attrs: Option<HashMap<String, String>>,
             ) -> Result<()> {
-                // Note: Full NetCDF-3 implementation requires netcdf3 crate
-                // This is a placeholder that stores data in a compatible format
-
-                // For now, store as metadata + binary
                 let shape = array.shape();
+                let mut data_set = build_data_set(&shape, var_name, $nc_type)?;
+                if let Some(attrs) = &attrs {
+                    apply_attrs(&mut data_set, var_name, attrs)?;
+                }
                 let data = array.to_vec();
 
-                let metadata = serde_json::json!({
-                    "variable_name": var_name,
-                    "shape": shape,
-                    "dtype": $type_name,
-                    "attributes": attrs.unwrap_or_default(),
-                });
-
-                // Write metadata
-                let meta_path = path.with_extension("nc.meta");
-                std::fs::write(&meta_path, metadata.to_string())
-                    .map_err(|e| NumRs2Error::IOError(format!("Failed to write metadata: {}", e)))?;
-
-                // Write binary data
-                let data_bytes: Vec<u8> = unsafe {
-                    std::slice::from_raw_parts(
-                        data.as_ptr() as *const u8,
-                        data.len() * std::mem::size_of::<$type>(),
-                    )
-                    .to_vec()
-                };
-
-                std::fs::write(path, &data_bytes)
-                    .map_err(|e| NumRs2Error::IOError(format!("Failed to write data: {}", e)))?;
-
+                // `data_set` must outlive `writer`, which borrows it (see
+                // `FileWriter::set_def`); declaring it first ensures that,
+                // since locals drop in reverse declaration order.
+                let mut writer = FileWriter::open(path).map_err(|e| {
+                    NumRs2Error::IOError(format!(
+                        "Failed to open NetCDF file '{}' for writing: {:?}",
+                        path.display(),
+                        e
+                    ))
+                })?;
+                writer
+                    .set_def(&data_set, Version::Classic, 0)
+                    .map_err(|e| {
+                        NumRs2Error::IOError(format!("Failed to write NetCDF header: {:?}", e))
+                    })?;
+                writer.$write_var_fn(var_name, &data).map_err(|e| {
+                    NumRs2Error::IOError(format!(
+                        "Failed to write NetCDF variable '{}': {:?}",
+                        var_name, e
+                    ))
+                })?;
+                writer.close().map_err(|e| {
+                    NumRs2Error::IOError(format!("Failed to finalize NetCDF file: {:?}", e))
+                })?;
                 Ok(())
             }
         }
 
-        impl NetCdfReadable for $type {
+        impl NetCdfReadable for $rust_type {
             fn read_from_netcdf(path: &Path, var_name: &str) -> Result<Array<Self>> {
-                // Read metadata
-                let meta_path = path.with_extension("nc.meta");
-                let metadata_str = std::fs::read_to_string(&meta_path)
-                    .map_err(|e| NumRs2Error::IOError(format!("Failed to read metadata: {}", e)))?;
+                let mut reader = FileReader::open(path).map_err(|e| {
+                    NumRs2Error::IOError(format!(
+                        "Failed to open NetCDF file '{}': {:?}",
+                        path.display(),
+                        e
+                    ))
+                })?;
 
-                let metadata: serde_json::Value = serde_json::from_str(&metadata_str)
-                    .map_err(|e| NumRs2Error::DeserializationError(format!("Invalid metadata: {}", e)))?;
-
-                // Verify variable name
-                let stored_var = metadata["variable_name"]
-                    .as_str()
-                    .ok_or_else(|| NumRs2Error::DeserializationError("Missing variable name".to_string()))?;
-
-                if stored_var != var_name {
-                    return Err(NumRs2Error::DeserializationError(format!(
-                        "Variable name mismatch: expected {}, found {}",
-                        var_name, stored_var
-                    )));
-                }
-
-                // Read shape
-                let shape: Vec<usize> = metadata["shape"]
-                    .as_array()
-                    .ok_or_else(|| NumRs2Error::DeserializationError("Missing shape".to_string()))?
-                    .iter()
-                    .map(|v| {
-                        v.as_u64()
-                            .ok_or_else(|| NumRs2Error::DeserializationError("Invalid shape value".to_string()))
-                            .map(|x| x as usize)
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-
-                // Read binary data
-                let data_bytes = std::fs::read(path)
-                    .map_err(|e| NumRs2Error::IOError(format!("Failed to read data: {}", e)))?;
-
-                // Convert bytes to typed data
-                let num_elements = shape.iter().product();
-                if data_bytes.len() != num_elements * std::mem::size_of::<$type>() {
-                    return Err(NumRs2Error::DeserializationError(format!(
-                        "Data size mismatch: expected {} bytes, got {}",
-                        num_elements * std::mem::size_of::<$type>(),
-                        data_bytes.len()
-                    )));
-                }
-
-                let data: Vec<$type> = unsafe {
-                    std::slice::from_raw_parts(
-                        data_bytes.as_ptr() as *const $type,
-                        num_elements,
-                    )
-                    .to_vec()
+                // Scoped so the immutable borrow of `reader` (via
+                // `data_set()`) ends before the mutable `$read_var_fn` call
+                // below.
+                let (actual_type, shape): (Nc3DataType, Vec<usize>) = {
+                    let var = reader.data_set().get_var(var_name).ok_or_else(|| {
+                        NumRs2Error::DeserializationError(format!(
+                            "Variable '{}' not found in NetCDF file",
+                            var_name
+                        ))
+                    })?;
+                    let shape = var.get_dims().iter().map(|d| d.size()).collect();
+                    (var.data_type(), shape)
                 };
+                if actual_type != $nc_type {
+                    return Err(NumRs2Error::DeserializationError(format!(
+                        "Variable '{}' has NetCDF type {:?}, expected {:?}",
+                        var_name, actual_type, $nc_type
+                    )));
+                }
+
+                let data = reader.$read_var_fn(var_name).map_err(|e| {
+                    NumRs2Error::DeserializationError(format!(
+                        "Failed to read NetCDF variable '{}': {:?}",
+                        var_name, e
+                    ))
+                })?;
 
                 Ok(Array::from_vec(data).reshape(&shape))
             }
@@ -228,13 +296,48 @@ macro_rules! impl_netcdf_io {
     };
 }
 
-// Implement for common numeric types
-impl_netcdf_io!(f64, "f64");
-impl_netcdf_io!(f32, "f32");
-impl_netcdf_io!(i32, "i32");
-impl_netcdf_io!(i64, "i64");
-impl_netcdf_io!(u32, "u32");
-impl_netcdf_io!(u64, "u64");
+// Implements `NetCdfWritable`/`NetCdfReadable` for a Rust numeric type that
+// has *no* native NetCDF-3 classic representation, returning a clear error
+// instead of silently narrowing/widening the data.
+macro_rules! impl_netcdf_unsupported {
+    ($rust_type:ty, $type_label:expr) => {
+        impl NetCdfWritable for $rust_type {
+            fn write_to_netcdf(
+                _array: &Array<Self>,
+                _path: &Path,
+                _var_name: &str,
+                _attrs: Option<HashMap<String, String>>,
+            ) -> Result<()> {
+                Err(NumRs2Error::TypeCastError(format!(
+                    "NetCDF-3 classic has no native {} type; supported numeric types are i8, u8, i16, i32, f32, f64",
+                    $type_label
+                )))
+            }
+        }
+
+        impl NetCdfReadable for $rust_type {
+            fn read_from_netcdf(_path: &Path, _var_name: &str) -> Result<Array<Self>> {
+                Err(NumRs2Error::TypeCastError(format!(
+                    "NetCDF-3 classic has no native {} type; supported numeric types are i8, u8, i16, i32, f32, f64",
+                    $type_label
+                )))
+            }
+        }
+    };
+}
+
+impl_netcdf_native!(f64, Nc3DataType::F64, write_var_f64, read_var_f64);
+impl_netcdf_native!(f32, Nc3DataType::F32, write_var_f32, read_var_f32);
+impl_netcdf_native!(i8, Nc3DataType::I8, write_var_i8, read_var_i8);
+impl_netcdf_native!(i16, Nc3DataType::I16, write_var_i16, read_var_i16);
+impl_netcdf_native!(i32, Nc3DataType::I32, write_var_i32, read_var_i32);
+impl_netcdf_native!(u8, Nc3DataType::U8, write_var_u8, read_var_u8);
+
+// Classic NetCDF-3 has no native 64-bit integer or unsigned 32/64-bit
+// integer type (see the module-level docs' "Type mapping" section).
+impl_netcdf_unsupported!(i64, "i64");
+impl_netcdf_unsupported!(u32, "u32");
+impl_netcdf_unsupported!(u64, "u64");
 
 #[cfg(test)]
 mod tests {
@@ -294,5 +397,20 @@ mod tests {
 
         assert_eq!(array.shape(), loaded.shape());
         assert_eq!(array.to_vec(), loaded.to_vec());
+    }
+
+    #[test]
+    fn test_netcdf_overwrite_existing_file() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let path = temp_dir.path().join("test_overwrite.nc");
+
+        let first = Array::from_vec(vec![1.0, 2.0]);
+        write_netcdf(&first, &path, "v", None).expect("Failed to write NetCDF");
+
+        let second = Array::from_vec(vec![9.0, 8.0, 7.0]);
+        write_netcdf(&second, &path, "v", None).expect("Failed to overwrite NetCDF file");
+
+        let loaded: Array<f64> = read_netcdf(&path, "v").expect("Failed to read NetCDF");
+        assert_eq!(loaded.to_vec(), vec![9.0, 8.0, 7.0]);
     }
 }

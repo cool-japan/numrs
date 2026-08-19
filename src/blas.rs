@@ -1,3 +1,16 @@
+//! Naive reference BLAS routines.
+//!
+//! This module is a pure-Rust reference implementation of a handful of BLAS
+//! Level 1-3 operations (`dot`, `gemv`, `gemm`) with no external BLAS/LAPACK
+//! dependency. Each routine is a straightforward nested-loop implementation
+//! with no SIMD, tiling, or multi-threading — it exists to validate
+//! correctness and to provide a fallback with minimal dependencies.
+//!
+//! For performance-sensitive code, prefer
+//! [`crate::linalg_accelerated::AcceleratedBlas`], which dispatches the same
+//! `dot`/`gemv`/`gemm` operations through scirs2-linalg/OxiBLAS (pure-Rust,
+//! SIMD-accelerated BLAS/LAPACK) and is 10-700x faster on large inputs.
+
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
@@ -8,10 +21,6 @@ pub fn dot<T>(x: &Array<T>, y: &Array<T>) -> Result<T>
 where
     T: Float + Default,
 {
-    // For simplicity, we'll implement a generic version first
-    // In a real implementation, we would dispatch to the appropriate BLAS routine
-    // based on the type (e.g., sdot, ddot)
-
     let x_shape = x.shape();
     let y_shape = y.shape();
 
@@ -52,9 +61,6 @@ pub fn gemv<T>(
 where
     T: Float + Default,
 {
-    // Generic implementation for now
-    // A real implementation would call the appropriate BLAS routine
-
     let a_shape = a.shape();
     let x_shape = x.shape();
     let y_shape = y.shape();
@@ -97,8 +103,6 @@ where
         }
     }
 
-    // Simple implementation for demonstration
-    // A full implementation would call BLAS
     let a_data = a.to_vec();
     let x_data = x.to_vec();
     let mut y_data = y.to_vec();
@@ -144,9 +148,6 @@ pub fn gemm<T>(
 where
     T: Float + Default + std::ops::AddAssign,
 {
-    // This would be implemented with BLAS in a complete library
-    // For now, we'll just validate the dimensions
-
     let a_shape = a.shape();
     let b_shape = b.shape();
     let c_shape = c.shape();
@@ -182,9 +183,6 @@ where
             actual: c_shape,
         });
     }
-
-    // A simple (inefficient) implementation for demonstration purposes
-    // A real implementation would call the appropriate BLAS routine
 
     let a_data = a.to_vec();
     let b_data = b.to_vec();
@@ -242,5 +240,3 @@ where
 
     Ok(())
 }
-
-// Add more BLAS functions as needed for your library

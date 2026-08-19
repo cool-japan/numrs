@@ -47,7 +47,9 @@ use scirs2_core::simd_ops::SimdUnifiedOps;
 /// # Parameters
 ///
 /// * `array` - Input array
-/// * `axis` - The axis along which to find the maximum indices. If None, the array is flattened
+/// * `axis` - The axis along which to find the maximum indices. If None, the array is flattened.
+///   Negative values count from the last axis (e.g. `-1` is the last axis), matching every other
+///   axis-taking reduction in this module.
 /// * `keepdims` - If true, the axes which are reduced are left in the result as dimensions with size one
 ///
 /// # Returns
@@ -65,11 +67,15 @@ use scirs2_core::simd_ops::SimdUnifiedOps;
 /// let indices = argmax(&a, Some(1), false).expect("argmax should succeed");
 /// assert_eq!(indices.to_vec(), vec![1, 1]); // max indices in each row
 ///
+/// // Negative axis counts from the end, same result as axis 1 on a 2-D array
+/// let neg_indices = argmax(&a, Some(-1), false).expect("argmax should succeed");
+/// assert_eq!(neg_indices.to_vec(), indices.to_vec());
+///
 /// // Find argmax of flattened array
 /// let index = argmax(&a, None, false).expect("argmax should succeed");
 /// assert_eq!(index.to_vec(), vec![4]); // index 4 has value 5.0
 /// ```
-pub fn argmax<T>(array: &Array<T>, axis: Option<usize>, keepdims: bool) -> Result<Array<usize>>
+pub fn argmax<T>(array: &Array<T>, axis: Option<isize>, keepdims: bool) -> Result<Array<usize>>
 where
     T: PartialOrd + Clone + Zero,
 {
@@ -96,6 +102,11 @@ where
             Ok(Array::from_vec(vec![max_idx]))
         }
         Some(ax) => {
+            let ax = if ax < 0 {
+                (array.ndim() as isize + ax) as usize
+            } else {
+                ax as usize
+            };
             if ax >= array.ndim() {
                 return Err(crate::error::NumRs2Error::DimensionMismatch(format!(
                     "Axis {} out of bounds for array of dimension {}",
@@ -175,7 +186,9 @@ where
 /// # Parameters
 ///
 /// * `array` - Input array
-/// * `axis` - The axis along which to find the minimum indices. If None, the array is flattened
+/// * `axis` - The axis along which to find the minimum indices. If None, the array is flattened.
+///   Negative values count from the last axis (e.g. `-1` is the last axis), matching every other
+///   axis-taking reduction in this module.
 /// * `keepdims` - If true, the axes which are reduced are left in the result as dimensions with size one
 ///
 /// # Returns
@@ -193,11 +206,15 @@ where
 /// let indices = argmin(&a, Some(1), false).expect("argmin should succeed");
 /// assert_eq!(indices.to_vec(), vec![2, 1]); // min indices in each row
 ///
+/// // Negative axis counts from the end, same result as axis 1 on a 2-D array
+/// let neg_indices = argmin(&a, Some(-1), false).expect("argmin should succeed");
+/// assert_eq!(neg_indices.to_vec(), indices.to_vec());
+///
 /// // Find argmin of flattened array
 /// let index = argmin(&a, None, false).expect("argmin should succeed");
 /// assert_eq!(index.to_vec(), vec![4]); // index 4 has value 1.0
 /// ```
-pub fn argmin<T>(array: &Array<T>, axis: Option<usize>, keepdims: bool) -> Result<Array<usize>>
+pub fn argmin<T>(array: &Array<T>, axis: Option<isize>, keepdims: bool) -> Result<Array<usize>>
 where
     T: PartialOrd + Clone + Zero,
 {
@@ -224,6 +241,11 @@ where
             Ok(Array::from_vec(vec![min_idx]))
         }
         Some(ax) => {
+            let ax = if ax < 0 {
+                (array.ndim() as isize + ax) as usize
+            } else {
+                ax as usize
+            };
             if ax >= array.ndim() {
                 return Err(crate::error::NumRs2Error::DimensionMismatch(format!(
                     "Axis {} out of bounds for array of dimension {}",
@@ -304,12 +326,24 @@ where
 ///
 /// * `array` - Input array to sort
 /// * `axis` - Axis along which to sort. If None, the array is flattened before sorting
-/// * `kind` - Sorting algorithm (currently only supports default stable sort)
-/// * `order` - Not used (for NumPy compatibility)
+/// * `kind` - Sorting algorithm. `None`, `"quicksort"`, and `"heapsort"` select an unstable
+///   sort; `"mergesort"` and `"stable"` select a stable sort (ties keep their original relative
+///   order). The exact underlying algorithm is unspecified beyond that stability guarantee.
+///   Any other value returns an error.
+/// * `order` - Structured-array field names to sort by. Plain `Array<T>` has no named fields,
+///   so passing `Some(_)` returns an error instead of silently ignoring it.
 ///
 /// # Returns
 ///
 /// Array of indices that sort the array along the specified axis
+///
+/// # Behavior change (pre-1.0)
+///
+/// `kind` used to be accepted and ignored; every call — including the default `kind=None` —
+/// silently used a stable sort internally. Now `kind` is honored, and `None` matches NumPy's
+/// own default of `"quicksort"` (unstable). Code that relied on the old accidental stability
+/// of the default path must now pass `kind=Some("stable")` (or `"mergesort"`) explicitly to
+/// keep ties in their original input order.
 ///
 /// # Examples
 ///
@@ -323,12 +357,31 @@ where
 pub fn argsort<T>(
     array: &Array<T>,
     axis: Option<isize>,
-    _kind: Option<&str>,
-    _order: Option<&[&str]>,
+    kind: Option<&str>,
+    order: Option<&[&str]>,
 ) -> Result<Array<usize>>
 where
     T: PartialOrd + Clone + Zero,
 {
+    if order.is_some() {
+        return Err(crate::error::NumRs2Error::NotImplemented(
+            "argsort: `order` (structured-array sort keys) is not supported for a plain \
+             Array<T>; there are no named fields to sort by"
+                .to_string(),
+        ));
+    }
+    let stable = match kind {
+        None | Some("quicksort") | Some("heapsort") => false,
+        Some("mergesort") | Some("stable") => true,
+        Some(other) => {
+            return Err(crate::error::NumRs2Error::InvalidOperation(format!(
+                "argsort: kind must be one of 'quicksort', 'heapsort', 'mergesort', 'stable' \
+                 (got {:?})",
+                other
+            )));
+        }
+    };
+
     let axis = if let Some(ax) = axis {
         if ax < 0 {
             (array.ndim() as isize + ax) as usize
@@ -339,11 +392,19 @@ where
         // If axis is None, flatten the array
         let data = array.to_vec();
         let mut indices: Vec<usize> = (0..data.len()).collect();
-        indices.sort_by(|&a, &b| {
-            data[a]
-                .partial_cmp(&data[b])
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        if stable {
+            indices.sort_by(|&a, &b| {
+                data[a]
+                    .partial_cmp(&data[b])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        } else {
+            indices.sort_unstable_by(|&a, &b| {
+                data[a]
+                    .partial_cmp(&data[b])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
         return Ok(Array::from_vec(indices));
     };
 
@@ -397,8 +458,14 @@ where
         }
 
         // Sort by value
-        values_with_indices
-            .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        if stable {
+            values_with_indices
+                .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        } else {
+            values_with_indices.sort_unstable_by(|a, b| {
+                a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
 
         // Place sorted indices in result
         for (k, (_, idx)) in values_with_indices.into_iter().enumerate() {
@@ -471,14 +538,34 @@ where
     }
 }
 
+/// Write `result` into `out` (validating that shapes match) when `out` is provided, matching
+/// NumPy's `out=` contract: the array passed as `out` receives the result in place, and the
+/// same array is what gets returned. When `out` is `None`, `result` is returned as-is.
+fn write_result_to_out<T: Clone>(result: Array<T>, out: Option<&mut Array<T>>) -> Result<Array<T>> {
+    match out {
+        Some(out_array) => {
+            if out_array.shape() != result.shape() {
+                return Err(crate::error::NumRs2Error::ShapeMismatch {
+                    expected: result.shape(),
+                    actual: out_array.shape(),
+                });
+            }
+            *out_array = result;
+            Ok(out_array.clone())
+        }
+        None => Ok(result),
+    }
+}
+
 /// Return the cumulative sum of array elements along the given axis
 ///
 /// # Parameters
 ///
 /// * `array` - Input array
 /// * `axis` - Axis along which the cumulative sum is computed. If None, the array is flattened
-/// * `dtype` - Data type of the returned array (uses input type if None)
-/// * `out` - Alternative output array to place the result
+/// * `out` - Optional output array. When provided, its shape must match the result's shape
+///   (the flattened array's shape when `axis` is `None`); the result is written into it and
+///   the same array is returned. A shape mismatch is an error rather than being ignored.
 ///
 /// # Returns
 ///
@@ -496,8 +583,16 @@ where
 pub fn cumsum<T>(
     array: &Array<T>,
     axis: Option<isize>,
-    _out: Option<&mut Array<T>>,
+    out: Option<&mut Array<T>>,
 ) -> Result<Array<T>>
+where
+    T: Float + Clone + Add<Output = T> + Send + Sync + 'static,
+{
+    let result = cumsum_no_out(array, axis)?;
+    write_result_to_out(result, out)
+}
+
+fn cumsum_no_out<T>(array: &Array<T>, axis: Option<isize>) -> Result<Array<T>>
 where
     T: Float + Clone + Add<Output = T> + Send + Sync + 'static,
 {
@@ -661,8 +756,9 @@ where
 ///
 /// * `array` - Input array
 /// * `axis` - Axis along which the cumulative product is computed. If None, the array is flattened
-/// * `dtype` - Data type of the returned array (uses input type if None)
-/// * `out` - Alternative output array to place the result
+/// * `out` - Optional output array. When provided, its shape must match the result's shape
+///   (the flattened array's shape when `axis` is `None`); the result is written into it and
+///   the same array is returned. A shape mismatch is an error rather than being ignored.
 ///
 /// # Returns
 ///
@@ -680,8 +776,16 @@ where
 pub fn cumprod<T>(
     array: &Array<T>,
     axis: Option<isize>,
-    _out: Option<&mut Array<T>>,
+    out: Option<&mut Array<T>>,
 ) -> Result<Array<T>>
+where
+    T: Float + Clone + Mul<Output = T> + Send + Sync,
+{
+    let result = cumprod_no_out(array, axis)?;
+    write_result_to_out(result, out)
+}
+
+fn cumprod_no_out<T>(array: &Array<T>, axis: Option<isize>) -> Result<Array<T>>
 where
     T: Float + Clone + Mul<Output = T> + Send + Sync,
 {

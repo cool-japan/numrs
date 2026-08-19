@@ -2,79 +2,76 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use std::cmp;
 
-/// Construct an array by repeating array the given number of times
+/// Compute row-major (C-order) strides for the given shape.
+fn row_major_strides(shape: &[usize]) -> Vec<usize> {
+    let mut strides = vec![1usize; shape.len()];
+    for i in (0..shape.len().saturating_sub(1)).rev() {
+        strides[i] = strides[i + 1] * shape[i + 1];
+    }
+    strides
+}
+
+/// Construct an array by repeating `array` the number of times given by `reps`.
+///
+/// Follows NumPy's `tile` semantics: letting `d = max(array.ndim(), reps.len())`,
+/// both `array`'s shape and `reps` are left-padded with `1`s to length `d`, the
+/// output shape is their element-wise product, and each output element is
+/// gathered from the input via `out[idx] = a[idx % a_shape]` (per-axis modulo,
+/// using N-D index arithmetic).
 pub fn tile<T: Clone>(array: &Array<T>, reps: &[usize]) -> Result<Array<T>> {
     let a_shape = array.shape();
 
-    // Determine the output shape
-    let mut output_shape = Vec::with_capacity(cmp::max(a_shape.len(), reps.len()));
+    // Force standard (C-contiguous) layout so the flat data below is in the
+    // same row-major order that `a_shape` implies, even if `array` happens to
+    // be a permuted/strided view (e.g. the result of `moveaxis`/`transpose`).
+    let input_vec = array.to_c_layout().to_vec();
 
-    // Ensure reps has at least as many dimensions as a_shape, filling with 1s if needed
-    let mut full_reps = Vec::with_capacity(cmp::max(a_shape.len(), reps.len()));
-    let reps_offset = if a_shape.len() > reps.len() {
-        a_shape.len() - reps.len()
-    } else {
-        0
-    };
-
-    for i in 0..full_reps.capacity() {
-        if i < reps_offset {
-            full_reps.push(1);
-        } else {
-            full_reps.push(reps[i - reps_offset]);
-        }
-    }
-
-    // Compute the output shape
-    for (&a_dim, &rep) in a_shape.iter().zip(full_reps.iter()) {
-        output_shape.push(a_dim * rep);
-    }
-
-    // Add extra dimensions if reps has more dimensions than a_shape
-    if reps.len() > a_shape.len() {
-        let a_offset = reps.len() - a_shape.len();
-        for &rep in reps.iter().take(a_offset) {
-            output_shape.insert(0, rep);
-        }
-    }
-
-    // Create the output array filled with the first element as a placeholder
-    let first_elem = array
-        .array()
-        .first()
-        .ok_or_else(|| NumRs2Error::InvalidOperation("Cannot tile an empty array".into()))?
-        .clone();
-
-    let mut result = Array::full(&output_shape, first_elem);
-
-    // Fill the output array by copying the input array in a tiled pattern
-    // This is a simplified implementation - for efficiency, we would use
-    // more sophisticated slicing and assignment operations
-
-    let result_vec = result
-        .array_mut()
-        .as_slice_mut()
-        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to get mutable slice".into()))?;
-
-    let input_vec = array.to_vec();
-    let input_size = input_vec.len();
-
-    if input_size == 0 {
+    if input_vec.is_empty() {
         return Err(NumRs2Error::InvalidOperation(
             "Cannot tile an empty array".into(),
         ));
     }
 
-    // For each position in the output, copy the corresponding element from the input
-    for (i, item) in result_vec.iter_mut().enumerate() {
-        // Calculate corresponding index in the input array
-        // This is a simplification - for a complete implementation, we would need
-        // to carefully map N-dimensional indices
-        let input_idx = i % input_size;
-        *item = input_vec[input_idx].clone();
+    // d = max(a.ndim, len(reps)); left-pad the shorter of `a_shape` / `reps`
+    // with 1s to length d.
+    let d = cmp::max(a_shape.len(), reps.len());
+
+    let mut a_shape_padded = vec![1usize; d - a_shape.len()];
+    a_shape_padded.extend_from_slice(&a_shape);
+
+    let mut reps_padded = vec![1usize; d - reps.len()];
+    reps_padded.extend_from_slice(reps);
+
+    let output_shape: Vec<usize> = a_shape_padded
+        .iter()
+        .zip(reps_padded.iter())
+        .map(|(&dim, &rep)| dim * rep)
+        .collect();
+
+    let output_size: usize = output_shape.iter().product();
+
+    // Strides (row-major) for the padded input shape and the output shape,
+    // used to convert between flat and multi-dimensional indices.
+    let in_strides = row_major_strides(&a_shape_padded);
+    let out_strides = row_major_strides(&output_shape);
+
+    let mut result_data = Vec::with_capacity(output_size);
+    for flat_out in 0..output_size {
+        // Unravel the output flat index into per-axis coordinates, take each
+        // coordinate modulo the (padded) input shape, then ravel back into a
+        // flat index into the input buffer.
+        let mut input_flat = 0usize;
+        let mut remainder = flat_out;
+        for axis in 0..d {
+            let out_coord = remainder / out_strides[axis];
+            remainder %= out_strides[axis];
+            let in_coord = out_coord % a_shape_padded[axis];
+            input_flat += in_coord * in_strides[axis];
+        }
+        result_data.push(input_vec[input_flat].clone());
     }
 
-    Ok(result)
+    Ok(Array::from_vec(result_data).reshape(&output_shape))
 }
 
 /// Repeat elements of an array along a specified axis

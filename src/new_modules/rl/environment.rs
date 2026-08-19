@@ -332,6 +332,10 @@ impl Environment for MountainCarEnv {
             0 => -self.force,
             1 => 0.0,
             2 => self.force,
+            // INVARIANT: unreachable. `action` is validated a few lines
+            // above (`action >= 3` returns `Err` before this point) and is
+            // never reassigned, so by the time this `match` executes it can
+            // only be 0, 1, or 2.
             _ => unreachable!(),
         };
 

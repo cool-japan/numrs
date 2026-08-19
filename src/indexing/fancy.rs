@@ -88,6 +88,11 @@ impl<T: Clone + num_traits::Zero> Array<T> {
 
         let idx_vec = match &index_specs[fancy_dim] {
             IndexSpec::Indices(idx) => idx,
+            // INVARIANT: unreachable. `fancy_dim = fancy_dims[0]`, and
+            // `fancy_dims` was built a few lines above by filtering
+            // `index_specs` for indices `i` where `index_specs[i]` matches
+            // `IndexSpec::Indices(_)`, so `index_specs[fancy_dim]` is
+            // guaranteed to be that variant.
             _ => unreachable!(),
         };
 
@@ -179,6 +184,14 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             .iter()
             .map(|&dim| match &index_specs[dim] {
                 IndexSpec::Indices(idx) => idx,
+                // INVARIANT: unreachable given how this crate calls
+                // `multi_fancy_index` (from `fancy_index`, with `fancy_dims`
+                // filtered from this same `index_specs` for indices whose
+                // spec matches `IndexSpec::Indices(_)`), so every `dim` in
+                // `fancy_dims` indexes that variant. `multi_fancy_index` is
+                // `pub(crate)`: a future in-crate caller that passes a
+                // `fancy_dims` not derived this way from `index_specs`
+                // would violate this invariant.
                 _ => unreachable!(),
             })
             .collect();

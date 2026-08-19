@@ -6,10 +6,11 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Add, Sub};
+use std::str::FromStr;
 
 use crate::error::{NumRs2Error, Result};
 
-use super::datetime64::DateTime64;
+use super::datetime64::{days_to_date, DateTime64};
 use super::timedelta64::TimeDelta64;
 use super::units::DateTimeUnit;
 
@@ -258,6 +259,12 @@ pub mod business_days {
 
     /// Get the weekday for a given date
     pub fn weekday(dt: &DateTime64) -> Result<Weekday> {
+        if dt.is_nat() {
+            return Err(NumRs2Error::ValueError(
+                "Cannot compute weekday of NaT (Not a Time)".to_string(),
+            ));
+        }
+
         let dt_days = dt.to_unit(DateTimeUnit::Day);
         // Unix epoch (1970-01-01) was a Thursday (index 3)
         let days_since_epoch = dt_days.value();
@@ -277,26 +284,118 @@ pub mod business_days {
         }
     }
 
-    /// Check if a date is a business day
+    /// Check if a date is a business day (Monday-Friday). This crate does
+    /// not support a custom weekmask; every roll/offset/count function in
+    /// this module treats Saturday and Sunday as the only fixed non-business
+    /// weekdays, and layers an optional explicit `holidays` list on top
+    /// (see [`busday_offset`] and [`busday_count`]).
     pub fn is_busday(dt: &DateTime64) -> Result<bool> {
         let wd = weekday(dt)?;
         Ok(wd.is_business_day())
     }
 
-    /// Count business days between two dates
-    pub fn busday_count(start: &DateTime64, end: &DateTime64) -> Result<i64> {
-        let start_days = start.to_unit(DateTimeUnit::Day);
+    /// `true` if `date` is a business day *and* is not one of `holidays`.
+    ///
+    /// This is the single predicate shared by [`busday_offset`]'s rolling
+    /// and stepping logic and by [`busday_count`], so that an explicit
+    /// holiday list affects rolling, offsetting, and counting consistently.
+    /// `date` may be in any unit; `holidays` entries are compared by
+    /// calendar day regardless of their own unit.
+    fn is_valid_business_day(date: &DateTime64, holidays: Option<&[DateTime64]>) -> Result<bool> {
+        if !is_busday(date)? {
+            return Ok(false);
+        }
+
+        if let Some(holiday_list) = holidays {
+            let day_value = date.to_unit(DateTimeUnit::Day).value();
+            let is_holiday = holiday_list
+                .iter()
+                .any(|h| h.to_unit(DateTimeUnit::Day).value() == day_value);
+            if is_holiday {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Roll convention for [`busday_offset`], matching NumPy's `roll`
+    /// parameter (`numpy.busday_offset(..., roll=...)`).
+    ///
+    /// Parsed from a string via [`FromStr`] (case-insensitive): `"raise"`,
+    /// `"nat"`, `"forward"`/`"following"`, `"backward"`/`"preceding"`,
+    /// `"modifiedfollowing"`, `"modifiedpreceding"`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Roll {
+        /// Return an error if the date is not a business day (NumPy's default).
+        Raise,
+        /// Return NaT ([`DateTime64::nat`]) if the date is not a business day.
+        Nat,
+        /// Take the first business day later in time ("following").
+        Forward,
+        /// Take the first business day earlier in time ("preceding").
+        Backward,
+        /// Like [`Roll::Forward`], unless that would cross into the next
+        /// calendar month, in which case behave like [`Roll::Backward`].
+        ModifiedFollowing,
+        /// Like [`Roll::Backward`], unless that would cross into the
+        /// previous calendar month, in which case behave like [`Roll::Forward`].
+        ModifiedPreceding,
+    }
+
+    impl FromStr for Roll {
+        type Err = NumRs2Error;
+
+        fn from_str(s: &str) -> Result<Self> {
+            match s.to_lowercase().as_str() {
+                "raise" => Ok(Roll::Raise),
+                "nat" => Ok(Roll::Nat),
+                "forward" | "following" => Ok(Roll::Forward),
+                "backward" | "preceding" => Ok(Roll::Backward),
+                "modifiedfollowing" => Ok(Roll::ModifiedFollowing),
+                "modifiedpreceding" => Ok(Roll::ModifiedPreceding),
+                _ => Err(NumRs2Error::ValueError(format!(
+                    "Unknown roll convention '{}': expected one of 'raise', 'nat', \
+                     'forward'/'following', 'backward'/'preceding', 'modifiedfollowing', \
+                     'modifiedpreceding'",
+                    s
+                ))),
+            }
+        }
+    }
+
+    /// Count business days in the half-open interval `[begin, end)`.
+    ///
+    /// Matches NumPy's `busday_count` semantics: `begin` is counted if it is
+    /// a business day, `end` is never counted. If `end` is earlier than
+    /// `begin`, the result is negative. `holidays`, when given, lists
+    /// additional dates excluded from the count even on a weekday (mirrors
+    /// NumPy's `holidays` parameter); this crate has no weekmask concept, so
+    /// Saturday/Sunday are always the only implicit non-business days (see
+    /// [`is_busday`]).
+    pub fn busday_count(
+        begin: &DateTime64,
+        end: &DateTime64,
+        holidays: Option<&[DateTime64]>,
+    ) -> Result<i64> {
+        if begin.is_nat() || end.is_nat() {
+            return Err(NumRs2Error::ValueError(
+                "Cannot count business days with a NaT (Not a Time) endpoint".to_string(),
+            ));
+        }
+
+        let begin_days = begin.to_unit(DateTimeUnit::Day);
         let end_days = end.to_unit(DateTimeUnit::Day);
 
-        if start_days.value() > end_days.value() {
-            return Ok(-busday_count(end, start)?);
+        if begin_days.value() > end_days.value() {
+            return Ok(-busday_count(end, begin, holidays)?);
         }
 
         let mut count = 0i64;
-        let mut current = start_days;
+        let mut current = begin_days;
 
         while current.value() < end_days.value() {
-            if is_busday(&current)? {
+            if is_valid_business_day(&current, holidays)? {
                 count += 1;
             }
             current = current + TimeDelta64::new(1, DateTimeUnit::Day);
@@ -305,20 +404,134 @@ pub mod business_days {
         Ok(count)
     }
 
-    /// Offset a date by a number of business days
-    pub fn busday_offset(dt: &DateTime64, offset: i64) -> Result<DateTime64> {
-        let mut current = dt.to_unit(DateTimeUnit::Day);
+    /// Offset a date by a number of business days, applying NumPy's roll
+    /// convention first.
+    ///
+    /// NumPy's algorithm (see `numpy.busday_offset`) is two steps:
+    /// 1. If `dt` is not already a valid business day, roll it to one
+    ///    according to `roll` (see [`Roll`]); if `dt` is already valid, no
+    ///    rolling happens regardless of `roll`.
+    /// 2. Starting from that business day, step `offset` business days
+    ///    forward (positive) or backward (negative), skipping non-business
+    ///    days. `offset == 0` leaves the rolled date unchanged, which is
+    ///    exactly NumPy's documented behavior for a zero offset.
+    ///
+    /// `roll` defaults to `"raise"` when `None`, matching NumPy's default.
+    /// `holidays`, when given, excludes those dates from both the rolling
+    /// and the stepping steps (both go through the same internal
+    /// business-day-with-holidays predicate as [`busday_count`]).
+    ///
+    /// If `dt` is NaT, NaT is returned unconditionally (NaT propagates,
+    /// like NaN in floating-point arithmetic) regardless of `roll`.
+    pub fn busday_offset(
+        dt: &DateTime64,
+        offset: i64,
+        roll: Option<&str>,
+        holidays: Option<&[DateTime64]>,
+    ) -> Result<DateTime64> {
+        if dt.is_nat() {
+            return Ok(DateTime64::nat(dt.unit()));
+        }
+
+        let roll_mode = Roll::from_str(roll.unwrap_or("raise"))?;
+        let original_unit = dt.unit();
+        let date_days = dt.to_unit(DateTimeUnit::Day);
+
+        let rolled = match roll_to_business_day(date_days, roll_mode, holidays)? {
+            Some(d) => d,
+            None => return Ok(DateTime64::nat(original_unit)),
+        };
+
+        let offset_result = step_business_days(rolled, offset, holidays)?;
+        Ok(offset_result.to_unit(original_unit))
+    }
+
+    /// Roll `date` (already in [`DateTimeUnit::Day`] units) to a business
+    /// day per `roll`. Returns `Ok(None)` only for [`Roll::Nat`] when `date`
+    /// is not a business day; otherwise the resolved business day, or an
+    /// error for [`Roll::Raise`].
+    fn roll_to_business_day(
+        date: DateTime64,
+        roll: Roll,
+        holidays: Option<&[DateTime64]>,
+    ) -> Result<Option<DateTime64>> {
+        if is_valid_business_day(&date, holidays)? {
+            return Ok(Some(date));
+        }
+
+        match roll {
+            Roll::Raise => {
+                let (y, m, d) = days_to_date(date.value());
+                Err(NumRs2Error::ValueError(format!(
+                    "Non-business day date {:04}-{:02}-{:02} with roll='raise'",
+                    y, m, d
+                )))
+            }
+            Roll::Nat => Ok(None),
+            Roll::Forward => Ok(Some(nearest_business_day(date, 1, holidays)?)),
+            Roll::Backward => Ok(Some(nearest_business_day(date, -1, holidays)?)),
+            Roll::ModifiedFollowing => {
+                let forward = nearest_business_day(date, 1, holidays)?;
+                if same_month(date, forward) {
+                    Ok(Some(forward))
+                } else {
+                    Ok(Some(nearest_business_day(date, -1, holidays)?))
+                }
+            }
+            Roll::ModifiedPreceding => {
+                let backward = nearest_business_day(date, -1, holidays)?;
+                if same_month(date, backward) {
+                    Ok(Some(backward))
+                } else {
+                    Ok(Some(nearest_business_day(date, 1, holidays)?))
+                }
+            }
+        }
+    }
+
+    /// Scan one day at a time in `direction` (`1` or `-1`) from `date`
+    /// (Day units) until a valid business day is found.
+    fn nearest_business_day(
+        mut date: DateTime64,
+        direction: i64,
+        holidays: Option<&[DateTime64]>,
+    ) -> Result<DateTime64> {
+        loop {
+            date = date + TimeDelta64::new(direction, DateTimeUnit::Day);
+            if is_valid_business_day(&date, holidays)? {
+                return Ok(date);
+            }
+        }
+    }
+
+    /// `true` if `a` and `b` (both Day units) fall in the same calendar
+    /// year and month, used by the `modifiedfollowing`/`modifiedpreceding`
+    /// roll conventions to detect a month-boundary crossing.
+    fn same_month(a: DateTime64, b: DateTime64) -> bool {
+        let (ay, am, _) = days_to_date(a.value());
+        let (by, bm, _) = days_to_date(b.value());
+        ay == by && am == bm
+    }
+
+    /// Step `offset` business days from `start` (already a valid business
+    /// day, Day units), skipping non-business days.
+    fn step_business_days(
+        start: DateTime64,
+        offset: i64,
+        holidays: Option<&[DateTime64]>,
+    ) -> Result<DateTime64> {
+        let mut current = start;
         let mut remaining = offset.abs();
         let direction = if offset >= 0 { 1 } else { -1 };
 
         while remaining > 0 {
             current = current + TimeDelta64::new(direction, DateTimeUnit::Day);
-            if is_busday(&current)? {
+            if is_valid_business_day(&current, holidays)? {
                 remaining -= 1;
             }
         }
 
-        Ok(current.to_unit(dt.unit()))
+        Ok(current)
     }
 
     /// Holiday calendar - simple implementation with common holidays
@@ -352,25 +565,12 @@ pub mod business_days {
         }
 
         /// Count business days between two dates considering holidays
+        ///
+        /// Delegates to the free [`busday_count`] function with this
+        /// calendar's holidays, so both share one implementation of the
+        /// `[begin, end)` / negative-when-reversed semantics.
         pub fn business_day_count(&self, start: &DateTime64, end: &DateTime64) -> Result<i64> {
-            let start_days = start.to_unit(DateTimeUnit::Day);
-            let end_days = end.to_unit(DateTimeUnit::Day);
-
-            if start_days.value() > end_days.value() {
-                return Ok(-self.business_day_count(end, start)?);
-            }
-
-            let mut count = 0i64;
-            let mut current = start_days;
-
-            while current.value() < end_days.value() {
-                if self.is_business_day(&current)? {
-                    count += 1;
-                }
-                current = current + TimeDelta64::new(1, DateTimeUnit::Day);
-            }
-
-            Ok(count)
+            busday_count(start, end, Some(self.holidays.as_slice()))
         }
 
         /// Create a calendar with US federal holidays for a given year
@@ -651,11 +851,13 @@ mod tests {
             .expect("should parse start date"); // Monday
         let end = DateTime64::from_iso_string("2023-01-06", DateTimeUnit::Day)
             .expect("should parse end date"); // Friday
-        let count = busday_count(&start, &end).expect("should count business days");
+        let count = busday_count(&start, &end, None).expect("should count business days");
         assert_eq!(count, 4); // Mon, Tue, Wed, Thu (not including end date)
 
-        // Test business day offset
-        let offset_dt = busday_offset(&start, 2).expect("should calculate business day offset");
+        // Test business day offset (roll=None defaults to "raise"; start is
+        // already a business day so no rolling is needed here)
+        let offset_dt =
+            busday_offset(&start, 2, None, None).expect("should calculate business day offset");
         let expected = DateTime64::from_iso_string("2023-01-04", DateTimeUnit::Day)
             .expect("should parse expected date"); // Wednesday
         assert_eq!(offset_dt.value(), expected.value());
@@ -681,5 +883,39 @@ mod tests {
         let new_years = DateTime64::from_iso_string("2023-01-01", DateTimeUnit::Day)
             .expect("should parse New Year's date");
         assert!(us_calendar.is_holiday(&new_years));
+    }
+
+    #[test]
+    fn test_holiday_calendar_business_day_count() {
+        // Mon 2023-01-02 .. Fri 2023-01-06 is 4 business days (Mon-Thu) with
+        // no holidays. Marking the Wednesday (2023-01-04) as a holiday
+        // should exclude it, leaving 3 -- this exercises
+        // HolidayCalendar::business_day_count, which now delegates to the
+        // free `busday_count` function.
+        let start = DateTime64::from_iso_string("2023-01-02", DateTimeUnit::Day)
+            .expect("should parse start date"); // Monday
+        let end = DateTime64::from_iso_string("2023-01-06", DateTimeUnit::Day)
+            .expect("should parse end date"); // Friday
+
+        let empty_calendar = HolidayCalendar::new();
+        let count_no_holidays = empty_calendar
+            .business_day_count(&start, &end)
+            .expect("should count business days with no holidays");
+        assert_eq!(count_no_holidays, 4);
+
+        let mut calendar = HolidayCalendar::new();
+        let wednesday = DateTime64::from_iso_string("2023-01-04", DateTimeUnit::Day)
+            .expect("should parse Wednesday date");
+        calendar.add_holiday(wednesday);
+        let count_with_holiday = calendar
+            .business_day_count(&start, &end)
+            .expect("should count business days excluding the holiday");
+        assert_eq!(count_with_holiday, 3);
+
+        // Reversed range still negates through the delegated implementation.
+        let reversed = calendar
+            .business_day_count(&end, &start)
+            .expect("should count reversed range");
+        assert_eq!(reversed, -3);
     }
 }

@@ -125,7 +125,7 @@ impl Var {
         let sigma: Array2<f64> = residuals.t().dot(&residuals) / (n_obs as f64);
 
         // Log-likelihood (multivariate normal)
-        let log_likelihood = self.compute_log_likelihood(&residuals.view(), &sigma.view());
+        let log_likelihood = self.compute_log_likelihood(&residuals.view(), &sigma.view())?;
 
         // Information criteria
         let n_params = n_vars * k;
@@ -143,7 +143,17 @@ impl Var {
     }
 
     /// Compute multivariate normal log-likelihood.
-    fn compute_log_likelihood(&self, residuals: &ArrayView2<f64>, sigma: &ArrayView2<f64>) -> f64 {
+    ///
+    /// Returns an error rather than silently substituting a
+    /// diag(1/sigma_ii) approximation for Sigma^-1 when the exact solve
+    /// fails: a diagonal fallback ignores all off-diagonal covariance and
+    /// would silently corrupt the reported log-likelihood/AIC/BIC without
+    /// any indication to the caller that Sigma was singular/ill-conditioned.
+    fn compute_log_likelihood(
+        &self,
+        residuals: &ArrayView2<f64>,
+        sigma: &ArrayView2<f64>,
+    ) -> Result<f64> {
         let (n, k) = residuals.dim();
 
         // Compute determinant with regularization for numerical stability
@@ -162,20 +172,18 @@ impl Var {
         let log_det = det_sigma.ln();
 
         // Compute trace term: sum_i (r_i^T Sigma^{-1} r_i)
-        // For small k, use direct inversion
+        // For small k, use direct inversion. A diag(1/sigma_ii) fallback
+        // here would silently discard all off-diagonal covariance and
+        // report a wrong log-likelihood/AIC/BIC with no indication to the
+        // caller, so propagate the failure instead of masking it.
         let eye_matrix: Array2<f64> = Array2::eye(k);
-        let sigma_inv = match scirs2_linalg::solve_multiple(&sigma.view(), &eye_matrix.view(), None)
-        {
-            Ok(inv) => inv,
-            Err(_) => {
-                // Fallback: use diagonal approximation if inversion fails
-                let mut diag_inv = Array2::<f64>::zeros((k, k));
-                for i in 0..k {
-                    diag_inv[[i, i]] = 1.0 / sigma[[i, i]].max(1e-10);
-                }
-                diag_inv
-            }
-        };
+        let sigma_inv = scirs2_linalg::solve_multiple(&sigma.view(), &eye_matrix.view(), None)
+            .map_err(|e| {
+                NumRs2Error::ComputationError(format!(
+                    "VAR log-likelihood: failed to invert the residual covariance matrix Sigma: {}",
+                    e
+                ))
+            })?;
 
         let mut quad_form = 0.0;
         for i in 0..n {
@@ -186,7 +194,10 @@ impl Var {
             }
         }
 
-        -0.5 * (n as f64 * (k as f64 * (2.0 * std::f64::consts::PI).ln() + log_det) + quad_form)
+        Ok(
+            -0.5 * (n as f64 * (k as f64 * (2.0 * std::f64::consts::PI).ln() + log_det)
+                + quad_form),
+        )
     }
 
     /// Forecast h steps ahead.
@@ -465,16 +476,25 @@ mod tests {
 
     #[test]
     fn test_var_fit() {
-        // Create simple bivariate series
+        // Bivariate series with irregular (non-perfectly-linear) step
+        // sizes in each column, so the OLS residuals -- and hence the
+        // residual covariance Sigma -- are genuinely nonzero and
+        // well-conditioned, rather than an (exactly or near-)singular
+        // all-zero matrix. A perfectly linear series is fit near-exactly
+        // by VAR(1), driving Sigma to numerically singular and silently
+        // masking whether Sigma^{-1} (needed for the log-likelihood) is
+        // actually being computed.
         let data = arr2(&[
             [1.0, 2.0],
-            [1.5, 2.3],
-            [2.0, 2.5],
-            [2.5, 2.8],
-            [3.0, 3.0],
-            [3.5, 3.2],
-            [4.0, 3.5],
-            [4.5, 3.8],
+            [1.7, 2.1],
+            [1.9, 2.8],
+            [2.8, 2.6],
+            [2.6, 3.4],
+            [3.5, 3.0],
+            [3.4, 3.9],
+            [4.3, 3.5],
+            [4.0, 4.3],
+            [4.9, 3.9],
         ]);
 
         let var = Var::new(1);
@@ -488,7 +508,19 @@ mod tests {
 
     #[test]
     fn test_var_forecast() {
-        let data = arr2(&[[1.0, 2.0], [2.0, 3.0], [3.0, 4.0], [4.0, 5.0], [5.0, 6.0]]);
+        // As in `test_var_fit`: irregular step sizes keep the residual
+        // covariance nonsingular instead of relying on a perfectly-linear
+        // (near-zero-residual) series.
+        let data = arr2(&[
+            [1.0, 2.0],
+            [1.8, 2.7],
+            [2.7, 3.8],
+            [3.3, 4.2],
+            [4.4, 5.5],
+            [4.8, 5.7],
+            [6.1, 7.0],
+            [6.5, 7.3],
+        ]);
 
         let var = Var::new(1);
         let params = var.fit(&data.view()).expect("fit should succeed");

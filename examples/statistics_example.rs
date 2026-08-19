@@ -130,11 +130,11 @@ fn main() -> numrs2::error::Result<()> {
     println!("Weights: {}", weights);
 
     // Calculate weighted average
-    let weighted_avg = average(&data, Some(&weights), None, None)?;
+    let weighted_avg = average(&data, Some(&weights), None)?;
     println!("Weighted average: {}", weighted_avg);
 
     // Regular average for comparison
-    let avg = average(&data, None, None, None)?;
+    let avg = average(&data, None, None)?;
     println!("Regular average:  {}", avg);
 
     // Weighted histogram

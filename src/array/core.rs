@@ -162,13 +162,26 @@ impl<T: Clone> Array<T> {
         None
     }
 
-    /// Return the data as a flat vector
+    /// Return the data as a flat vector, in logical (row-major/C) order.
+    ///
+    /// For a standard-layout (C-contiguous) array this is a fast path that
+    /// hands back the underlying memory buffer directly. For a
+    /// non-standard-layout array (e.g. produced by [`Array::to_f_layout`],
+    /// `reversed_axes`, or a permuted-axes view) the raw memory buffer is
+    /// *not* in row-major order for the array's current shape, so it is
+    /// walked element-by-element via strides instead. Using the raw buffer
+    /// unconditionally would silently return elements in the wrong order
+    /// for any such array.
     pub fn to_vec(&self) -> Vec<T>
     where
         T: Clone,
     {
-        let (raw_vec, _) = self.data.clone().into_raw_vec_and_offset();
-        raw_vec
+        if self.data.is_standard_layout() {
+            let (raw_vec, _) = self.data.clone().into_raw_vec_and_offset();
+            raw_vec
+        } else {
+            self.data.iter().cloned().collect()
+        }
     }
 
     /// Borrow the underlying data as a contiguous slice without copying.

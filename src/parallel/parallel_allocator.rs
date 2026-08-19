@@ -35,10 +35,27 @@ struct CachedBlock {
     allocated_at: Instant,
 }
 
-// SAFETY: CachedBlock is safe to send between threads because:
-// 1. NonNull<u8> is just a pointer wrapper and the actual memory management is handled by allocators
-// 2. Layout and Instant are both Send + Sync
-// 3. The allocator ensures memory safety across threads
+// SAFETY: `CachedBlock` holds `ptr: NonNull<u8>`, `layout: Layout`, and
+// `allocated_at: Instant`; only `NonNull<u8>` prevents the auto-derived
+// Send/Sync (raw pointers are `!Send`/`!Sync` by default), and `Layout`/
+// `Instant` are already `Send + Sync` so they impose no extra constraint.
+//
+// Send: `ptr` addresses a raw, uninterpreted byte allocation (`u8`, not a
+// generic `T` that could itself be `!Send`, e.g. an `Rc<_>`), so moving a
+// `CachedBlock` to another thread carries no thread-affine state -- only an
+// address and a size/alignment description. `CachedBlock` is not `Clone` or
+// `Copy`, so ordinary Rust ownership rules guarantee the pointer has a
+// single owner at a time as it moves between the per-thread cache
+// (`ThreadLocalState::cached_blocks`) and the cross-thread `global_pool:
+// Arc<Mutex<Vec<CachedBlock>>>` below; there is no path that duplicates the
+// pointer while a `CachedBlock` is aliased.
+//
+// Sync: a shared `&CachedBlock` only exposes `Copy` field reads
+// (`NonNull<u8>`, `Layout`, `Instant`); no method dereferences `ptr` through
+// a shared reference, so concurrent readers cannot race on the pointee.
+// (Any *dereference* of the allocation itself happens through the owning
+// allocator's own synchronization -- e.g. the `Arc<Mutex<_>>` wrappers this
+// module uses -- not through `CachedBlock` directly.)
 unsafe impl Send for CachedBlock {}
 unsafe impl Sync for CachedBlock {}
 

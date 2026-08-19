@@ -95,10 +95,47 @@ impl DateTime64 {
         self.unit
     }
 
+    /// Create a "Not a Time" (NaT) sentinel value for the given unit.
+    ///
+    /// Mirrors NumPy's `datetime64('NaT')`: NumPy reserves the minimum
+    /// representable `int64` bit pattern (`i64::MIN`) as NaT regardless of
+    /// unit, and this crate adopts the same convention, so
+    /// `DateTime64::nat(unit).is_nat()` holds for every `unit`.
+    ///
+    /// # Limitations
+    /// Only [`Self::is_nat`], [`Self::to_unit`], and [`Self::to_iso_string`]
+    /// are defined for NaT values (they propagate/format it safely).
+    /// Everything else (arithmetic via `Add`/`Sub`, [`Self::to_system_time`])
+    /// is undefined for NaT and may panic or return nonsensical results;
+    /// callers passing a value through the wider API should check
+    /// [`Self::is_nat`] first.
+    pub fn nat(unit: DateTimeUnit) -> Self {
+        Self {
+            value: i64::MIN,
+            unit,
+        }
+    }
+
+    /// Returns `true` if this value is the "Not a Time" (NaT) sentinel
+    /// (see [`Self::nat`]).
+    pub fn is_nat(&self) -> bool {
+        self.value == i64::MIN
+    }
+
     /// Convert to a different unit
     pub fn to_unit(&self, unit: DateTimeUnit) -> Self {
         if self.unit == unit {
             return *self;
+        }
+
+        // NaT is a reserved bit pattern, not a real instant: converting it
+        // through the nanosecond intermediate below would overflow. Keep
+        // the sentinel value exactly and just retag the unit.
+        if self.is_nat() {
+            return Self {
+                value: i64::MIN,
+                unit,
+            };
         }
 
         // First convert to nanoseconds as a common intermediate format
@@ -258,6 +295,10 @@ impl DateTime64 {
 
     /// Format as ISO 8601 string
     pub fn to_iso_string(&self) -> Result<String> {
+        if self.is_nat() {
+            return Ok("NaT".to_string());
+        }
+
         let dt_seconds = self.to_unit(DateTimeUnit::Second);
         let total_seconds = dt_seconds.value;
 
@@ -585,5 +626,40 @@ mod tests {
         // Convert to seconds to see the actual value
         let dt2_sec = dt2.to_unit(DateTimeUnit::Second);
         assert_eq!(dt2_sec.value(), 60); // 1 minute = 60 seconds
+    }
+
+    #[test]
+    fn test_nat_sentinel() {
+        // NaT is unit-independent: i64::MIN regardless of which unit asked for.
+        let nat_day = DateTime64::nat(DateTimeUnit::Day);
+        assert!(nat_day.is_nat());
+        assert_eq!(nat_day.value(), i64::MIN);
+
+        let nat_ns = DateTime64::nat(DateTimeUnit::Nanosecond);
+        assert!(nat_ns.is_nat());
+
+        // A real (non-NaT) value must never report as NaT.
+        let real = DateTime64::new(0, DateTimeUnit::Day);
+        assert!(!real.is_nat());
+    }
+
+    #[test]
+    fn test_nat_to_unit_does_not_overflow() {
+        // Converting NaT across units must not panic (overflow-checks are
+        // enabled in the test profile) and must remain NaT afterward.
+        let nat_second = DateTime64::nat(DateTimeUnit::Second);
+        let converted = nat_second.to_unit(DateTimeUnit::Nanosecond);
+        assert!(converted.is_nat());
+        assert_eq!(converted.unit(), DateTimeUnit::Nanosecond);
+
+        let back = converted.to_unit(DateTimeUnit::Year);
+        assert!(back.is_nat());
+    }
+
+    #[test]
+    fn test_nat_to_iso_string() {
+        let nat = DateTime64::nat(DateTimeUnit::Second);
+        let s = nat.to_iso_string().expect("NaT should format, not error");
+        assert_eq!(s, "NaT");
     }
 }

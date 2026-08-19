@@ -423,10 +423,16 @@ pub fn solve_lyapunov(a: &Array2<f64>, q: &Array2<f64>) -> ControlResult<Array2<
         });
     }
 
-    // Use Bartels-Stewart algorithm (simplified version)
-    // For small matrices, we can use direct method
+    // Direct Kronecker-product ("vec trick") method: assemble the n²×n² linear
+    // system for vec(X) and solve it by Gaussian elimination. This is O(n^6), not
+    // the Schur-decomposition-based Bartels-Stewart algorithm, but it is adequate
+    // for the small state dimensions this solver is used with.
 
-    // Vectorize: A ⊗ I + I ⊗ A^T
+    // Vectorize using row-major vec(X) (vec_r(X)[i*n+j] = X[i][j]). For this
+    // convention, vec_r(P·X·Q) = (P ⊗ Qᵀ)·vec_r(X), so:
+    //   A·X   = A·X·I  -> (A ⊗ I)  · vec_r(X)
+    //   X·Aᵀ  = I·X·Aᵀ -> (I ⊗ A)  · vec_r(X)   (Qᵀ = (Aᵀ)ᵀ = A)
+    // The assembled system matrix below is therefore (A ⊗ I) + (I ⊗ A).
     let n2 = n * n;
     let mut m = Array2::zeros((n2, n2));
 
@@ -442,9 +448,11 @@ pub fn solve_lyapunov(a: &Array2<f64>, q: &Array2<f64>) -> ControlResult<Array2<
                         m[[row, col]] += a[[i, k]];
                     }
 
-                    // I ⊗ A^T term
+                    // X·A^T term: (I ⊗ A) under row-major vec(X) -- see note above
+                    // (NOT I ⊗ A^T; a[[l, j]] here would silently reintroduce the
+                    // A·X + X·A bug for non-symmetric A).
                     if i == k {
-                        m[[row, col]] += a[[l, j]];
+                        m[[row, col]] += a[[j, l]];
                     }
                 }
             }
@@ -571,7 +579,6 @@ fn companion_matrix_eigenvalues(
         companion[[i, i - 1]] = 1.0;
     }
 
-    // Compute eigenvalues using simplified QR
     simple_eigenvalues(&companion)
 }
 

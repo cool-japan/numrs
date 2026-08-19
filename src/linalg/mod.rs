@@ -1,13 +1,16 @@
 //! Basic linear algebra operations with Array
 //! Includes matrix multiplication, dot product, matrix inversion, etc.
 
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+// Needed by both the primary (matrix_decomp+lapack) impl block below and the
+// complementary fallback impl block further down; each block only uses a
+// subset depending on which sub-cfg branch is active, so allow unused.
+#[allow(unused_imports)]
 use crate::array::Array;
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#[allow(unused_imports)]
 use crate::error::{NumRs2Error, Result};
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#[allow(unused_imports)]
 use num_traits::{Float, ToPrimitive};
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#[allow(unused_imports)]
 use std::fmt::Debug;
 
 // Matrix decomposition submodule
@@ -160,7 +163,7 @@ where
         #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
         let (_, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
@@ -297,7 +300,7 @@ where
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
@@ -585,7 +588,7 @@ where
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
@@ -631,7 +634,7 @@ where
     /// 2. Gaussian elimination with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(not(feature = "matrix_decomp"))]
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -934,7 +937,7 @@ where
 }
 
 /// A simplified direct implementation of linear algebra functions for Array
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 impl<T> Array<T>
 where
     T: Float
@@ -942,6 +945,7 @@ where
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
         + std::fmt::Display,
 {
@@ -1295,6 +1299,7 @@ where
     /// 2. LU decomposition with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
+    #[cfg(feature = "lapack")]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -1391,7 +1396,7 @@ where
     /// 2. LU decomposition with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(all(feature = "matrix_decomp", not(feature = "scirs")))]
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack", not(feature = "scirs")))]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -1485,7 +1490,7 @@ where
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
@@ -1531,7 +1536,7 @@ where
     /// 2. Gaussian elimination with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(not(feature = "matrix_decomp"))]
+    #[cfg(not(feature = "lapack"))]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -1702,6 +1707,7 @@ where
     }
 
     /// Compute the singular value decomposition of a matrix
+    #[cfg(feature = "lapack")]
     pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::svd;
@@ -1723,6 +1729,14 @@ where
         Ok((u, s, vt))
     }
 
+    /// Compute the singular value decomposition of a matrix (fallback)
+    ///
+    /// Without the `lapack` feature this operation is not available.
+    #[cfg(not(feature = "lapack"))]
+    pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
+        Err(NumRs2Error::FeatureNotEnabled("lapack".to_string()))
+    }
+
     /// Compute the eigenvalues and eigenvectors of a square matrix
     ///
     /// Without the `matrix_decomp` feature this operation is not available.
@@ -1732,16 +1746,34 @@ where
     }
 
     /// Compute the Cholesky decomposition of a matrix
+    #[cfg(feature = "lapack")]
     pub fn cholesky(&self) -> Result<Array<T>> {
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::cholesky;
         cholesky(self)
     }
 
+    /// Compute the Cholesky decomposition of a matrix (fallback)
+    ///
+    /// Without the `lapack` feature this operation is not available.
+    #[cfg(not(feature = "lapack"))]
+    pub fn cholesky(&self) -> Result<Array<T>> {
+        Err(NumRs2Error::FeatureNotEnabled("lapack".to_string()))
+    }
+
     /// Compute the QR decomposition of a matrix
+    #[cfg(feature = "lapack")]
     pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::qr;
         qr(self)
+    }
+
+    /// Compute the QR decomposition of a matrix (fallback)
+    ///
+    /// Without the `lapack` feature this operation is not available.
+    #[cfg(not(feature = "lapack"))]
+    pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
+        Err(NumRs2Error::FeatureNotEnabled("lapack".to_string()))
     }
 }

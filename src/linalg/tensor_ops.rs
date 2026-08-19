@@ -203,11 +203,22 @@ fn einsum_general<T: Float + Clone + Debug + std::ops::AddAssign>(
         }
     }
 
-    // Determine output shape
+    // Determine output shape. Every output index must appear in at least
+    // one input operand's spec (its size is otherwise undefined); indexing
+    // `index_sizes` directly would panic on a HashMap miss for a
+    // free/undeclared output index (e.g. subscripts like "ij->ik" where
+    // 'k' never appears on the input side).
     let output_shape: Vec<usize> = output_indices
         .iter()
-        .map(|&idx| index_sizes[&idx])
-        .collect();
+        .map(|&idx| {
+            index_sizes.get(&idx).copied().ok_or_else(|| {
+                NumRs2Error::InvalidOperation(format!(
+                    "einsum output index '{}' does not appear in any input operand",
+                    idx
+                ))
+            })
+        })
+        .collect::<Result<Vec<usize>>>()?;
 
     // Handle scalar output case
     let output_shape = if output_shape.is_empty() {
@@ -234,12 +245,18 @@ fn einsum_general<T: Float + Clone + Debug + std::ops::AddAssign>(
             temp /= output_shape[i];
         }
 
-        // Map output indices to their values
+        // Map output indices to their values. This must happen
+        // unconditionally: `output_multi_idx[i]` is always a valid index
+        // for `idx_char` regardless of that axis's *size*. The previous
+        // `output_shape[0] != 1` guard skipped population whenever the
+        // FIRST output axis happened to have size 1 (e.g. "ij,jk->ik"
+        // with i=1), even though later output axes (or operands sharing
+        // one of these index letters) still needed the mapping -- any
+        // operand referencing an unmapped index then panicked on the
+        // `index_values[&idx_char]` lookup below.
         let mut index_values = std::collections::HashMap::new();
         for (i, &idx_char) in output_indices.iter().enumerate() {
-            if !output_shape.is_empty() && output_shape[0] != 1 {
-                index_values.insert(idx_char, output_multi_idx[i]);
-            }
+            index_values.insert(idx_char, output_multi_idx[i]);
         }
 
         // Sum over all combinations of summation indices

@@ -1,0 +1,74 @@
+# cargo-deny configuration for numrs2 (COOLJAPAN Pure Rust Policy enforcement)
+# Schema: cargo-deny 0.19.x
+# Run: cargo deny check bans
+#
+# Scope: this file currently covers [bans] only (the COOLJAPAN banned-crate
+# list plus the pure-Rust transitive-codec exceptions below). [licenses],
+# [advisories] and [sources] are intentionally left at cargo-deny's defaults
+# for now — vetting numrs2's full license/advisory graph is a separate task
+# from the banned-crate audit this file was created for.
+#
+# ---------------------------------------------------------------------------
+# USER DECISION (2026-08-19): pure-Rust transitive codecs inside parquet and
+# matfile are KEPT for real-world file compatibility.
+#
+# numrs2's `parquet` feature and `matlab` feature pull in a handful of crates
+# that are also COOLJAPAN-banned by name (flate2, miniz_oxide, brotli, snap,
+# lz4_flex, libflate) because the OxiARC ecosystem has its own compression
+# codecs (oxiarc-deflate, oxiarc-brotli, oxiarc-snappy, oxiarc-lz4). Those
+# crates are reached ONLY as transitive dependencies of `parquet` (Apache
+# Arrow's own format crate) and `matfile` (MATLAB .mat I/O) — foreign crates
+# whose own Cargo.toml numrs2 does not control, so oxiarc cannot be injected
+# into them. All of these codecs are 100% pure Rust themselves (no C/FFI); the
+# COOLJAPAN preference for oxiarc here is an ecosystem-consistency preference,
+# not a Pure-Rust-safety issue. Blocking them outright would mean giving up
+# real-world Parquet/MATLAB file interoperability for no purity gain, so the
+# user approved keeping them, scoped tightly via the `wrappers` mechanism
+# below: each entry is denied for any OTHER direct dependent, so a stray
+# future direct dependency on e.g. `flate2` from numrs2's own Cargo.toml (or a
+# new transitive path through some other crate) still fails this check.
+# ---------------------------------------------------------------------------
+
+[graph]
+# The parquet/matfile/usvg wrapper exceptions below only mean anything if
+# cargo-deny actually resolves the graph with those optional features turned
+# on (parquet, matlab, visualization, etc. are all off by default). Without
+# this, `cargo deny check bans` silently checks the default-feature slice
+# only, every `wrappers` entry below goes unmatched, and a banned crate
+# introduced solely through a non-default feature would never be caught.
+all-features = true
+
+[bans]
+multiple-versions = "warn"
+deny = [
+    # === C/C++/Fortran FFI and BLAS/LAPACK — hard Pure Rust Policy violations ===
+    { name = "openblas-src", use-instead = "oxiblas" },
+    { name = "blas-src", use-instead = "oxiblas" },
+    { name = "cblas-sys", use-instead = "oxiblas" },
+    { name = "lapack-src", use-instead = "oxiblas" },
+    { name = "lapacke-sys", use-instead = "oxiblas" },
+    { name = "rusqlite", use-instead = "oxisql-sqlite-compat" },
+    { name = "z3", use-instead = "oxiz" },
+
+    # === Pure Rust, but superseded by the COOLJAPAN ecosystem (ecosystem-preference bans) ===
+    { name = "bincode", use-instead = "oxicode" },
+    { name = "rustfft", use-instead = "oxifft" },
+    { name = "zip", use-instead = "oxiarc-archive" },
+    { name = "tar", use-instead = "oxiarc-archive" },
+    { name = "zstd", use-instead = "oxiarc-zstd" },
+    { name = "bzip2", use-instead = "oxiarc-bzip2" },
+    { name = "lz4", use-instead = "oxiarc-lz4" },
+
+    # === Pure-Rust parquet/matfile/usvg-transitive codec exceptions (USER-APPROVED 2026-08-19) ===
+    # Each `wrappers` list is the crate's actual, verified set of direct
+    # dependents in this workspace's graph, per
+    # `cargo tree -i <crate> --all-features -e normal` (re-derive it if the
+    # dependency graph shifts — a new direct dependent not listed here will
+    # correctly fail this check rather than silently passing).
+    { name = "flate2", use-instead = "oxiarc-deflate", wrappers = ["parquet", "png", "usvg"] },
+    { name = "miniz_oxide", use-instead = "oxiarc-deflate", wrappers = ["flate2", "png"] },
+    { name = "brotli", use-instead = "oxiarc-brotli", wrappers = ["parquet"] },
+    { name = "snap", use-instead = "oxiarc-snappy", wrappers = ["parquet"] },
+    { name = "lz4_flex", use-instead = "oxiarc-lz4", wrappers = ["parquet"] },
+    { name = "libflate", use-instead = "oxiarc-deflate", wrappers = ["matfile"] },
+]

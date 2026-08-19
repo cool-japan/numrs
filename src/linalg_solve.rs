@@ -47,13 +47,14 @@ pub fn solve<
 }
 
 /// Solve a linear system Ax = b
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn solve<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
         + std::fmt::Display,
 >(
@@ -81,13 +82,14 @@ pub fn inv<
 }
 
 /// Compute the inverse of a matrix
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn inv<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
         + std::fmt::Display,
 >(

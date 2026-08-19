@@ -104,6 +104,10 @@ impl ModelCompression {
                 }
                 bytes
             }
+            // INVARIANT: unreachable. `bits` is validated a few lines above
+            // (`bits != 8 && bits != 16 && bits != 32` returns `Err` before
+            // this point) and is never reassigned, so by the time this
+            // `match` executes it can only be 8, 16, or 32.
             _ => unreachable!(),
         };
 

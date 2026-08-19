@@ -44,6 +44,8 @@ impl PerfPlot {
             return Err(VizError::InvalidData("No benchmark results".to_string()));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -97,6 +99,8 @@ impl PerfPlot {
         if scaling_data.is_empty() {
             return Err(VizError::InvalidData("No scaling data".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -184,6 +188,8 @@ impl PerfPlot {
             return Err(VizError::InvalidData("No scaling data".to_string()));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -248,6 +254,8 @@ impl PerfPlot {
         if times.is_empty() {
             return Err(VizError::InvalidData("No time series data".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
