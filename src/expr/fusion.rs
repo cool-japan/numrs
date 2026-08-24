@@ -19,8 +19,8 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::simd::SimdOps;
-use scirs2_core::ndarray::Array1;
+use crate::kernels::borrow::operand;
+use crate::simd::{into_vec_no_copy, SimdOps};
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::marker::PhantomData;
 
@@ -378,16 +378,16 @@ where
         let b_arr = self.b.eval();
         let c_arr = self.c.eval();
 
-        let a_data = a_arr.to_vec();
-        let b_data = b_arr.to_vec();
-        let c_data = c_arr.to_vec();
-
-        let a_nd = Array1::from_vec(a_data);
-        let b_nd = Array1::from_vec(b_data);
-        let c_nd = Array1::from_vec(c_data);
+        // `as_cow_1d()` borrows each freshly-evaluated (and so always
+        // uniquely-owned) operand zero-copy in the common contiguous case,
+        // instead of `to_vec()`-ing it into a second buffer.
+        let a_nd = a_arr.as_cow_1d();
+        let b_nd = b_arr.as_cow_1d();
+        let c_nd = c_arr.as_cow_1d();
 
         let result = f64::simd_fma(&a_nd.view(), &b_nd.view(), &c_nd.view());
-        Array::from_vec_shape(result.to_vec(), &self.shape).unwrap_or_else(|e| panic!("{e}"))
+        Array::from_vec_shape(into_vec_no_copy(result), &self.shape)
+            .unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Scalar FMA evaluation using hardware FMA instruction per element.
@@ -558,21 +558,17 @@ pub fn simd_fma_arrays(a: &Array<f64>, b: &Array<f64>, c: &Array<f64>) -> Result
         });
     }
 
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-    let c_data = c.to_vec();
-
-    let a_nd = Array1::from_vec(a_data);
-    let b_nd = Array1::from_vec(b_data);
-    let c_nd = Array1::from_vec(c_data);
+    let a_nd = a.as_cow_1d();
+    let b_nd = b.as_cow_1d();
+    let c_nd = c.as_cow_1d();
 
     let result = f64::simd_fma(&a_nd.view(), &b_nd.view(), &c_nd.view());
-    Array::from_vec_shape(result.to_vec(), &a.shape())
+    Array::from_vec_shape(into_vec_no_copy(result), &a.shape())
 }
 
 /// Evaluate `a * scalar_mul + scalar_add` using SIMD, operating directly on an array.
 pub fn simd_fused_scalar_broadcast(a: &Array<f64>, scalar_mul: f64, scalar_add: f64) -> Array<f64> {
-    let data = a.to_vec();
+    let data = operand(a);
     let size = data.len();
     let mut result = Vec::with_capacity(size);
 
@@ -604,11 +600,8 @@ pub fn simd_fused_dot_product(a: &Array<f64>, b: &Array<f64>) -> Result<f64> {
         });
     }
 
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-
-    let a_nd = Array1::from_vec(a_data);
-    let b_nd = Array1::from_vec(b_data);
+    let a_nd = a.as_cow_1d();
+    let b_nd = b.as_cow_1d();
 
     Ok(f64::simd_dot(&a_nd.view(), &b_nd.view()))
 }
@@ -974,7 +967,11 @@ impl<'a> FusionBuilder<'a> {
 
     /// Element-wise add with another array (fused into the current pass).
     pub fn add_expr(mut self, other: &Array<f64>) -> Self {
-        let other_data = other.to_vec();
+        // `other` is only ever read here, never mutated -- `operand()`
+        // borrows it zero-copy for the common contiguous case instead of
+        // `to_vec()`-ing it into an owned buffer just to iterate it once.
+        let other_operand = operand(other);
+        let other_data: &[f64] = &other_operand;
         let len = self.data.len().min(other_data.len());
         for i in 0..len {
             self.data[i] += other_data[i];
@@ -985,7 +982,9 @@ impl<'a> FusionBuilder<'a> {
 
     /// Element-wise multiply with another array (fused).
     pub fn mul_expr(mut self, other: &Array<f64>) -> Self {
-        let other_data = other.to_vec();
+        // See `add_expr`: read-only access, so borrow rather than copy.
+        let other_operand = operand(other);
+        let other_data: &[f64] = &other_operand;
         let len = self.data.len().min(other_data.len());
         for i in 0..len {
             self.data[i] *= other_data[i];
@@ -996,7 +995,9 @@ impl<'a> FusionBuilder<'a> {
 
     /// Element-wise subtract another array (fused).
     pub fn sub_expr(mut self, other: &Array<f64>) -> Self {
-        let other_data = other.to_vec();
+        // See `add_expr`: read-only access, so borrow rather than copy.
+        let other_operand = operand(other);
+        let other_data: &[f64] = &other_operand;
         let len = self.data.len().min(other_data.len());
         for i in 0..len {
             self.data[i] -= other_data[i];
@@ -1541,6 +1542,91 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // W3-B2 perf probe: FusionBuilder de-copy fix (this task's actual change).
+    // #[ignore]d -- run explicitly in release:
+    //   CARGO_INCREMENTAL=0 cargo test --release -p numrs2 \
+    //     expr::fusion::tests::probe_ -- --ignored --nocapture
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[ignore]
+    fn probe_fusion_builder_mul_expr_copy_elimination_perf() {
+        // Honest A/B, both sides real code (not reconstructed from prose):
+        // `old_mul_in_place` is the exact body `mul_expr` had before this
+        // fix (`other.to_vec()` purely to read `other` once, never
+        // mutating it); `new_mul_in_place` is literally what `mul_expr`
+        // does today (`operand(other)`, zero-copy in the common contiguous
+        // case). Min-over-many-alternating-samples, per project convention,
+        // to stay robust on a possibly noisy/shared machine.
+        fn old_mul_in_place(data: &mut [f64], other: &Array<f64>) {
+            let other_data = other.to_vec();
+            let len = data.len().min(other_data.len());
+            for i in 0..len {
+                data[i] *= other_data[i];
+            }
+        }
+
+        fn new_mul_in_place(data: &mut [f64], other: &Array<f64>) {
+            let other_operand = operand(other);
+            let other_data: &[f64] = &other_operand;
+            let len = data.len().min(other_data.len());
+            for i in 0..len {
+                data[i] *= other_data[i];
+            }
+        }
+
+        let n = 200_000;
+        // Values close to 1 so many rounds of repeated in-place
+        // multiplication (across samples) don't drift toward 0/inf --
+        // each round resets `data` from `base` before the timed section.
+        let base: Vec<f64> = (0..n).map(|i| 1.0 + (i as f64) * 1e-9).collect();
+        let other = Array::from_vec((0..n).map(|i| 1.0 - (i as f64) * 1e-10).collect());
+
+        const SAMPLES: usize = 200;
+        let mut data = base.clone();
+        let mut old_min = std::time::Duration::MAX;
+        let mut new_min = std::time::Duration::MAX;
+
+        for _ in 0..SAMPLES {
+            data.copy_from_slice(&base);
+            let t0 = std::time::Instant::now();
+            old_mul_in_place(
+                std::hint::black_box(&mut data),
+                std::hint::black_box(&other),
+            );
+            old_min = old_min.min(t0.elapsed());
+
+            data.copy_from_slice(&base);
+            let t1 = std::time::Instant::now();
+            new_mul_in_place(
+                std::hint::black_box(&mut data),
+                std::hint::black_box(&other),
+            );
+            new_min = new_min.min(t1.elapsed());
+        }
+
+        let ratio = old_min.as_secs_f64() / new_min.as_secs_f64();
+        eprintln!(
+            "[FusionBuilder::mul_expr copy elimination, n={n}] old(min)={:.2}us new(min)={:.2}us ({:.2}x)",
+            old_min.as_secs_f64() * 1e6,
+            new_min.as_secs_f64() * 1e6,
+            ratio,
+        );
+
+        // Same inputs -> bit-identical outputs, not just faster.
+        let mut a = base.clone();
+        old_mul_in_place(&mut a, &other);
+        let mut b = base.clone();
+        new_mul_in_place(&mut b, &other);
+        assert_eq!(a, b);
+
+        assert!(
+            ratio >= 1.0,
+            "expected the zero-copy borrow to be no slower than the old to_vec() copy, got {ratio:.2}x"
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // 11. SIMD direct array functions
     // -----------------------------------------------------------------------
 
@@ -1573,6 +1659,85 @@ mod tests {
 
         let result = simd_fused_dot_product(&a, &b);
         assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // W3-B2 perf probe (secondary): `simd_fma_arrays` was ALREADY fixed by
+    // Wave 2 before this task started (see `as_cow_1d`/`into_vec_no_copy`
+    // usage above) -- this task changed nothing here. `old_simd_fma_arrays`
+    // below is a byte-for-byte reconstruction of the actual pre-Wave-2 body
+    // of this function (recovered from `git diff HEAD`'s
+    // `-let a_nd = Array1::from_vec(a_data);` / `-Array::from_vec_shape(
+    // result.to_vec(), ...)` hunk, not guessed from the ticket's prose):
+    // 3 `to_vec()` input copies + a `result.to_vec()` output detour, 4
+    // buffers total vs. today's 0 (contiguous case). This measures that
+    // real 4-copy-vs-0-copy delta so the win claimed for this file's
+    // heaviest-by-copy-count SIMD helper (vs. `SimdBinaryEvaluator`'s 3) is
+    // actually measured, not merely asserted.
+    // #[ignore]d -- run explicitly in release, same as the probe above.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[ignore]
+    fn probe_simd_fma_arrays_copy_elimination_perf() {
+        fn old_simd_fma_arrays(a: &Array<f64>, b: &Array<f64>, c: &Array<f64>) -> Array<f64> {
+            let a_data = a.to_vec();
+            let b_data = b.to_vec();
+            let c_data = c.to_vec();
+
+            let a_nd = scirs2_core::ndarray::Array1::from_vec(a_data);
+            let b_nd = scirs2_core::ndarray::Array1::from_vec(b_data);
+            let c_nd = scirs2_core::ndarray::Array1::from_vec(c_data);
+
+            let result = f64::simd_fma(&a_nd.view(), &b_nd.view(), &c_nd.view());
+            Array::from_vec_shape(result.to_vec(), &a.shape())
+                .expect("shape always matches for equal-shape inputs")
+        }
+
+        let n = 200_000;
+        let a = Array::from_vec((0..n).map(|i| i as f64).collect::<Vec<_>>());
+        let b = Array::from_vec((0..n).map(|i| (i as f64) * 0.5).collect::<Vec<_>>());
+        let c = Array::from_vec((0..n).map(|i| (i as f64) * 0.25).collect::<Vec<_>>());
+
+        const SAMPLES: usize = 200;
+        let mut old_min = std::time::Duration::MAX;
+        let mut new_min = std::time::Duration::MAX;
+
+        for _ in 0..SAMPLES {
+            let t0 = std::time::Instant::now();
+            let r_old = old_simd_fma_arrays(
+                std::hint::black_box(&a),
+                std::hint::black_box(&b),
+                std::hint::black_box(&c),
+            );
+            old_min = old_min.min(t0.elapsed());
+            std::hint::black_box(&r_old);
+
+            let t1 = std::time::Instant::now();
+            let r_new = simd_fma_arrays(
+                std::hint::black_box(&a),
+                std::hint::black_box(&b),
+                std::hint::black_box(&c),
+            )
+            .expect("simd_fma_arrays should succeed");
+            new_min = new_min.min(t1.elapsed());
+            std::hint::black_box(&r_new);
+        }
+
+        let ratio = old_min.as_secs_f64() / new_min.as_secs_f64();
+        eprintln!(
+            "[simd_fma_arrays copy elimination (Wave 2 fix, verified here), n={n}] old(min)={:.2}us new(min)={:.2}us ({:.2}x)",
+            old_min.as_secs_f64() * 1e6,
+            new_min.as_secs_f64() * 1e6,
+            ratio,
+        );
+
+        assert_eq!(
+            old_simd_fma_arrays(&a, &b, &c).to_vec(),
+            simd_fma_arrays(&a, &b, &c)
+                .expect("simd_fma_arrays should succeed")
+                .to_vec()
+        );
     }
 
     // -----------------------------------------------------------------------

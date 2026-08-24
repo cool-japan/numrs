@@ -190,7 +190,7 @@ fn bench_histograms(c: &mut Criterion) {
             let rng = random::default_rng();
             if let Ok(data) = rng.random::<f64>(&[s]) {
                 b.iter(|| {
-                    if let Ok(result) = histogram(&data, 10, None, None) {
+                    if let Ok(result) = histogram(&data, 10, None, None, None) {
                         black_box(result);
                     }
                 });
@@ -201,7 +201,7 @@ fn bench_histograms(c: &mut Criterion) {
             let rng = random::default_rng();
             if let Ok(data) = rng.random::<f64>(&[s]) {
                 b.iter(|| {
-                    if let Ok(result) = histogram(&data, 50, None, None) {
+                    if let Ok(result) = histogram(&data, 50, None, None, None) {
                         black_box(result);
                     }
                 });
@@ -215,7 +215,7 @@ fn bench_histograms(c: &mut Criterion) {
                 let rng = random::default_rng();
                 if let Ok(data) = rng.random::<f64>(&[s]) {
                     b.iter(|| {
-                        if let Ok(result) = histogram(&data, 100, None, None) {
+                        if let Ok(result) = histogram(&data, 100, None, None, None) {
                             black_box(result);
                         }
                     });

@@ -27,14 +27,21 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             )));
         }
 
-        // Check if indices are within bounds
+        // Check if indices are within bounds.
+        //
+        // Reads `self.array().shape()` -- a zero-allocation `&[usize]`
+        // borrow -- rather than calling `self.shape()` per index, which
+        // heap-allocates a fresh `Vec` via `to_vec()` on *every* call.
+        // `get()` sits on the same hot per-element paths as `Array::set`
+        // (paired `get`/`set` loops in hand-rolled linalg and iterative
+        // solvers), so this allocation was paid twice per loop iteration.
+        // Values are identical either way.
+        let shape = self.array().shape();
         for (i, &idx) in indices.iter().enumerate() {
-            if idx >= self.shape()[i] {
+            if idx >= shape[i] {
                 return Err(NumRs2Error::IndexOutOfBounds(format!(
                     "Index {} is out of bounds for dimension {} with size {}",
-                    idx,
-                    i,
-                    self.shape()[i]
+                    idx, i, shape[i]
                 )));
             }
         }

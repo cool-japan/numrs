@@ -363,6 +363,31 @@ name = "reduction_dispatch_benchmark"
 path = "bench/reduction_dispatch_benchmark.rs"
 harness = false
 
+# ===================================================================
+# Arc-backed copy-on-write storage (Wave 3): keeps the write-side cost
+# of the O(1) Clone honest. Also runnable as
+# `COW_AB_REPORT=1 cargo bench --bench cow_mutation_guard` for a
+# min-over-alternating-A/B report instead of criterion means.
+# ===================================================================
+
+[[bench]]
+name = "cow_mutation_guard"
+path = "bench/cow_mutation_guard.rs"
+harness = false
+
+# ===================================================================
+# Owned expression templates (Wave 3): does
+# `(a.expr() + b.expr() * c.expr()).eval()` actually beat the eager
+# `&a + &(&b * &c)`? Also runnable as
+# `EXPR_AB_REPORT=1 cargo bench --bench expr_fused_benchmark` for a
+# min-over-alternating-A/B report instead of criterion means.
+# ===================================================================
+
+[[bench]]
+name = "expr_fused_benchmark"
+path = "bench/expr_fused_benchmark.rs"
+harness = false
+
 [[example]]
 name = "visualization"
 required-features = ["visualization"]

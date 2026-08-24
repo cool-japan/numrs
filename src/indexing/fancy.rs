@@ -122,6 +122,12 @@ impl<T: Clone + num_traits::Zero> Array<T> {
         // Create a result array with the right shape
         let mut result = Self::zeros(&output_shape);
 
+        // Bulk-acquire once for the whole outer x inner loop below: `result`
+        // is write-only throughout (every read is `slice.get`, a distinct
+        // per-`new_idx` temporary), so one unshare covers every element
+        // across every fancy-index slot instead of one per copied element.
+        let result_arr = result.array_mut();
+
         // For each index in the fancy indexing dimension
         for (new_idx, &orig_idx) in idx_vec.iter().enumerate() {
             // Create index specs to select a single slice from the original array
@@ -163,7 +169,12 @@ impl<T: Clone + num_traits::Zero> Array<T> {
 
                 // Get value from slice and set in result
                 let value = slice.get(&slice_idx)?;
-                result.set(&target_idx, value)?;
+                *result_arr.get_mut(target_idx.as_slice()).ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        target_idx
+                    ))
+                })? = value;
             }
         }
 

@@ -60,7 +60,13 @@ fn bench_shared_array_vs_array(c: &mut Criterion) {
             },
         );
 
-        // Regular Array clone (full copy)
+        // Regular Array clone. Since `Array<T>`'s buffer moved behind an
+        // `Arc` (copy-on-write), this is also an O(1) reference-count bump
+        // rather than the full copy it used to be, so this curve and
+        // `shared_array_clone` above are expected to CONVERGE -- they are
+        // now the same operation. A regression here (this curve growing
+        // with `size` again) means something reintroduced a deep copy into
+        // `Array::clone`.
         let regular = Array::from_vec(data.clone());
         group.bench_with_input(BenchmarkId::new("array_clone", size), &size, |b, _| {
             b.iter(|| {

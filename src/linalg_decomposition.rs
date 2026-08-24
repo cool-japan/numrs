@@ -197,7 +197,8 @@ pub fn cholesky<
         + std::ops::AddAssign
         + std::ops::MulAssign
         + std::ops::DivAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -502,11 +503,12 @@ pub fn svd<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>
     let n = vt.shape()[0];
     let k = s_vec.len();
     let mut s = Array::zeros(&[m, n]);
+    let s_arr = s.array_mut();
     for i in 0..k.min(m).min(n) {
         let val = s_vec.get(&[i])?;
         // Convert Real to T using NumCast which works for f32/f64
         if let Some(t_val) = num_traits::NumCast::from(val) {
-            s.set(&[i, i], t_val)?;
+            s_arr[[i, i]] = t_val;
         }
     }
 

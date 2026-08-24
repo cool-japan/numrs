@@ -934,6 +934,12 @@ fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast + Send + Sync>(
     // Calculate the total number of elements in the result
     let result_size = result.size();
 
+    // Bulk-acquire once: `result` is write-only across this whole loop
+    // (exactly one write per `i`, dynamic-rank index so `get_mut` replaces
+    // `Array::set`'s bounds-checked, per-call `Arc::make_mut` path), so one
+    // unshare covers all `result_size` writes.
+    let result_arr = result.array_mut();
+
     // For each position in the result array
     for i in 0..result_size {
         // Convert flat index to multi-dimensional indices
@@ -972,7 +978,14 @@ fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast + Send + Sync>(
         }
 
         // Set the result value
-        result.set(&result_indices, sum)?;
+        *result_arr
+            .get_mut(result_indices.as_slice())
+            .ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    result_indices
+                ))
+            })? = sum;
     }
 
     Ok(result)

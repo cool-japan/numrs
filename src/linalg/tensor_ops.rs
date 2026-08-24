@@ -236,6 +236,11 @@ fn einsum_general<T: Float + Clone + Debug + std::ops::AddAssign>(
 
     let total_output_size: usize = output_shape.iter().product();
 
+    // `result` is write-only across this whole loop (exactly one `.set()`
+    // per output element, never read back), so bulk-acquiring once here
+    // replaces `total_output_size` `Arc::make_mut` calls with one.
+    let result_arr = result.array_mut();
+
     for output_idx in 0..total_output_size {
         // Convert linear index to multi-dimensional indices for output
         let mut output_multi_idx = vec![0; output_shape.len()];
@@ -331,9 +336,16 @@ fn einsum_general<T: Float + Clone + Debug + std::ops::AddAssign>(
         // Store result
         if output_shape[0] == 1 && output_shape.len() == 1 {
             // Scalar output
-            result.set(&[0], sum)?;
+            result_arr[[0]] = sum;
         } else {
-            result.set(&output_multi_idx, sum)?;
+            *result_arr
+                .get_mut(output_multi_idx.as_slice())
+                .ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        output_multi_idx
+                    ))
+                })? = sum;
         }
     }
 
@@ -474,30 +486,53 @@ pub fn tensordot<T: Float + Clone + Debug + 'static>(
         });
     }
 
-    // For simplicity, this implementation only handles 2D arrays
-    // A complete implementation would handle arbitrary dimensions
-    if a_shape.len() != 2 || b_shape.len() != 2 {
-        return Err(NumRs2Error::DimensionMismatch(
-            "This implementation of tensordot only supports 2D arrays".to_string(),
-        ));
-    }
-
-    // When contracting along axis 1 of A and axis 0 of B,
-    // this becomes a matrix multiplication (if dimensions match)
-    if a_axis == 1 && b_axis == 0 {
+    // Fast path: the common "matrix multiplication" shape (both operands
+    // 2-D, contracting `a`'s last axis against `b`'s first) needs no
+    // reshaping at all.
+    if a_shape.len() == 2 && b_shape.len() == 2 && a_axis == 1 && b_axis == 0 {
         return a.matmul(b);
     }
 
-    // If contracting along axis 0 of A and axis 1 of B,
-    // transpose B first, then do matrix multiplication
-    if a_axis == 0 && b_axis == 1 {
-        let b_trans = b.transpose();
-        let result = a.transpose().matmul(&b_trans)?;
-        return Ok(result.transpose());
-    }
+    // General case: works for any dimensionality and any single-axis-pair
+    // contraction. Move the contracted axis of `a` to its last position and
+    // of `b` to its first, reshape both down to 2-D (every other axis
+    // flattens in place, keeping its existing relative order), multiply,
+    // then reshape the 2-D product back out to the combined shape. This is
+    // the standard reduction of `tensordot` to `matmul`, and it handles a
+    // 1-D `a` or `b` correctly too: the "other axes" side of that operand
+    // then reshapes to a length-1 dimension, matching a plain
+    // vector-matrix product (verified against `np.tensordot` for a 3-D x
+    // 3-D contraction over non-trivial axes).
+    //
+    // This also replaces the old `a_axis == 0 && b_axis == 1` special case,
+    // which transposed its `matmul` result one time too many: that
+    // combination's contraction already lands in the right
+    // (a`s-other-axes, b's-other-axes) order with no further transpose
+    // needed, so the old code silently returned the correctly-computed
+    // result with its two axes swapped (confirmed against
+    // `np.tensordot(a, b, axes=([0], [1]))` on a non-square example).
+    let a_moved = crate::array_ops::axis_ops::moveaxis(a, &[a_axis], &[a_shape.len() - 1])?;
+    let b_moved = crate::array_ops::axis_ops::moveaxis(b, &[b_axis], &[0])?;
 
-    // Handle other cases (more complex tensor contractions)
-    Err(NumRs2Error::InvalidOperation(
-        "This axis combination is not implemented in this version".to_string(),
-    ))
+    let a_moved_shape = a_moved.shape();
+    let b_moved_shape = b_moved.shape();
+    let contracted_dim = a_moved_shape[a_moved_shape.len() - 1];
+    let a_rows: usize = a_moved_shape[..a_moved_shape.len() - 1].iter().product();
+    let b_cols: usize = b_moved_shape[1..].iter().product();
+
+    let a_2d = a_moved.try_reshape(&[a_rows, contracted_dim])?;
+    let b_2d = b_moved.try_reshape(&[contracted_dim, b_cols])?;
+    let result_2d = a_2d.matmul(&b_2d)?;
+
+    let mut out_shape: Vec<usize> = a_moved_shape[..a_moved_shape.len() - 1].to_vec();
+    out_shape.extend_from_slice(&b_moved_shape[1..]);
+
+    if out_shape.is_empty() {
+        // Both operands were 1-D: a full vector-vector contraction. This
+        // crate's scalar convention (see e.g. `einsum`'s "i,i->" case
+        // above) is a length-1 array rather than a true 0-D one.
+        result_2d.try_reshape(&[1])
+    } else {
+        result_2d.try_reshape(&out_shape)
+    }
 }

@@ -162,13 +162,21 @@ impl ParallelLinAlg {
         let mut q = Array::eye(m, m, 0);
         let mut r = a.clone();
 
+        // Bulk-acquire both buffers once for the whole routine: unlike
+        // `linalg_stable::qr_pivoted` (which reads columns through a shared
+        // `extract_column_slice(&Array<T>, ..)` helper), the column
+        // extraction here is inlined, so nothing forces re-acquiring either
+        // handle mid-loop.
+        let r_arr = r.array_mut();
+        let q_arr = q.array_mut();
+
         // Sequential Householder QR for correctness
         // In a full parallel implementation, we would parallelize the matrix updates
         for k in 0..min_mn {
             // Extract column for Householder vector
             let mut col_k = Vec::with_capacity(m - k);
             for i in k..m {
-                col_k.push(r.get(&[i, k])?);
+                col_k.push(r_arr[[i, k]]);
             }
 
             // Compute Householder vector
@@ -178,13 +186,13 @@ impl ParallelLinAlg {
             for j in k..n {
                 let mut col_j = Vec::with_capacity(m - k);
                 for i in k..m {
-                    col_j.push(r.get(&[i, j])?);
+                    col_j.push(r_arr[[i, j]]);
                 }
 
                 let reflected = Self::apply_householder(&col_j, &v, beta)?;
 
                 for (idx, &val) in reflected.iter().enumerate() {
-                    r.set(&[k + idx, j], val)?;
+                    r_arr[[k + idx, j]] = val;
                 }
             }
 
@@ -192,13 +200,13 @@ impl ParallelLinAlg {
             for j in 0..m {
                 let mut col_j = Vec::with_capacity(m - k);
                 for i in k..m {
-                    col_j.push(q.get(&[i, j])?);
+                    col_j.push(q_arr[[i, j]]);
                 }
 
                 let reflected = Self::apply_householder(&col_j, &v, beta)?;
 
                 for (idx, &val) in reflected.iter().enumerate() {
-                    q.set(&[k + idx, j], val)?;
+                    q_arr[[k + idx, j]] = val;
                 }
             }
         }

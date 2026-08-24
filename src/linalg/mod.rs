@@ -30,6 +30,7 @@ mod backend;
 // Import submodules
 pub mod iterative_solvers;
 pub mod matrix_ops;
+pub mod parity;
 pub mod randomized;
 pub mod tensor_decomp;
 pub mod tensor_ops;
@@ -46,10 +47,11 @@ pub use solve::{inv, solve};
 pub use decomposition::matrix_rank;
 #[cfg(feature = "lapack")]
 pub use matrix_ops::{det, matrix_power};
+pub use parity::{multi_dot, tensorinv, tensorsolve};
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub use solve::pinv;
 pub use tensor_ops::{einsum, kron, tensordot};
-pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
+pub use vector_ops::{complex_vdot, inner, norm, nuclear_norm, outer, trace, vdot};
 
 // Randomized linear algebra
 pub use randomized::{
@@ -328,6 +330,11 @@ where
 
         // Step 2: Create a result matrix
         let mut result = Array::zeros(&[n, n]);
+        // Bulk-acquire once for all n columns: `result` is write-only here
+        // (each column's values come from the local `x` buffer, not from
+        // `result` itself), so one unshare replaces what used to be n^2
+        // `Arc::make_mut` calls.
+        let result_arr = result.array_mut();
 
         // Step 3: Solve LUX = I column by column to find A^-1
         // For each column of the identity matrix...
@@ -369,7 +376,7 @@ where
             // Step 3.4: Store the solution in the j-th column of the result
             #[allow(clippy::needless_range_loop)]
             for i in 0..n {
-                result.set(&[i, j], x[i])?;
+                result_arr[[i, j]] = x[i];
             }
         }
 
@@ -918,9 +925,11 @@ where
 
             // Apply shift: H_shifted = H - shift * I
             let mut h_shifted = h.clone();
-            for i in 0..n {
-                let v = h_shifted.get(&[i, i])?;
-                h_shifted.set(&[i, i], v - shift)?;
+            {
+                let hs_arr = h_shifted.array_mut();
+                for i in 0..n {
+                    hs_arr[[i, i]] -= shift;
+                }
             }
 
             // QR decompose the shifted matrix
@@ -928,9 +937,11 @@ where
 
             // H_new = R * Q + shift * I (unshift)
             let mut h_new = r_k.matmul(&q_k)?;
-            for i in 0..n {
-                let v = h_new.get(&[i, i])?;
-                h_new.set(&[i, i], v + shift)?;
+            {
+                let hn_arr = h_new.array_mut();
+                for i in 0..n {
+                    hn_arr[[i, i]] += shift;
+                }
             }
 
             // Accumulate Q: Q_total = Q_total * Q_k
@@ -1075,12 +1086,18 @@ where
         let mut a_copy = self.clone();
         let mut det_sign = T::one(); // Track sign changes due to row swaps
 
+        // Bulk-acquire once for the whole function: every remaining access to
+        // `a_copy` below (scale computation, in-place elimination, and the
+        // final diagonal product) is a direct call with no intervening
+        // helper, so one hoisted handle replaces every per-element unshare.
+        let a_arr = a_copy.array_mut();
+
         // Scale factors for each row (for numerical stability)
         let mut row_scale = vec![T::zero(); n];
         for i in 0..n {
             let mut max_in_row = T::zero();
             for j in 0..n {
-                let abs_val = num_traits::Float::abs(a_copy.get(&[i, j])?);
+                let abs_val = num_traits::Float::abs(a_arr[[i, j]]);
                 if abs_val > max_in_row {
                     max_in_row = abs_val;
                 }
@@ -1098,10 +1115,10 @@ where
         for k in 0..n - 1 {
             // Find pivot using scaled partial pivoting
             let mut p_row = k;
-            let mut p_val = num_traits::Float::abs(a_copy.get(&[k, k])?) * row_scale[k];
+            let mut p_val = num_traits::Float::abs(a_arr[[k, k]]) * row_scale[k];
 
             for i in k + 1..n {
-                let val = num_traits::Float::abs(a_copy.get(&[i, k])?) * row_scale[i];
+                let val = num_traits::Float::abs(a_arr[[i, k]]) * row_scale[i];
                 if val > p_val {
                     p_row = i;
                     p_val = val;
@@ -1117,9 +1134,9 @@ where
             // Swap rows if needed
             if p_row != k {
                 for j in 0..n {
-                    let temp = a_copy.get(&[k, j])?;
-                    a_copy.set(&[k, j], a_copy.get(&[p_row, j])?)?;
-                    a_copy.set(&[p_row, j], temp)?;
+                    let temp = a_arr[[k, j]];
+                    a_arr[[k, j]] = a_arr[[p_row, j]];
+                    a_arr[[p_row, j]] = temp;
                 }
 
                 // Swap scale factors too
@@ -1130,15 +1147,15 @@ where
             }
 
             // Perform elimination
-            let pivot = a_copy.get(&[k, k])?;
+            let pivot = a_arr[[k, k]];
 
             for i in k + 1..n {
-                let factor = a_copy.get(&[i, k])? / pivot;
-                a_copy.set(&[i, k], factor)?; // Store multiplier in L part
+                let factor = a_arr[[i, k]] / pivot;
+                a_arr[[i, k]] = factor; // Store multiplier in L part
 
                 for j in k + 1..n {
-                    let val = a_copy.get(&[i, j])? - factor * a_copy.get(&[k, j])?;
-                    a_copy.set(&[i, j], val)?;
+                    let val = a_arr[[i, j]] - factor * a_arr[[k, j]];
+                    a_arr[[i, j]] = val;
                 }
             }
         }
@@ -1146,7 +1163,7 @@ where
         // Compute determinant as product of diagonal elements times the sign
         let mut det = det_sign;
         for i in 0..n {
-            det *= a_copy.get(&[i, i])?;
+            det *= a_arr[[i, i]];
         }
 
         Ok(det)
@@ -1240,26 +1257,31 @@ where
         // Step 1: Create an augmented matrix [A|I]
         let mut aug = Array::zeros(&[n, 2 * n]);
 
+        // Bulk-acquire once: `aug` is read and written throughout
+        // construction, pivoting, scaling, and elimination below via direct
+        // calls only, so a single hoisted handle covers the whole routine.
+        let aug_arr = aug.array_mut();
+
         // Fill the left side with our matrix
         for i in 0..n {
             for j in 0..n {
-                aug.set(&[i, j], self.get(&[i, j])?)?;
+                aug_arr[[i, j]] = self.get(&[i, j])?;
             }
         }
 
         // Fill the right side with identity matrix
         for i in 0..n {
-            aug.set(&[i, i + n], T::one())?;
+            aug_arr[[i, i + n]] = T::one();
         }
 
         // Step 2: Compute row-echelon form using Gaussian elimination with pivoting
         for i in 0..n {
             // Find pivot (maximum value in current column)
-            let mut max_val = num_traits::Float::abs(aug.get(&[i, i])?);
+            let mut max_val = num_traits::Float::abs(aug_arr[[i, i]]);
             let mut max_row = i;
 
             for j in (i + 1)..n {
-                let abs_val = num_traits::Float::abs(aug.get(&[j, i])?);
+                let abs_val = num_traits::Float::abs(aug_arr[[j, i]]);
                 if abs_val > max_val {
                     max_val = abs_val;
                     max_row = j;
@@ -1277,26 +1299,24 @@ where
             // Swap rows if needed
             if max_row != i {
                 for j in 0..(2 * n) {
-                    let temp = aug.get(&[i, j])?;
-                    aug.set(&[i, j], aug.get(&[max_row, j])?)?;
-                    aug.set(&[max_row, j], temp)?;
+                    let temp = aug_arr[[i, j]];
+                    aug_arr[[i, j]] = aug_arr[[max_row, j]];
+                    aug_arr[[max_row, j]] = temp;
                 }
             }
 
             // Scale current row to get 1 on diagonal
-            let pivot = aug.get(&[i, i])?;
+            let pivot = aug_arr[[i, i]];
             for j in 0..(2 * n) {
-                let val = aug.get(&[i, j])? / pivot;
-                aug.set(&[i, j], val)?;
+                aug_arr[[i, j]] = aug_arr[[i, j]] / pivot;
             }
 
             // Eliminate current column for all other rows
             for j in 0..n {
                 if j != i {
-                    let factor = aug.get(&[j, i])?;
+                    let factor = aug_arr[[j, i]];
                     for k in 0..(2 * n) {
-                        let val = aug.get(&[j, k])? - factor * aug.get(&[i, k])?;
-                        aug.set(&[j, k], val)?;
+                        aug_arr[[j, k]] = aug_arr[[j, k]] - factor * aug_arr[[i, k]];
                     }
                 }
             }
@@ -1304,9 +1324,10 @@ where
 
         // Step 3: Extract the right side, which is now A^-1
         let mut result = Array::zeros(&[n, n]);
+        let result_arr = result.array_mut();
         for i in 0..n {
             for j in 0..n {
-                result.set(&[i, j], aug.get(&[i, j + n])?)?;
+                result_arr[[i, j]] = aug_arr[[i, j + n]];
             }
         }
 
@@ -1693,22 +1714,30 @@ where
         // Create an augmented matrix [A|b]
         let mut aug = Array::zeros(&[n, n + 1]);
 
+        // Bulk-acquire once: construction, pivoting, and elimination below
+        // all touch `aug` via direct calls only, so a single hoisted handle
+        // covers everything up through the end of the elimination loop. Back
+        // substitution afterward only reads `aug` (never writes), so it is
+        // left on plain `.get()` -- no COW cost either way once the handle's
+        // borrow has ended.
+        let aug_arr = aug.array_mut();
+
         // Fill in the augmented matrix
         for i in 0..n {
             for j in 0..n {
-                aug.set(&[i, j], self.get(&[i, j])?)?;
+                aug_arr[[i, j]] = self.get(&[i, j])?;
             }
-            aug.set(&[i, n], b.get(&[i])?)?;
+            aug_arr[[i, n]] = b.get(&[i])?;
         }
 
         // Gaussian elimination with partial pivoting
         for i in 0..n {
             // Find pivot (maximum absolute value in current column)
-            let mut max_val = num_traits::Float::abs(aug.get(&[i, i])?);
+            let mut max_val = num_traits::Float::abs(aug_arr[[i, i]]);
             let mut max_row = i;
 
             for j in (i + 1)..n {
-                let abs_val = num_traits::Float::abs(aug.get(&[j, i])?);
+                let abs_val = num_traits::Float::abs(aug_arr[[j, i]]);
                 if abs_val > max_val {
                     max_val = abs_val;
                     max_row = j;
@@ -1726,19 +1755,18 @@ where
             // Swap rows if needed
             if max_row != i {
                 for j in i..(n + 1) {
-                    let temp = aug.get(&[i, j])?;
-                    aug.set(&[i, j], aug.get(&[max_row, j])?)?;
-                    aug.set(&[max_row, j], temp)?;
+                    let temp = aug_arr[[i, j]];
+                    aug_arr[[i, j]] = aug_arr[[max_row, j]];
+                    aug_arr[[max_row, j]] = temp;
                 }
             }
 
             // Eliminate below
             for j in (i + 1)..n {
-                let factor = aug.get(&[j, i])? / aug.get(&[i, i])?;
+                let factor = aug_arr[[j, i]] / aug_arr[[i, i]];
 
                 for k in i..(n + 1) {
-                    let val = aug.get(&[j, k])? - factor * aug.get(&[i, k])?;
-                    aug.set(&[j, k], val)?;
+                    aug_arr[[j, k]] = aug_arr[[j, k]] - factor * aug_arr[[i, k]];
                 }
             }
         }

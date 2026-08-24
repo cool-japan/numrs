@@ -139,6 +139,18 @@ pub fn put<T: Clone + ToString>(
         NumRs2Error::InvalidOperation("values array should be contiguous".to_string())
     })?;
 
+    // `shape` is invariant across the loop (only its *elements* are
+    // mutated), so read it once here rather than once per index -- both to
+    // avoid `array.shape()`'s per-call `Vec` allocation and because it must
+    // be read before `array_mut()` takes an exclusive borrow below.
+    let shape = array.shape();
+    let ndim = shape.len();
+
+    // Bulk-acquire once: every write below is a direct `get_mut` on a
+    // distinct index, so one unshare covers all `n_indices` writes instead
+    // of one per `Array::set` call.
+    let array_arr = array.array_mut();
+
     // Process each index
     for i in 0..n_indices {
         // Get the index value
@@ -182,9 +194,6 @@ pub fn put<T: Clone + ToString>(
         };
 
         // Compute the multi-dimensional index
-        let shape = array.shape();
-        let ndim = shape.len();
-
         let mut multi_idx = Vec::with_capacity(ndim);
         let mut temp = idx;
 
@@ -202,7 +211,12 @@ pub fn put<T: Clone + ToString>(
         let value = values_slice[i % n_values].clone();
 
         // Set the value
-        array.set(&multi_idx, value)?;
+        *array_arr.get_mut(multi_idx.as_slice()).ok_or_else(|| {
+            NumRs2Error::IndexOutOfBounds(format!(
+                "Failed to set element at indices {:?}",
+                multi_idx
+            ))
+        })? = value;
     }
 
     Ok(())
@@ -283,17 +297,26 @@ pub fn putmask<T: Clone + ToString, U: Clone + ToString>(
         NumRs2Error::InvalidOperation("values array should be contiguous".to_string())
     })?;
 
+    // `shape` is invariant across the loop; read it once (see `put` above
+    // for the same rationale) rather than once per masked element, and
+    // before `array_mut()` takes its exclusive borrow.
+    let array_size = array.size();
+    let shape = array.shape();
+    let ndim = shape.len();
+
+    // Bulk-acquire once: every write below is a direct `get_mut` on a
+    // distinct index, so one unshare covers every masked-element write
+    // instead of one per `Array::set` call.
+    let array_arr = array.array_mut();
+
     // Process each element
     let mut value_idx = 0;
 
-    for i in 0..array.size() {
+    for i in 0..array_size {
         let mask_val = mask_slice[i].to_string() == "true";
 
         if mask_val {
             // Calculate the multi-dimensional index
-            let shape = array.shape();
-            let ndim = shape.len();
-
             let mut multi_idx = Vec::with_capacity(ndim);
             let mut temp = i;
 
@@ -311,7 +334,12 @@ pub fn putmask<T: Clone + ToString, U: Clone + ToString>(
             let value = values_slice[value_idx % n_values].clone();
 
             // Set the value
-            array.set(&multi_idx, value)?;
+            *array_arr.get_mut(multi_idx.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    multi_idx
+                ))
+            })? = value;
 
             value_idx += 1;
         }
@@ -669,6 +697,11 @@ pub fn put_along_axis<T: Clone + ToString>(
 
     let values_data = values.to_vec();
 
+    // Bulk-acquire once: every write below is a direct `get_mut` on a
+    // distinct index, so one unshare covers every `indices_slice` element
+    // instead of one per `Array::set` call.
+    let array_arr = array.array_mut();
+
     for (flat_idx, &idx_value) in indices_slice.iter().enumerate() {
         // Validate index
         if idx_value >= axis_size {
@@ -691,7 +724,12 @@ pub fn put_along_axis<T: Clone + ToString>(
         multi_idx[axis] = idx_value;
 
         // Set the value in the array
-        array.set(&multi_idx, values_data[flat_idx].clone())?;
+        *array_arr.get_mut(multi_idx.as_slice()).ok_or_else(|| {
+            NumRs2Error::IndexOutOfBounds(format!(
+                "Failed to set element at indices {:?}",
+                multi_idx
+            ))
+        })? = values_data[flat_idx].clone();
     }
 
     Ok(())

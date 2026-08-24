@@ -98,7 +98,7 @@ impl<T: Clone> Array<T> {
     where
         F: Fn(&T) -> T,
     {
-        for elem in self.data.iter_mut() {
+        for elem in self.nd_mut().iter_mut() {
             *elem = f(elem);
         }
     }
@@ -118,7 +118,7 @@ impl<T: Clone> Array<T> {
             });
         }
 
-        for (src, dst) in self.data.iter().zip(output.data.iter_mut()) {
+        for (src, dst) in self.data.iter().zip(output.nd_mut().iter_mut()) {
             *dst = f(src);
         }
 
@@ -431,7 +431,7 @@ where
         // `output` too. `mem::replace` takes the running value out by
         // move, so no `T: Copy` is needed and `output`'s contents are
         // never cloned.
-        for (dst, val) in output.data.iter_mut().zip(product) {
+        for (dst, val) in output.nd_mut().iter_mut().zip(product) {
             let acc = std::mem::replace(dst, T::zero());
             *dst = acc + val;
         }

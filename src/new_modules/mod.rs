@@ -78,7 +78,13 @@
 //! - Numerical stability guarantees
 
 // Signal processing modules
-pub mod fft;
+//
+// `fft` was merged into `crate::fft` (the former near-duplicate
+// `src/new_modules/fft.rs` implementation now lives there instead); this
+// re-export keeps `crate::new_modules::fft::*` resolving to the same
+// items for the handful of sibling modules in this directory that still
+// spell the path that way, without maintaining two copies of the code.
+pub use crate::fft;
 pub mod fft_enhanced;
 pub mod frequency_analysis;
 pub mod signal_processing;

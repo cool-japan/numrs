@@ -104,7 +104,12 @@ where
             .expect("fp array should have at least 2 elements as validated above")
     });
 
-    // Process each element in x
+    // Process each element in x. `result` is write-only across this whole
+    // loop (exactly one write per `i`, along whichever of the three branches
+    // fires; `xp`/`fp`/`x_flat` are distinct arrays, so nothing here reads
+    // back through this handle), so one bulk unshare covers every iteration
+    // instead of `Array::set`'s per-call `Arc::make_mut`.
+    let result_arr = result.array_mut();
     for i in 0..x_flat.len() {
         let mut x_val = x_flat.get(&[i])?;
 
@@ -125,11 +130,11 @@ where
 
         // Out of bounds handling
         if x_val < xp.get(&[0])? {
-            result.set(&[i], left_val)?;
+            result_arr[[i]] = left_val;
             continue;
         }
         if x_val > xp.get(&[xp.len() - 1])? {
-            result.set(&[i], right_val)?;
+            result_arr[[i]] = right_val;
             continue;
         }
 
@@ -155,7 +160,7 @@ where
         let t = (x_val - x0) / (x1 - x0);
         let interpolated = y0 * (T::one() - t) + y1 * t;
 
-        result.set(&[i], interpolated)?;
+        result_arr[[i]] = interpolated;
     }
 
     // Reshape result back to original shape of x
@@ -330,7 +335,12 @@ pub fn select<T: Clone + num_traits::Zero>(
     let default_val = default.unwrap_or_else(T::zero);
     let mut result = Array::full(&broadcast_shape, default_val);
 
-    // Process each element
+    // Process each element. `result` starts as write-only (`Array::full`
+    // already populated every slot with `default_val`) and every actual
+    // write below overwrites a slot with a freshly cloned `choice_val`, so
+    // one bulk unshare for the whole loop replaces one `Arc::make_mut` per
+    // matched condition.
+    let result_arr = result.array_mut();
     let total_size = broadcast_shape.iter().product::<usize>();
     for i in 0..total_size {
         // Convert flat index to multi-dimensional index
@@ -353,8 +363,11 @@ pub fn select<T: Clone + num_traits::Zero>(
                 let choice_val = choice_broadcast
                     .array()
                     .get(scirs2_core::ndarray::IxDyn(&indices))
-                    .expect("indices should be valid within broadcast shape");
-                result.set(&indices, choice_val.clone())?;
+                    .expect("indices should be valid within broadcast shape")
+                    .clone();
+                *result_arr.get_mut(indices.as_slice()).expect(
+                    "indices should be valid within broadcast shape (result has the same shape)",
+                ) = choice_val;
                 break; // Take the first matching condition
             }
         }

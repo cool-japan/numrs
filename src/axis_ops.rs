@@ -68,14 +68,23 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, sum along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: `result` is write-only across this
+                // whole loop (exactly one write per `i`, dynamic-rank index
+                // so `get_mut` replaces `Array::set`'s bounds-checked,
+                // per-call `Arc::make_mut` path), so one unshare covers all
+                // `result_size` writes.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -96,7 +105,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, sum)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = sum;
                 }
 
                 Ok(result)
@@ -181,14 +195,19 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, find the minimum along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: same rationale as `sum_axis` above.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -217,7 +236,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, min_val)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = min_val;
                 }
 
                 Ok(result)
@@ -265,14 +289,19 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, find the maximum along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: same rationale as `sum_axis` above.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -301,7 +330,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, max_val)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = max_val;
                 }
 
                 Ok(result)
@@ -346,14 +380,19 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, compute product along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: same rationale as `sum_axis` above.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -374,7 +413,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, prod)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = prod;
                 }
 
                 Ok(result)

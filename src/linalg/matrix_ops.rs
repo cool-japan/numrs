@@ -118,25 +118,46 @@ pub fn matrix_power<
         return a.inv();
     }
 
-    // For higher powers, we should implement a more efficient algorithm
-    // using binary exponentiation. For simplicity, we'll use a direct approach
-    // for now.
+    // For |n| > 1: binary exponentiation (exponentiation by squaring), an
+    // O(log|n|) sequence of matmuls instead of the O(|n|) repeated-multiply
+    // loop this replaces. Negative powers invert first, then raise that
+    // inverse to the positive `|n|`; squaring itself doesn't care about
+    // sign, so both directions share `binary_pow`.
+    let base = if n > 0 { a.clone() } else { a.inv()? };
+    binary_pow(&base, n.unsigned_abs(), size)
+}
 
-    if n > 0 {
-        let mut result = a.clone();
-        for _ in 1..n {
-            result = result.matmul(a)?;
+/// Exponentiation by squaring: `base^exponent` in `O(log exponent)`
+/// matmuls. Only ever called by [`matrix_power`] above with `exponent >= 2`
+/// (its `0`/`1`/`-1` cases are handled before this point), but the loop
+/// below is self-contained and correct for any `exponent`, including `0`
+/// (returns the identity untouched) and `1` (one multiply, no squaring).
+#[cfg(feature = "lapack")]
+fn binary_pow<
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display
+        + 'static,
+>(
+    base: &Array<T>,
+    mut exponent: u32,
+    size: usize,
+) -> Result<Array<T>> {
+    let mut result = Array::identity(size);
+    let mut power_of_base = base.clone();
+    while exponent > 0 {
+        if exponent & 1 == 1 {
+            result = result.matmul(&power_of_base)?;
         }
-        Ok(result)
-    } else {
-        // For negative powers, compute the inverse first
-        let inv = a.inv()?;
-        let abs_n = (-n) as u32;
-
-        let mut result = inv.clone();
-        for _ in 1..abs_n {
-            result = result.matmul(&inv)?;
+        exponent >>= 1;
+        if exponent > 0 {
+            power_of_base = power_of_base.matmul(&power_of_base)?;
         }
-        Ok(result)
     }
+    Ok(result)
 }

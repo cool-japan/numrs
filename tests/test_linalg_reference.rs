@@ -29,23 +29,17 @@ use numrs2::linalg::decomposition::matrix_rank;
 
 // Use SciRS2 functions when available
 #[cfg(feature = "scirs")]
-use scirs2_linalg::{eigh as scirs_eigh, matrix_power as scirs_matrix_power, schur as scirs_schur};
+use scirs2_linalg::{eigh as scirs_eigh, schur as scirs_schur};
 
-// Provide scirs wrapper functions for missing functions
-#[cfg(feature = "scirs")]
+// `matrix_power` is implemented locally in numrs2 itself (binary
+// exponentiation, see `linalg::matrix_ops::matrix_power`) rather than
+// delegated to `scirs2_linalg::matrix_power`, which is limited to `|n| <= 1`
+// (that limitation is what `test_matrix_power_reference` below used to be
+// `#[ignore]`d for). This file is `#![cfg(feature = "lapack")]`-gated as a
+// whole, and `numrs2::linalg::matrix_power` requires exactly that feature,
+// so it is always available here -- no `scirs`/`not(scirs)` split needed.
 fn matrix_power(a: &Array<f64>, n: i32) -> numrs2::error::Result<Array<f64>> {
-    // Convert numrs2 Array to ndarray ArrayView2 for scirs2
-    let a_view = a.view_2d().map_err(|e| {
-        numrs2::error::NumRs2Error::ComputationError(format!("View conversion failed: {:?}", e))
-    })?;
-    let result = scirs_matrix_power(&a_view, n, None).map_err(|e| {
-        numrs2::error::NumRs2Error::ComputationError(format!("SCIRS matrix_power failed: {:?}", e))
-    })?;
-
-    // Convert back to numrs2 Array
-    let result_converted = Array::from_ndarray(result.into_dyn());
-
-    Ok(result_converted)
+    numrs2::linalg::matrix_power(a, n)
 }
 
 #[cfg(feature = "scirs")]
@@ -66,13 +60,6 @@ fn schur(a: &Array<f64>) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
 }
 
 // Provide fallback implementations for missing functions
-#[cfg(not(feature = "scirs"))]
-fn matrix_power(_a: &Array<f64>, _n: i32) -> numrs2::error::Result<Array<f64>> {
-    Err(numrs2::error::NumRs2Error::FeatureNotEnabled(
-        "scirs feature required for matrix_power".to_string(),
-    ))
-}
-
 #[cfg(not(feature = "scirs"))]
 fn schur(a: &Array<f64>) -> numrs2::error::Result<(Array<f64>, Array<f64>)> {
     // Use NumRS2's own schur implementation
@@ -622,9 +609,11 @@ fn test_condition_number_reference() {
 }
 
 #[test]
-#[ignore = "SCIRS2 matrix_power limitation: |n| > 1 not implemented"]
 fn test_matrix_power_reference() {
-    // Test matrix power against known values
+    // Test matrix power against known values. `matrix_power` above now
+    // delegates to numrs2's own binary-exponentiation implementation
+    // instead of `scirs2_linalg::matrix_power` (which was limited to
+    // `|n| <= 1`), so this no longer needs `#[ignore]`.
 
     // Create a test matrix
     let m = Array::<f64>::from_vec(vec![1.0, 1.0, 1.0, 0.0]).reshape(&[2, 2]);

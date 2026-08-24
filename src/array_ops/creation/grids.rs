@@ -108,6 +108,12 @@ where
             let total_elements: usize = shape.iter().product();
             let mut indices = vec![0; ndim];
 
+            // Bulk-acquire once: `grid` is write-only across this whole loop
+            // (every read is from `arr_data`, a local `Vec` clone of a
+            // different array), so one unshare covers all `total_elements`
+            // writes instead of one per element.
+            let grid_arr = grid.array_mut();
+
             for linear_idx in 0..total_elements {
                 // Convert linear index to multi-dimensional indices
                 let mut temp = linear_idx;
@@ -130,7 +136,12 @@ where
                     indices[axis_idx]
                 };
 
-                grid.set(&indices, arr_data[src_idx].clone())?;
+                *grid_arr.get_mut(indices.as_slice()).ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        indices
+                    ))
+                })? = arr_data[src_idx].clone();
             }
 
             grids.push(grid);

@@ -1,9 +1,39 @@
+//! `numpy.ma`-style masked arrays.
+//!
+//! [`MaskedArray<T>`] pairs a data [`Array<T>`] with a boolean mask
+//! [`Array<bool>`] of the same shape (`true` = masked / invalid) and an
+//! optional fill value. This module is split across several files, all
+//! part of the same `masked` module and all operating on the same
+//! [`MaskedArray`] type -- splitting does not change any public path
+//! (`numrs2::masked::MaskedArray`, re-exported at the crate root as
+//! `numrs2::prelude::MaskedArray`, is unaffected by which physical file a
+//! given inherent method lives in):
+//!
+//! - `mod.rs` (this file) -- the struct itself, construction, shape/mask
+//!   accessors, `get`/`set`, `reshape`/`transpose`, `Display`/`Debug`.
+//! - [`ops`] -- arithmetic operators (`Add`/`Sub`/`Mul`/`Div`, all
+//!   mask-propagating) and the element-wise comparison methods
+//!   (`equal`/`not_equal`/`less_than`/`less_equal`/`greater_than`/
+//!   `greater_equal`, NumPy's `eq`/`ne`/`lt`/`le`/`gt`/`ge`).
+//! - [`reductions`] -- the shared axis-walking engine plus every
+//!   value-producing reduction: `mean`/`sum`/`min`/`max` (whole-array,
+//!   pre-existing, `Option<T>`) and their `_axis`-suffixed
+//!   `axis`+`keepdims`-aware siblings, plus the brand-new `std`/`var`/
+//!   `prod`/`median`/`ptp`.
+//! - [`bool_ops`] -- `any`/`all`, scoped to `MaskedArray<bool>`.
+//! - [`search`] -- `argmin`/`argmax`/`cumsum`/`sort`.
+//! - [`linalg`] -- `dot`/`concatenate`.
+
+mod bool_ops;
+mod linalg;
+mod ops;
+mod reductions;
+mod search;
+
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::Zero;
 use std::fmt;
 use std::fmt::Debug;
-use std::ops::{Add, Div, Mul, Sub};
 
 /// Represents a masked array with data and a boolean mask
 ///
@@ -481,290 +511,6 @@ impl<T: Clone> MaskedArray<T> {
     }
 }
 
-// Implementation of arithmetic operations for MaskedArray
-// Implement Add for MaskedArray with MaskedArray
-impl<T: Clone + Add<Output = T>> Add for &MaskedArray<T> {
-    type Output = MaskedArray<T>;
-
-    /// # Panics
-    ///
-    /// Panics if `self` and `other` have shapes that cannot be broadcast
-    /// together. `std::ops::Add` cannot return a `Result`, so there is no
-    /// non-panicking version of this operator; construct the result via
-    /// [`Array::add_broadcast`] directly (on the `.data`/`.mask` fields) if
-    /// you need to handle a shape mismatch without panicking.
-    fn add(self, other: &MaskedArray<T>) -> MaskedArray<T> {
-        // Add the data arrays
-        let result_data = match self.data.add_broadcast(&other.data) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to add MaskedArrays with incompatible shapes: {:?} vs {:?}",
-                self.data.shape(),
-                other.data.shape()
-            ),
-        };
-
-        // Combine the masks - an element is masked if it is masked in either input
-        let mask_combined = match self.mask.zip_with(&other.mask, |a, b| a || b) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
-                self.mask.shape(),
-                other.mask.shape()
-            ),
-        };
-
-        MaskedArray {
-            data: result_data,
-            mask: mask_combined,
-            fill_value: self.fill_value.clone(),
-        }
-    }
-}
-
-// Implement subtract for MaskedArray with MaskedArray
-impl<T: Clone + Sub<Output = T>> Sub for &MaskedArray<T> {
-    type Output = MaskedArray<T>;
-
-    /// # Panics
-    ///
-    /// Panics if `self` and `other` have shapes that cannot be broadcast
-    /// together. `std::ops::Sub` cannot return a `Result`, so there is no
-    /// non-panicking version of this operator; construct the result via
-    /// [`Array::subtract_broadcast`] directly (on the `.data`/`.mask`
-    /// fields) if you need to handle a shape mismatch without panicking.
-    fn sub(self, other: &MaskedArray<T>) -> MaskedArray<T> {
-        // Subtract the data arrays
-        let result_data = match self.data.subtract_broadcast(&other.data) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to subtract MaskedArrays with incompatible shapes: {:?} vs {:?}",
-                self.data.shape(),
-                other.data.shape()
-            ),
-        };
-
-        // Combine the masks - an element is masked if it is masked in either input
-        let mask_combined = match self.mask.zip_with(&other.mask, |a, b| a || b) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
-                self.mask.shape(),
-                other.mask.shape()
-            ),
-        };
-
-        MaskedArray {
-            data: result_data,
-            mask: mask_combined,
-            fill_value: self.fill_value.clone(),
-        }
-    }
-}
-
-// Implement multiply for MaskedArray with MaskedArray
-impl<T: Clone + Mul<Output = T>> Mul for &MaskedArray<T> {
-    type Output = MaskedArray<T>;
-
-    /// # Panics
-    ///
-    /// Panics if `self` and `other` have shapes that cannot be broadcast
-    /// together. `std::ops::Mul` cannot return a `Result`, so there is no
-    /// non-panicking version of this operator; construct the result via
-    /// [`Array::multiply_broadcast`] directly (on the `.data`/`.mask`
-    /// fields) if you need to handle a shape mismatch without panicking.
-    fn mul(self, other: &MaskedArray<T>) -> MaskedArray<T> {
-        // Multiply the data arrays
-        let result_data = match self.data.multiply_broadcast(&other.data) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to multiply MaskedArrays with incompatible shapes: {:?} vs {:?}",
-                self.data.shape(),
-                other.data.shape()
-            ),
-        };
-
-        // Combine the masks - an element is masked if it is masked in either input
-        let mask_combined = match self.mask.zip_with(&other.mask, |a, b| a || b) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
-                self.mask.shape(),
-                other.mask.shape()
-            ),
-        };
-
-        MaskedArray {
-            data: result_data,
-            mask: mask_combined,
-            fill_value: self.fill_value.clone(),
-        }
-    }
-}
-
-// Implement divide for MaskedArray with MaskedArray
-impl<T: Clone + Div<Output = T> + PartialEq + Zero> Div for &MaskedArray<T> {
-    type Output = MaskedArray<T>;
-
-    /// # Panics
-    ///
-    /// Panics if `self` and `other` have shapes that cannot be broadcast
-    /// together. `std::ops::Div` cannot return a `Result`, so there is no
-    /// non-panicking version of this operator; construct the result via
-    /// [`Array::divide_broadcast`] directly (on the `.data`/`.mask` fields)
-    /// if you need to handle a shape mismatch without panicking. Division by
-    /// a zero element does not panic: that element is masked instead (see
-    /// `division_mask` below).
-    fn div(self, other: &MaskedArray<T>) -> MaskedArray<T> {
-        // Check for divisions by zero and mask them
-        let zero = T::zero();
-        let other_data_op = crate::kernels::borrow::operand(&other.data);
-        let other_mask_op = crate::kernels::borrow::operand(&other.mask);
-        let mut division_mask_vec = Vec::with_capacity(other.size());
-
-        for (value, is_masked) in other_data_op.iter().zip(other_mask_op.iter()) {
-            division_mask_vec.push(*is_masked || *value == zero);
-        }
-
-        let division_mask = Array::from_vec_shape(division_mask_vec, &other.shape())
-            .unwrap_or_else(|e| panic!("{e}"));
-
-        // Divide the data arrays
-        let result_data = match self.data.divide_broadcast(&other.data) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to divide MaskedArrays with incompatible shapes: {:?} vs {:?}",
-                self.data.shape(),
-                other.data.shape()
-            ),
-        };
-
-        // Combine the masks - an element is masked if it is masked in either input or if divisor is zero
-        let mask_combined = match self.mask.zip_with(&division_mask, |a, b| a || b) {
-            Ok(res) => res,
-            Err(_) => panic!(
-                "Failed to combine masks with incompatible shapes: {:?} vs {:?}",
-                self.mask.shape(),
-                division_mask.shape()
-            ),
-        };
-
-        MaskedArray {
-            data: result_data,
-            mask: mask_combined,
-            fill_value: self.fill_value.clone(),
-        }
-    }
-}
-
-// Statistical operations on MaskedArray
-impl<T: Clone + Add<Output = T> + Div<Output = T> + Zero + From<f64> + Into<f64>> MaskedArray<T> {
-    /// Calculate the mean of unmasked elements
-    ///
-    /// # Returns
-    ///
-    /// The mean value, or None if all elements are masked
-    pub fn mean(&self) -> Option<T> {
-        let data_op = crate::kernels::borrow::operand(&self.data);
-        let mask_op = crate::kernels::borrow::operand(&self.mask);
-        let mut sum = T::zero();
-        let mut count = 0;
-
-        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
-            if !*is_masked {
-                sum = sum + value.clone();
-                count += 1;
-            }
-        }
-
-        if count == 0 {
-            None
-        } else {
-            // We need to convert to/from f64 to properly handle division
-            let count_f64 = count as f64;
-            let sum_f64: f64 = sum.into();
-            Some(T::from(sum_f64 / count_f64))
-        }
-    }
-
-    /// Calculate the sum of unmasked elements
-    ///
-    /// # Returns
-    ///
-    /// The sum, or None if all elements are masked
-    pub fn sum(&self) -> Option<T> {
-        let data_op = crate::kernels::borrow::operand(&self.data);
-        let mask_op = crate::kernels::borrow::operand(&self.mask);
-        let mut sum = T::zero();
-        let mut count = 0;
-
-        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
-            if !*is_masked {
-                sum = sum + value.clone();
-                count += 1;
-            }
-        }
-
-        if count == 0 {
-            None
-        } else {
-            Some(sum)
-        }
-    }
-
-    /// Find the minimum value among unmasked elements
-    ///
-    /// # Returns
-    ///
-    /// The minimum value, or None if all elements are masked
-    pub fn min(&self) -> Option<T>
-    where
-        T: PartialOrd,
-    {
-        let data_op = crate::kernels::borrow::operand(&self.data);
-        let mask_op = crate::kernels::borrow::operand(&self.mask);
-        let mut min_val = None;
-
-        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
-            if !*is_masked {
-                match min_val {
-                    None => min_val = Some(value.clone()),
-                    Some(ref current_min) if value < current_min => min_val = Some(value.clone()),
-                    _ => {}
-                }
-            }
-        }
-
-        min_val
-    }
-
-    /// Find the maximum value among unmasked elements
-    ///
-    /// # Returns
-    ///
-    /// The maximum value, or None if all elements are masked
-    pub fn max(&self) -> Option<T>
-    where
-        T: PartialOrd,
-    {
-        let data_op = crate::kernels::borrow::operand(&self.data);
-        let mask_op = crate::kernels::borrow::operand(&self.mask);
-        let mut max_val = None;
-
-        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
-            if !*is_masked {
-                match max_val {
-                    None => max_val = Some(value.clone()),
-                    Some(ref current_max) if value > current_max => max_val = Some(value.clone()),
-                    _ => {}
-                }
-            }
-        }
-
-        max_val
-    }
-}
-
 // Display implementation for MaskedArray
 impl<T: Clone + fmt::Display + Debug> fmt::Display for MaskedArray<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -808,66 +554,5 @@ impl<T: Clone + Debug> fmt::Debug for MaskedArray<T> {
             .field("masked_count", &self.count_masked())
             .field("fill_value", &self.fill_value)
             .finish()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Manual timing probe (no `[[bench]]` entry available in this
-    /// lane's `Cargo.toml`, owned by another lane) for the `data`/`mask`
-    /// `to_vec()` pair -> `operand` conversion applied throughout this
-    /// file (`mean`, `sum`, `min`, `max`, `filled`, `compressed`,
-    /// `Display::fmt`, and `Div::div`'s zero-check all followed this
-    /// exact shape). `mean()` is representative: every other conversion
-    /// removes the same two full-array clones per call.
-    #[test]
-    fn probe_mean_perf_vs_naive_to_vec_pair() {
-        fn naive_mean(data: &Array<f64>, mask: &Array<bool>) -> Option<f64> {
-            let data_vec = data.to_vec();
-            let mask_vec = mask.to_vec();
-            let mut sum = 0.0;
-            let mut count = 0;
-            for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
-                if !*is_masked {
-                    sum += *value;
-                    count += 1;
-                }
-            }
-            if count == 0 {
-                None
-            } else {
-                Some(sum / count as f64)
-            }
-        }
-
-        let n = 100_000;
-        let data = Array::from_vec((0..n).map(|i| i as f64).collect::<Vec<_>>());
-        let mask = Array::from_vec((0..n).map(|i| i % 7 == 0).collect::<Vec<_>>());
-        let masked = MaskedArray::new(data.clone(), Some(mask.clone()), Some(0.0))
-            .expect("MaskedArray::new should succeed");
-        let iters = 200;
-
-        let t0 = std::time::Instant::now();
-        for _ in 0..iters {
-            let _ = std::hint::black_box(naive_mean(&data, &mask));
-        }
-        let naive = t0.elapsed();
-
-        let t1 = std::time::Instant::now();
-        for _ in 0..iters {
-            let _ = std::hint::black_box(masked.mean());
-        }
-        let operand = t1.elapsed();
-
-        eprintln!(
-            "[MaskedArray::mean, n={n}] naive(to_vec_pair)={:.1}us/iter operand={:.1}us/iter ({:.2}x)",
-            naive.as_secs_f64() * 1e6 / iters as f64,
-            operand.as_secs_f64() * 1e6 / iters as f64,
-            naive.as_secs_f64() / operand.as_secs_f64(),
-        );
-
-        assert_eq!(naive_mean(&data, &mask), masked.mean());
     }
 }

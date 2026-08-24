@@ -75,8 +75,9 @@ impl<T: Float + Clone> Preconditioner<T> for JacobiPreconditioner<T> {
         }
 
         let mut z = Array::zeros(&[n]);
+        let out = z.array_mut();
         for i in 0..n {
-            z.set(&[i], r.get(&[i])? * self.diag_inv[i])?;
+            out[[i]] = r.get(&[i])? * self.diag_inv[i];
         }
         Ok(z)
     }
@@ -150,30 +151,42 @@ impl<T: Float + Clone> Preconditioner<T> for SSORPreconditioner<T> {
             });
         }
 
-        // Forward sweep: solve (D + omega*L) * y = omega * r
+        // Forward sweep: solve (D + omega*L) * y = omega * r.
+        // Self-referential (each y[i] reads previously-written y[j], j < i)
+        // with no intervening helper calls, so one hoisted handle for the
+        // whole sweep is sound.
         let mut y = Array::zeros(&[n]);
-        for i in 0..n {
-            let mut sum = r.get(&[i])? * self.omega;
-            for j in 0..i {
-                sum = sum - self.omega * self.lower.get(&[i, j])? * y.get(&[j])?;
+        {
+            let y_arr = y.array_mut();
+            for i in 0..n {
+                let mut sum = r.get(&[i])? * self.omega;
+                for j in 0..i {
+                    sum = sum - self.omega * self.lower.get(&[i, j])? * y_arr[[j]];
+                }
+                y_arr[[i]] = sum / self.diag[i];
             }
-            y.set(&[i], sum / self.diag[i])?;
         }
 
-        // Diagonal scaling: z = D * y
+        // Diagonal scaling: z = D * y (write-only on z; y is read-only here)
         let mut z = Array::zeros(&[n]);
-        for i in 0..n {
-            z.set(&[i], self.diag[i] * y.get(&[i])?)?;
+        {
+            let z_arr = z.array_mut();
+            for i in 0..n {
+                z_arr[[i]] = self.diag[i] * y.get(&[i])?;
+            }
         }
 
-        // Backward sweep: solve (D + omega*U) * result = omega * z
+        // Backward sweep: solve (D + omega*U) * result = omega * z.
+        // Self-referential the same way as the forward sweep, just in
+        // reverse index order.
         let mut result = Array::zeros(&[n]);
+        let result_arr = result.array_mut();
         for i in (0..n).rev() {
             let mut sum = z.get(&[i])? * self.omega;
             for j in (i + 1)..n {
-                sum = sum - self.omega * self.upper.get(&[i, j])? * result.get(&[j])?;
+                sum = sum - self.omega * self.upper.get(&[i, j])? * result_arr[[j]];
             }
-            result.set(&[i], sum / self.diag[i])?;
+            result_arr[[i]] = sum / self.diag[i];
         }
 
         Ok(result)
@@ -205,12 +218,17 @@ impl<T: Float + Clone> IncompleteCholeskyPreconditioner<T> {
         let n = shape[0];
         let mut l = Array::zeros(&[n, n]);
 
+        // Bulk-acquire once for the whole factorization: every iteration
+        // reads previously-written entries of `l` and writes the next one
+        // via direct calls only, so a single hoisted handle is sound.
+        let l_arr = l.array_mut();
+
         // Compute IC(0) factorization
         for i in 0..n {
             // Compute L[i,i]
             let mut sum = a.get(&[i, i])?;
             for k in 0..i {
-                let l_ik = l.get(&[i, k])?;
+                let l_ik = l_arr[[i, k]];
                 sum = sum - l_ik * l_ik;
             }
 
@@ -219,7 +237,7 @@ impl<T: Float + Clone> IncompleteCholeskyPreconditioner<T> {
                     "Matrix is not positive definite or IC factorization failed".to_string(),
                 ));
             }
-            l.set(&[i, i], sum.sqrt())?;
+            l_arr[[i, i]] = sum.sqrt();
 
             // Compute L[j,i] for j > i
             for j in (i + 1)..n {
@@ -228,9 +246,9 @@ impl<T: Float + Clone> IncompleteCholeskyPreconditioner<T> {
                 if a_ji.abs() > T::from(1e-14).expect("1e-14 is a valid f64 constant") {
                     let mut sum = a_ji;
                     for k in 0..i {
-                        sum = sum - l.get(&[j, k])? * l.get(&[i, k])?;
+                        sum = sum - l_arr[[j, k]] * l_arr[[i, k]];
                     }
-                    l.set(&[j, i], sum / l.get(&[i, i])?)?;
+                    l_arr[[j, i]] = sum / l_arr[[i, i]];
                 }
             }
         }
@@ -249,24 +267,28 @@ impl<T: Float + Clone> Preconditioner<T> for IncompleteCholeskyPreconditioner<T>
             });
         }
 
-        // Solve L * y = r (forward substitution)
+        // Solve L * y = r (forward substitution); self-referential on `y`.
         let mut y = Array::zeros(&[n]);
-        for i in 0..n {
-            let mut sum = r.get(&[i])?;
-            for j in 0..i {
-                sum = sum - self.l.get(&[i, j])? * y.get(&[j])?;
+        {
+            let y_arr = y.array_mut();
+            for i in 0..n {
+                let mut sum = r.get(&[i])?;
+                for j in 0..i {
+                    sum = sum - self.l.get(&[i, j])? * y_arr[[j]];
+                }
+                y_arr[[i]] = sum / self.l.get(&[i, i])?;
             }
-            y.set(&[i], sum / self.l.get(&[i, i])?)?;
         }
 
-        // Solve L^T * z = y (backward substitution)
+        // Solve L^T * z = y (backward substitution); self-referential on `z`.
         let mut z = Array::zeros(&[n]);
+        let z_arr = z.array_mut();
         for i in (0..n).rev() {
             let mut sum = y.get(&[i])?;
             for j in (i + 1)..n {
-                sum = sum - self.l.get(&[j, i])? * z.get(&[j])?;
+                sum = sum - self.l.get(&[j, i])? * z_arr[[j]];
             }
-            z.set(&[i], sum / self.l.get(&[i, i])?)?;
+            z_arr[[i]] = sum / self.l.get(&[i, i])?;
         }
 
         Ok(z)

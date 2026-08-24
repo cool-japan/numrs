@@ -71,7 +71,7 @@ fn example1_distribution_fitting() -> std::result::Result<(), Box<dyn std::error
     println!("  Sample size: {}", sample_size);
 
     // Calculate goodness of fit using chi-square
-    let (hist, bin_edges) = histogram(&data, 20, None, None)?;
+    let (hist, bin_edges) = histogram(&data, 20, None, None, None)?;
     println!("  Histogram bins: {}", hist.size());
     println!("  Data range: [{:.2}, {:.2}]\n", data.min(), data.max());
 

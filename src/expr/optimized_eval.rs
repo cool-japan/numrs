@@ -8,8 +8,9 @@
 
 use crate::array::Array;
 use crate::error::Result;
-use crate::simd::SimdOps;
-use scirs2_core::ndarray::Array1;
+use crate::kernels::borrow::operand;
+use crate::simd::into_vec_no_copy;
+use scirs2_core::ndarray::ArrayView1;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::marker::PhantomData;
 
@@ -194,63 +195,55 @@ impl SimdBinaryEvaluator {
     /// SIMD-optimized addition
     #[inline]
     pub fn add_f64(left: &[f64], right: &[f64]) -> Vec<f64> {
-        let left_arr = Array1::from_vec(left.to_vec());
-        let right_arr = Array1::from_vec(right.to_vec());
-        let result = f64::simd_add(&left_arr.view(), &right_arr.view());
-        result.to_vec()
+        let result = f64::simd_add(&ArrayView1::from(left), &ArrayView1::from(right));
+        into_vec_no_copy(result)
     }
 
     /// SIMD-optimized subtraction
     #[inline]
     pub fn sub_f64(left: &[f64], right: &[f64]) -> Vec<f64> {
-        let left_arr = Array1::from_vec(left.to_vec());
-        let right_arr = Array1::from_vec(right.to_vec());
-        let result = f64::simd_sub(&left_arr.view(), &right_arr.view());
-        result.to_vec()
+        let result = f64::simd_sub(&ArrayView1::from(left), &ArrayView1::from(right));
+        into_vec_no_copy(result)
     }
 
     /// SIMD-optimized multiplication
     #[inline]
     pub fn mul_f64(left: &[f64], right: &[f64]) -> Vec<f64> {
-        let left_arr = Array1::from_vec(left.to_vec());
-        let right_arr = Array1::from_vec(right.to_vec());
-        let result = f64::simd_mul(&left_arr.view(), &right_arr.view());
-        result.to_vec()
+        let result = f64::simd_mul(&ArrayView1::from(left), &ArrayView1::from(right));
+        into_vec_no_copy(result)
     }
 
     /// SIMD-optimized division
     #[inline]
     pub fn div_f64(left: &[f64], right: &[f64]) -> Vec<f64> {
-        let left_arr = Array1::from_vec(left.to_vec());
-        let right_arr = Array1::from_vec(right.to_vec());
-        let result = f64::simd_div(&left_arr.view(), &right_arr.view());
-        result.to_vec()
+        let result = f64::simd_div(&ArrayView1::from(left), &ArrayView1::from(right));
+        into_vec_no_copy(result)
     }
 
     /// SIMD-optimized fused multiply-add: a * b + c
     #[inline]
     pub fn fma_f64(a: &[f64], b: &[f64], c: &[f64]) -> Vec<f64> {
-        let a_arr = Array1::from_vec(a.to_vec());
-        let b_arr = Array1::from_vec(b.to_vec());
-        let c_arr = Array1::from_vec(c.to_vec());
-        let result = f64::simd_fma(&a_arr.view(), &b_arr.view(), &c_arr.view());
-        result.to_vec()
+        let result = f64::simd_fma(
+            &ArrayView1::from(a),
+            &ArrayView1::from(b),
+            &ArrayView1::from(c),
+        );
+        into_vec_no_copy(result)
     }
 
     /// SIMD-optimized scalar addition (broadcast)
     #[inline]
     pub fn add_scalar_f64(data: &[f64], scalar: f64) -> Vec<f64> {
-        let arr = Array::from_vec(data.to_vec());
-        let result = arr.simd_add_scalar(scalar);
-        result.to_vec()
+        let scalar_vec = vec![scalar; data.len()];
+        let result = f64::simd_add(&ArrayView1::from(data), &ArrayView1::from(&scalar_vec));
+        into_vec_no_copy(result)
     }
 
     /// SIMD-optimized scalar multiplication (broadcast)
     #[inline]
     pub fn mul_scalar_f64(data: &[f64], scalar: f64) -> Vec<f64> {
-        let arr = Array::from_vec(data.to_vec());
-        let result = arr.simd_mul_scalar(scalar);
-        result.to_vec()
+        let result = f64::simd_scalar_mul(&ArrayView1::from(data), scalar);
+        into_vec_no_copy(result)
     }
 }
 
@@ -331,11 +324,15 @@ where
 
     /// Override eval() to use SIMD evaluation
     fn eval(&self) -> Array<f64> {
-        let size = self.size();
-
-        // Materialize operands
-        let left_data = self.left.eval().to_vec();
-        let right_data = self.right.eval().to_vec();
+        // `self.left.eval()`/`self.right.eval()` each already materialize a
+        // fresh, owned `Array<f64>` -- borrowing it via `operand()` (instead
+        // of the `.to_vec()` this used to chain on top) avoids cloning that
+        // buffer a second time right before it is fed into the (now
+        // zero-copy) `SimdBinaryEvaluator` methods below.
+        let left_arr = self.left.eval();
+        let right_arr = self.right.eval();
+        let left_data = operand(&left_arr);
+        let right_data = operand(&right_arr);
 
         // Use SIMD operations
         let result_data = match self.op_type {

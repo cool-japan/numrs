@@ -324,30 +324,78 @@ policy_file_size_check() {
   fi
 }
 
+# Scan src/ for *calls* to one Arc primitive, ignoring prose.
+#
+# `Array<T>` is Arc-backed copy-on-write, and the whole invariant rests on
+# there being exactly one unshare point (`Array::nd_mut`) and exactly one
+# consuming extraction point (`Array::into_nd`), both in ${COW_GUARD_FILE}.
+# A second `Arc::make_mut` anywhere would be a second, unreviewed place where
+# a shared buffer silently forks; a second `Arc::try_unwrap` would be a second
+# place that can deep-copy on extraction. So this counts occurrences rather
+# than merely confining them.
+#
+# Comment lines are stripped before counting: the doc comments on `nd_mut` and
+# `into_nd` (and the prose in src/array_ops/creation/contiguous.rs explaining
+# why a clone is not reported as aliasing) name these primitives on purpose,
+# and a guard that counted prose would punish documenting the invariant. The
+# trailing `(` in the pattern keeps this anchored on call syntax as a second
+# line of defence.
+arc_primitive_call_sites() {
+  local primitive="$1"
+  { grep -rn -F "${primitive}(" src/ --include='*.rs' || true; } \
+    | { grep -v -E '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' || true; }
+}
+
 policy_arc_cow_guard() {
-  local label="policy: Arc COW guard (Arc::make_mut|Arc::get_mut confined to ${COW_GUARD_FILE})"
+  local label="policy: Arc COW guard (exactly one make_mut + one try_unwrap, in ${COW_GUARD_FILE})"
   sub "$label"
 
-  local raw
-  raw="$( { grep -rn -E 'Arc::make_mut|Arc::get_mut' src/ --include='*.rs' || true; } )"
+  local status=PASS
+  local detail=""
+  local primitive raw count offenders
 
-  if [ -z "$raw" ]; then
-    ok "no Arc::make_mut/Arc::get_mut usages in src/ yet -- guard is not load-bearing yet (will bind once the COW invariant lands); tolerating zero matches"
-    record_result "$label" PASS "0 matches"
-    return
-  fi
+  for primitive in Arc::make_mut Arc::try_unwrap; do
+    raw="$(arc_primitive_call_sites "$primitive")"
+    count=0
+    if [ -n "$raw" ]; then
+      count="$(printf '%s\n' "$raw" | wc -l | tr -d ' ')"
+    fi
 
-  local offenders
-  offenders="$(printf '%s\n' "$raw" | grep -v -F "${COW_GUARD_FILE}:" || true)"
+    if [ "$count" -ne 1 ]; then
+      fail_msg "expected exactly 1 ${primitive} call in src/, found ${count} (COW invariant guard):"
+      if [ -n "$raw" ]; then printf '%s\n' "$raw"; fi
+      status=FAIL
+      detail="${detail}${primitive}=${count} (want 1); "
+      continue
+    fi
 
-  if [ -n "$offenders" ]; then
-    fail_msg "Arc::make_mut/Arc::get_mut used outside ${COW_GUARD_FILE} (COW invariant guard):"
-    printf '%s\n' "$offenders"
-    record_result "$label" FAIL "usages outside ${COW_GUARD_FILE}"
+    offenders="$(printf '%s\n' "$raw" | grep -v -F "${COW_GUARD_FILE}:" || true)"
+    if [ -n "$offenders" ]; then
+      fail_msg "the single ${primitive} call is not in ${COW_GUARD_FILE} (COW invariant guard):"
+      printf '%s\n' "$offenders"
+      status=FAIL
+      detail="${detail}${primitive} outside ${COW_GUARD_FILE}; "
+    else
+      ok "exactly one ${primitive} call, in ${COW_GUARD_FILE}"
+      detail="${detail}${primitive}=1 ok; "
+    fi
+  done
+
+  # `Arc::get_mut` is a third way to reach a uniquely-owned buffer and would
+  # bypass the single unshare point entirely (it returns None instead of
+  # copying when the buffer is shared), so it must not appear at all.
+  raw="$(arc_primitive_call_sites Arc::get_mut)"
+  if [ -n "$raw" ]; then
+    fail_msg "Arc::get_mut must not be used in src/ -- all unsharing goes through ${COW_GUARD_FILE}'s nd_mut():"
+    printf '%s\n' "$raw"
+    status=FAIL
+    detail="${detail}Arc::get_mut present"
   else
-    ok "all Arc::make_mut/Arc::get_mut usages are confined to ${COW_GUARD_FILE}"
-    record_result "$label" PASS "confined to ${COW_GUARD_FILE}"
+    ok "no Arc::get_mut calls in src/"
+    detail="${detail}Arc::get_mut=0 ok"
   fi
+
+  record_result "$label" "$status" "$detail"
 }
 
 step_policy() {

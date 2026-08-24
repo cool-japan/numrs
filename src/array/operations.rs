@@ -328,8 +328,8 @@ where
 impl<T: Clone + Add<Output = T>> Array<T> {
     /// Add arrays without broadcasting (for convenience)
     pub fn add(&self, other: &Array<T>) -> Array<T> {
-        let result = &self.data + &other.data;
-        Array { data: result }
+        let result = self.array() + other.array();
+        Array::from_nd(result)
     }
 
     /// Add arrays with broadcasting
@@ -381,8 +381,8 @@ impl<T: Clone + Add<Output = T>> Array<T> {
 impl<T: Clone + Sub<Output = T>> Array<T> {
     /// Subtract arrays without broadcasting (for convenience)
     pub fn subtract(&self, other: &Array<T>) -> Array<T> {
-        let result = &self.data - &other.data;
-        Array { data: result }
+        let result = self.array() - other.array();
+        Array::from_nd(result)
     }
 
     /// Subtract arrays with broadcasting
@@ -403,8 +403,8 @@ impl<T: Clone + Sub<Output = T>> Array<T> {
 impl<T: Clone + Mul<Output = T>> Array<T> {
     /// Multiply arrays without broadcasting (for convenience)
     pub fn multiply(&self, other: &Array<T>) -> Array<T> {
-        let result = &self.data * &other.data;
-        Array { data: result }
+        let result = self.array() * other.array();
+        Array::from_nd(result)
     }
 
     /// Multiply arrays with broadcasting
@@ -425,8 +425,8 @@ impl<T: Clone + Mul<Output = T>> Array<T> {
 impl<T: Clone + Div<Output = T>> Array<T> {
     /// Divide arrays without broadcasting (for convenience)
     pub fn divide(&self, other: &Array<T>) -> Array<T> {
-        let result = &self.data / &other.data;
-        Array { data: result }
+        let result = self.array() / other.array();
+        Array::from_nd(result)
     }
 
     /// Divide arrays with broadcasting
@@ -505,9 +505,7 @@ mod perf_probe {
             // spelled out directly to avoid the `Add` trait impl (also in
             // scope via `use super::*`) shadowing the inherent method at
             // dot-call resolution.
-            let _ = black_box(Array {
-                data: &a.data + &b.data,
-            });
+            let _ = black_box(Array::from_nd(a.array() + b.array()));
         }
         let old_ndarray = t0.elapsed();
 
@@ -605,7 +603,7 @@ mod perf_probe {
     ///
     /// # Four candidates, to localize *where* any real difference lives
     ///
-    /// - `old_full`: `Array { data: &a.data + &b.data }` -- the gate's
+    /// - `old_full`: `Array::from_nd(a.array() + b.array())` -- the gate's
     ///   exact "old" baseline (`Array::add`'s body, spelled out to dodge
     ///   the `Add` trait import shadowing the inherent method at dot-call
     ///   resolution, same as `bench_one` above).
@@ -801,9 +799,7 @@ mod perf_probe {
             // Warm-up: touch every candidate's code path (and, for
             // `reused_buf`, its pages) a few times before timing starts.
             for _ in 0..5 {
-                let _ = timed(|| Array {
-                    data: &a.data + &b.data,
-                });
+                let _ = timed(|| Array::from_nd(a.array() + b.array()));
                 let _ = timed(|| a.add_broadcast(&b).expect("equal shapes never fail"));
                 let op_a = kernels::borrow::operand(&a);
                 let op_b = kernels::borrow::operand(&b);
@@ -821,16 +817,12 @@ mod perf_probe {
 
             for round in 0..repeats {
                 let (d_old, d_new) = if round % 2 == 0 {
-                    let d_old = timed(|| Array {
-                        data: &a.data + &b.data,
-                    });
+                    let d_old = timed(|| Array::from_nd(a.array() + b.array()));
                     let d_new = timed(|| a.add_broadcast(&b).expect("equal shapes never fail"));
                     (d_old, d_new)
                 } else {
                     let d_new = timed(|| a.add_broadcast(&b).expect("equal shapes never fail"));
-                    let d_old = timed(|| Array {
-                        data: &a.data + &b.data,
-                    });
+                    let d_old = timed(|| Array::from_nd(a.array() + b.array()));
                     (d_old, d_new)
                 };
                 min_old_full = min_old_full.min(d_old);

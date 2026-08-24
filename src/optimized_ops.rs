@@ -101,6 +101,22 @@ pub struct SimdOpsResult {
 }
 
 /// Optimized vector operations using SIMD via SimdUnifiedOps
+///
+/// `min`/`max` follow NumPy `np.min`/`np.max` semantics: **any `NaN`
+/// anywhere in `v` makes the result `NaN`**, independent of where the
+/// `NaN` sits or how long `v` is. [`crate::math::nanmin`]/
+/// [`crate::math::nanmax`] are the `NaN`-ignoring alternative.
+///
+/// These no longer route through
+/// `scirs2_core::simd_ops::SimdUnifiedOps::simd_min_element`/
+/// `simd_max_element`: that upstream pair has a proven bug where it
+/// returns a **wrong, finite value** (neither the true extremum nor
+/// `NaN`) for some `NaN` placements -- see
+/// `crate::kernels::reduce`'s module docs for the reproduction. Instead
+/// this calls [`crate::kernels::reduce::min_f32`]/
+/// [`crate::kernels::reduce::max_f32`], the same deterministic
+/// comparison-fold kernels backing `stats::basic` and
+/// `Array::min_optimized`/`max_optimized`.
 pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
     // Use SimdUnifiedOps from scirs2-core for SIMD operations
     let sum = f32::simd_sum(v);
@@ -109,9 +125,35 @@ pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
     // Calculate L2 norm using SIMD
     let norm = f32::simd_norm(v);
 
-    // Find min and max using SIMD
-    let min = f32::simd_min_element(v);
-    let max = f32::simd_max_element(v);
+    // Borrow `v`'s data as a flat slice for the min/max kernels below,
+    // zero-copy when `v` is contiguous (the common case); materializing
+    // an owned copy only for a non-contiguous view (e.g. a strided
+    // slice), matching `crate::kernels::borrow::operand`'s approach for
+    // `Array<T>`.
+    let owned_for_minmax;
+    let slice: &[f32] = match v.as_slice() {
+        Some(s) => s,
+        None => {
+            owned_for_minmax = v.iter().copied().collect::<Vec<f32>>();
+            &owned_for_minmax
+        }
+    };
+
+    // `crate::kernels::reduce::min_f32`/`max_f32` return `0.0` for an
+    // empty slice (their documented contract), which does not match this
+    // function's pre-existing empty-input behavior of +/-infinity
+    // (inherited from `simd_min_element`/`simd_max_element`'s own empty
+    // case) -- guarded explicitly here so that contract is unchanged.
+    let min = if slice.is_empty() {
+        f32::INFINITY
+    } else {
+        crate::kernels::reduce::min_f32(slice)
+    };
+    let max = if slice.is_empty() {
+        f32::NEG_INFINITY
+    } else {
+        crate::kernels::reduce::max_f32(slice)
+    };
 
     SimdVectorResult {
         sum,
@@ -700,6 +742,40 @@ mod tests {
         assert_eq!(result.max, 4.0);
         // norm = sqrt(1^2 + 2^2 + 3^2 + 4^2) = sqrt(30) ≈ 5.477
         assert!((result.norm - 5.477).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_simd_vector_ops_upstream_bug_vector_yields_nan() {
+        // The proven `scirs2_core::simd_ops::SimdUnifiedOps::
+        // simd_max_element` bug vector: a 64-element f32 slice
+        // `[5.0, 1.0 x9, NaN at index 10, 1.0 x53]`. Upstream silently
+        // returned `1.0` (dropping the true max, `5.0`) instead of `NaN`.
+        // `simd_vector_ops` must now report `NaN` for both min and max.
+        let mut data = vec![1.0f32; 64];
+        data[0] = 5.0;
+        data[10] = f32::NAN;
+        let v = Array1::from_vec(data);
+
+        let result = simd_vector_ops(&v.view());
+
+        assert!(result.min.is_nan(), "min should be NaN, got {}", result.min);
+        assert!(result.max.is_nan(), "max should be NaN, got {}", result.max);
+    }
+
+    #[test]
+    fn test_simd_vector_ops_nan_at_first_position_yields_nan() {
+        let v = array![f32::NAN, 1.0, 2.0, 3.0];
+        let result = simd_vector_ops(&v.view());
+        assert!(result.min.is_nan());
+        assert!(result.max.is_nan());
+    }
+
+    #[test]
+    fn test_simd_vector_ops_nan_at_last_position_yields_nan() {
+        let v = array![1.0f32, 2.0, 3.0, f32::NAN];
+        let result = simd_vector_ops(&v.view());
+        assert!(result.min.is_nan());
+        assert!(result.max.is_nan());
     }
 
     #[test]

@@ -243,6 +243,15 @@ where
         let total_size: usize = shape.iter().product();
         let n_slices = total_size / axis_len;
 
+        // Bulk-acquire once for the whole axis-partition pass: `result` was
+        // just cloned from `array` above, so this first mutable access is
+        // the ONE unshare the COW buffer ever needs here (subsequent access
+        // through this same handle is free); every read in the loop below
+        // goes through the still-shared, untouched `array` (a distinct
+        // `Array` handle from `result`), so nothing here can read stale data
+        // through the mutable borrow.
+        let result_arr = result.array_mut();
+
         for slice_idx in 0..n_slices {
             // Get indices for this slice along the axis
             let _indices: Vec<usize> = Vec::with_capacity(axis_len);
@@ -283,7 +292,12 @@ where
             // Write back partitioned values
             for i in 0..axis_len {
                 base_indices[ax] = i;
-                result.set(&base_indices, values[i])?;
+                *result_arr.get_mut(base_indices.as_slice()).ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        base_indices
+                    ))
+                })? = values[i];
             }
         }
 

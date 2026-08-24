@@ -178,9 +178,10 @@ pub fn pinv<
 
     // 1. Create a diagonal matrix from s_inv
     let mut s_inv_diag = Array::zeros(&[k, k]);
+    let out = s_inv_diag.array_mut();
     #[allow(clippy::needless_range_loop)]
     for i in 0..k {
-        s_inv_diag.set(&[i, i], s_inv_vec[i])?;
+        out[[i, i]] = s_inv_vec[i];
     }
 
     // 2. Compute V * S^+

@@ -457,27 +457,46 @@ where
     // Compute the pseudo-inverse solution: x = V * S^+ * U^T * b
     // where S^+ is the Moore-Penrose pseudo-inverse of the diagonal matrix S
 
-    // Step 1: Compute U^T * b
+    // Step 1: Compute U^T * b. `svd()` returns the FULL `U` (m x m -- see
+    // oxiblas-lapack's `SvdDc::u()`, which is what backs it), so `ut_b`
+    // always has `m` rows, regardless of how `m` compares to `n`.
     let ut_b = u.transpose().matmul(b)?;
 
-    // Step 2: Apply S^+ (multiply by 1/s_i for non-zero singular values)
-    let mut s_pinv_ut_b = ut_b.clone();
+    // Step 2: Apply S^+, landing directly in the `n x k` shape that `v`
+    // (n x n) needs for the Step 3 matmul below. `S^+` is conceptually
+    // `n x m` (the pseudo-inverse of the `m x n` rectangular "diagonal" S),
+    // so `S^+ @ ut_b` always has `n` rows -- not `m`:
+    //   - rows `0..min_dim` (`min_dim = min(m, n)`): `ut_b[i] / s_vec[i]`
+    //     when `s_vec[i]` clears the cutoff, else zero -- same scaling the
+    //     old code applied.
+    //   - rows `min_dim..n` (non-empty only when `n > m`, the
+    //     under-determined case): always zero -- `S^+` has no diagonal
+    //     entry there, so nothing survives.
+    //   - any `ut_b` rows at or past `min_dim` when `m > n` (the
+    //     over-determined case) are dropped entirely -- `S^+` has no
+    //     *column* there either, so they never contribute to `V @ S^+ @
+    //     U^T @ b`.
+    //
+    // The old code instead started from `ut_b.clone()` (keeping all `m`
+    // rows unconditionally) and only overwrote rows `0..min_dim` in place,
+    // so it only ever matched `v`'s `n` columns when `m == n`. For every
+    // non-square `a` the Step 3 `v.matmul(&s_pinv_ut_b)` below failed with
+    // a shape mismatch -- this rebuild (into a fresh `n x k` buffer, rather
+    // than a same-shape-as-`ut_b` in-place edit) is that fix.
     let min_dim = std::cmp::min(m, n);
-
+    let mut s_pinv_ut_b_data = vec![T::zero(); n * k];
     for i in 0..min_dim {
-        for j in 0..k {
-            let ut_b_val = ut_b.get(&[i, j])?;
-            if i < s_vec.len() && s_vec[i] > cutoff {
-                let sv_as_t = <T as num_traits::NumCast>::from(s_vec[i])
-                    .expect("singular value should convert to float type");
-                let new_val = ut_b_val / sv_as_t;
-                s_pinv_ut_b.set(&[i, j], new_val)?;
-            } else {
-                // Zero out contributions from small singular values
-                s_pinv_ut_b.set(&[i, j], T::zero())?;
+        if i < s_vec.len() && s_vec[i] > cutoff {
+            let sv_as_t = <T as num_traits::NumCast>::from(s_vec[i])
+                .expect("singular value should convert to float type");
+            for j in 0..k {
+                s_pinv_ut_b_data[i * k + j] = ut_b.get(&[i, j])? / sv_as_t;
             }
         }
+        // else: leave this row zero (small/negligible singular value) --
+        // already the initial value from `vec![T::zero(); ..]` above.
     }
+    let s_pinv_ut_b = Array::from_vec_shape(s_pinv_ut_b_data, &[n, k])?;
 
     // Step 3: Compute x = V * (S^+ * U^T * b)
     let v = vt.transpose();
@@ -510,15 +529,19 @@ where
                 .collect();
             Array::from_vec(diff_vec)
         } else {
-            let mut diff_result = Array::zeros(&b.shape());
+            // Built from scratch (every entry is written exactly once), so a
+            // flat Vec + `from_vec_shape` replaces `Array::zeros(..)` +
+            // per-element `set()`: no wasted zero-fill and no per-element
+            // unshare check.
+            let mut diff_vec = Vec::with_capacity(b.shape()[0] * k);
             for i in 0..b.shape()[0] {
                 for j in 0..k {
                     let ax_val = ax.get(&[i, j])?;
                     let b_val = b.get(&[i, j])?;
-                    diff_result.set(&[i, j], ax_val - b_val)?;
+                    diff_vec.push(ax_val - b_val);
                 }
             }
-            diff_result
+            Array::from_vec_shape(diff_vec, &b.shape())?
         };
 
         // Compute sum of squares for each column
@@ -544,4 +567,244 @@ where
     };
 
     Ok((x_final, residuals, rank, s))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
+
+    /// Regression coverage for the `lstsq` `s_pinv_ut_b` conversion (W3-A2):
+    /// hoisted `array_mut()` instead of a per-`(i, j)` `Array::set`. Uses a
+    /// MATRIX (not vector) right-hand side with `k = 2`, so the write loop
+    /// actually iterates over more than one column.
+    ///
+    /// This is deliberately a SQUARE, invertible `a` (`m == n`), which was
+    /// already reachable before the W4-D fix below. The non-square cases
+    /// that fix unblocked -- `s_pinv_ut_b` needed truncating to `n` rows
+    /// when `m > n` and zero-padding to `n` rows when `m < n`, since
+    /// `svd()` returns the FULL `U` (m×m) and `Vᵀ` (n×n) (`SvdDc::u()`/
+    /// `vt()`), while the old code always kept `ut_b`'s `m` rows -- have
+    /// their own dedicated tests below (`lstsq_overdetermined_vector_
+    /// matches_numpy`, `lstsq_underdetermined_vector_matches_numpy`,
+    /// `lstsq_overdetermined_matrix_rhs_matches_numpy`), pinned against
+    /// `np.linalg.lstsq`. The last of those also exercises the
+    /// `diff_result` (matrix) residuals branch below, which this square
+    /// test's `m == n` shape can never reach (residuals are only computed
+    /// when `m > n`).
+    ///
+    /// Expected values are the closed-form solution `x = A⁻¹b`, computed by
+    /// hand per column, independent of the implementation under test.
+    #[test]
+    fn lstsq_matrix_rhs_square_matches_closed_form_solve() {
+        // A = [[1, 1], [1, 2]], det = 1, A^-1 = [[2, -1], [-1, 1]].
+        let a = Array::from_vec(vec![1.0, 1.0, 1.0, 2.0]).reshape(&[2, 2]);
+        // b has two columns: [3, 5] and [4, 6].
+        let b = Array::from_vec(vec![3.0, 4.0, 5.0, 6.0]).reshape(&[2, 2]);
+
+        let (x, _residuals, rank, _sv) =
+            lstsq(&a, &b, None).expect("square full-rank lstsq should succeed");
+
+        assert_eq!(rank, 2);
+        assert_eq!(x.shape(), vec![2, 2]);
+
+        // Column 0: A^-1 * [3, 5] = [2*3-1*5, -1*3+1*5] = [1, 2].
+        assert_relative_eq!(x.get(&[0, 0]).expect("valid"), 1.0, epsilon = 1e-9);
+        assert_relative_eq!(x.get(&[1, 0]).expect("valid"), 2.0, epsilon = 1e-9);
+        // Column 1: A^-1 * [4, 6] = [2*4-1*6, -1*4+1*6] = [2, 2].
+        assert_relative_eq!(x.get(&[0, 1]).expect("valid"), 2.0, epsilon = 1e-9);
+        assert_relative_eq!(x.get(&[1, 1]).expect("valid"), 2.0, epsilon = 1e-9);
+
+        // Cross-check independent of the hand-derived numbers: A*x must
+        // reproduce b exactly for a square, well-conditioned, exact solve.
+        let ax = a.matmul(&x).expect("matmul should succeed");
+        for i in 0..2 {
+            for j in 0..2 {
+                assert_relative_eq!(
+                    ax.get(&[i, j]).expect("valid"),
+                    b.get(&[i, j]).expect("valid"),
+                    epsilon = 1e-9
+                );
+            }
+        }
+    }
+
+    /// Over-determined (`m > n`) least squares: the shape bug's primary
+    /// repro. Before the fix, this errored on `v.matmul(&s_pinv_ut_b)`
+    /// (`v` is `n x n`, but `s_pinv_ut_b` kept all `m` rows of `svd()`'s
+    /// full `U`) for every non-square `a` -- this is the `m > n` half.
+    ///
+    /// Reference values from `numpy.linalg.lstsq` (numpy 2.4.2):
+    /// `np.linalg.lstsq([[1,1],[1,2],[1,3],[1,4]], [6,5,7,10], rcond=None)`
+    /// -> `x = [3.4999999999999987, 1.4]`, `res = [4.199999999999998]`,
+    /// `rank = 2`.
+    #[test]
+    fn lstsq_overdetermined_vector_matches_numpy() {
+        let a = Array::from_vec(vec![1.0, 1.0, 1.0, 2.0, 1.0, 3.0, 1.0, 4.0]).reshape(&[4, 2]);
+        let b = Array::from_vec(vec![6.0, 5.0, 7.0, 10.0]);
+
+        let (x, residuals, rank, _sv) =
+            lstsq(&a, &b, None).expect("over-determined lstsq should now succeed");
+
+        assert_eq!(rank, 2);
+        assert_eq!(x.shape(), vec![2]);
+
+        assert_relative_eq!(
+            x.get(&[0]).expect("valid"),
+            3.499_999_999_999_998_7,
+            epsilon = 1e-9
+        );
+        assert_relative_eq!(x.get(&[1]).expect("valid"), 1.4, epsilon = 1e-9);
+
+        // Defining property of the least-squares solution, independent of
+        // the particular SVD/pinv algorithm used to reach it: the normal
+        // equations A^T A x = A^T b hold up to floating-point error. `x`
+        // comes back 1-D here (`b` was a vector) while `a.transpose()`'s
+        // matmuls promote it to a column, so compare via flattened `Vec`s
+        // rather than assuming a specific shape for either side.
+        let at = a.transpose();
+        let ata_x = at.matmul(&a).expect("matmul").matmul(&x).expect("matmul");
+        let at_b = at.matmul(&b).expect("matmul");
+        let ata_x_vec = ata_x.to_vec();
+        let at_b_vec = at_b.to_vec();
+        assert_eq!(ata_x_vec.len(), at_b_vec.len());
+        for i in 0..ata_x_vec.len() {
+            assert_relative_eq!(ata_x_vec[i], at_b_vec[i], epsilon = 1e-9);
+        }
+
+        // Residual: ||Ax - b||^2, pinned against NumPy's `res`. This is the
+        // first test to reach the residuals computation at all (it needs
+        // `m > n`, which errored unconditionally before this fix).
+        assert_eq!(residuals.shape(), vec![1]);
+        assert_relative_eq!(
+            residuals.get(&[0]).expect("valid"),
+            4.199_999_999_999_998,
+            epsilon = 1e-9
+        );
+    }
+
+    /// Under-determined (`m < n`) least squares -- NumPy's minimum-norm
+    /// case, and the shape bug's other half: `s_pinv_ut_b` needs *padding*
+    /// with `n - m` zero rows here, not truncation.
+    ///
+    /// Reference values from `numpy.linalg.lstsq` (numpy 2.4.2):
+    /// `np.linalg.lstsq([[1,2,3],[4,5,6]], [7,8], rcond=None)` ->
+    /// `x = [-3.055555555555555, 0.11111111111111172, 3.2777777777777772]`,
+    /// `res = []`, `rank = 2`.
+    #[test]
+    fn lstsq_underdetermined_vector_matches_numpy() {
+        let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let b = Array::from_vec(vec![7.0, 8.0]);
+
+        let (x, residuals, rank, _sv) =
+            lstsq(&a, &b, None).expect("under-determined lstsq should now succeed");
+
+        assert_eq!(rank, 2);
+        assert_eq!(x.shape(), vec![3]);
+
+        assert_relative_eq!(
+            x.get(&[0]).expect("valid"),
+            -3.055_555_555_555_555,
+            epsilon = 1e-8
+        );
+        assert_relative_eq!(
+            x.get(&[1]).expect("valid"),
+            0.111_111_111_111_111_72,
+            epsilon = 1e-8
+        );
+        assert_relative_eq!(
+            x.get(&[2]).expect("valid"),
+            3.277_777_777_777_777_2,
+            epsilon = 1e-8
+        );
+
+        // A full-row-rank under-determined system has an *exact* solution
+        // (there is nothing left to minimize): this is the identity that
+        // actually pins down NumPy's minimum-norm convention here, unlike
+        // the A^T A one above (which only characterizes least squares in
+        // general, and would be satisfied by other x's too when `a` is
+        // rank-deficient in columns the way it is here).
+        let ax = a.matmul(&x).expect("matmul");
+        let ax_vec = ax.to_vec();
+        let b_vec = b.to_vec();
+        assert_eq!(ax_vec.len(), b_vec.len());
+        for i in 0..b_vec.len() {
+            assert_relative_eq!(ax_vec[i], b_vec[i], epsilon = 1e-9);
+        }
+
+        // No residuals for an under-determined system: matches NumPy,
+        // whose `res` is an empty array whenever `M <= N`.
+        assert_eq!(residuals.shape(), vec![0]);
+    }
+
+    /// Matrix right-hand side, over-determined and full rank: exercises the
+    /// `diff_result` (matrix, not vector) branch of the residuals
+    /// computation above, which was unreachable before the shape fix --
+    /// every over-determined call errored before residuals were ever
+    /// computed, regardless of whether `b` was a vector or a matrix.
+    ///
+    /// Reference values from `numpy.linalg.lstsq` (numpy 2.4.2), same `A`
+    /// as the over-determined vector test above, with
+    /// `B = [[6,1,0],[5,2,1],[7,3,2],[10,4,5]]`.
+    #[test]
+    fn lstsq_overdetermined_matrix_rhs_matches_numpy() {
+        let a = Array::from_vec(vec![1.0, 1.0, 1.0, 2.0, 1.0, 3.0, 1.0, 4.0]).reshape(&[4, 2]);
+        #[rustfmt::skip]
+        let b = Array::from_vec(vec![
+            6.0, 1.0, 0.0,
+            5.0, 2.0, 1.0,
+            7.0, 3.0, 2.0,
+            10.0, 4.0, 5.0,
+        ])
+        .reshape(&[4, 3]);
+
+        let (x, residuals, rank, _sv) =
+            lstsq(&a, &b, None).expect("over-determined matrix-RHS lstsq should now succeed");
+
+        assert_eq!(rank, 2);
+        assert_eq!(x.shape(), vec![2, 3]);
+
+        #[rustfmt::skip]
+        let expected_x = [
+            [3.499_999_999_999_998_7,  2.428_503_789_574_373_6e-16, -1.999_999_999_999_999_3],
+            [1.399_999_999_999_999_9,  0.999_999_999_999_999_7,      1.599_999_999_999_999_6],
+        ];
+        for i in 0..2 {
+            for j in 0..3 {
+                assert_relative_eq!(
+                    x.get(&[i, j]).expect("valid"),
+                    expected_x[i][j],
+                    epsilon = 1e-8
+                );
+            }
+        }
+
+        // Normal equations A^T A X = A^T B, column-by-column -- independent
+        // of NumPy's specific pinv/SVD internals.
+        let at = a.transpose();
+        let ata_x = at.matmul(&a).expect("matmul").matmul(&x).expect("matmul");
+        let at_b = at.matmul(&b).expect("matmul");
+        let ata_x_vec = ata_x.to_vec();
+        let at_b_vec = at_b.to_vec();
+        assert_eq!(ata_x_vec.len(), at_b_vec.len());
+        for i in 0..ata_x_vec.len() {
+            assert_relative_eq!(ata_x_vec[i], at_b_vec[i], epsilon = 1e-8);
+        }
+
+        // Residuals: one value per column of B, from the previously-dead
+        // `diff_result` branch. The middle column's residual is ~0 (that
+        // column of `B` lies exactly in `A`'s column space) -- `epsilon`
+        // in `approx`'s `assert_relative_eq!` is also the absolute-error
+        // fallback used whenever either side is (near) zero, so the same
+        // tolerance covers it without a separate branch.
+        assert_eq!(residuals.shape(), vec![3]);
+        let expected_res = [4.199_999_999_999_998, 0.0, 1.2];
+        for j in 0..3 {
+            assert_relative_eq!(
+                residuals.get(&[j]).expect("valid"),
+                expected_res[j],
+                epsilon = 1e-8
+            );
+        }
+    }
 }

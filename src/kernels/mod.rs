@@ -92,16 +92,17 @@ pub(crate) const PARALLEL_MIN_LEN: usize = 10_000;
 pub(crate) const PARALLEL_CHUNK: usize = 8_192;
 
 /// Minimum estimated FLOP count (`2 * m * n * k`) above which
-/// [`gemm::gemm_2d`]'s f64/f32 SIMD tier splits the `M` (row) dimension
-/// across threads instead of making one single-threaded call into
-/// `scirs2-core`'s blocked GEMM.
+/// [`gemm::gemm_2d`]'s f64/f32 tier splits the `M` (row) dimension across
+/// threads instead of making one single-threaded call into
+/// `scirs2_core::ndarray::linalg::general_mat_mul` (the pure-Rust
+/// `matrixmultiply` crate, which packs both operands and has no
+/// small-matrix degradation of its own).
 ///
-/// `1 << 20` (~1.05M FLOPs) is roughly a 64x64x64 to 80x80x80 cube of
-/// multiply-adds -- large enough that `scirs2-core`'s own blocked GEMM
-/// (which self-degrades to a plain triple loop below 32 in any dimension)
-/// is already past its small-matrix regime, so there is real parallel
-/// work available, and small enough that the row-split's own scheduling
-/// overhead stays negligible relative to the work it parallelizes.
+/// `1 << 20` (~1.05M FLOPs) is the measured serial/parallel crossover,
+/// re-validated empirically against this backend by [`gemm::gemm_2d`]'s
+/// bake-off (see that function's doc comment for the full table): `80^3`
+/// (1,024,000 FLOPs, just under) wins serial, `96^3` (1,769,472 FLOPs,
+/// just over) wins parallel, in both `f64` and `f32`.
 pub(crate) const GEMM_PARALLEL_MIN_FLOPS: usize = 1 << 20;
 
 /// Exercises the actual cross-module call pattern the hot-path-migration

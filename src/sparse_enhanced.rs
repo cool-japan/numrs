@@ -17,6 +17,17 @@ use std::fmt::Debug;
 pub struct SparseOpsAdvanced;
 
 impl SparseOpsAdvanced {
+    /// Shorthand for [`NumRs2Error::bulk_index_oob`]: every loop below
+    /// hoists one `array()`/`array_mut()` above a `for i in 0..n` and then
+    /// reads/writes through the raw `ndarray` accessors (`get`/`get_mut`),
+    /// which return `Option` rather than the `Array::get`/`Array::set`
+    /// wrappers' `Result` -- see that function's doc comment for why this
+    /// is unreachable in practice but still returns `Result`.
+    #[inline]
+    fn oob(indices: &[usize]) -> NumRs2Error {
+        NumRs2Error::bulk_index_oob(indices)
+    }
+
     /// Sparse-dense matrix multiplication with optimized memory access patterns
     ///
     /// Computes C = alpha * A * B + beta * C where A is sparse and B, C are dense
@@ -50,11 +61,14 @@ impl SparseOpsAdvanced {
         let m = a_shape[0];
         let n = a_shape[1];
 
-        // Apply beta scaling to y first
+        // Apply beta scaling to y first. Bulk-acquired: one `array_mut()`
+        // (one `Arc::make_mut` unshare check) for the whole loop instead of
+        // one per element via `Array::set`.
         if beta != T::one() {
+            let y_arr = y.array_mut();
             for i in 0..m {
-                let val = y.get(&[i])?;
-                y.set(&[i], beta * val)?;
+                let elem = y_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                *elem = beta * *elem;
             }
         }
 
@@ -75,6 +89,12 @@ impl SparseOpsAdvanced {
         if let (Some(indptr), Some(indices)) = (&a.indptr, &a.indices) {
             let m = a.shape()[0];
 
+            // Bulk-acquired: `x` is read-only for the whole sweep and `y`
+            // is unshared exactly once, instead of once per row via
+            // `Array::get`/`Array::set`.
+            let x_arr = x.array();
+            let y_arr = y.array_mut();
+
             for i in 0..m {
                 let row_start = indptr[i];
                 let row_end = indptr[i + 1];
@@ -83,12 +103,12 @@ impl SparseOpsAdvanced {
                 for idx in row_start..row_end {
                     let j = indices[idx];
                     let a_val = a.get(i, j)?;
-                    let x_val = x.get(&[j])?;
+                    let x_val = *x_arr.get([j]).ok_or_else(|| Self::oob(&[j]))?;
                     sum = sum + a_val * x_val;
                 }
 
-                let current = y.get(&[i])?;
-                y.set(&[i], current + alpha * sum)?;
+                let elem = y_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                *elem = *elem + alpha * sum;
             }
         } else {
             return Err(NumRs2Error::ComputationError(
@@ -107,18 +127,21 @@ impl SparseOpsAdvanced {
         if let (Some(indptr), Some(indices)) = (&a.indptr, &a.indices) {
             let n = a.shape()[1];
 
+            let x_arr = x.array();
+            let y_arr = y.array_mut();
+
             for j in 0..n {
                 let col_start = indptr[j];
                 let col_end = indptr[j + 1];
 
-                let x_val = x.get(&[j])?;
+                let x_val = *x_arr.get([j]).ok_or_else(|| Self::oob(&[j]))?;
                 let scaled_x = alpha * x_val;
 
                 for idx in col_start..col_end {
                     let i = indices[idx];
                     let a_val = a.get(i, j)?;
-                    let current = y.get(&[i])?;
-                    y.set(&[i], current + a_val * scaled_x)?;
+                    let elem = y_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = *elem + a_val * scaled_x;
                 }
             }
         } else {
@@ -142,15 +165,18 @@ impl SparseOpsAdvanced {
     where
         T: Float + Clone + Debug,
     {
-        // For COO format, iterate through all non-zero entries
+        // For COO format, iterate through all non-zero entries. Bulk-acquired
+        // the same way as the CSR/CSC paths above.
+        let x_arr = x.array();
+        let y_arr = y.array_mut();
         for (indices, value) in &a.array.data {
             let i = indices[0];
             let j = indices[1];
 
             if i < m && j < n {
-                let x_val = x.get(&[j])?;
-                let current = y.get(&[i])?;
-                y.set(&[i], current + alpha * *value * x_val)?;
+                let x_val = *x_arr.get([j]).ok_or_else(|| Self::oob(&[j]))?;
+                let elem = y_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                *elem = *elem + alpha * *value * x_val;
             }
         }
 
@@ -219,10 +245,15 @@ impl SparseOpsAdvanced {
         Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
 
         let mut r = Array::zeros(&[n]);
-        for i in 0..n {
-            let b_val = b.get(&[i])?;
-            let ax_val = ax.get(&[i])?;
-            r.set(&[i], b_val - ax_val)?;
+        {
+            let b_arr = b.array();
+            let ax_arr = ax.array();
+            let r_arr = r.array_mut();
+            for i in 0..n {
+                let b_val = *b_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                let ax_val = *ax_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                *r_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = b_val - ax_val;
+            }
         }
 
         let mut p = r.clone();
@@ -251,17 +282,25 @@ impl SparseOpsAdvanced {
             let alpha = rsold / ptap;
 
             // Update solution: x = x + alpha * p
-            for i in 0..n {
-                let x_val = x.get(&[i])?;
-                let p_val = p.get(&[i])?;
-                x.set(&[i], x_val + alpha * p_val)?;
+            {
+                let p_arr = p.array();
+                let x_arr = x.array_mut();
+                for i in 0..n {
+                    let p_val = *p_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let elem = x_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = *elem + alpha * p_val;
+                }
             }
 
             // Update residual: r = r - alpha * A * p
-            for i in 0..n {
-                let r_val = r.get(&[i])?;
-                let ap_val = ap.get(&[i])?;
-                r.set(&[i], r_val - alpha * ap_val)?;
+            {
+                let ap_arr = ap.array();
+                let r_arr = r.array_mut();
+                for i in 0..n {
+                    let ap_val = *ap_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let elem = r_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = *elem - alpha * ap_val;
+                }
             }
 
             let rsnew = Self::dot_product(&r, &r)?;
@@ -273,10 +312,14 @@ impl SparseOpsAdvanced {
 
             // Update search direction: p = r + beta * p
             let beta = rsnew / rsold;
-            for i in 0..n {
-                let r_val = r.get(&[i])?;
-                let p_val = p.get(&[i])?;
-                p.set(&[i], r_val + beta * p_val)?;
+            {
+                let r_arr = r.array();
+                let p_arr = p.array_mut();
+                for i in 0..n {
+                    let r_val = *r_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let elem = p_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = r_val + beta * *elem;
+                }
             }
 
             rsold = rsnew;
@@ -316,10 +359,15 @@ impl SparseOpsAdvanced {
         Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
 
         let mut r = Array::zeros(&[n]);
-        for i in 0..n {
-            let b_val = b.get(&[i])?;
-            let ax_val = ax.get(&[i])?;
-            r.set(&[i], b_val - ax_val)?;
+        {
+            let b_arr = b.array();
+            let ax_arr = ax.array();
+            let r_arr = r.array_mut();
+            for i in 0..n {
+                let b_val = *b_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                let ax_val = *ax_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                *r_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = b_val - ax_val;
+            }
         }
 
         let r0 = r.clone();
@@ -353,11 +401,16 @@ impl SparseOpsAdvanced {
             let beta = (rho_new / rho) * (alpha / omega);
 
             // Update p = r + beta * (p - omega * v)
-            for i in 0..n {
-                let r_val = r.get(&[i])?;
-                let p_val = p.get(&[i])?;
-                let v_val = v.get(&[i])?;
-                p.set(&[i], r_val + beta * (p_val - omega * v_val))?;
+            {
+                let r_arr = r.array();
+                let v_arr = v.array();
+                let p_arr = p.array_mut();
+                for i in 0..n {
+                    let r_val = *r_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let v_val = *v_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let elem = p_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = r_val + beta * (*elem - omega * v_val);
+                }
             }
 
             // v = A * p
@@ -373,20 +426,29 @@ impl SparseOpsAdvanced {
             alpha = rho_new / r0v;
 
             // s = r - alpha * v
-            for i in 0..n {
-                let r_val = r.get(&[i])?;
-                let v_val = v.get(&[i])?;
-                s.set(&[i], r_val - alpha * v_val)?;
+            {
+                let r_arr = r.array();
+                let v_arr = v.array();
+                let s_arr = s.array_mut();
+                for i in 0..n {
+                    let r_val = *r_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let v_val = *v_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *s_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = r_val - alpha * v_val;
+                }
             }
 
             // Check if we can stop here
             let s_norm_sq = Self::dot_product(&s, &s)?;
             if s_norm_sq < tol_sq {
                 // Update x and return
-                for i in 0..n {
-                    let x_val = x.get(&[i])?;
-                    let p_val = p.get(&[i])?;
-                    x.set(&[i], x_val + alpha * p_val)?;
+                {
+                    let p_arr = p.array();
+                    let x_arr = x.array_mut();
+                    for i in 0..n {
+                        let p_val = *p_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                        let elem = x_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                        *elem = *elem + alpha * p_val;
+                    }
                 }
                 return Ok((x, iter + 1, s_norm_sq.sqrt()));
             }
@@ -406,18 +468,28 @@ impl SparseOpsAdvanced {
             omega = ts / tt;
 
             // Update solution: x = x + alpha * p + omega * s
-            for i in 0..n {
-                let x_val = x.get(&[i])?;
-                let p_val = p.get(&[i])?;
-                let s_val = s.get(&[i])?;
-                x.set(&[i], x_val + alpha * p_val + omega * s_val)?;
+            {
+                let p_arr = p.array();
+                let s_arr = s.array();
+                let x_arr = x.array_mut();
+                for i in 0..n {
+                    let p_val = *p_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let s_val = *s_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let elem = x_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = *elem + alpha * p_val + omega * s_val;
+                }
             }
 
             // Update residual: r = s - omega * t
-            for i in 0..n {
-                let s_val = s.get(&[i])?;
-                let t_val = t.get(&[i])?;
-                r.set(&[i], s_val - omega * t_val)?;
+            {
+                let s_arr = s.array();
+                let t_arr = t.array();
+                let r_arr = r.array_mut();
+                for i in 0..n {
+                    let s_val = *s_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let t_val = *t_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *r_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = s_val - omega * t_val;
+                }
             }
 
             rho = rho_new;
@@ -499,10 +571,15 @@ impl SparseOpsAdvanced {
             Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
 
             let mut r = Array::zeros(&[n]);
-            for i in 0..n {
-                let b_val = b.get(&[i])?;
-                let ax_val = ax.get(&[i])?;
-                r.set(&[i], b_val - ax_val)?;
+            {
+                let b_arr = b.array();
+                let ax_arr = ax.array();
+                let r_arr = r.array_mut();
+                for i in 0..n {
+                    let b_val = *b_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let ax_val = *ax_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *r_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = b_val - ax_val;
+                }
             }
 
             let r_norm = Self::dot_product(&r, &r)?.sqrt();
@@ -514,8 +591,13 @@ impl SparseOpsAdvanced {
 
             // Initialize Arnoldi iteration
             let mut v = vec![Array::zeros(&[n]); restart + 1];
-            for i in 0..n {
-                v[0].set(&[i], r.get(&[i])? / r_norm)?;
+            {
+                let r_arr = r.array();
+                let v0_arr = v[0].array_mut();
+                for i in 0..n {
+                    let r_val = *r_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *v0_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = r_val / r_norm;
+                }
             }
 
             let mut h = vec![vec![T::zero(); restart]; restart + 1];
@@ -537,12 +619,22 @@ impl SparseOpsAdvanced {
                 let mut w = Array::zeros(&[n]);
                 Self::spmv_dense(a, &v[j], &mut w, T::one(), T::zero())?;
 
-                // Modified Gram-Schmidt orthogonalization
+                // Modified Gram-Schmidt orthogonalization. Bulk-acquired
+                // per `i`: `w` alternates between being read (the dot
+                // product) and written (the axpy below), so its unshare
+                // can only be hoisted as far as one `Arc::make_mut` per
+                // `i` rather than one for the whole `0..=j` sweep -- still
+                // collapsing the inner `0..n` loop's per-element cost to a
+                // single check.
                 for i in 0..=j {
                     h[i][j] = Self::dot_product(&v[i], &w)?;
+                    let hij = h[i][j];
+                    let vi_arr = v[i].array();
+                    let w_arr = w.array_mut();
                     for l in 0..n {
-                        let val = w.get(&[l])? - h[i][j] * v[i].get(&[l])?;
-                        w.set(&[l], val)?;
+                        let vi_val = *vi_arr.get([l]).ok_or_else(|| Self::oob(&[l]))?;
+                        let elem = w_arr.get_mut([l]).ok_or_else(|| Self::oob(&[l]))?;
+                        *elem = *elem - hij * vi_val;
                     }
                 }
 
@@ -555,8 +647,14 @@ impl SparseOpsAdvanced {
                 }
 
                 // Normalize
-                for i in 0..n {
-                    v[j + 1].set(&[i], w.get(&[i])? / h[j + 1][j])?;
+                {
+                    let denom = h[j + 1][j];
+                    let w_arr = w.array();
+                    let vj1_arr = v[j + 1].array_mut();
+                    for i in 0..n {
+                        let w_val = *w_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                        *vj1_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = w_val / denom;
+                    }
                 }
 
                 // Apply previous Givens rotations to new column
@@ -605,11 +703,20 @@ impl SparseOpsAdvanced {
                 y[i] = sum / h[i][i];
             }
 
-            // Update solution: x = x + V * y
-            for j in 0..k {
-                for i in 0..n {
-                    let x_val = x.get(&[i])? + y[j] * v[j].get(&[i])?;
-                    x.set(&[i], x_val)?;
+            // Update solution: x = x + V * y. `x`'s unshare is hoisted above
+            // both loops (only `v[j]` changes per outer `j`, and reading a
+            // *different* array while holding `x`'s `&mut` is fine), so the
+            // whole O(k*n) update pays one `Arc::make_mut` in total.
+            {
+                let x_arr = x.array_mut();
+                for j in 0..k {
+                    let yj = y[j];
+                    let vj_arr = v[j].array();
+                    for i in 0..n {
+                        let vj_val = *vj_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                        let elem = x_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                        *elem = *elem + yj * vj_val;
+                    }
                 }
             }
 
@@ -618,8 +725,15 @@ impl SparseOpsAdvanced {
             Self::spmv_dense(a, &x, &mut ax_final, T::one(), T::zero())?;
 
             let mut r_final = Array::zeros(&[n]);
-            for i in 0..n {
-                r_final.set(&[i], b.get(&[i])? - ax_final.get(&[i])?)?;
+            {
+                let b_arr = b.array();
+                let ax_arr = ax_final.array();
+                let r_arr = r_final.array_mut();
+                for i in 0..n {
+                    let b_val = *b_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    let ax_val = *ax_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *r_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = b_val - ax_val;
+                }
             }
             let final_r_norm = Self::dot_product(&r_final, &r_final)?.sqrt();
 
@@ -633,8 +747,15 @@ impl SparseOpsAdvanced {
         Self::spmv_dense(a, &x, &mut ax, T::one(), T::zero())?;
 
         let mut r = Array::zeros(&[n]);
-        for i in 0..n {
-            r.set(&[i], b.get(&[i])? - ax.get(&[i])?)?;
+        {
+            let b_arr = b.array();
+            let ax_arr = ax.array();
+            let r_arr = r.array_mut();
+            for i in 0..n {
+                let b_val = *b_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                let ax_val = *ax_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                *r_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = b_val - ax_val;
+            }
         }
         let final_residual = Self::dot_product(&r, &r)?.sqrt();
 
@@ -790,7 +911,11 @@ impl SparseOpsAdvanced {
     where
         T: Float + Clone + Debug,
     {
-        if x.shape() != y.shape() {
+        // Compares the raw `ndarray` shapes (`&[usize]`) rather than
+        // `Array::shape()` (which heap-allocates a `Vec` on every call) --
+        // `dot_product` runs once per solver iteration, so this is cheap
+        // but free to avoid.
+        if x.array().shape() != y.array().shape() {
             return Err(NumRs2Error::DimensionMismatch(
                 "Arrays must have same shape for dot product".to_string(),
             ));
@@ -799,9 +924,14 @@ impl SparseOpsAdvanced {
         let n = x.shape()[0];
         let mut result = T::zero();
 
+        // Bulk-acquired: both operands are read-only, so this is a plain
+        // shared borrow with no unshare at all, but still saves the
+        // `Array::get` `Result`/bounds-check wrapper on every element.
+        let x_arr = x.array();
+        let y_arr = y.array();
         for i in 0..n {
-            let x_val = x.get(&[i])?;
-            let y_val = y.get(&[i])?;
+            let x_val = *x_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+            let y_val = *y_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
             result = result + x_val * y_val;
         }
 
@@ -849,9 +979,10 @@ impl SparseOpsAdvanced {
         {
             let v_norm = Self::vector_norm(&v)?;
             if v_norm > T::zero() {
+                let v_arr = v.array_mut();
                 for i in 0..n {
-                    let val = v.get(&[i])?;
-                    v.set(&[i], val / v_norm)?;
+                    let elem = v_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = *elem / v_norm;
                 }
             }
         }
@@ -873,9 +1004,13 @@ impl SparseOpsAdvanced {
             let new_lambda = Self::dot_product(&v, &av)?;
 
             // Normalize the new iterate for the next step.
-            for i in 0..n {
-                let val = av.get(&[i])?;
-                v.set(&[i], val / norm)?;
+            {
+                let av_arr = av.array();
+                let v_arr = v.array_mut();
+                for i in 0..n {
+                    let av_val = *av_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *v_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = av_val / norm;
+                }
             }
 
             if (new_lambda - lambda_max).abs() < tol {
@@ -893,9 +1028,10 @@ impl SparseOpsAdvanced {
         {
             let w_norm = Self::vector_norm(&w)?;
             if w_norm > T::zero() {
+                let w_arr = w.array_mut();
                 for i in 0..n {
-                    let val = w.get(&[i])?;
-                    w.set(&[i], val / w_norm)?;
+                    let elem = w_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *elem = *elem / w_norm;
                 }
             }
         }
@@ -921,9 +1057,13 @@ impl SparseOpsAdvanced {
             }
 
             // Normalize the iterate.
-            for i in 0..n {
-                let val = x.get(&[i])?;
-                w.set(&[i], val / x_norm)?;
+            {
+                let x_arr = x.array();
+                let w_arr = w.array_mut();
+                for i in 0..n {
+                    let x_val = *x_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
+                    *w_arr.get_mut([i]).ok_or_else(|| Self::oob(&[i]))? = x_val / x_norm;
+                }
             }
 
             // Rayleigh quotient λ_min = wᵀ A w (w is unit-norm).
@@ -961,8 +1101,9 @@ impl SparseOpsAdvanced {
         let n = x.shape()[0];
         let mut sum = T::zero();
 
+        let x_arr = x.array();
         for i in 0..n {
-            let val = x.get(&[i])?;
+            let val = *x_arr.get([i]).ok_or_else(|| Self::oob(&[i]))?;
             sum = sum + val * val;
         }
 

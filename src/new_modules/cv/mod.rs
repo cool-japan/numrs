@@ -334,7 +334,12 @@ impl Image {
         match self.color_space {
             ColorSpace::Grayscale => Ok(self.clone()),
             ColorSpace::Rgb | ColorSpace::Rgba => {
-                let mut result = Array::zeros(&[self.height, self.width]);
+                // Built from scratch (every pixel is written exactly once),
+                // so a flat row-major Vec + `from_vec_shape` replaces
+                // `Array::zeros(..)` + a per-pixel `set()` call: no wasted
+                // zero-fill and no per-pixel `Arc::make_mut` unshare check
+                // for what can be a multi-megapixel loop.
+                let mut gray_vec = Vec::with_capacity(self.height * self.width);
                 for row in 0..self.height {
                     for col in 0..self.width {
                         let r = self.data.get(&[row, col, 0]).map_err(|e| {
@@ -346,12 +351,10 @@ impl Image {
                         let b = self.data.get(&[row, col, 2]).map_err(|e| {
                             NumRs2Error::ComputationError(format!("Blue channel access: {}", e))
                         })?;
-                        let gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-                        result.set(&[row, col], gray).map_err(|e| {
-                            NumRs2Error::ComputationError(format!("Setting gray pixel: {}", e))
-                        })?;
+                        gray_vec.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
                     }
                 }
+                let result = Array::from_vec_shape(gray_vec, &[self.height, self.width])?;
                 Ok(Self {
                     data: result,
                     width: self.width,

@@ -382,6 +382,38 @@ fn test_simd_max_f32() {
     assert!((max - 9.0).abs() < EPSILON_F32);
 }
 
+#[test]
+fn test_simd_min_max_f32_upstream_bug_vector_yields_nan() {
+    // Proven `scirs2_core::simd_ops::SimdUnifiedOps::simd_max_element`
+    // bug vector: a 64-element f32 slice `[5.0, 1.0 x9, NaN at index 10,
+    // 1.0 x53]`. Upstream silently returned `1.0` (dropping the true
+    // max, `5.0`) instead of `NaN`. Both `simd_min_f32` and
+    // `simd_max_f32` must now report `NaN`.
+    use scirs2_core::ndarray::Array1;
+
+    let mut data = vec![1.0f32; 64];
+    data[0] = 5.0;
+    data[10] = f32::NAN;
+    let x = Array1::from_vec(data);
+
+    assert!(simd_min_f32(&x.view()).is_nan());
+    assert!(simd_max_f32(&x.view()).is_nan());
+}
+
+#[test]
+fn test_simd_min_max_f32_nan_at_first_position_yields_nan() {
+    let x = array![f32::NAN, 1.0, 2.0, 3.0];
+    assert!(simd_min_f32(&x.view()).is_nan());
+    assert!(simd_max_f32(&x.view()).is_nan());
+}
+
+#[test]
+fn test_simd_min_max_f32_nan_at_last_position_yields_nan() {
+    let x = array![1.0f32, 2.0, 3.0, f32::NAN];
+    assert!(simd_min_f32(&x.view()).is_nan());
+    assert!(simd_max_f32(&x.view()).is_nan());
+}
+
 // ================================
 // Large Array Tests
 // ================================

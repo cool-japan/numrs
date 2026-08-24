@@ -31,8 +31,8 @@ pub use quantile::{percentile, quantile};
 
 // Re-export histogram functions and types
 pub use histogram::{
-    bincount, digitize, histogram, histogram2d, histogram_bin_edges, histogram_dd, BinSpec,
-    HistBins,
+    bincount, digitize, histogram, histogram2d, histogram_bin_edges, histogram_dd, histogramdd,
+    BinSpec, HistBins,
 };
 
 // Re-export NaN-aware statistics

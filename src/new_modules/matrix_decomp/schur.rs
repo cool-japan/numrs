@@ -502,21 +502,30 @@ where
         }
     }
 
-    // Convert back to Array<T>.
-    let mut q_out = Array::zeros(&[n, n]);
-    let mut t_out = Array::zeros(&[n, n]);
+    // Convert back to Array<T>, built as flat row-major Vecs rather than
+    // `Array::zeros(..)` + per-element `set()`: every entry is written
+    // exactly once here, so `Array::from_vec_shape` both skips the zero-fill
+    // `zeros()` would otherwise do just to have it immediately overwritten,
+    // and needs no `Arc::make_mut` unshare check at all (the buffer is
+    // fresh). One shared (i, j) loop still pushes into both Vecs in the
+    // original interleaved order, so a conversion failure surfaces for the
+    // same (i, j) and the same entry (Q before T) as before.
+    let mut q_vec = Vec::with_capacity(n * n);
+    let mut t_vec = Vec::with_capacity(n * n);
     for i in 0..n {
         for j in 0..n {
             let q_val = T::from(q[i][j]).ok_or_else(|| {
                 NumRs2Error::ComputationError("Cannot convert Q entry back to T".to_string())
             })?;
-            q_out.set(&[i, j], q_val)?;
+            q_vec.push(q_val);
             let t_val = T::from(h[i][j]).ok_or_else(|| {
                 NumRs2Error::ComputationError("Cannot convert T entry back to T".to_string())
             })?;
-            t_out.set(&[i, j], t_val)?;
+            t_vec.push(t_val);
         }
     }
+    let q_out = Array::from_vec_shape(q_vec, &[n, n])?;
+    let t_out = Array::from_vec_shape(t_vec, &[n, n])?;
 
     Ok((q_out, t_out))
 }

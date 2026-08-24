@@ -143,6 +143,7 @@ pub mod symbolic;
 pub mod testing;
 pub mod traits;
 pub mod types;
+pub mod ufunc_ops;
 pub mod ufuncs;
 pub mod unique;
 pub mod unique_optimized;
@@ -336,6 +337,11 @@ pub mod prelude {
         norm_l2, power, power_scalar, reciprocal, subtract, subtract_scalar, BinaryUfunc,
         UnaryUfunc,
     };
+    // Generic ufunc-method machinery: reduce/accumulate/outer/reduceat/at/where=
+    pub use crate::ufunc_ops::{
+        add_where, divide_where, multiply_where, subtract_where, ufunc_accumulate, ufunc_at,
+        ufunc_outer, ufunc_reduce, ufunc_reduceat, ufunc_where, UfuncOp,
+    };
     pub use crate::unique::{unique, UniqueResult};
     pub use crate::unique_optimized::unique_optimized;
     pub use crate::util::{
@@ -404,9 +410,9 @@ pub mod prelude {
     };
 
     // New modules
+    pub use crate::fft::FFT;
     #[cfg(feature = "lapack")]
     pub use crate::new_modules::eigenvalues::{eig as eig_general, eigh, eigvals, eigvalsh};
-    pub use crate::new_modules::fft::FFT;
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub use crate::new_modules::matrix_decomp::{
         cholesky, cod, condition_number, lu, pivoted_cholesky, qr, rcond, schur, svd,
@@ -486,6 +492,8 @@ pub mod prelude {
         ExprCache,
         ExprId,
         ExprKey,
+        // Owned expression templates: `a.expr() + b.expr() * c.expr()` fuses
+        IntoExpr,
         LazyEval,
         ScalarExpr,
         SharedArrayExpr,
@@ -1107,7 +1115,7 @@ mod tests {
         // Test histogram
         let data = Array::<f64>::from_vec(vec![1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]);
         let (counts, bins) =
-            histogram(&data, 4, None, None).expect("test: histogram should succeed");
+            histogram(&data, 4, None, None, None).expect("test: histogram should succeed");
         assert_eq!(counts.to_vec(), vec![2.0, 2.0, 2.0, 3.0]);
         assert_eq!(bins.size(), 5);
         assert_relative_eq!(bins.to_vec()[0], 1.0, epsilon = 1e-10);

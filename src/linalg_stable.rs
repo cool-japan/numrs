@@ -68,10 +68,11 @@ impl StableDecompositions {
             // Swap columns if needed
             if pivot_col != k {
                 // Swap columns in R
+                let r_arr = r.array_mut();
                 for i in 0..m {
-                    let temp = r.get(&[i, k])?;
-                    r.set(&[i, k], r.get(&[i, pivot_col])?)?;
-                    r.set(&[i, pivot_col], temp)?;
+                    let temp = r_arr[[i, k]];
+                    r_arr[[i, k]] = r_arr[[i, pivot_col]];
+                    r_arr[[i, pivot_col]] = temp;
                 }
 
                 // Update permutation and norms
@@ -83,23 +84,31 @@ impl StableDecompositions {
             let x_k = Self::extract_column_slice(&r, k, k, m)?;
             let (v, beta) = Self::householder_vector(&x_k)?;
 
-            // Apply reflection to R (from column k onwards)
+            // Apply reflection to R (from column k onwards).
+            // `extract_column_slice` takes `&Array<T>`, so each column's
+            // read has to happen before we can hold a `&mut` handle for its
+            // write-back; hoisting `array_mut()` per `j` (rather than
+            // refactoring that shared helper, which QR and SVD both use)
+            // still collapses the write-back from one `Arc::make_mut` per
+            // element down to one per column.
             for j in k..n {
                 let x_j = Self::extract_column_slice(&r, j, k, m)?;
                 let y_j = Self::apply_householder(&x_j, &v, beta)?;
 
+                let r_arr = r.array_mut();
                 for (idx, &val) in y_j.iter().enumerate() {
-                    r.set(&[k + idx, j], val)?;
+                    r_arr[[k + idx, j]] = val;
                 }
             }
 
-            // Apply reflection to Q
+            // Apply reflection to Q (same per-column hoist rationale as R above).
             for j in 0..m {
                 let x_j = Self::extract_column_slice(&q, j, k, m)?;
                 let y_j = Self::apply_householder(&x_j, &v, beta)?;
 
+                let q_arr = q.array_mut();
                 for (idx, &val) in y_j.iter().enumerate() {
-                    q.set(&[k + idx, j], val)?;
+                    q_arr[[k + idx, j]] = val;
                 }
             }
 
@@ -178,35 +187,41 @@ impl StableDecompositions {
         let mut l = Array::zeros(&[n, n]);
         let mut is_positive_definite = true;
 
-        for i in 0..n {
-            // Compute diagonal element
-            let mut sum = T::zero();
-            for k in 0..i {
-                let l_ik = l.get(&[i, k])?;
-                sum = sum + l_ik * l_ik;
-            }
-
-            let a_ii = a.get(&[i, i])?;
-            let l_ii_sq = a_ii - sum;
-
-            if l_ii_sq <= T::zero() {
-                is_positive_definite = false;
-                break;
-            }
-
-            let l_ii = l_ii_sq.sqrt();
-            l.set(&[i, i], l_ii)?;
-
-            // Compute sub-diagonal elements
-            for j in (i + 1)..n {
+        {
+            // Bulk-acquire once: every iteration reads previously-written
+            // entries of `l` and writes the next one via direct calls only,
+            // so a single hoisted handle covers the whole factorization.
+            let l_arr = l.array_mut();
+            'outer: for i in 0..n {
+                // Compute diagonal element
                 let mut sum = T::zero();
                 for k in 0..i {
-                    sum = sum + l.get(&[i, k])? * l.get(&[j, k])?;
+                    let l_ik = l_arr[[i, k]];
+                    sum = sum + l_ik * l_ik;
                 }
 
-                let a_ji = a.get(&[j, i])?;
-                let l_ji = (a_ji - sum) / l_ii;
-                l.set(&[j, i], l_ji)?;
+                let a_ii = a.get(&[i, i])?;
+                let l_ii_sq = a_ii - sum;
+
+                if l_ii_sq <= T::zero() {
+                    is_positive_definite = false;
+                    break 'outer;
+                }
+
+                let l_ii = l_ii_sq.sqrt();
+                l_arr[[i, i]] = l_ii;
+
+                // Compute sub-diagonal elements
+                for j in (i + 1)..n {
+                    let mut sum = T::zero();
+                    for k in 0..i {
+                        sum = sum + l_arr[[i, k]] * l_arr[[j, k]];
+                    }
+
+                    let a_ji = a.get(&[j, i])?;
+                    let l_ji = (a_ji - sum) / l_ii;
+                    l_arr[[j, i]] = l_ji;
+                }
             }
         }
 
@@ -255,13 +270,22 @@ impl StableDecompositions {
         let mut p: Vec<usize> = (0..n).collect();
         let mut a_work = a.clone();
 
+        // Bulk-acquire all three buffers once for the whole factorization:
+        // `a_work` is read and written throughout via direct calls only
+        // (self-referential), while `l` and `d` are write-only from here.
+        // Three independent `&mut` borrows of three distinct `Array`s don't
+        // conflict with each other.
+        let a_arr = a_work.array_mut();
+        let l_arr = l.array_mut();
+        let d_arr = d.array_mut();
+
         for k in 0..n {
             // Find pivot
             let mut max_val = T::zero();
             let mut pivot_idx = k;
 
             for i in k..n {
-                let abs_val = num_traits::Float::abs(a_work.get(&[i, k])?);
+                let abs_val = num_traits::Float::abs(a_arr[[i, k]]);
                 if abs_val > max_val {
                     max_val = abs_val;
                     pivot_idx = i;
@@ -272,21 +296,21 @@ impl StableDecompositions {
             if pivot_idx != k {
                 // Swap in working matrix
                 for j in 0..n {
-                    let temp = a_work.get(&[k, j])?;
-                    a_work.set(&[k, j], a_work.get(&[pivot_idx, j])?)?;
-                    a_work.set(&[pivot_idx, j], temp)?;
+                    let temp = a_arr[[k, j]];
+                    a_arr[[k, j]] = a_arr[[pivot_idx, j]];
+                    a_arr[[pivot_idx, j]] = temp;
 
-                    let temp = a_work.get(&[j, k])?;
-                    a_work.set(&[j, k], a_work.get(&[j, pivot_idx])?)?;
-                    a_work.set(&[j, pivot_idx], temp)?;
+                    let temp = a_arr[[j, k]];
+                    a_arr[[j, k]] = a_arr[[j, pivot_idx]];
+                    a_arr[[j, pivot_idx]] = temp;
                 }
 
                 p.swap(k, pivot_idx);
             }
 
             // Extract diagonal element
-            let d_kk = a_work.get(&[k, k])?;
-            d.set(&[k, k], d_kk)?;
+            let d_kk = a_arr[[k, k]];
+            d_arr[[k, k]] = d_kk;
 
             if d_kk == T::zero() {
                 continue; // Skip singular case
@@ -294,13 +318,13 @@ impl StableDecompositions {
 
             // Update submatrix
             for i in (k + 1)..n {
-                let l_ik = a_work.get(&[i, k])? / d_kk;
-                l.set(&[i, k], l_ik)?;
+                let l_ik = a_arr[[i, k]] / d_kk;
+                l_arr[[i, k]] = l_ik;
 
                 for j in (k + 1)..n {
-                    let old_val = a_work.get(&[i, j])?;
-                    let update = l_ik * a_work.get(&[k, j])?;
-                    a_work.set(&[i, j], old_val - update)?;
+                    let old_val = a_arr[[i, j]];
+                    let update = l_ik * a_arr[[k, j]];
+                    a_arr[[i, j]] = old_val - update;
                 }
             }
         }
@@ -501,13 +525,22 @@ impl StableDecompositions {
         let mut alpha = Vec::<T>::with_capacity(min_mn);
         let mut beta = Vec::<T>::with_capacity(min_mn);
 
+        // Bulk-acquire all three buffers once for the entire bidiagonalization
+        // sweep: every access below is a direct `.get()`/`.set()` pair (the
+        // Householder helpers operate on plain `Vec<T>`, never on `&Array<T>`),
+        // so nothing here forces re-acquiring the handle per column/row the
+        // way `qr_pivoted`'s shared `extract_column_slice` helper does.
+        let a_arr = a_work.array_mut();
+        let ub_arr = ub.array_mut();
+        let vb_arr = vb.array_mut();
+
         for k in 0..min_mn {
             // --- Left Householder to zero out a_work[k+1..m, k] ---
             {
                 let col_len = m - k;
                 let mut x = Vec::<T>::with_capacity(col_len);
                 for i in k..m {
-                    x.push(a_work.get(&[i, k])?);
+                    x.push(a_arr[[i, k]]);
                 }
 
                 let (v, beta_h) = Self::householder_vector(&x)?;
@@ -516,11 +549,11 @@ impl StableDecompositions {
                 for j in k..n {
                     let mut col_j = Vec::<T>::with_capacity(col_len);
                     for i in k..m {
-                        col_j.push(a_work.get(&[i, j])?);
+                        col_j.push(a_arr[[i, j]]);
                     }
                     let col_j_new = Self::apply_householder(&col_j, &v, beta_h)?;
                     for (offset, &val) in col_j_new.iter().enumerate() {
-                        a_work.set(&[k + offset, j], val)?;
+                        a_arr[[k + offset, j]] = val;
                     }
                 }
 
@@ -531,16 +564,16 @@ impl StableDecompositions {
                 for row in 0..m {
                     let mut row_slice = Vec::<T>::with_capacity(col_len);
                     for col in k..m {
-                        row_slice.push(ub.get(&[row, col])?);
+                        row_slice.push(ub_arr[[row, col]]);
                     }
                     let row_new = Self::apply_householder(&row_slice, &v, beta_h)?;
                     for (offset, &val) in row_new.iter().enumerate() {
-                        ub.set(&[row, k + offset], val)?;
+                        ub_arr[[row, k + offset]] = val;
                     }
                 }
 
                 // Record B[k,k] = a_work[k,k] after left reflection.
-                alpha.push(a_work.get(&[k, k])?);
+                alpha.push(a_arr[[k, k]]);
             }
 
             // --- Right Householder to zero out a_work[k, k+2..n] ---
@@ -548,7 +581,7 @@ impl StableDecompositions {
                 let row_len = n - k - 1;
                 let mut x = Vec::<T>::with_capacity(row_len);
                 for j in (k + 1)..n {
-                    x.push(a_work.get(&[k, j])?);
+                    x.push(a_arr[[k, j]]);
                 }
 
                 let (v, beta_h) = Self::householder_vector(&x)?;
@@ -557,11 +590,11 @@ impl StableDecompositions {
                 for i in k..m {
                     let mut row_slice = Vec::<T>::with_capacity(row_len);
                     for j in (k + 1)..n {
-                        row_slice.push(a_work.get(&[i, j])?);
+                        row_slice.push(a_arr[[i, j]]);
                     }
                     let row_new = Self::apply_householder(&row_slice, &v, beta_h)?;
                     for (offset, &val) in row_new.iter().enumerate() {
-                        a_work.set(&[i, k + 1 + offset], val)?;
+                        a_arr[[i, k + 1 + offset]] = val;
                     }
                 }
 
@@ -569,16 +602,16 @@ impl StableDecompositions {
                 for row in 0..n {
                     let mut row_slice = Vec::<T>::with_capacity(row_len);
                     for col in (k + 1)..n {
-                        row_slice.push(vb.get(&[row, col])?);
+                        row_slice.push(vb_arr[[row, col]]);
                     }
                     let row_new = Self::apply_householder(&row_slice, &v, beta_h)?;
                     for (offset, &val) in row_new.iter().enumerate() {
-                        vb.set(&[row, k + 1 + offset], val)?;
+                        vb_arr[[row, k + 1 + offset]] = val;
                     }
                 }
 
                 // Record B[k, k+1] = a_work[k, k+1] after right reflection.
-                beta.push(a_work.get(&[k, k + 1])?);
+                beta.push(a_arr[[k, k + 1]]);
             } else {
                 beta.push(T::zero());
             }
@@ -596,27 +629,35 @@ impl StableDecompositions {
         //   =>  U = ub · U_B,  V^T = V_B^T · vb^T.
         // -----------------------------------------------------------------------
 
-        // Build the bidiagonal B as an m×n Array.
+        // Build the bidiagonal B as an m×n Array (write-only).
         let mut b_mat = Array::zeros(&[m, n]);
-        for k in 0..min_mn {
-            b_mat.set(&[k, k], alpha[k])?;
-            if k + 1 < n {
-                b_mat.set(&[k, k + 1], beta[k])?;
+        {
+            let b_arr = b_mat.array_mut();
+            for k in 0..min_mn {
+                b_arr[[k, k]] = alpha[k];
+                if k + 1 < n {
+                    b_arr[[k, k + 1]] = beta[k];
+                }
             }
         }
 
         // Compute SVD of B via Jacobi eigendecomposition of BᵀB.
         let b_svd = Self::svd_small_stable(&b_mat)?;
 
-        // full_u = ub · b_svd.u  (m × min_mn)
+        // full_u = ub · b_svd.u  (m × min_mn). Bulk-acquire once: the
+        // construction pass is write-only (reads come from `ub`/`b_svd.u`),
+        // and the Modified-Gram-Schmidt pass right after it is
+        // self-referential direct `.get()`/`.set()` on `full_u` alone, so one
+        // handle covers both passes.
         let mut full_u = Array::zeros(&[m, min_mn]);
+        let fu_arr = full_u.array_mut();
         for i in 0..m {
             for j in 0..min_mn {
                 let mut s = T::zero();
                 for k in 0..m {
                     s = s + ub.get(&[i, k])? * b_svd.u.get(&[k, j])?;
                 }
-                full_u.set(&[i, j], s)?;
+                fu_arr[[i, j]] = s;
             }
         }
         // Re-orthogonalize full_u columns via Modified Gram-Schmidt (MGS).
@@ -626,64 +667,64 @@ impl StableDecompositions {
             // Normalize column j.
             let mut norm_sq = T::zero();
             for i in 0..m {
-                let v = full_u.get(&[i, j])?;
+                let v = fu_arr[[i, j]];
                 norm_sq = norm_sq + v * v;
             }
             let norm = norm_sq.sqrt();
             if norm > eps_orth {
                 for i in 0..m {
-                    let v = full_u.get(&[i, j])?;
-                    full_u.set(&[i, j], v / norm)?;
+                    fu_arr[[i, j]] = fu_arr[[i, j]] / norm;
                 }
             }
             // Subtract projection of column j from subsequent columns.
             for j2 in (j + 1)..min_mn {
                 let mut dot = T::zero();
                 for i in 0..m {
-                    dot = dot + full_u.get(&[i, j])? * full_u.get(&[i, j2])?;
+                    dot = dot + fu_arr[[i, j]] * fu_arr[[i, j2]];
                 }
                 for i in 0..m {
-                    let old = full_u.get(&[i, j2])?;
-                    let proj = full_u.get(&[i, j])?;
-                    full_u.set(&[i, j2], old - dot * proj)?;
+                    let old = fu_arr[[i, j2]];
+                    let proj = fu_arr[[i, j]];
+                    fu_arr[[i, j2]] = old - dot * proj;
                 }
             }
         }
 
-        // full_vt = b_svd.vt · vb^T  (min_mn × n)
+        // full_vt = b_svd.vt · vb^T  (min_mn × n). Same bulk-acquisition
+        // rationale as `full_u` above.
         let mut full_vt = Array::zeros(&[min_mn, n]);
+        let fvt_arr = full_vt.array_mut();
         for i in 0..min_mn {
             for j in 0..n {
                 let mut s = T::zero();
                 for k in 0..n {
                     s = s + b_svd.vt.get(&[i, k])? * vb.get(&[j, k])?;
                 }
-                full_vt.set(&[i, j], s)?;
+                fvt_arr[[i, j]] = s;
             }
         }
         // Re-orthogonalize rows of full_vt via MGS.
         for i in 0..min_mn {
             let mut norm_sq = T::zero();
             for j in 0..n {
-                let v = full_vt.get(&[i, j])?;
+                let v = fvt_arr[[i, j]];
                 norm_sq = norm_sq + v * v;
             }
             let norm = norm_sq.sqrt();
             if norm > eps_orth {
                 for j in 0..n {
-                    let v = full_vt.get(&[i, j])?;
-                    full_vt.set(&[i, j], v / norm)?;
+                    fvt_arr[[i, j]] = fvt_arr[[i, j]] / norm;
                 }
             }
             for i2 in (i + 1)..min_mn {
                 let mut dot = T::zero();
                 for j in 0..n {
-                    dot = dot + full_vt.get(&[i, j])? * full_vt.get(&[i2, j])?;
+                    dot = dot + fvt_arr[[i, j]] * fvt_arr[[i2, j]];
                 }
                 for j in 0..n {
-                    let old = full_vt.get(&[i2, j])?;
-                    let proj = full_vt.get(&[i, j])?;
-                    full_vt.set(&[i2, j], old - dot * proj)?;
+                    let old = fvt_arr[[i2, j]];
+                    let proj = fvt_arr[[i, j]];
+                    fvt_arr[[i2, j]] = old - dot * proj;
                 }
             }
         }
@@ -1082,12 +1123,17 @@ impl StableDecompositions {
 
         let eigenvalues: Vec<T> = order.iter().map(|&k| d[k]).collect();
 
-        let mut q_sorted = Array::zeros(&[n, n]);
+        // Build the reordered eigenvector matrix as a flat row-major `Vec`
+        // and hand it to `from_vec_shape` in one shot: cheaper than a
+        // `zeros()` allocation followed by n^2 bounds-checked `Array::set`
+        // calls, and avoids the `Arc::make_mut` unshare check entirely.
+        let mut q_data = vec![T::zero(); n * n];
         for (new_col, &old_col) in order.iter().enumerate() {
             for row in 0..n {
-                q_sorted.set(&[row, new_col], v_v[ai!(row, old_col)])?;
+                q_data[row * n + new_col] = v_v[ai!(row, old_col)];
             }
         }
+        let q_sorted = Array::from_vec_shape(q_data, &[n, n])?;
 
         Ok((eigenvalues, q_sorted))
     }
@@ -1249,9 +1295,13 @@ impl StableDecompositions {
         let n = shape[1];
         let mut result = Array::zeros(&[n, m]);
 
+        // `result` is write-only here (every read is from the untouched
+        // input `a`), so one bulk unshare covers the whole O(m*n) pass
+        // instead of paying `Array::set`'s `Arc::make_mut` per element.
+        let out = result.array_mut();
         for i in 0..m {
             for j in 0..n {
-                result.set(&[j, i], a.get(&[i, j])?)?;
+                out[[j, i]] = a.get(&[i, j])?;
             }
         }
 
@@ -1277,15 +1327,17 @@ impl StableDecompositions {
 
         let mut c = Array::zeros(&[m, n]);
 
-        // Simple matrix multiplication for stable decompositions
-        // Uses Array::matmul which handles the multiplication internally
+        // Simple matrix multiplication for stable decompositions.
+        // `c` is write-only (every read is from the immutable `a`/`b`
+        // inputs), so one bulk unshare covers the whole O(m*n*k) pass.
+        let out = c.array_mut();
         for i in 0..m {
             for j in 0..n {
                 let mut sum = T::zero();
                 for l in 0..k {
                     sum = sum + a.get(&[i, l])? * b.get(&[l, j])?;
                 }
-                c.set(&[i, j], sum)?;
+                out[[i, j]] = sum;
             }
         }
 
@@ -1380,6 +1432,152 @@ mod tests {
                     epsilon = 1e-10
                 );
             }
+        }
+    }
+
+    /// Pre-COW-conversion twin of `ldlt_pivoted`, byte-for-byte identical to
+    /// the function before the `Array::set` -> bulk-`array_mut()` hoist.
+    /// `ldlt_pivoted` had (and has) no direct test coverage of its own in
+    /// this module -- it is only reachable as `cholesky_stable`'s fallback
+    /// for non-positive-definite input -- so a differential check against
+    /// this twin is the only available guardrail that the conversion did
+    /// not change its (pre-existing, possibly numerically quirky) behavior.
+    fn ldlt_pivoted_precow<T>(a: &Array<T>) -> Result<CholeskyStableResult<T>>
+    where
+        T: Float + Clone + Debug,
+    {
+        let shape = a.shape();
+        let n = shape[0];
+
+        let mut l = Array::eye(n, n, 0);
+        let mut d = Array::zeros(&[n, n]);
+        let mut p: Vec<usize> = (0..n).collect();
+        let mut a_work = a.clone();
+
+        for k in 0..n {
+            let mut max_val = T::zero();
+            let mut pivot_idx = k;
+
+            for i in k..n {
+                let abs_val = num_traits::Float::abs(a_work.get(&[i, k])?);
+                if abs_val > max_val {
+                    max_val = abs_val;
+                    pivot_idx = i;
+                }
+            }
+
+            if pivot_idx != k {
+                for j in 0..n {
+                    let temp = a_work.get(&[k, j])?;
+                    a_work.set(&[k, j], a_work.get(&[pivot_idx, j])?)?;
+                    a_work.set(&[pivot_idx, j], temp)?;
+
+                    let temp = a_work.get(&[j, k])?;
+                    a_work.set(&[j, k], a_work.get(&[j, pivot_idx])?)?;
+                    a_work.set(&[j, pivot_idx], temp)?;
+                }
+
+                p.swap(k, pivot_idx);
+            }
+
+            let d_kk = a_work.get(&[k, k])?;
+            d.set(&[k, k], d_kk)?;
+
+            if d_kk == T::zero() {
+                continue;
+            }
+
+            for i in (k + 1)..n {
+                let l_ik = a_work.get(&[i, k])? / d_kk;
+                l.set(&[i, k], l_ik)?;
+
+                for j in (k + 1)..n {
+                    let old_val = a_work.get(&[i, j])?;
+                    let update = l_ik * a_work.get(&[k, j])?;
+                    a_work.set(&[i, j], old_val - update)?;
+                }
+            }
+        }
+
+        let mut d_min = T::infinity();
+        let mut d_max = T::zero();
+
+        for i in 0..n {
+            let d_val = num_traits::Float::abs(d.get(&[i, i])?);
+            if d_val > T::zero() {
+                d_min = d_min.min(d_val);
+                d_max = d_max.max(d_val);
+            }
+        }
+
+        let condition_number = if d_min > T::zero() {
+            d_max / d_min
+        } else {
+            T::infinity()
+        };
+
+        Ok(CholeskyStableResult {
+            l,
+            condition_number,
+            is_positive_definite: false,
+            pivoting_used: true,
+            p: Some(Array::from_vec(p.iter().map(|&x| x as f64).collect())),
+            d: Some(d),
+        })
+    }
+
+    #[test]
+    fn test_ldlt_pivoted_matches_precow() {
+        // Differential check (not a mathematical-correctness check -- see
+        // the doc comment on `ldlt_pivoted_precow`): several indefinite
+        // symmetric matrices, each forcing the LDLT fallback path, compared
+        // element-for-element between the pre- and post-conversion code.
+        let cases: [(&[f64], usize); 3] = [
+            (&[1.0, 2.0, 2.0, 1.0], 2),
+            (&[0.0, 1.0, 1.0, 0.0], 2),
+            (&[1.0, 2.0, 3.0, 2.0, 1.0, 2.0, 3.0, 2.0, 1.0], 3),
+        ];
+
+        for (data, n) in cases {
+            let a = Array::from_vec(data.to_vec()).reshape(&[n, n]);
+
+            let expected = ldlt_pivoted_precow(&a).expect("precow LDLT should succeed");
+            let actual =
+                StableDecompositions::ldlt_pivoted(&a).expect("converted LDLT should succeed");
+
+            assert_eq!(actual.is_positive_definite, expected.is_positive_definite);
+            assert_eq!(actual.pivoting_used, expected.pivoting_used);
+            assert_relative_eq!(
+                actual.condition_number,
+                expected.condition_number,
+                epsilon = 1e-12
+            );
+
+            for i in 0..n {
+                for j in 0..n {
+                    assert_relative_eq!(
+                        actual.l.get(&[i, j]).expect("valid index"),
+                        expected.l.get(&[i, j]).expect("valid index"),
+                        epsilon = 1e-12
+                    );
+                }
+            }
+
+            let actual_d = actual.d.expect("D present");
+            let expected_d = expected.d.expect("D present");
+            for i in 0..n {
+                for j in 0..n {
+                    assert_relative_eq!(
+                        actual_d.get(&[i, j]).expect("valid index"),
+                        expected_d.get(&[i, j]).expect("valid index"),
+                        epsilon = 1e-12
+                    );
+                }
+            }
+
+            let actual_p = actual.p.expect("P present").to_vec();
+            let expected_p = expected.p.expect("P present").to_vec();
+            assert_eq!(actual_p, expected_p);
         }
     }
 

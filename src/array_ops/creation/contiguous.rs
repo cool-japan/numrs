@@ -251,18 +251,41 @@ pub fn iscontiguous<T: Clone>(a: &Array<T>) -> bool {
 /// assert!(!may_share_memory(&a, &b));  // Different arrays don't share memory
 ///
 /// let c = a.clone();
-/// assert!(!may_share_memory(&a, &c));  // Cloned arrays have separate memory
+/// // A clone is an O(1) copy-on-write handle, but it can never observe a
+/// // write made through `a` (the buffer unshares first), so it does not
+/// // count as sharing memory.
+/// assert!(!may_share_memory(&a, &c));
 /// ```
 pub fn may_share_memory<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
-    // Two arrays share memory iff their underlying buffers' address ranges
-    // overlap. With the current deep-copy `Array` (every `.clone()` /
-    // transform allocates a fresh buffer), two *distinct* `Array` values
-    // can never overlap -- but `a` and `a` (the same object, e.g. through
-    // two references to it) trivially do, and hardcoding `false`
-    // unconditionally got that wrong. Comparing raw pointer ranges (rather
-    // than a special-cased identity check) keeps this correct once
-    // copy-on-write/view support lands and distinct `Array` values really
-    // can alias.
+    observably_aliases(a, b)
+}
+
+/// Returns true iff a write through `a` could be observed through `b`.
+///
+/// This is the question NumPy's `may_share_memory`/`shares_memory` are
+/// actually asked -- *can mutating one of these arrays corrupt the other?* --
+/// and it is deliberately **not** the same as "do these two arrays' bytes
+/// currently live at the same address".
+///
+/// `Array`'s storage is `Arc`-backed copy-on-write, so `Array::clone` is an
+/// O(1) reference-count bump and two handles routinely point at one buffer.
+/// That physical sharing is never a channel between them: every mutating path
+/// goes through `Array::nd_mut`, whose `Arc::make_mut` unshares the buffer
+/// before the first write, so the writer silently gets its own copy and every
+/// other handle keeps seeing the original. Two *distinct* `Array` handles
+/// therefore never alias observably, no matter what their buffer addresses
+/// say. Answering with a raw address comparison alone would report every
+/// clone as aliased and invert the guarantee callers depend on.
+///
+/// The physical-overlap test is still applied on top of the identity check
+/// (see [`ptr_ranges_overlap`]): it is what makes a zero-length array report
+/// `false` even against itself -- matching NumPy -- and it is the half that
+/// becomes load-bearing if borrowed/view-backed `Array` storage is ever added,
+/// where two distinct handles *can* genuinely alias.
+fn observably_aliases<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
+    if !std::ptr::eq(a, b) {
+        return false;
+    }
     ptr_ranges_overlap(a, b)
 }
 
@@ -313,13 +336,15 @@ fn ptr_ranges_overlap<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
 pub fn shares_memory<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
     // NumPy distinguishes `may_share_memory` (a fast, conservative check
     // that is allowed to over-report on complex strided views) from
-    // `shares_memory` (the exact, exhaustive check). With today's
-    // deep-copy-only `Array` there is no such ambiguity to approximate --
-    // a pointer-range overlap is exact either way -- so both delegate to
-    // the same precise check. Kept as separate functions (rather than one
-    // calling the other in a way that hides it) so the exact-vs-may
-    // distinction is easy to reintroduce once views/COW exist.
-    ptr_ranges_overlap(a, b)
+    // `shares_memory` (the exact, exhaustive check). `Array` has no such
+    // ambiguity to approximate: its storage is either uniquely owned or
+    // copy-on-write shared, and copy-on-write sharing dissolves on the
+    // first write, so the aliasing answer is exact either way (see
+    // `observably_aliases`). Both therefore delegate to the same precise
+    // check. Kept as separate functions (rather than one calling the other
+    // in a way that hides it) so the exact-vs-may distinction is easy to
+    // reintroduce once borrowed/view-backed storage exists.
+    observably_aliases(a, b)
 }
 
 #[cfg(test)]

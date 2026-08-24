@@ -19,7 +19,7 @@ use scirs2_core::Complex;
 use std::fmt::Debug;
 
 /// Compute the norm of a vector or matrix
-pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static>(
+pub fn norm<T: Float + Clone + Debug + std::fmt::Display + std::ops::AddAssign + 'static>(
     a: &Array<T>,
     ord: Option<T>,
 ) -> Result<T> {
@@ -234,27 +234,34 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
                 // Normalize to prevent overflow/underflow
                 let mut y_normalized = Array::zeros(&y.shape());
 
-                // Handle the indices correctly based on array dimensionality
+                // Handle the indices correctly based on array dimensionality.
+                // `y_normalized` is write-only here (every read is from
+                // `y_data`, borrowed from `y`), and it is freshly zeroed on
+                // every one of up to `max_iter` power-iteration steps, so one
+                // bulk unshare per iteration replaces one per element.
                 let ndim = y.ndim();
                 if ndim == 1 {
+                    let out = y_normalized.array_mut();
                     #[allow(clippy::needless_range_loop)]
                     for i in 0..y_data.len() {
-                        y_normalized.set(&[i], y_data[i] / max_abs)?;
+                        out[[i]] = y_data[i] / max_abs;
                     }
                 } else if ndim == 2 {
                     // For a 2D vector with shape (n, 1) or (1, n)
                     let shape = y.shape();
                     if shape[0] == 1 {
                         // Shape (1, n) - row vector
+                        let out = y_normalized.array_mut();
                         #[allow(clippy::needless_range_loop)]
                         for i in 0..y_data.len() {
-                            y_normalized.set(&[0, i], y_data[i] / max_abs)?;
+                            out[[0, i]] = y_data[i] / max_abs;
                         }
                     } else if shape[1] == 1 {
                         // Shape (n, 1) - column vector
+                        let out = y_normalized.array_mut();
                         #[allow(clippy::needless_range_loop)]
                         for i in 0..y_data.len() {
-                            y_normalized.set(&[i, 0], y_data[i] / max_abs)?;
+                            out[[i, 0]] = y_data[i] / max_abs;
                         }
                     } else {
                         // This is a matrix, not a vector
@@ -312,6 +319,32 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             // Return the square root of the largest eigenvalue,
             // which is the largest singular value (spectral norm)
             Ok(lambda.sqrt())
+        } else if ord == -(T::one() + T::one()) {
+            // Smallest singular value (NumPy's matrix `ord=-2`). Unlike
+            // `ord=2` above, there is no comparably cheap iterative route
+            // to the *smallest* singular value (inverse power iteration
+            // would need `A^-1`, which costs at least as much as an SVD),
+            // so this goes straight through the existing SVD
+            // implementation.
+            #[cfg(feature = "lapack")]
+            {
+                let (_, s, _) = crate::new_modules::matrix_decomp::svd(a)?;
+                let s_vec = s.to_vec();
+                if s_vec.is_empty() {
+                    return Err(NumRs2Error::ComputationError(
+                        "cannot compute ord=-2 norm of an empty matrix".to_string(),
+                    ));
+                }
+                Ok(s_vec
+                    .into_iter()
+                    .fold(T::infinity(), |acc, x| if x < acc { x } else { acc }))
+            }
+            #[cfg(not(feature = "lapack"))]
+            {
+                Err(NumRs2Error::FeatureNotEnabled(
+                    "ord=-2 (smallest singular value) requires the 'lapack' feature".to_string(),
+                ))
+            }
         } else {
             Err(NumRs2Error::InvalidOperation(format!(
                 "Invalid matrix norm order: {}",
@@ -321,6 +354,50 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
     } else {
         Err(NumRs2Error::DimensionMismatch(
             "norm requires a 1D or 2D array".to_string(),
+        ))
+    }
+}
+
+/// Compute the nuclear norm of a matrix: the sum of its singular values
+/// (NumPy's `ord='nuc'` for [`norm`]).
+///
+/// Unlike every numeric order `norm` accepts, `'nuc'` has no representation
+/// as a single value of `T` (`norm`'s `ord: Option<T>` parameter), so it
+/// gets its own entry point here rather than a sentinel value.
+///
+/// # Errors
+/// * `DimensionMismatch` if `a` is not 2-D.
+/// * `FeatureNotEnabled` if the `lapack` feature (which backs the SVD this
+///   is computed from) is disabled.
+///
+/// # Examples
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::nuclear_norm;
+///
+/// // A diagonal matrix's singular values are the absolute values of its
+/// // diagonal entries, so its nuclear norm is their sum.
+/// let a = Array::from_vec(vec![3.0, 0.0, 0.0, -4.0]).reshape(&[2, 2]);
+/// let nn = nuclear_norm(&a).expect("nuclear_norm should succeed");
+/// assert!((nn - 7.0).abs() < 1e-8);
+/// ```
+pub fn nuclear_norm<T: Float + Clone + Debug>(a: &Array<T>) -> Result<T> {
+    let shape = a.shape();
+    if shape.len() != 2 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "nuclear norm (ord='nuc') requires a 2D matrix".to_string(),
+        ));
+    }
+
+    #[cfg(feature = "lapack")]
+    {
+        let (_, s, _) = crate::new_modules::matrix_decomp::svd(a)?;
+        Ok(s.to_vec().into_iter().fold(T::zero(), |acc, x| acc + x))
+    }
+    #[cfg(not(feature = "lapack"))]
+    {
+        Err(NumRs2Error::FeatureNotEnabled(
+            "nuclear norm (ord='nuc') requires the 'lapack' feature".to_string(),
         ))
     }
 }

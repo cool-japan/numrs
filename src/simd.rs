@@ -92,7 +92,7 @@ fn to_ndarray_1d<T: Clone>(arr: &Array<T>) -> Result<CowArray<'_, T, Ix1>> {
 /// (not expected from a fresh SIMD kernel output today, but not part of
 /// `Array1`'s public contract either) falls back to the same
 /// `iter().cloned().collect()` `to_vec()` itself would have used.
-fn into_vec_no_copy<T: Clone>(arr: Array1<T>) -> Vec<T> {
+pub(crate) fn into_vec_no_copy<T: Clone>(arr: Array1<T>) -> Vec<T> {
     if !arr.is_standard_layout() {
         return arr.iter().cloned().collect();
     }

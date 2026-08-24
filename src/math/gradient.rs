@@ -147,6 +147,12 @@ where
             .map(|(_, &s)| s)
             .product();
 
+        // Bulk-acquire once: `grad` is write-only across this whole
+        // perpendicular-position x axis-position loop (every read is
+        // `f.get(..)`, a distinct object), so one unshare covers all
+        // `total_perp * n` writes.
+        let grad_arr = grad.array_mut();
+
         for perp_idx in 0..total_perp {
             // Convert linear index to multi-dimensional indices for perpendicular dimensions
             let mut temp = perp_idx;
@@ -221,7 +227,12 @@ where
                 };
 
                 indices[ax] = i;
-                grad.set(&indices, derivative)?;
+                *grad_arr.get_mut(indices.as_slice()).ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        indices
+                    ))
+                })? = derivative;
             }
         }
 

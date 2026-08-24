@@ -223,7 +223,7 @@ impl<T: Clone> Array<T> {
             });
         }
         NdArray::from_shape_vec(IxDyn(shape), vec)
-            .map(|data| Self { data })
+            .map(Self::from_nd)
             .map_err(|e| NumRs2Error::InvalidOperation(format!("from_vec_shape failed: {e}")))
     }
 
@@ -240,7 +240,7 @@ impl<T: Clone> Array<T> {
             NdArray::from_shape_vec(IxDyn(&[0]), Vec::new())
                 .expect("empty array creation should succeed")
         });
-        Self { data }
+        Self::from_nd(data)
     }
 
     /// Create a new array with a specific shape, filled with zeros
@@ -249,7 +249,7 @@ impl<T: Clone> Array<T> {
         T: Zero + Clone,
     {
         let data = NdArray::zeros(IxDyn(shape));
-        Self { data }
+        Self::from_nd(data)
     }
 
     /// Create a triangular matrix with ones below the given diagonal and zeros elsewhere
@@ -459,7 +459,7 @@ impl<T: Clone> Array<T> {
         T: One + Clone,
     {
         let data = NdArray::ones(IxDyn(shape));
-        Self { data }
+        Self::from_nd(data)
     }
 
     /// Create a new array with a specific shape, filled with a specific value

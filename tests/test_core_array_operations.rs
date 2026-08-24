@@ -1002,7 +1002,7 @@ mod statistical_operations_tests {
     #[test]
     fn test_histogram() {
         let data = Array::from_vec(vec![1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]);
-        let (counts, bins) = histogram(&data, 4, None, None).unwrap();
+        let (counts, bins) = histogram(&data, 4, None, None, None).unwrap();
 
         assert_eq!(counts.size(), 4);
         assert_eq!(bins.size(), 5); // n+1 bin edges

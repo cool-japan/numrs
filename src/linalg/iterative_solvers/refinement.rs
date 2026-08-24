@@ -314,10 +314,11 @@ where
 {
     let n = b.size();
     let mut r = Array::zeros(&[n]);
+    let out = r.array_mut();
     for i in 0..n {
         let bi = b.get(&[i])?;
         let axi = ax.get(&[i])?;
-        r.set(&[i], bi - axi)?;
+        out[[i]] = bi - axi;
     }
     Ok(r)
 }
@@ -343,10 +344,11 @@ where
 {
     let n = a.size();
     let mut result = Array::zeros(&[n]);
+    let out = result.array_mut();
     for i in 0..n {
         let ai = a.get(&[i])?;
         let bi = b.get(&[i])?;
-        result.set(&[i], ai + bi)?;
+        out[[i]] = ai + bi;
     }
     Ok(result)
 }

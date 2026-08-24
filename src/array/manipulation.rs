@@ -76,9 +76,7 @@ impl<T: Clone> Array<T> {
         // returns `None` for incompatible shapes instead of silently tiling
         // or reading out of bounds.
         match self.data.broadcast(IxDyn(shape)) {
-            Some(view) => Ok(Self {
-                data: view.to_owned(),
-            }),
+            Some(view) => Ok(Self::from_nd(view.to_owned())),
             None => Err(NumRs2Error::ShapeMismatch {
                 expected: shape.to_vec(),
                 actual: self.shape(),
@@ -142,8 +140,13 @@ impl<T: Clone> Array<T> {
             });
         }
 
-        match self.data.clone().into_shape_with_order(IxDyn(shape)) {
-            Ok(reshaped) => Ok(Self { data: reshaped }),
+        // Deep-clones the ndarray (not the Arc): `into_shape_with_order`
+        // consumes its receiver, and `try_reshape` borrows `self`, so a fresh
+        // buffer is required here exactly as before the Arc-backed storage
+        // landed. Callers that can give up ownership should use
+        // `into_reshape`, which hands the existing buffer over instead.
+        match self.array().clone().into_shape_with_order(IxDyn(shape)) {
+            Ok(reshaped) => Ok(Self::from_nd(reshaped)),
             Err(_) => {
                 // `into_shape_with_order` only succeeds without copying when
                 // the array's memory layout is compatible with the new
@@ -155,8 +158,10 @@ impl<T: Clone> Array<T> {
                 // would silently scramble the data for such arrays.
                 let logical_order: Vec<T> = self.array().iter().cloned().collect();
                 let fresh = Self::from_vec(logical_order);
-                match fresh.data.into_shape_with_order(IxDyn(shape)) {
-                    Ok(reshaped) => Ok(Self { data: reshaped }),
+                // `fresh` is a local, sole owner of its buffer, so `into_nd`
+                // hands the allocation over without copying.
+                match fresh.into_nd().into_shape_with_order(IxDyn(shape)) {
+                    Ok(reshaped) => Ok(Self::from_nd(reshaped)),
                     Err(e) => Err(NumRs2Error::InvalidOperation(format!(
                         "Failed to reshape array: {e}"
                     ))),
@@ -226,8 +231,8 @@ impl<T: Clone> Array<T> {
             // handle it via `Result` -- consistent with `try_reshape` --
             // rather than `.expect(...)`, since a defensive match costs
             // nothing here.
-            return match self.data.into_shape_with_order(IxDyn(shape)) {
-                Ok(reshaped) => Ok(Self { data: reshaped }),
+            return match self.into_nd().into_shape_with_order(IxDyn(shape)) {
+                Ok(reshaped) => Ok(Self::from_nd(reshaped)),
                 Err(e) => Err(NumRs2Error::InvalidOperation(format!(
                     "Failed to reshape array: {e}"
                 ))),
@@ -578,10 +583,10 @@ impl<T: Clone> Array<T> {
         perm.swap(axis1, axis2);
 
         // Permute the axes
-        let permuted_data = self.data.clone().permuted_axes(IxDyn(&perm));
-        Ok(Self {
-            data: permuted_data,
-        })
+        // Deep-clones the ndarray (not the Arc): `permuted_axes` consumes its
+        // receiver and `swap_axes` only borrows `self`.
+        let permuted_data = self.array().clone().permuted_axes(IxDyn(&perm));
+        Ok(Self::from_nd(permuted_data))
     }
 
     /// Get a 2D view of the underlying ndarray data
@@ -625,9 +630,7 @@ impl<T: Clone> Array<T> {
         }
 
         let slice = self.data.index_axis(Axis(axis), index);
-        Ok(Self {
-            data: slice.into_owned().into_dyn(),
-        })
+        Ok(Self::from_nd(slice.into_owned().into_dyn()))
     }
 
     /// Slice the array along a given axis, returning a view

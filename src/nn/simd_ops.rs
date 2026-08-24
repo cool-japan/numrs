@@ -451,13 +451,54 @@ pub fn simd_norm_f32(x: &ArrayView1<f32>) -> f32 {
 }
 
 /// SIMD-optimized minimum element (f32)
+///
+/// NumPy `np.min` semantics: **any `NaN` anywhere in `x` makes the result
+/// `NaN`**, independent of where the `NaN` sits or how long `x` is. Use
+/// [`crate::math::nanmin`] if you need the `NaN`-ignoring variant.
+///
+/// No longer routes through
+/// `scirs2_core::simd_ops::SimdUnifiedOps::simd_min_element`: that
+/// upstream function has a proven bug returning a **wrong, finite
+/// value** (neither the true minimum nor `NaN`) for some `NaN`
+/// placements -- see `crate::kernels::reduce`'s module docs for the
+/// reproduction. Instead this calls
+/// [`crate::kernels::reduce::min_f32`], the same deterministic
+/// comparison-fold kernel backing `stats::basic` and
+/// `Array::min_optimized`.
 pub fn simd_min_f32(x: &ArrayView1<f32>) -> f32 {
-    f32::simd_min_element(x)
+    // Preserve the pre-existing empty-input contract (+infinity,
+    // inherited from `simd_min_element`'s own empty case), which does not
+    // match `crate::kernels::reduce::min_f32`'s empty convention (0.0).
+    if x.is_empty() {
+        return f32::INFINITY;
+    }
+    match x.as_slice() {
+        Some(s) => crate::kernels::reduce::min_f32(s),
+        None => {
+            let owned: Vec<f32> = x.iter().copied().collect();
+            crate::kernels::reduce::min_f32(&owned)
+        }
+    }
 }
 
 /// SIMD-optimized maximum element (f32)
+///
+/// NumPy `np.max` semantics: **any `NaN` anywhere in `x` makes the result
+/// `NaN`**. See [`simd_min_f32`] above for the upstream bug this avoids
+/// and [`crate::math::nanmax`] for the `NaN`-ignoring variant.
 pub fn simd_max_f32(x: &ArrayView1<f32>) -> f32 {
-    f32::simd_max_element(x)
+    // Preserve the pre-existing empty-input contract (-infinity); see
+    // `simd_min_f32`.
+    if x.is_empty() {
+        return f32::NEG_INFINITY;
+    }
+    match x.as_slice() {
+        Some(s) => crate::kernels::reduce::max_f32(s),
+        None => {
+            let owned: Vec<f32> = x.iter().copied().collect();
+            crate::kernels::reduce::max_f32(&owned)
+        }
+    }
 }
 
 // ================================

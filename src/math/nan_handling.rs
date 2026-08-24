@@ -98,6 +98,12 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: `result` is write-only across this whole loop
+        // (exactly one set per `res_idx`, dynamic-rank index so `get_mut`
+        // replaces `Array::set`'s bounds-checked, per-call `Arc::make_mut`
+        // path), so one unshare covers all `result_size` writes.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut sum = T::zero();
             let mut res_indices = vec![0; new_shape.len()];
@@ -129,7 +135,12 @@ where
                 }
             }
 
-            result.set(&res_indices, sum)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = sum;
         }
 
         Ok(result)
@@ -198,6 +209,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let counts_arr = counts.array_mut();
+
         for res_idx in 0..result_size {
             let mut count = T::zero();
             let mut res_indices = vec![0; new_shape.len()];
@@ -229,7 +243,12 @@ where
                 }
             }
 
-            counts.set(&res_indices, count)?;
+            *counts_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = count;
         }
 
         // Divide sums by counts
@@ -353,6 +372,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum`/`nanmean` above.
+        let counts_arr = counts.array_mut();
+
         for res_idx in 0..result_size {
             let mut count = T::zero();
             let mut res_indices = vec![0; new_shape.len()];
@@ -382,7 +404,12 @@ where
                 }
             }
 
-            counts.set(&res_indices, count)?;
+            *counts_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = count;
         }
 
         // Sum squared differences along axis
@@ -471,6 +498,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut min_val = T::nan();
             let mut res_indices = vec![0; new_shape.len()];
@@ -502,7 +532,12 @@ where
                 }
             }
 
-            result.set(&res_indices, min_val)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = min_val;
         }
 
         Ok(result)
@@ -564,6 +599,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut max_val = T::nan();
             let mut res_indices = vec![0; new_shape.len()];
@@ -595,7 +633,12 @@ where
                 }
             }
 
-            result.set(&res_indices, max_val)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = max_val;
         }
 
         Ok(result)
@@ -666,6 +709,11 @@ where
         let axis_stride = strides[ax];
         let group_size = axis_stride * axis_len;
 
+        // Bulk-acquire once: `result` is write-only here (`array`, the only
+        // read source, is a distinct object), so one unshare covers every
+        // group/offset/axis-position write below.
+        let result_arr = result.array_mut();
+
         // Process each group independently
         for group_start in (0..total_elems).step_by(group_size) {
             for offset in 0..axis_stride {
@@ -687,7 +735,12 @@ where
                     if !value.is_nan() {
                         cumsum = cumsum + value;
                     }
-                    result.set(&indices, cumsum)?;
+                    *result_arr.get_mut(indices.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            indices
+                        ))
+                    })? = cumsum;
                 }
             }
         }
@@ -757,6 +810,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut prod = T::one();
             let mut res_indices = vec![0; new_shape.len()];
@@ -788,7 +844,12 @@ where
                 }
             }
 
-            result.set(&res_indices, prod)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = prod;
         }
 
         Ok(result)
@@ -911,6 +972,12 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: `result` is write-only here (every write below
+        // is one `T::nan()` or one freshly computed `quantile`, never a
+        // value read back from `result` itself), so one unshare covers every
+        // `(res_idx, q_idx)` write in both branches below.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut res_indices = vec![0; new_shape.len()];
             let mut temp = res_idx;
@@ -948,7 +1015,14 @@ where
                 for (q_idx, _) in q_vec.iter().enumerate() {
                     let mut result_indices = res_indices.clone();
                     result_indices.push(q_idx);
-                    result.set(&result_indices, T::nan())?;
+                    *result_arr
+                        .get_mut(result_indices.as_slice())
+                        .ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "Failed to set element at indices {:?}",
+                                result_indices
+                            ))
+                        })? = T::nan();
                 }
             } else {
                 values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
@@ -1009,7 +1083,14 @@ where
 
                     let mut result_indices = res_indices.clone();
                     result_indices.push(q_idx);
-                    result.set(&result_indices, quantile)?;
+                    *result_arr
+                        .get_mut(result_indices.as_slice())
+                        .ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "Failed to set element at indices {:?}",
+                                result_indices
+                            ))
+                        })? = quantile;
                 }
             }
         }

@@ -75,7 +75,7 @@ fn main() -> numrs2::error::Result<()> {
     println!("Created normal distribution data with mean=5.0, std=2.0");
 
     // Calculate histogram
-    let (hist, bin_edges) = histogram(&normal_data, 10, None, None)?;
+    let (hist, bin_edges) = histogram(&normal_data, 10, None, None, None)?;
 
     println!("\nHistogram (10 bins):");
     println!("Counts:    {}", hist);
@@ -86,7 +86,7 @@ fn main() -> numrs2::error::Result<()> {
     let y_data = create_normal_distribution_data(200, 0.0, 1.0);
 
     // Calculate 2D histogram
-    let (hist2d, x_edges, y_edges) = histogram2d(&x_data, &y_data, 5, None, None)?;
+    let (hist2d, x_edges, y_edges) = histogram2d(&x_data, &y_data, 5, None, None, None)?;
 
     println!("\n2D Histogram (5x5 bins):");
     println!("2D Histogram shape: {:?}", hist2d.shape());
@@ -138,7 +138,7 @@ fn main() -> numrs2::error::Result<()> {
     println!("Regular average:  {}", avg);
 
     // Weighted histogram
-    let (hist, bin_edges) = histogram(&data, 5, None, Some(&weights))?;
+    let (hist, bin_edges) = histogram(&data, 5, None, Some(&weights), None)?;
     println!("\nWeighted histogram:");
     println!("Counts:    {}", hist);
     println!("Bin edges: {}", bin_edges);

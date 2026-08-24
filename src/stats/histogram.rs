@@ -1,10 +1,14 @@
 //! Histogram functions
 //!
 //! This module provides histogram calculation and related utilities:
-//! - histogram: Calculate a 1D histogram
+//! - histogram: Calculate a 1D histogram (optionally density-normalized)
 //! - histogram_bin_edges: Compute bin edges without computing the histogram
-//! - histogram2d: Calculate a 2D histogram
-//! - histogram_dd: Calculate a multi-dimensional histogram
+//! - histogram2d: Calculate a 2D histogram (optionally density-normalized)
+//! - histogramdd: Calculate a multi-dimensional histogram (optionally
+//!   density-normalized) -- this is the canonical entry point, matching
+//!   NumPy's `numpy.histogramdd` name.
+//! - histogram_dd: Deprecated-in-spirit alias kept for backward
+//!   compatibility; delegates to [`histogramdd`] with `density = None`.
 //! - bincount: Count occurrences of each value
 //! - digitize: Return the indices of the bins for each value
 //! - BinSpec: Enum for specifying bin strategies
@@ -17,23 +21,82 @@ use scirs2_core::parallel_ops::*;
 
 use super::basic::PARALLEL_THRESHOLD;
 
+/// Resolve the outer bin-edge range for one histogram axis, matching
+/// NumPy's `_get_outer_edges`.
+///
+/// An explicit `range` is validated (its lower bound must not exceed its
+/// upper bound); otherwise the auto-detected `(auto_min, auto_max)` from the
+/// data is used. Either way, a degenerate range (`min == max`, e.g. a
+/// constant array) is expanded to `(min - 0.5, max + 0.5)` to avoid a
+/// zero-width bin (which would otherwise divide by zero).
+fn resolve_range<T: Float + NumCast + std::fmt::Display>(
+    auto_min: T,
+    auto_max: T,
+    range: Option<(T, T)>,
+) -> Result<(T, T)> {
+    let (lo, hi) = match range {
+        Some((lo, hi)) => {
+            if lo > hi {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Range ({}, {}) is invalid: min must not exceed max",
+                    lo, hi
+                )));
+            }
+            (lo, hi)
+        }
+        None => (auto_min, auto_max),
+    };
+    if lo == hi {
+        let half = T::from(0.5).expect("0.5 should be representable");
+        Ok((lo - half, hi + half))
+    } else {
+        Ok((lo, hi))
+    }
+}
+
+/// Normalize raw (possibly weighted) bin counts into a probability density,
+/// matching NumPy's `density=True`: `density[i] = count[i] / (bin_width *
+/// total)`, so that `sum(density * bin_width) == 1`. Bins are assumed
+/// uniform width (`edges[i+1] - edges[i]` constant), which holds for every
+/// histogram function in this module.
+///
+/// If `total` is zero (no samples fell inside the range), the density is
+/// all zeros rather than dividing by zero.
+fn normalize_density<T: Float + NumCast>(counts: &[T], bin_width: T) -> Vec<T> {
+    let total = counts.iter().cloned().fold(T::zero(), |acc, c| acc + c);
+    if total == T::zero() {
+        return vec![T::zero(); counts.len()];
+    }
+    let denom = bin_width * total;
+    counts.iter().map(|&c| c / denom).collect()
+}
+
 /// Calculate a histogram of a dataset with parallel processing for large arrays
 ///
 /// # Parameters
 ///
 /// * `a` - Input array
 /// * `bins` - Number of bins
-/// * `range` - Optional tuple of (min, max) to use for bin edges
+/// * `range` - Optional tuple of (min, max) to use for bin edges. A
+///   degenerate range (`min == max`), whether explicit or auto-detected
+///   from constant data, is expanded to `(min - 0.5, max + 0.5)`, matching
+///   NumPy.
 /// * `weights` - Optional array of weights for each value
+/// * `density` - If `Some(true)`, normalize the result so it integrates to
+///   1 over the range (`numpy.histogram`'s `density=True`). `None` or
+///   `Some(false)` returns raw (possibly weighted) counts.
 ///
 /// # Returns
 ///
-/// A tuple of (histogram counts, bin edges)
+/// A tuple of (histogram values, bin edges). Bin `i` covers
+/// `[edges[i], edges[i+1])`, except the last bin, which is closed on both
+/// ends (`[edges[-2], edges[-1]]`), matching NumPy.
 pub fn histogram<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync + 'static>(
     a: &Array<T>,
     bins: usize,
     range: Option<(T, T)>,
     weights: Option<&Array<T>>,
+    density: Option<bool>,
 ) -> Result<(Array<T>, Array<T>)> {
     use super::basic::Statistics;
 
@@ -44,19 +107,7 @@ pub fn histogram<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync + 
         ));
     }
 
-    // Get min and max values - either from range parameter or from data
-    let (min_val, max_val) = match range {
-        Some((min, max)) => {
-            if min >= max {
-                return Err(NumRs2Error::InvalidOperation(format!(
-                    "Range ({}, {}) is invalid: min must be less than max",
-                    min, max
-                )));
-            }
-            (min, max)
-        }
-        None => (a.min(), a.max()),
-    };
+    let (min_val, max_val) = resolve_range(a.min(), a.max(), range)?;
 
     // Create bin edges
     let step = (max_val - min_val) / T::from(bins).expect("bins should be representable");
@@ -194,6 +245,12 @@ pub fn histogram<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync + 
             }
         }
     }
+
+    let counts = if density.unwrap_or(false) {
+        normalize_density(&counts, step)
+    } else {
+        counts
+    };
 
     Ok((Array::from_vec(counts), Array::from_vec(bin_edges)))
 }
@@ -512,8 +569,12 @@ impl From<(usize, usize)> for HistBins {
 /// * `y` - Input array for y coordinates
 /// * `bins` - Either a tuple (nx, ny) to specify bins in each dimension,
 ///   or a single value to use the same number of bins in both dimensions
-/// * `range` - Optional tuple ((xmin, xmax), (ymin, ymax)) to use for bin edges
+/// * `range` - Optional tuple ((xmin, xmax), (ymin, ymax)) to use for bin edges.
+///   A degenerate range on either axis is expanded by ±0.5, matching NumPy.
 /// * `weights` - Optional array of weights for each value
+/// * `density` - If `Some(true)`, normalize so the result integrates to 1
+///   over the 2-D range (each cell divided by its area and the total
+///   weight), matching `numpy.histogram2d`'s `density=True`.
 ///
 /// # Returns
 ///
@@ -524,6 +585,7 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
     bins: impl Into<HistBins>,
     range: Option<((T, T), (T, T))>,
     weights: Option<&Array<T>>,
+    density: Option<bool>,
 ) -> Result<(Array<T>, Array<T>, Array<T>)> {
     let bins_val = bins.into();
     let (x_bins, y_bins) = match bins_val {
@@ -549,49 +611,25 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
     }
 
     // Get min and max values - either from range parameter or from data
-    let (x_min, x_max) = match range {
-        Some(((min, max), _)) => {
-            if min >= max {
-                return Err(NumRs2Error::InvalidOperation(format!(
-                    "X range ({}, {}) is invalid: min must be less than max",
-                    min, max
-                )));
-            }
-            (min, max)
-        }
-        None => {
-            let x_data = x.to_vec();
-            let x_min = x_data
-                .iter()
-                .fold(x_data[0], |acc, &val| if val < acc { val } else { acc });
-            let x_max = x_data
-                .iter()
-                .fold(x_data[0], |acc, &val| if val > acc { val } else { acc });
-            (x_min, x_max)
-        }
-    };
+    let (x_auto_min, x_auto_max) = x_data
+        .iter()
+        .fold((x_data[0], x_data[0]), |(mn, mx), &val| {
+            (
+                if val < mn { val } else { mn },
+                if val > mx { val } else { mx },
+            )
+        });
+    let (x_min, x_max) = resolve_range(x_auto_min, x_auto_max, range.map(|(xr, _)| xr))?;
 
-    let (y_min, y_max) = match range {
-        Some((_, (min, max))) => {
-            if min >= max {
-                return Err(NumRs2Error::InvalidOperation(format!(
-                    "Y range ({}, {}) is invalid: min must be less than max",
-                    min, max
-                )));
-            }
-            (min, max)
-        }
-        None => {
-            let y_data = y.to_vec();
-            let y_min = y_data
-                .iter()
-                .fold(y_data[0], |acc, &val| if val < acc { val } else { acc });
-            let y_max = y_data
-                .iter()
-                .fold(y_data[0], |acc, &val| if val > acc { val } else { acc });
-            (y_min, y_max)
-        }
-    };
+    let (y_auto_min, y_auto_max) = y_data
+        .iter()
+        .fold((y_data[0], y_data[0]), |(mn, mx), &val| {
+            (
+                if val < mn { val } else { mn },
+                if val > mx { val } else { mx },
+            )
+        });
+    let (y_min, y_max) = resolve_range(y_auto_min, y_auto_max, range.map(|(_, yr)| yr))?;
 
     // Create bin edges
     let x_step = (x_max - x_min) / T::from(x_bins).expect("x_bins should be representable");
@@ -790,6 +828,13 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
         hist
     };
 
+    let flat_hist = if density.unwrap_or(false) {
+        let bin_area = x_step * y_step;
+        normalize_density(&flat_hist, bin_area)
+    } else {
+        flat_hist
+    };
+
     Ok((
         Array::from_vec_shape(flat_hist, &[x_bins, y_bins])?,
         Array::from_vec(x_edges),
@@ -797,7 +842,11 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
     ))
 }
 
-/// Calculate a multi-dimensional histogram of a dataset
+/// Calculate a multi-dimensional histogram of a dataset.
+///
+/// This is the canonical entry point, matching NumPy's `numpy.histogramdd`
+/// name; [`histogram_dd`] is kept as a thin, backward-compatible alias that
+/// delegates here with `density = None`.
 ///
 /// # Parameters
 ///
@@ -805,17 +854,24 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
 /// * `bins` - Number of bins for each dimension. Can be:
 ///   - A single usize: Same number of bins for all dimensions
 ///   - A vector of usize: Different number of bins for each dimension
-/// * `range` - Optional vector of (min, max) tuples for each dimension
+/// * `range` - Optional vector of (min, max) tuples for each dimension. A
+///   degenerate range on any dimension is expanded by ±0.5, matching NumPy.
 /// * `weights` - Optional array of weights for each sample
+/// * `density` - If `Some(true)`, normalize so the result integrates to 1
+///   over the D-dimensional range (each cell divided by its hyper-volume
+///   and the total weight), matching `numpy.histogramdd`'s `density=True`.
 ///
 /// # Returns
 ///
-/// A tuple of (histogram counts, vector of bin edges for each dimension)
+/// A tuple of (histogram values, vector of bin edges for each dimension).
+/// As with [`histogram`], each bin is half-open except the last along each
+/// dimension, which is closed on both ends.
 ///
 /// # Examples
 ///
 /// ```
 /// use numrs2::prelude::*;
+/// use numrs2::stats::histogramdd;
 ///
 /// // Create 2D data points
 /// let data = Array::from_vec(vec![
@@ -826,19 +882,21 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
 /// ]).reshape(&[4, 2]);
 ///
 /// // Compute 2D histogram with 2 bins in each dimension
-/// let (hist, edges) = histogram_dd(&data, &[2, 2], None, None).expect("histogram_dd should succeed");
+/// let (hist, edges) = histogramdd(&data, &[2, 2], None, None, None).expect("histogramdd should succeed");
 /// assert_eq!(hist.shape(), vec![2, 2]);
 /// ```
-pub fn histogram_dd<T: Float + Clone + NumCast + std::fmt::Display>(
+#[allow(clippy::too_many_arguments)]
+pub fn histogramdd<T: Float + Clone + NumCast + std::fmt::Display>(
     sample: &Array<T>,
     bins: &[usize],
     range: Option<Vec<(T, T)>>,
     weights: Option<&Array<T>>,
+    density: Option<bool>,
 ) -> Result<(Array<T>, Vec<Array<T>>)> {
     let shape = sample.shape();
     if shape.len() != 2 {
         return Err(NumRs2Error::InvalidOperation(
-            "histogram_dd requires 2D input array of shape (N, D)".to_string(),
+            "histogramdd requires 2D input array of shape (N, D)".to_string(),
         ));
     }
 
@@ -902,9 +960,14 @@ pub fn histogram_dd<T: Float + Clone + NumCast + std::fmt::Display>(
                 n_dims
             )));
         }
-        ranges = r;
+        for dim_range in r.into_iter() {
+            // `resolve_range`'s auto_min/auto_max are unused when an
+            // explicit range is supplied, as it is here.
+            ranges.push(resolve_range(T::zero(), T::zero(), Some(dim_range))?);
+        }
     } else {
-        // Compute min and max for each dimension
+        // Compute min and max for each dimension, then apply the same
+        // degenerate-range (min == max) expansion as `histogram`.
         for d in 0..n_dims {
             let mut min_val = sample_data[d];
             let mut max_val = sample_data[d];
@@ -919,11 +982,7 @@ pub fn histogram_dd<T: Float + Clone + NumCast + std::fmt::Display>(
                 }
             }
 
-            // Add small epsilon to max to ensure last value is included
-            let epsilon = T::from(1e-10).expect("epsilon should be representable");
-            max_val = max_val + epsilon;
-
-            ranges.push((min_val, max_val));
+            ranges.push(resolve_range(min_val, max_val, None)?);
         }
     }
 
@@ -1023,10 +1082,50 @@ pub fn histogram_dd<T: Float + Clone + NumCast + std::fmt::Display>(
         }
     }
 
+    let hist_data = if density.unwrap_or(false) {
+        let bin_volume = bin_steps
+            .iter()
+            .cloned()
+            .fold(T::one(), |acc, step| acc * step);
+        normalize_density(&hist_data, bin_volume)
+    } else {
+        hist_data
+    };
+
     // Create the histogram array with proper shape
     let hist = Array::from_vec_shape(hist_data, &hist_shape)?;
 
     Ok((hist, edges))
+}
+
+/// Calculate a multi-dimensional histogram of a dataset.
+///
+/// Deprecated-in-spirit alias for [`histogramdd`] (NumPy's canonical name),
+/// kept for backward compatibility with existing call sites. Delegates
+/// directly to `histogramdd(sample, bins, range, weights, None)`.
+///
+/// # Examples
+///
+/// ```
+/// use numrs2::prelude::*;
+///
+/// let data = Array::from_vec(vec![
+///     0.0, 0.0,
+///     0.5, 0.5,
+///     1.0, 1.0,
+///     0.3, 0.7,
+/// ]).reshape(&[4, 2]);
+///
+/// let (hist, edges) = histogram_dd(&data, &[2, 2], None, None).expect("histogram_dd should succeed");
+/// assert_eq!(hist.shape(), vec![2, 2]);
+/// ```
+pub fn histogram_dd<T: Float + Clone + NumCast + std::fmt::Display>(
+    sample: &Array<T>,
+    bins: &[usize],
+    range: Option<Vec<(T, T)>>,
+    weights: Option<&Array<T>>,
+) -> Result<(Array<T>, Vec<Array<T>>)> {
+    histogramdd(sample, bins, range, weights, None)
 }
 
 /// Calculate counts of each unique value in an array
