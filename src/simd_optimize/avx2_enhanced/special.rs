@@ -54,7 +54,7 @@ impl EnhancedSimdOps {
             Self::blocked_matmul_avx2_f32(&a_data, &b_data, &mut c_data, m, n, k, block_size);
         }
 
-        *c = Array::from_vec(c_data).reshape(&[m, n]);
+        *c = Array::from_vec_shape(c_data, &[m, n])?;
         Ok(())
     }
 
@@ -161,8 +161,8 @@ impl EnhancedSimdOps {
         }
 
         Ok((
-            Array::from_vec(c_r).reshape(&a_real.shape()),
-            Array::from_vec(c_i).reshape(&a_real.shape()),
+            Array::from_vec_shape(c_r, &a_real.shape())?,
+            Array::from_vec_shape(c_i, &a_real.shape())?,
         ))
     }
 
@@ -334,7 +334,7 @@ impl EnhancedSimdOps {
             result[i] = sum;
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     // ========================================
@@ -443,7 +443,7 @@ impl EnhancedSimdOps {
         // Backward difference at end
         result[len - 1] = data[len - 1] - data[len - 2];
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized gradient (central differences)
@@ -487,7 +487,7 @@ impl EnhancedSimdOps {
             Self::avx2_copy_f32(&src_data, &mut dst);
         }
 
-        Array::from_vec(dst).reshape(&src.shape())
+        Array::from_vec_shape(dst, &src.shape())?
     }
 
     /// Optimized memory copy for f64 arrays
@@ -500,7 +500,7 @@ impl EnhancedSimdOps {
             Self::avx2_copy_f64(&src_data, &mut dst);
         }
 
-        Array::from_vec(dst).reshape(&src.shape())
+        Array::from_vec_shape(dst, &src.shape())?
     }
 
     /// AVX2 optimized copy for f32

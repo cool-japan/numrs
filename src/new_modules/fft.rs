@@ -172,7 +172,7 @@ impl FFT {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&shape))
+        Array::from_vec_shape(result, &shape)
     }
 
     /// Compute 2D inverse FFT of a 2D complex array
@@ -241,7 +241,7 @@ impl FFT {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&shape))
+        Array::from_vec_shape(result, &shape)
     }
 
     /// Compute the frequency axis for an FFT result
@@ -411,7 +411,7 @@ impl FFT {
                     result.extend(shifted_row);
                 }
 
-                Ok(Array::from_vec(result).reshape(&shape))
+                Ok(Array::from_vec_shape(result, &shape)?)
             }
             _ => Err(NumRs2Error::InvalidOperation(format!(
                 "fftshift only supports 1D and 2D arrays, got {}D",
@@ -502,7 +502,7 @@ impl FFT {
                     result.extend(shifted_row);
                 }
 
-                Ok(Array::from_vec(result).reshape(&shape))
+                Ok(Array::from_vec_shape(result, &shape)?)
             }
             _ => Err(NumRs2Error::InvalidOperation(format!(
                 "ifftshift only supports 1D and 2D arrays, got {}D",
@@ -697,7 +697,7 @@ impl FFT {
         }
 
         // Return as array with adjusted shape
-        Ok(Array::from_vec(result).reshape(&[n_rows, rfft_cols]))
+        Array::from_vec_shape(result, &[n_rows, rfft_cols])
     }
 
     /// 2D Inverse Real Fast Fourier Transform
@@ -797,7 +797,7 @@ impl FFT {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(shape))
+        Array::from_vec_shape(result, shape)
     }
 
     /// Apply window function to the signal before FFT to reduce spectral leakage

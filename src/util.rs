@@ -14,7 +14,7 @@ where
     let result: Vec<U> = vec_data.par_iter().map(|x| f(x.clone())).collect();
 
     let shape = array.shape();
-    Array::from_vec(result).reshape(&shape)
+    Array::from_vec_shape(result, &shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Memory layout optimization utilities
@@ -168,14 +168,14 @@ fn broadcast_to<T: Clone>(array: &Array<T>, shape: &[usize]) -> Result<Array<T>>
         result_data.push(orig_data[orig_idx].clone());
     }
 
-    Ok(Array::from_vec(result_data).reshape(shape))
+    Array::from_vec_shape(result_data, shape)
 }
 
 /// Type conversion utilities
 pub fn astype<T: Clone, U: Clone + From<T>>(array: &Array<T>) -> Array<U> {
     let data = array.to_vec();
     let converted: Vec<U> = data.into_iter().map(U::from).collect();
-    Array::from_vec(converted).reshape(&array.shape())
+    Array::from_vec_shape(converted, &array.shape()).unwrap_or_else(|e| panic!("{e}"))
 }
 
 // Specialized optimizations for common operations

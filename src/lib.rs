@@ -100,6 +100,7 @@ pub mod integrate;
 pub mod interop;
 pub mod interpolate;
 pub mod io;
+pub(crate) mod kernels;
 pub mod linalg;
 pub mod linalg_accelerated;
 pub mod linalg_extended;

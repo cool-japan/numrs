@@ -218,8 +218,8 @@ impl UnifiedSimdDispatcher {
                     .collect();
 
                 Ok((
-                    Array::from_vec(c_r).reshape(&a_real.shape()),
-                    Array::from_vec(c_i).reshape(&a_real.shape()),
+                    Array::from_vec_shape(c_r, &a_real.shape())?,
+                    Array::from_vec_shape(c_i, &a_real.shape())?,
                 ))
             }
         }

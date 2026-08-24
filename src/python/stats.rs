@@ -110,7 +110,7 @@ fn median(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny
                 };
             }
 
-            let arr = Array::from_vec(result).reshape(&out_shape);
+            let arr = Array::from_vec_shape(result, &out_shape)?;
             let py_arr = PyArray { inner: arr };
             py_arr.into_pyobject(py).map(|b| b.into_any().unbind())
         }
@@ -250,7 +250,7 @@ fn corrcoef(x: &PyArray, y: Option<&PyArray>) -> PyResult<PyArray> {
         // Return 2x2 correlation matrix
         let data = vec![1.0, corr, corr, 1.0];
         Ok(PyArray {
-            inner: crate::array::Array::from_vec(data).reshape(&[2, 2]),
+            inner: crate::array::Array::from_vec_shape(data, &[2, 2])?,
         })
     } else {
         Err(PyValueError::new_err(
@@ -367,7 +367,7 @@ fn randn(size: Vec<usize>) -> PyResult<PyArray> {
     let data: Vec<f64> = (0..total_size).map(|_| dist.sample(&mut rng)).collect();
 
     Ok(PyArray {
-        inner: crate::array::Array::from_vec(data).reshape(&size),
+        inner: crate::array::Array::from_vec_shape(data, &size)?,
     })
 }
 
@@ -382,7 +382,7 @@ fn rand(size: Vec<usize>) -> PyResult<PyArray> {
     let data: Vec<f64> = (0..total_size).map(|_| rng.random::<f64>()).collect();
 
     Ok(PyArray {
-        inner: crate::array::Array::from_vec(data).reshape(&size),
+        inner: crate::array::Array::from_vec_shape(data, &size)?,
     })
 }
 

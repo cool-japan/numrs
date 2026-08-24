@@ -54,7 +54,7 @@ where
     /// A new Matrix instance with shape (n, 1) where n is the length of the vector
     pub fn from_vec(vec: Vec<T>) -> Self {
         let n = vec.len();
-        let array = Array::from_vec(vec).reshape(&[n, 1]);
+        let array = Array::from_vec_shape(vec, &[n, 1]).unwrap_or_else(|e| panic!("{e}"));
         Self { data: array }
     }
 
@@ -94,7 +94,7 @@ where
         }
 
         // Create an array and reshape it
-        let array = Array::from_vec(flat_vec).reshape(&[rows, first_row_len]);
+        let array = Array::from_vec_shape(flat_vec, &[rows, first_row_len])?;
         Ok(Self { data: array })
     }
 
@@ -270,7 +270,7 @@ where
         }
 
         // Create a row matrix (1 x cols)
-        let row_array = Array::from_vec(row_data).reshape(&[1, cols]);
+        let row_array = Array::from_vec_shape(row_data, &[1, cols])?;
         Ok(Self { data: row_array })
     }
 
@@ -292,7 +292,7 @@ where
         }
 
         // Create a column matrix (rows x 1)
-        let col_array = Array::from_vec(col_data).reshape(&[rows, 1]);
+        let col_array = Array::from_vec_shape(col_data, &[rows, 1])?;
         Ok(Self { data: col_array })
     }
 
@@ -312,7 +312,8 @@ where
         }
 
         // Create a column matrix with the diagonal elements
-        let diag_array = Array::from_vec(diag_data).reshape(&[diag_len, 1]);
+        let diag_array =
+            Array::from_vec_shape(diag_data, &[diag_len, 1]).unwrap_or_else(|e| panic!("{e}"));
         Self { data: diag_array }
     }
 
@@ -556,7 +557,7 @@ where
                 .get(&[])
                 .expect("matrix: 0-dimensional array should have a single element")
                 .clone();
-            let scalar_array = Array::from_vec(vec![scalar_value]).reshape(&[1, 1]);
+            let scalar_array = Array::from_vec_shape(vec![scalar_value], &[1, 1])?;
             Matrix::new(scalar_array)
         }
         1 => {
@@ -637,7 +638,8 @@ pub fn matrix_from_scalar<T>(scalar: T) -> Matrix<T>
 where
     T: Clone + Zero + One + PartialEq + Default + PartialOrd,
 {
-    let scalar_array = Array::from_vec(vec![scalar]).reshape(&[1, 1]);
+    let scalar_array =
+        Array::from_vec_shape(vec![scalar], &[1, 1]).unwrap_or_else(|e| panic!("{e}"));
     Matrix::new(scalar_array).expect("matrix_from_scalar: 1x1 array is always a valid matrix")
 }
 

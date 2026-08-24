@@ -95,7 +95,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate integers in the range [low, high)
@@ -147,7 +147,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a normal (Gaussian) distribution
@@ -196,7 +196,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a log-normal distribution
@@ -241,7 +241,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Beta distribution
@@ -283,7 +283,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Chi-Square distribution
@@ -324,7 +324,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Dirichlet distribution
@@ -402,7 +402,7 @@ impl RandomState {
         let mut out_shape = shape.to_vec();
         out_shape.push(k);
 
-        Ok(Array::from_vec(result).reshape(&out_shape))
+        Array::from_vec_shape(result, &out_shape)
     }
 
     /// Generate random values from a Student's t-distribution
@@ -443,7 +443,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Poisson distribution
@@ -478,7 +478,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Binomial distribution
@@ -514,7 +514,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Cauchy (Lorentz) distribution
@@ -556,7 +556,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a uniform distribution
@@ -595,7 +595,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate binary random values with given probability of success
@@ -629,7 +629,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a gamma distribution
@@ -672,7 +672,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(size_shape))
+        Array::from_vec_shape(vec, size_shape)
     }
 
     /// Generate random values from an exponential distribution
@@ -716,7 +716,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Weibull distribution
@@ -758,7 +758,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(size_shape))
+        Array::from_vec_shape(vec, size_shape)
     }
 
     /// Shuffle an array in-place
@@ -770,7 +770,7 @@ impl RandomState {
 
         // Update the array with shuffled data
         let shape = array.shape();
-        *array = Array::from_vec(data).reshape(&shape);
+        *array = Array::from_vec_shape(data, &shape)?;
 
         Ok(())
     }
@@ -892,7 +892,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Triangular distribution
@@ -937,7 +937,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a PERT distribution
@@ -985,7 +985,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random samples from an F (Fisher-Snedecor) distribution.
@@ -1047,7 +1047,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 }
 

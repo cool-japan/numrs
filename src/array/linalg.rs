@@ -10,17 +10,141 @@
 use super::core::LstsqResult;
 use super::Array;
 use crate::error::{NumRs2Error, Result};
+use crate::kernels;
 use num_traits::{Float, Zero};
-use scirs2_core::ndarray::IxDyn;
+use scirs2_core::parallel_ops::*;
 use scirs2_core::simd_ops::SimdUnifiedOps;
+use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::{Add, Mul};
 
-// Matrix multiplication
+/// Batched GEMM over `batch` row-major panels laid out back to back.
+///
+/// `a` is `[batch, m, k]`, `b` is `[batch, k, n]`, `c` is `[batch, m, n]`,
+/// all flattened in row-major (C) order, so panel `t` of each occupies
+/// exactly one contiguous run: `a[t*m*k .. (t+1)*m*k]`, and likewise for
+/// `b`/`c`. Each panel is dispatched through [`kernels::gemm::gemm_2d`],
+/// which picks its own f64/f32 SIMD or generic tier.
+///
+/// # Parallelism, and why it is f64/f32-only
+///
+/// Panels are disjoint (no cross-panel accumulation), so splitting the
+/// batch across threads changes nothing about the arithmetic -- only which
+/// thread evaluates which panel -- exactly the argument
+/// `kernels::gemm`'s own row split makes for the `M` axis. Parallelizing a
+/// *generic* `&mut [T]` would nonetheless require `T: Send + Sync`, and
+/// `Array::matmul` is called from ~50 sites across this crate on generic
+/// `T: Float + ...` parameters that carry no such bound; adding it to the
+/// public signature is a far wider cascade than the `'static` this module
+/// already takes on. Instead the parallel branch reinterprets the flat
+/// operands as concrete `&[f64]`/`&mut [f64]` (or `f32`) via
+/// [`kernels::cast`] -- which the `'static` bound already permits, and
+/// which yields slices that are unconditionally `Send + Sync` -- and
+/// parallelizes those. The f64/f32 tiers are exactly the ones where the
+/// per-panel work is fast enough for scheduling overhead to matter, so
+/// nothing is lost by leaving the generic tier sequential.
+///
+/// `total_flops >= GEMM_PARALLEL_MIN_FLOPS` forces `batch`, `m`, `n`, `k`
+/// all `> 0`, so the `par_chunks_mut(m * n)` chunk size below is never
+/// zero (rayon panics on a zero chunk size).
+///
+/// If a panel is *itself* large enough to clear `GEMM_PARALLEL_MIN_FLOPS`,
+/// `gemm_2d`'s row split nests inside this batch split. Rayon supports
+/// that (the inner split just joins within the same pool); it is not a
+/// deadlock, only a mild scheduling cost in a regime where each panel is
+/// already tens of milliseconds of work.
+fn batched_gemm<T>(batch: usize, m: usize, k: usize, n: usize, a: &[T], b: &[T], c: &mut [T])
+where
+    T: Clone + Add<Output = T> + Mul<Output = T> + Zero + 'static,
+{
+    if batch == 0 || m == 0 || n == 0 {
+        return;
+    }
+
+    // Defensive: every caller is a shape-validated public entry point one
+    // layer up, so these always match in practice. Mirrors
+    // `kernels::gemm::gemm_generic`'s convention for a violated
+    // precondition -- leave `c` as the caller allocated it (already
+    // zeroed) rather than indexing past what was actually passed.
+    if a.len() != batch * m * k || b.len() != batch * k * n || c.len() != batch * m * n {
+        return;
+    }
+
+    let total_flops = 2usize
+        .saturating_mul(batch)
+        .saturating_mul(m)
+        .saturating_mul(n)
+        .saturating_mul(k);
+
+    if batch > 1 && total_flops >= kernels::GEMM_PARALLEL_MIN_FLOPS {
+        if let (Some(a64), Some(b64)) = (kernels::cast::as_f64(a), kernels::cast::as_f64(b)) {
+            if let Some(c64) = kernels::cast::as_f64_mut(c) {
+                par_batch_f64(m, k, n, a64, b64, c64);
+                return;
+            }
+        }
+        if let (Some(a32), Some(b32)) = (kernels::cast::as_f32(a), kernels::cast::as_f32(b)) {
+            if let Some(c32) = kernels::cast::as_f32_mut(c) {
+                par_batch_f32(m, k, n, a32, b32, c32);
+                return;
+            }
+        }
+    }
+
+    for t in 0..batch {
+        kernels::gemm::gemm_2d(
+            m,
+            k,
+            n,
+            &a[t * m * k..(t + 1) * m * k],
+            &b[t * k * n..(t + 1) * k * n],
+            &mut c[t * m * n..(t + 1) * m * n],
+        );
+    }
+}
+
+/// f64 batch split for [`batched_gemm`]: one panel per rayon task.
+fn par_batch_f64(m: usize, k: usize, n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
+    c.par_chunks_mut(m * n)
+        .enumerate()
+        .for_each(|(t, c_panel)| {
+            kernels::gemm::gemm_2d(
+                m,
+                k,
+                n,
+                &a[t * m * k..(t + 1) * m * k],
+                &b[t * k * n..(t + 1) * k * n],
+                c_panel,
+            );
+        });
+}
+
+/// `f32` twin of [`par_batch_f64`].
+fn par_batch_f32(m: usize, k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
+    c.par_chunks_mut(m * n)
+        .enumerate()
+        .for_each(|(t, c_panel)| {
+            kernels::gemm::gemm_2d(
+                m,
+                k,
+                n,
+                &a[t * m * k..(t + 1) * m * k],
+                &b[t * k * n..(t + 1) * k * n],
+                c_panel,
+            );
+        });
+}
+
+// Matrix multiplication.
+//
+// Split out of the block holding `dot` below purely so `matmul`/`matmul_2d`
+// can carry the extra `+ 'static` bound that `kernels::gemm::gemm_2d`
+// needs to `TypeId`-dispatch `T` onto its f64/f32 SIMD tiers. `dot` needs
+// no dispatch and keeps its historical bounds unchanged.
 impl<T> Array<T>
 where
-    T: Clone + Add<Output = T> + Mul<Output = T> + Zero,
+    T: Clone + Add<Output = T> + Mul<Output = T> + Zero + 'static,
 {
     /// Perform matrix multiplication using BLAS if available
     ///
@@ -36,22 +160,35 @@ where
             return self.matmul_2d(other);
         }
 
-        // For higher dimensions, we need to handle broadcasting
-        // Ensure both arrays have at least 2 dimensions
-        let a = if a_shape.len() == 1 {
-            self.reshape(&[1, a_shape[0]])
+        // For higher dimensions, we need to handle broadcasting.
+        // Ensure both arrays have at least 2 dimensions. Only the 1-D
+        // promotion actually needs to build a new array; every other
+        // operand is *borrowed* through the `Cow` (the previous
+        // implementation `clone()`d both operands unconditionally here,
+        // copying every element of both inputs before a single multiply
+        // had happened).
+        let a: Cow<'_, Self> = if a_shape.len() == 1 {
+            Cow::Owned(self.try_reshape(&[1, a_shape[0]])?)
         } else {
-            self.clone()
+            Cow::Borrowed(self)
         };
 
-        let b = if b_shape.len() == 1 {
-            other.reshape(&[b_shape[0], 1])
+        let b: Cow<'_, Self> = if b_shape.len() == 1 {
+            Cow::Owned(other.try_reshape(&[b_shape[0], 1])?)
         } else {
-            other.clone()
+            Cow::Borrowed(other)
         };
 
         let a_shape = a.shape();
         let b_shape = b.shape();
+
+        // A 0-D operand has no core dimensions to slice off; return a
+        // dimension error rather than underflowing `len() - 2` below.
+        if a_shape.len() < 2 || b_shape.len() < 2 {
+            return Err(NumRs2Error::DimensionMismatch(
+                "matmul requires operands with at least 1 dimension".to_string(),
+            ));
+        }
 
         // Extract core dimensions (last 2 of each array)
         let a_core_shape = &a_shape[a_shape.len() - 2..];
@@ -85,93 +222,48 @@ where
         let a_broadcast_shape = [&broadcast_batch_shape, a_core_shape].concat();
         let b_broadcast_shape = [&broadcast_batch_shape, b_core_shape].concat();
 
-        let a_broadcast = if a_shape == a_broadcast_shape {
+        let a_broadcast: Cow<'_, Self> = if a_shape == a_broadcast_shape {
             a
         } else {
-            a.broadcast_to(&a_broadcast_shape)?
+            Cow::Owned(a.broadcast_to(&a_broadcast_shape)?)
         };
 
-        let b_broadcast = if b_shape == b_broadcast_shape {
+        let b_broadcast: Cow<'_, Self> = if b_shape == b_broadcast_shape {
             b
         } else {
-            b.broadcast_to(&b_broadcast_shape)?
+            Cow::Owned(b.broadcast_to(&b_broadcast_shape)?)
         };
 
+        let m = a_core_shape[0];
+        let k = a_core_shape[1];
+        let n = b_core_shape[1];
+
         // Calculate output shape
-        let output_core_shape = vec![a_core_shape[0], b_core_shape[1]];
         let mut output_shape = broadcast_batch_shape.clone();
-        output_shape.extend_from_slice(&output_core_shape);
+        output_shape.push(m);
+        output_shape.push(n);
 
-        // Perform batch matrix multiplication
-        let mut result = Self::zeros(&output_shape);
-
-        // Calculate total batch size
+        // Calculate total batch size (`1` when there are no batch axes,
+        // i.e. the plain 2-D-after-promotion case)
         let batch_size: usize = broadcast_batch_shape.iter().product();
 
-        // For each batch, perform matrix multiplication
-        for batch_idx in 0..batch_size {
-            // Calculate indices for this batch
-            let mut batch_indices = Vec::with_capacity(broadcast_batch_shape.len());
-            let mut temp = batch_idx;
+        // Both operands are now shaped `[batch.., m, k]` / `[batch.., k, n]`.
+        // `operand()` hands back their data as one flat slice in *logical*
+        // (row-major) order -- borrowed outright when the array is
+        // contiguous (which every `broadcast_to` output is, since it is a
+        // freshly owned standard-layout array), materialized only for a
+        // non-contiguous operand that needed no broadcasting. In that
+        // layout panel `t` is a contiguous run, so the whole batch reduces
+        // to flat-index panel arithmetic feeding `kernels::gemm::gemm_2d`
+        // -- replacing the previous per-element `IxDyn` `get`/`set` pair,
+        // which rebuilt an index `Vec` and walked strides for every single
+        // multiply-add.
+        let a_flat = kernels::borrow::operand(&a_broadcast);
+        let b_flat = kernels::borrow::operand(&b_broadcast);
+        let mut c_data = vec![T::zero(); batch_size * m * n];
+        batched_gemm(batch_size, m, k, n, &a_flat, &b_flat, &mut c_data);
 
-            for &dim in broadcast_batch_shape.iter().rev() {
-                batch_indices.insert(0, temp % dim);
-                temp /= dim;
-            }
-
-            // Extract matrices for this batch
-            let mut a_indices = batch_indices.clone();
-            a_indices.push(0); // Placeholder for row index
-            a_indices.push(0); // Placeholder for column index
-
-            let mut b_indices = batch_indices.clone();
-            b_indices.push(0); // Placeholder for row index
-            b_indices.push(0); // Placeholder for column index
-
-            // Perform matrix multiplication for this batch
-            let m = a_core_shape[0];
-            let n = b_core_shape[1];
-            let k = a_core_shape[1];
-
-            for i in 0..m {
-                let a_idx_pos = a_indices.len() - 2;
-                a_indices[a_idx_pos] = i;
-
-                for j in 0..n {
-                    let b_idx_pos = b_indices.len() - 1;
-                    b_indices[b_idx_pos] = j;
-
-                    let mut sum = T::zero();
-
-                    for l in 0..k {
-                        let a_col_pos = a_indices.len() - 1;
-                        a_indices[a_col_pos] = l;
-                        let b_row_pos = b_indices.len() - 2;
-                        b_indices[b_row_pos] = l;
-
-                        let a_val = a_broadcast
-                            .array()
-                            .get(IxDyn(&a_indices))
-                            .expect("broadcast element access should succeed");
-                        let b_val = b_broadcast
-                            .array()
-                            .get(IxDyn(&b_indices))
-                            .expect("broadcast element access should succeed");
-
-                        sum = sum + a_val.clone() * b_val.clone();
-                    }
-
-                    // Calculate output indices
-                    let mut output_indices = batch_indices.clone();
-                    output_indices.push(i);
-                    output_indices.push(j);
-
-                    result.set(&output_indices, sum)?;
-                }
-            }
-        }
-
-        Ok(result)
+        Self::from_vec_shape(c_data, &output_shape)
     }
 
     /// Basic 2D matrix multiplication (no broadcasting)
@@ -197,59 +289,35 @@ where
         let n = b_shape[1];
         let k = a_shape[1];
 
-        // Implement cache-aware blocked matrix multiplication
-        // This provides significant performance improvements over naive O(n^3) algorithm
+        // Hand both operands to the crate's dtype-dispatched GEMM kernel:
+        // `gemm_2d` routes f64/f32 onto `scirs2-core`'s blocked SIMD
+        // matmul (row-split across threads once the FLOP count clears
+        // `kernels::GEMM_PARALLEL_MIN_FLOPS`) and everything else onto the
+        // same `BLOCK_SIZE = 64` blocked i-k-j triple loop that used to be
+        // inlined right here.
+        //
+        // `operand()` borrows a contiguous operand outright; only a
+        // non-contiguous layout (e.g. a permuted-axes view) materializes a
+        // logically-ordered copy. The result is built with
+        // `from_vec_shape`, which *consumes* the output buffer -- the
+        // previous `from_vec(..).reshape(&[m, n])` had to clone the whole
+        // buffer, because `reshape` takes `&self`.
+        let a = kernels::borrow::operand(self);
+        let b = kernels::borrow::operand(other);
+        let mut c = vec![T::zero(); m * n];
+        kernels::gemm::gemm_2d(m, k, n, &a, &b, &mut c);
 
-        // Cache-optimized implementation with improved memory access pattern
-        // Borrow the contiguous operands without copying; only non-contiguous
-        // layouts incur a materializing copy. The output buffer is allocated
-        // directly instead of via a throwaway zeroed Array.
-        let mut c_data = vec![T::zero(); m * n];
-        let owned_a;
-        let a_data: &[T] = match self.as_slice() {
-            Some(slice) => slice,
-            None => {
-                owned_a = self.to_vec();
-                &owned_a
-            }
-        };
-        let owned_b;
-        let b_data: &[T] = match other.as_slice() {
-            Some(slice) => slice,
-            None => {
-                owned_b = other.to_vec();
-                &owned_b
-            }
-        };
-
-        // Cache-optimized matrix multiplication with improved memory access pattern
-        // Using i-k-j loop order for better cache locality
-        const BLOCK_SIZE: usize = 64; // Cache-friendly block size
-
-        for i_block in (0..m).step_by(BLOCK_SIZE) {
-            for k_block in (0..k).step_by(BLOCK_SIZE) {
-                for j_block in (0..n).step_by(BLOCK_SIZE) {
-                    // Process blocks to improve cache reuse
-                    let i_end = std::cmp::min(i_block + BLOCK_SIZE, m);
-                    let k_end = std::cmp::min(k_block + BLOCK_SIZE, k);
-                    let j_end = std::cmp::min(j_block + BLOCK_SIZE, n);
-
-                    for i in i_block..i_end {
-                        for k_l in k_block..k_end {
-                            let a_ik = &a_data[i * k + k_l];
-                            for j in j_block..j_end {
-                                c_data[i * n + j] = c_data[i * n + j].clone()
-                                    + a_ik.clone() * b_data[k_l * n + j].clone();
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(Self::from_vec(c_data).reshape(&[m, n]))
+        Self::from_vec_shape(c, &[m, n])
     }
+}
 
+// `dot` deliberately stays in its own impl block, on the *original*
+// bounds: it needs no dtype dispatch, so there is no reason to make it
+// demand `T: 'static` alongside `matmul`/`matmul_2d` above.
+impl<T> Array<T>
+where
+    T: Clone + Add<Output = T> + Mul<Output = T> + Zero,
+{
     /// Compute the dot product of two vectors
     pub fn dot(&self, other: &Self) -> Result<T> {
         let a_shape = self.shape();
@@ -333,7 +401,8 @@ impl<
             + std::ops::MulAssign
             + std::ops::DivAssign
             + std::ops::SubAssign
-            + std::fmt::Display,
+            + std::fmt::Display
+            + 'static,
     > Array<T>
 {
     /// Compute the condition number of a matrix

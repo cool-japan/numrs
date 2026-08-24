@@ -164,7 +164,7 @@ where
         for i in 0..size {
             data.push(self.eval_at(i));
         }
-        Array::from_vec(data).reshape(&self.shape)
+        Array::from_vec_shape(data, &self.shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     fn fused_size(&self) -> usize {
@@ -247,7 +247,7 @@ where
         for i in 0..size {
             data.push(self.eval_at(i));
         }
-        Array::from_vec(data).reshape(self.expr.shape())
+        Array::from_vec_shape(data, self.expr.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     fn fused_size(&self) -> usize {
@@ -387,7 +387,7 @@ where
         let c_nd = Array1::from_vec(c_data);
 
         let result = f64::simd_fma(&a_nd.view(), &b_nd.view(), &c_nd.view());
-        Array::from_vec(result.to_vec()).reshape(&self.shape)
+        Array::from_vec_shape(result.to_vec(), &self.shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Scalar FMA evaluation using hardware FMA instruction per element.
@@ -400,7 +400,7 @@ where
             let cv = self.c.eval_at(i);
             data.push(av.mul_add(bv, cv));
         }
-        Array::from_vec(data).reshape(&self.shape)
+        Array::from_vec_shape(data, &self.shape).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 
@@ -567,7 +567,7 @@ pub fn simd_fma_arrays(a: &Array<f64>, b: &Array<f64>, c: &Array<f64>) -> Result
     let c_nd = Array1::from_vec(c_data);
 
     let result = f64::simd_fma(&a_nd.view(), &b_nd.view(), &c_nd.view());
-    Ok(Array::from_vec(result.to_vec()).reshape(&a.shape()))
+    Array::from_vec_shape(result.to_vec(), &a.shape())
 }
 
 /// Evaluate `a * scalar_mul + scalar_add` using SIMD, operating directly on an array.
@@ -592,7 +592,7 @@ pub fn simd_fused_scalar_broadcast(a: &Array<f64>, scalar_mul: f64, scalar_add: 
         result.push(data[i].mul_add(scalar_mul, scalar_add));
     }
 
-    Array::from_vec(result).reshape(&a.shape())
+    Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Compute a fused dot product directly on arrays using SIMD.
@@ -1053,7 +1053,7 @@ impl<'a> FusionBuilder<'a> {
 
     /// Materialize the fused result.
     pub fn eval_fused(self) -> Array<f64> {
-        Array::from_vec(self.data).reshape(&self.shape)
+        Array::from_vec_shape(self.data, &self.shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Return the number of fusions that were applied.

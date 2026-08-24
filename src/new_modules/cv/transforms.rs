@@ -675,7 +675,7 @@ fn create_output_image(
         }
         ColorSpace::Rgba => {
             let data = vec![0.0; width * height * 4];
-            let arr = crate::array::Array::from_vec(data).reshape(&[height, width, 4]);
+            let arr = crate::array::Array::from_vec_shape(data, &[height, width, 4])?;
             Image::from_array(arr, ColorSpace::Rgba)
         }
     }

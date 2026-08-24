@@ -131,7 +131,7 @@ impl QuantumFourierTransform {
             phase,
         ];
 
-        let gate = Array::from_vec(gate_data).reshape(&[4, 4]);
+        let gate = Array::from_vec_shape(gate_data, &[4, 4])?;
         circuit.add_gate(gate, vec![control, target], "CP".to_string())?;
 
         Ok(())
@@ -316,7 +316,7 @@ where
         |z: Complex<f64>| Complex::new(<T as From<f64>>::from(z.re), <T as From<f64>>::from(z.im));
 
     let data = vec![conv(m00), conv(m01), conv(m10), conv(m11)];
-    Array::from_vec(data).reshape(&[2, 2])
+    Array::from_vec_shape(data, &[2, 2]).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Build the controlled version (4×4) of a single-qubit gate.
@@ -343,7 +343,7 @@ where
             data[(i + 2) * 4 + (j + 2)] = elem;
         }
     }
-    Ok(Array::from_vec(data).reshape(&[4, 4]))
+    Array::from_vec_shape(data, &[4, 4])
 }
 
 /// Apply a multi-controlled `X^p` gate using the ancilla-free recursive
@@ -739,7 +739,7 @@ impl QuantumPhaseEstimation {
             }
         }
 
-        Ok(Array::from_vec(data).reshape(&[big, big]))
+        Array::from_vec_shape(data, &[big, big])
     }
 
     /// Embed an `n_eigen`-qubit eigenstate into the high qubits of an
@@ -832,7 +832,7 @@ impl QuantumPhaseEstimation {
             phase,
         ];
 
-        let gate = Array::from_vec(gate_data).reshape(&[4, 4]);
+        let gate = Array::from_vec_shape(gate_data, &[4, 4])?;
         circuit.add_gate(gate, vec![control, target], "CP".to_string())?;
 
         Ok(())

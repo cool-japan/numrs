@@ -362,7 +362,7 @@ where
                     NumRs2Error::DeserializationError(format!("JSON deserialization error: {}", e))
                 })?;
 
-                Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
+                Ok(Array::from_vec_shape(serialized.data, &serialized.shape)?)
             }
             SerializeFormat::Csv => {
                 let mut reader = csv::ReaderBuilder::new()
@@ -466,7 +466,7 @@ where
                         ))
                     })?;
 
-                Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
+                Ok(Array::from_vec_shape(serialized.data, &serialized.shape)?)
             }
             SerializeFormat::Csv => {
                 let mut csv_reader = csv::ReaderBuilder::new()
@@ -521,7 +521,7 @@ where
                 }
 
                 // Create a 2D array with the appropriate shape
-                Ok(Array::from_vec(data).reshape(&[rows_count, row_length]))
+                Ok(Array::from_vec_shape(data, &[rows_count, row_length])?)
             }
             SerializeFormat::Binary => {
                 let config = oxicode::config::standard();
@@ -534,7 +534,7 @@ where
                         ))
                     })?;
 
-                Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
+                Ok(Array::from_vec_shape(serialized.data, &serialized.shape)?)
             }
             SerializeFormat::Npy | SerializeFormat::Npz => {
                 // Delegate to the NPY/NPZ module for these formats
@@ -551,7 +551,7 @@ where
                         },
                     )?;
 
-                Ok(Array::from_vec(serialized.data).reshape(&serialized.shape))
+                Ok(Array::from_vec_shape(serialized.data, &serialized.shape)?)
             }
             #[cfg(feature = "parquet")]
             SerializeFormat::Parquet => Err(NumRs2Error::DeserializationError(
@@ -661,7 +661,7 @@ pub fn vec2d_to_array<T: Clone>(vec: Vec<Vec<T>>) -> Result<Array<T>> {
     }
 
     // Create a 2D array with the appropriate shape
-    Ok(Array::from_vec(data).reshape(&[rows, cols]))
+    Array::from_vec_shape(data, &[rows, cols])
 }
 
 /// Convert an Array to a 2D Vec (`Vec<Vec<T>>`)

@@ -183,7 +183,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
 
         // Convert the raw bytes to the actual type and create a CPU array
         let typed_data: Vec<T> = bytemuck::cast_slice(&data).to_vec();
-        let array = Array::from_vec(typed_data).reshape(&self.shape);
+        let array = Array::from_vec_shape(typed_data, &self.shape)?;
 
         Ok(array)
     }

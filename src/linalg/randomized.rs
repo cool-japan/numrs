@@ -105,7 +105,8 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + std::fmt::Debug,
+        + std::fmt::Debug
+        + 'static,
 {
     let shape = a.shape();
     if shape.len() != 2 {
@@ -184,7 +185,8 @@ where
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + Div<Output = T>,
+        + Div<Output = T>
+        + 'static,
 {
     let shape = a.shape();
     if shape.len() != 2 {
@@ -241,7 +243,8 @@ where
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + Div<Output = T>,
+        + Div<Output = T>
+        + 'static,
 {
     let shape = a.shape();
     if shape.len() != 2 {
@@ -305,7 +308,8 @@ where
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + Div<Output = T>,
+        + Div<Output = T>
+        + 'static,
 {
     // Find orthonormal basis Q
     let q = randomized_range_finder(a, rank, n_iter)?;
@@ -338,7 +342,7 @@ where
         })
         .collect();
 
-    Ok(Array::from_vec(data).reshape(&[rows, cols]))
+    Array::from_vec_shape(data, &[rows, cols])
 }
 
 /// Generate sparse random matrix (entries are -1, 0, 1 with specific probabilities)
@@ -362,7 +366,7 @@ where
         })
         .collect();
 
-    Ok(Array::from_vec(data).reshape(&[rows, cols]))
+    Array::from_vec_shape(data, &[rows, cols])
 }
 
 /// Generate Rademacher matrix (entries are ±1 with equal probability)
@@ -386,7 +390,7 @@ where
         })
         .collect();
 
-    Ok(Array::from_vec(data).reshape(&[rows, cols]))
+    Array::from_vec_shape(data, &[rows, cols])
 }
 
 /// Simplified QR decomposition using Gram-Schmidt
@@ -448,8 +452,8 @@ where
         }
     }
 
-    let q = Array::from_vec(q_data).reshape(&[m, n]);
-    let r = Array::from_vec(r_data).reshape(&[n, n]);
+    let q = Array::from_vec_shape(q_data, &[m, n])?;
+    let r = Array::from_vec_shape(r_data, &[n, n])?;
 
     Ok((q, r))
 }
@@ -496,7 +500,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(data).reshape(&[m, k]))
+    Array::from_vec_shape(data, &[m, k])
 }
 
 /// Extract first k rows of a matrix
@@ -522,7 +526,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(data).reshape(&[k, n]))
+    Array::from_vec_shape(data, &[k, n])
 }
 
 /// Extract first k elements of a vector

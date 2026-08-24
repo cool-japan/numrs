@@ -71,7 +71,7 @@ pub fn tile<T: Clone>(array: &Array<T>, reps: &[usize]) -> Result<Array<T>> {
         result_data.push(input_vec[input_flat].clone());
     }
 
-    Ok(Array::from_vec(result_data).reshape(&output_shape))
+    Array::from_vec_shape(result_data, &output_shape)
 }
 
 /// Repeat elements of an array along a specified axis

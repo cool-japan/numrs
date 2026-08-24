@@ -114,7 +114,7 @@ pub fn delete<T: Clone + Zero>(
                 }
             }
 
-            Ok(Array::from_vec(result_data).reshape(&new_shape))
+            Ok(Array::from_vec_shape(result_data, &new_shape)?)
         }
         None => {
             // Flatten array and delete from flattened version
@@ -310,7 +310,7 @@ pub fn insert<T: Clone + Zero>(
                 }
             }
 
-            Ok(Array::from_vec(result_data).reshape(&new_shape))
+            Ok(Array::from_vec_shape(result_data, &new_shape)?)
         }
         None => {
             // Flatten array and insert into flattened version
@@ -711,7 +711,7 @@ pub fn compress<T: Clone + Zero>(
                 // Return empty array with appropriate shape
                 let mut new_shape = shape.clone();
                 new_shape[ax] = 0;
-                return Ok(Array::from_vec(vec![]).reshape(&new_shape));
+                return Array::from_vec_shape(vec![], &new_shape);
             }
 
             // Calculate new shape
@@ -744,7 +744,7 @@ pub fn compress<T: Clone + Zero>(
                 }
             }
 
-            Ok(Array::from_vec(result_data).reshape(&new_shape))
+            Ok(Array::from_vec_shape(result_data, &new_shape)?)
         }
         None => {
             // Flatten array and compress

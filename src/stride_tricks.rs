@@ -165,7 +165,7 @@ where
     // is nothing to gather, and no meaningful bounds to check.
     let total_size: usize = shape.iter().product();
     if total_size == 0 {
-        return Ok(Array::from_vec(Vec::new()).reshape(shape));
+        return Array::from_vec_shape(Vec::new(), shape);
     }
 
     // offset(idx) = sum(idx[d] * strides[d]) is a sum of independent
@@ -209,7 +209,7 @@ where
         result_data.push(flat_data[offset as usize].clone());
     }
 
-    Ok(Array::from_vec(result_data).reshape(shape))
+    Array::from_vec_shape(result_data, shape)
 }
 
 /// Convert a linear (row-major) index into a multi-dimensional index for
@@ -290,7 +290,7 @@ where
                     array.ndim()
                 )));
             }
-            if s.iter().any(|&v| v == 0) {
+            if s.contains(&0) {
                 return Err(NumRs2Error::InvalidOperation(
                     "Step sizes must be greater than zero".to_string(),
                 ));

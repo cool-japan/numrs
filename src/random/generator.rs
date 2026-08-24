@@ -238,7 +238,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate integers in the range [low, high)
@@ -291,7 +291,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a normal (Gaussian) distribution
@@ -336,7 +336,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate a standard normal distribution
@@ -392,7 +392,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Beta distribution
@@ -437,7 +437,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Chi-Square distribution
@@ -481,7 +481,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a gamma distribution
@@ -527,7 +527,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(size_shape))
+        Array::from_vec_shape(vec, size_shape)
     }
 
     /// Generate random values from an exponential distribution
@@ -574,7 +574,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Weibull distribution
@@ -620,7 +620,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(size_shape))
+        Array::from_vec_shape(vec, size_shape)
     }
 
     /// Generate random values from a uniform distribution
@@ -657,7 +657,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate binary random values with given probability of success
@@ -694,7 +694,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Poisson distribution
@@ -732,7 +732,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a binomial distribution
@@ -771,7 +771,7 @@ impl<B: BitGenerator> Generator<B> {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate integers in a given range

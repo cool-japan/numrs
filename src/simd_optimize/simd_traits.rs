@@ -92,7 +92,7 @@ impl SimdArrayOps for Array<f32> {
             }
         }
 
-        Ok(Array::from_vec(result_data).reshape(&self.shape()))
+        Array::from_vec_shape(result_data, &self.shape())
     }
 
     fn simd_mul(&self, other: &Self) -> Result<Array<f32>> {
@@ -129,7 +129,7 @@ impl SimdArrayOps for Array<f32> {
             }
         }
 
-        Ok(Array::from_vec(result_data).reshape(&self.shape()))
+        Array::from_vec_shape(result_data, &self.shape())
     }
 
     fn simd_sum(&self) -> f32 {

@@ -126,7 +126,7 @@ pub fn einsum<T: Float + Clone + Debug + std::ops::AddAssign + 'static>(
             .zip(b_data.iter())
             .map(|(a, b)| *a * *b)
             .collect();
-        return Ok(Array::from_vec(result_data).reshape(&operands[0].shape()));
+        return Array::from_vec_shape(result_data, &operands[0].shape());
     }
 
     // Sum over axis: "ij->i" (sum over j) or "ij->j" (sum over i)
@@ -442,7 +442,7 @@ pub fn kron<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arra
 /// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 /// let result = tensordot(&a, &b, &[1, 0]).expect("tensordot should succeed"); // Contract axis 1 of a with axis 0 of b
 /// ```
-pub fn tensordot<T: Float + Clone + Debug>(
+pub fn tensordot<T: Float + Clone + Debug + 'static>(
     a: &Array<T>,
     b: &Array<T>,
     axes: &[usize],

@@ -341,7 +341,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&new_shape))
+    Array::from_vec_shape(result_data, &new_shape)
 }
 
 // Helper functions for pad

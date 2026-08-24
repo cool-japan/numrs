@@ -37,7 +37,7 @@ impl NeonEnhancedOps {
             result[i] = data_a[i] + data_b[i];
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized array subtraction for f64
@@ -62,7 +62,7 @@ impl NeonEnhancedOps {
             result[i] = data_a[i] - data_b[i];
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized array multiplication for f64
@@ -87,7 +87,7 @@ impl NeonEnhancedOps {
             result[i] = data_a[i] * data_b[i];
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized array division for f64
@@ -112,7 +112,7 @@ impl NeonEnhancedOps {
             result[i] = data_a[i] / data_b[i];
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     // =========================================================================
@@ -140,7 +140,7 @@ impl NeonEnhancedOps {
             result[i] = data[i] + scalar;
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized scalar multiplication for f64
@@ -164,7 +164,7 @@ impl NeonEnhancedOps {
             result[i] = data[i] * scalar;
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized subtract scalar for f64
@@ -188,7 +188,7 @@ impl NeonEnhancedOps {
             result[i] = data[i] - scalar;
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized divide scalar for f64
@@ -212,7 +212,7 @@ impl NeonEnhancedOps {
             result[i] = data[i] / scalar;
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     // =========================================================================
@@ -244,7 +244,7 @@ impl NeonEnhancedOps {
             result[i] = data_a[i].mul_add(data_b[i], data_c[i]);
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized negation for f64
@@ -267,7 +267,7 @@ impl NeonEnhancedOps {
             result[i] = -data[i];
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized reciprocal for f64
@@ -291,7 +291,7 @@ impl NeonEnhancedOps {
             result[i] = 1.0 / data[i];
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized square for f64
@@ -314,7 +314,7 @@ impl NeonEnhancedOps {
             result[i] = data[i] * data[i];
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 
@@ -364,7 +364,7 @@ impl NeonEnhancedOps {
         let result: Vec<f64> = (0..len)
             .map(|i| data_a[i].mul_add(data_b[i], data_c[i]))
             .collect();
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     pub fn vectorized_negative_f64(input: &Array<f64>) -> Array<f64> {

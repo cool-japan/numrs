@@ -67,7 +67,7 @@ impl Generator {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate normal (Gaussian) random values
@@ -112,7 +112,7 @@ impl Generator {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate log-normal random values
@@ -160,7 +160,7 @@ impl Generator {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a uniform distribution
@@ -182,7 +182,7 @@ impl Generator {
             vec.push(rng.random_range(low..high));
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate binary random values with given probability of success
@@ -219,7 +219,7 @@ impl Generator {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a gamma distribution
@@ -264,7 +264,7 @@ impl Generator {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(size_shape))
+        Array::from_vec_shape(vec, size_shape)
     }
 
     /// Generate random values from an exponential distribution
@@ -311,7 +311,7 @@ impl Generator {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Shuffle an array in-place
@@ -326,7 +326,7 @@ impl Generator {
 
         // Update the array with shuffled data
         let shape = array.shape();
-        *array = Array::from_vec(data).reshape(&shape);
+        *array = Array::from_vec_shape(data, &shape)?;
 
         Ok(())
     }

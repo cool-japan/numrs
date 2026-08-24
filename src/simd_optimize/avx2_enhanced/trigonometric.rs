@@ -97,7 +97,7 @@ impl EnhancedSimdOps {
             Self::avx2_sin_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized sine function for f64
@@ -490,7 +490,7 @@ impl EnhancedSimdOps {
             Self::avx2_sinh_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized sinh for f64 using (exp(x) - exp(-x)) / 2
@@ -539,7 +539,7 @@ impl EnhancedSimdOps {
             Self::avx2_cosh_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized cosh for f64 using (exp(x) + exp(-x)) / 2
@@ -588,7 +588,7 @@ impl EnhancedSimdOps {
             Self::avx2_tanh_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized tanh for f64
@@ -642,7 +642,7 @@ impl EnhancedSimdOps {
             Self::avx2_asin_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized arc sine for f64
@@ -690,7 +690,7 @@ impl EnhancedSimdOps {
             Self::avx2_acos_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized arc cosine for f64
@@ -738,7 +738,7 @@ impl EnhancedSimdOps {
             Self::avx2_atan_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized arc tangent for f64
@@ -782,7 +782,7 @@ impl EnhancedSimdOps {
             Self::avx2_asinh_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized asinh for f64
@@ -831,7 +831,7 @@ impl EnhancedSimdOps {
             Self::avx2_acosh_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized acosh for f64
@@ -880,7 +880,7 @@ impl EnhancedSimdOps {
             Self::avx2_atanh_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized atanh for f64

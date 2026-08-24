@@ -104,7 +104,7 @@ pub fn iterative_refinement<T, F>(
     config: Option<RefinementConfig<T>>,
 ) -> Result<RefinementResult<T>>
 where
-    T: Float + Clone + Zero + std::fmt::Debug + std::ops::AddAssign,
+    T: Float + Clone + Zero + std::fmt::Debug + std::ops::AddAssign + 'static,
     F: Fn(&Array<T>, &Array<T>) -> Result<Array<T>>,
 {
     let shape = a.shape();
@@ -235,7 +235,7 @@ pub fn iterative_refinement_cg<T>(
     max_iter: Option<usize>,
 ) -> Result<RefinementResult<T>>
 where
-    T: Float + Clone + Zero + std::fmt::Debug + std::ops::AddAssign,
+    T: Float + Clone + Zero + std::fmt::Debug + std::ops::AddAssign + 'static,
 {
     let config = RefinementConfig {
         max_iter: max_iter.unwrap_or(10),
@@ -281,7 +281,7 @@ pub fn iterative_refinement_bicgstab<T>(
     max_iter: Option<usize>,
 ) -> Result<RefinementResult<T>>
 where
-    T: Float + Clone + Zero + std::fmt::Debug + std::ops::AddAssign,
+    T: Float + Clone + Zero + std::fmt::Debug + std::ops::AddAssign + 'static,
 {
     let config = RefinementConfig {
         max_iter: max_iter.unwrap_or(10),

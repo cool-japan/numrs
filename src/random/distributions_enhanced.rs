@@ -446,7 +446,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a von Mises distribution
@@ -516,7 +516,7 @@ impl RandomState {
             vec.push(<T as NumCast>::from(normalized).unwrap_or(T::zero()));
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a non-central chi-square distribution
@@ -559,7 +559,7 @@ impl RandomState {
             vec.push(chi2.to_vec()[0]);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a non-central F distribution
@@ -607,7 +607,7 @@ impl RandomState {
             vec.push(f_val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Maxwell distribution
@@ -638,7 +638,7 @@ impl RandomState {
             vec.push(magnitude);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a power distribution
@@ -665,7 +665,7 @@ impl RandomState {
             vec.push(<T as NumCast>::from(val).unwrap_or(T::zero()));
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate correlated random variables using the Cholesky decomposition
@@ -733,7 +733,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&[size, n]))
+        Array::from_vec_shape(result, &[size, n])
     }
 
     /// Generate a random correlation matrix
@@ -781,7 +781,7 @@ impl RandomState {
         // Project the random symmetric matrix onto the nearest valid
         // correlation matrix (symmetric, PSD, unit diagonal) using Higham's
         // alternating projections algorithm.
-        let sym_array = Array::from_vec(sym_matrix).reshape(&[n, n]);
+        let sym_array = Array::from_vec_shape(sym_matrix, &[n, n])?;
         nearest_correlation_matrix(&sym_array)
     }
 
@@ -890,7 +890,7 @@ impl RandomState {
             component_indices[selected_component] += 1;
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate Sobol sequence for quasi-Monte Carlo methods
@@ -943,7 +943,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&[n, dim]))
+        Array::from_vec_shape(result, &[n, dim])
     }
 
     /// Generate Latin Hypercube samples
@@ -986,7 +986,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&[n, dim]))
+        Array::from_vec_shape(result, &[n, dim])
     }
 
     /// Generate copula samples with a specified correlation structure
@@ -1040,7 +1040,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&[n, dim]))
+        Array::from_vec_shape(result, &[n, dim])
     }
 }
 
@@ -1244,7 +1244,7 @@ where
 
         // PSD projection of R_k via eigenvalue clipping: R = V diag(λ) V^T,
         // X = V diag(max(λ, 0)) V^T.
-        let r_array = Array::from_vec(r.clone()).reshape(&[n, n]);
+        let r_array = Array::from_vec_shape(r.clone(), &[n, n])?;
         let (eigenvalues, eigenvectors) =
             StableDecompositions::symmetric_eigendecomposition(&r_array)?;
         let evec: Vec<f64> = eigenvectors.to_vec();
@@ -1303,7 +1303,7 @@ where
         .map(|v| <T as NumCast>::from(v).unwrap_or(T::zero()))
         .collect();
 
-    Ok(Array::from_vec(result).reshape(&[n, n]))
+    Array::from_vec_shape(result, &[n, n])
 }
 
 // Enhanced distributions directly exported by the parent module, no need to re-export here

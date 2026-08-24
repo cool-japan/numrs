@@ -328,7 +328,7 @@ where
 
             if keepdims {
                 let shape = vec![1; array.ndim()];
-                Ok(Array::from_vec(vec![count]).reshape(&shape))
+                Ok(Array::from_vec_shape(vec![count], &shape)?)
             } else {
                 Ok(Array::from_vec(vec![count]))
             }
@@ -405,7 +405,7 @@ where
                 result_data[out_idx] = count;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }

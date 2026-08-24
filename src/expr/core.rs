@@ -39,7 +39,7 @@ pub trait Expr<T: Clone> {
             data.push(self.eval_at(i));
         }
 
-        Array::from_vec(data).reshape(self.shape())
+        Array::from_vec_shape(data, self.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Check if this expression can be fused with another

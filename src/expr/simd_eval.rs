@@ -31,7 +31,7 @@ pub trait SimdEval<T: Clone + Copy>: Expr<T> {
             i += batch_len;
         }
 
-        Array::from_vec(data).reshape(self.shape())
+        Array::from_vec_shape(data, self.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 

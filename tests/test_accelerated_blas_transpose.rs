@@ -180,12 +180,12 @@ fn test_gemm_transpose_all_combos_match_naive_blas_reference() {
         blas::gemm(&a, &b, &mut c_ref, 1.0, 0.0, trans_a, trans_b)
             .unwrap_or_else(|e| panic!("blas::gemm({trans_a}, {trans_b}) failed: {e}"));
 
-        for i in 0..2 {
-            for j in 0..2 {
+        for (i, row) in AB_EXPECTED.iter().enumerate() {
+            for (j, expected) in row.iter().enumerate() {
                 let acc_val = c_acc.get(&[i, j]).expect("in-bounds index");
                 let ref_val = c_ref.get(&[i, j]).expect("in-bounds index");
                 assert_relative_eq!(acc_val, ref_val, epsilon = EPS);
-                assert_relative_eq!(acc_val, AB_EXPECTED[i][j], epsilon = EPS);
+                assert_relative_eq!(acc_val, *expected, epsilon = EPS);
             }
         }
     }

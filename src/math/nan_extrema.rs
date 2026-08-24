@@ -163,7 +163,7 @@ where
                 result_data[out_idx] = max_idx;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -296,7 +296,7 @@ where
                 result_data[out_idx] = min_idx;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -399,6 +399,6 @@ where
             result.push(cumprod);
         }
 
-        Ok(Array::from_vec(result).reshape(&array.shape()))
+        Ok(Array::from_vec_shape(result, &array.shape())?)
     }
 }

@@ -104,7 +104,7 @@ where
         result.push(idx);
     }
 
-    Ok(Array::from_vec(result).reshape(&array.shape()))
+    Array::from_vec_shape(result, &array.shape())
 }
 
 /// Find indices where elements should be inserted to maintain order
@@ -160,7 +160,7 @@ where
         result.push(idx);
     }
 
-    Ok(Array::from_vec(result).reshape(&values.shape()))
+    Array::from_vec_shape(result, &values.shape())
 }
 
 /// Partially sort array so that kth element is in its final sorted position
@@ -303,7 +303,7 @@ where
             a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        Ok(Array::from_vec(data_vec).reshape(&array.shape()))
+        Ok(Array::from_vec_shape(data_vec, &array.shape())?)
     }
 }
 
@@ -403,7 +403,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&x.shape()))
+    Array::from_vec_shape(result, &x.shape())
 }
 
 /// Compute the median along the specified axis
@@ -454,7 +454,7 @@ where
 
             if keepdims {
                 let shape = vec![1; array.ndim()];
-                Ok(Array::from_vec(vec![median_val]).reshape(&shape))
+                Ok(Array::from_vec_shape(vec![median_val], &shape)?)
             } else {
                 Ok(Array::from_vec(vec![median_val]))
             }
@@ -537,7 +537,7 @@ where
                 result_data[out_idx] = median_val;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }

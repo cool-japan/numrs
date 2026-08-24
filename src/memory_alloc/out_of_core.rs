@@ -762,7 +762,7 @@ impl<T: Copy + Send + Sync + Default + 'static> OutOfCoreArray<T> {
         // Truncate to exact size (last chunk might be smaller)
         all_data.truncate(self.total_elements);
 
-        Ok(Array::from_vec(all_data).reshape(&self.shape))
+        Array::from_vec_shape(all_data, &self.shape)
     }
 
     /// Sync all dirty chunks to disk

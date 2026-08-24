@@ -351,7 +351,7 @@ where
         }
 
         Ok(Self {
-            matrix: Array::from_vec(matrix_data).reshape(&[dim, dim]),
+            matrix: Array::from_vec_shape(matrix_data, &[dim, dim])?,
             num_qubits: state.num_qubits(),
         })
     }
@@ -460,7 +460,7 @@ where
         }
 
         Ok(Self {
-            matrix: Array::from_vec(reduced).reshape(&[new_dim, new_dim]),
+            matrix: Array::from_vec_shape(reduced, &[new_dim, new_dim])?,
             num_qubits: num_remaining,
         })
     }

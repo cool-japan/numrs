@@ -148,7 +148,7 @@ where
 
     let n = a_view.nrows();
     let eigenvalues_converted = Array::from_vec(eigenvalues);
-    let eigenvectors_converted = Array::from_vec(eigenvectors).reshape(&[n, n]);
+    let eigenvectors_converted = Array::from_vec_shape(eigenvectors, &[n, n])?;
 
     Ok((eigenvalues_converted, eigenvectors_converted))
 }
@@ -280,7 +280,7 @@ where
     }
 
     let eigenvalues_converted = Array::from_vec(vals_vec);
-    let eigenvectors_converted = Array::from_vec(vecs_vec).reshape(&[n, n]);
+    let eigenvectors_converted = Array::from_vec_shape(vecs_vec, &[n, n])?;
 
     Ok((eigenvalues_converted, eigenvectors_converted))
 }

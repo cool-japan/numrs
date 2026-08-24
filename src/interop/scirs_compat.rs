@@ -145,7 +145,8 @@ where
         + std::ops::AddAssign
         + std::ops::MulAssign
         + std::ops::DivAssign
-        + std::ops::SubAssign,
+        + std::ops::SubAssign
+        + 'static,
 {
     // Use NumRS2's built-in linear algebra solve function
     crate::linalg::solve(a, b)

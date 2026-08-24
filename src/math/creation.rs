@@ -58,7 +58,7 @@ pub fn zeros<T: Zero + Clone>(shape: &[usize]) -> Array<T> {
     for _ in 0..size {
         vec.push(T::zero());
     }
-    Array::from_vec(vec).reshape(shape)
+    Array::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Create an array filled with ones
@@ -86,7 +86,7 @@ pub fn ones<T: One + Clone>(shape: &[usize]) -> Array<T> {
     for _ in 0..size {
         vec.push(T::one());
     }
-    Array::from_vec(vec).reshape(shape)
+    Array::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Create an array with uninitialized values
@@ -113,7 +113,7 @@ pub fn ones<T: One + Clone>(shape: &[usize]) -> Array<T> {
 pub fn empty<T: Default + Clone>(shape: &[usize]) -> Array<T> {
     let size: usize = shape.iter().product();
     let vec = vec![T::default(); size];
-    Array::from_vec(vec).reshape(shape)
+    Array::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Create evenly spaced values between start and stop (inclusive)
@@ -342,7 +342,7 @@ pub fn meshgrid<T: Clone>(arrays: &[&Array<T>], indexing: Option<&str>) -> Resul
         }
 
         // Reshape the source array
-        let reshaped = Array::from_vec(arrays[i].to_vec()).reshape(&out_shape);
+        let reshaped = Array::from_vec_shape(arrays[i].to_vec(), &out_shape)?;
 
         // Determine the target broadcast shape
         let target_shape = if indexing_mode == "xy" && n >= 2 {
@@ -565,7 +565,7 @@ pub fn ogrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
         shape[i] = range.size();
 
         // Reshape the range to this shape
-        let reshaped = Array::from_vec(range.to_vec()).reshape(&shape);
+        let reshaped = Array::from_vec_shape(range.to_vec(), &shape)?;
         output.push(reshaped);
     }
 

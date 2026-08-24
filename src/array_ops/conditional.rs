@@ -248,7 +248,7 @@ pub fn where_cond<T: Clone + Display + Send + Sync>(
             .collect()
     };
 
-    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+    Array::from_vec_shape(result_data, &broadcast_shape)
 }
 
 /// Select elements from choices array based on conditions
@@ -474,7 +474,7 @@ pub fn choose<T: Clone + num_traits::Zero>(
         result_data.push(value);
     }
 
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// Evaluate a piecewise-defined function
@@ -575,7 +575,7 @@ where
         }
 
         // Update result and mask
-        result = Array::from_vec(result_data).reshape(&x.shape());
+        result = Array::from_vec_shape(result_data, &x.shape())?;
 
         // Update mask to track which elements have been set
         let mut new_mask_data = mask_used.to_vec();
@@ -584,7 +584,7 @@ where
                 new_mask_data[i] = true;
             }
         }
-        mask_used = Array::from_vec(new_mask_data).reshape(&x.shape());
+        mask_used = Array::from_vec_shape(new_mask_data, &x.shape())?;
     }
 
     Ok(result)

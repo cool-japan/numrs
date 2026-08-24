@@ -358,7 +358,7 @@ pub fn noncentral_chisquare<T: Float + NumCast + Clone + Debug + Display>(
         vec.push(val);
     }
 
-    Ok(Array::from_vec(vec).reshape(shape))
+    Array::from_vec_shape(vec, shape)
 }
 
 /// Generate random values from a non-central F distribution
@@ -412,7 +412,7 @@ pub fn noncentral_f<T: Float + NumCast + Clone + Debug + Display>(
         vec.push(val);
     }
 
-    Ok(Array::from_vec(vec).reshape(shape))
+    Array::from_vec_shape(vec, shape)
 }
 
 /// Generate random values from a von Mises distribution
@@ -456,7 +456,7 @@ pub fn vonmises<T: Float + NumCast + Clone + Debug + Display>(
         vec.push(val);
     }
 
-    Ok(Array::from_vec(vec).reshape(shape))
+    Array::from_vec_shape(vec, shape)
 }
 
 /// Generate random values from a Maxwell-Boltzmann distribution
@@ -495,7 +495,7 @@ pub fn maxwell<T: Float + NumCast + Clone + Debug + Display>(
         vec.push(val);
     }
 
-    Ok(Array::from_vec(vec).reshape(shape))
+    Array::from_vec_shape(vec, shape)
 }
 
 /// Generate random values from a Wald distribution (Inverse Gaussian)
@@ -539,7 +539,7 @@ pub fn wald<T: Float + NumCast + Clone + Debug + Display>(
         vec.push(val);
     }
 
-    Ok(Array::from_vec(vec).reshape(shape))
+    Array::from_vec_shape(vec, shape)
 }
 
 #[cfg(test)]

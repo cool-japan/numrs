@@ -164,7 +164,7 @@ pub fn cov<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync>(
         }
     }
 
-    Ok(Array::from_vec(cov_matrix).reshape(&[n_vars, n_vars]))
+    Array::from_vec_shape(cov_matrix, &[n_vars, n_vars])
 }
 
 /// Return Pearson product-moment correlation coefficients with parallel processing.
@@ -249,5 +249,5 @@ pub fn corrcoef<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + S
         }
     }
 
-    Ok(Array::from_vec(corr_matrix).reshape(&[n, n]))
+    Array::from_vec_shape(corr_matrix, &[n, n])
 }

@@ -74,7 +74,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(jac_data).reshape(&[m, n]))
+    Array::from_vec_shape(jac_data, &[m, n])
 }
 
 /// Compute Jacobian matrix using reverse-mode AD (Tape).
@@ -142,7 +142,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(jac_data).reshape(&[m, n]))
+    Array::from_vec_shape(jac_data, &[m, n])
 }
 
 /// Automatically select forward or reverse mode for Jacobian computation.

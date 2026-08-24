@@ -311,7 +311,7 @@ where
         vec![data.len() / row_length, row_length]
     };
 
-    let mut array = Array::from_vec(data).reshape(&shape);
+    let mut array = Array::from_vec_shape(data, &shape)?;
 
     // Apply ndmin constraint
     while array.ndim() < options.ndmin {
@@ -639,7 +639,7 @@ where
         vec![data.len() / row_length, row_length]
     };
 
-    Ok(Array::from_vec(data).reshape(&shape))
+    Array::from_vec_shape(data, &shape)
 }
 
 /// Automatically detect delimiter in a text file
@@ -849,7 +849,7 @@ where
         vec![data.len() / row_length, row_length]
     };
 
-    Ok(Array::from_vec(data).reshape(&shape))
+    Array::from_vec_shape(data, &shape)
 }
 
 /// Convenience function for saving compressed NPZ files

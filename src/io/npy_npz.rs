@@ -460,7 +460,7 @@ fn read_npy_generic<T: Clone, R: Read>(mut reader: R) -> Result<Array<T>> {
     let typed_data = decode_npy_elements::<T>(type_name, &raw_data)?;
 
     // Create the array
-    Ok(Array::from_vec(typed_data).reshape(&shape))
+    Array::from_vec_shape(typed_data, &shape)
 }
 
 // Generic function to read NPZ data for any supported type

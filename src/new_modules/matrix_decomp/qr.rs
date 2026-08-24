@@ -24,7 +24,8 @@ where
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     // Check that the matrix is 2D
     let shape = a.shape();
@@ -124,8 +125,8 @@ where
     }
 
     #[allow(unused_mut)] // q_array is only modified in debug builds for orthogonality correction
-    let mut q_array = Array::from_vec(q_vec).reshape(&[q_rows, q_cols]);
-    let mut r_array = Array::from_vec(r_vec).reshape(&[r_rows, r_cols]);
+    let mut q_array = Array::from_vec_shape(q_vec, &[q_rows, q_cols])?;
+    let mut r_array = Array::from_vec_shape(r_vec, &[r_rows, r_cols])?;
 
     // If we scaled the matrix, rescale R appropriately
     if scaling_factor != <T as num_traits::One>::one() {

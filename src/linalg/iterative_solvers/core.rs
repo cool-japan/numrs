@@ -61,7 +61,7 @@ pub fn dot_vec<T: Float>(a: &[T], b: &[T]) -> T {
 /// Matrix-vector multiplication that always returns a 1D vector
 pub fn matvec<T>(a: &Array<T>, x: &Array<T>) -> Result<Array<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let n = x.size();
     let x_col = x.clone().reshape(&[n, 1]);

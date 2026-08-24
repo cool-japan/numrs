@@ -88,7 +88,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(transformed).reshape(&out_shape))
+        Array::from_vec_shape(transformed, &out_shape)
     }
 
     /// Generate random values from a multivariate normal distribution with rotation
@@ -202,7 +202,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(transformed).reshape(&out_shape))
+        Array::from_vec_shape(transformed, &out_shape)
     }
 
     /// Generate random values from a Laplace (double exponential) distribution
@@ -255,7 +255,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Gumbel distribution
@@ -304,7 +304,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a logistic distribution
@@ -353,7 +353,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a rayleigh distribution
@@ -398,7 +398,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Wald (inverse Gaussian) distribution
@@ -462,7 +462,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a negative binomial distribution
@@ -509,7 +509,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a geometric distribution
@@ -550,7 +550,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a multinomial distribution
@@ -631,7 +631,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&out_shape))
+        Array::from_vec_shape(result, &out_shape)
     }
 
     /// Generate random values from a hypergeometric distribution
@@ -674,7 +674,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a zipf distribution
@@ -725,7 +725,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a logseries distribution
@@ -773,7 +773,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a multivariate t-distribution
@@ -899,7 +899,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&out_shape))
+        Array::from_vec_shape(result, &out_shape)
     }
 
     /// Generate random values from a Wishart distribution
@@ -1036,7 +1036,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&out_shape))
+        Array::from_vec_shape(result, &out_shape)
     }
 
     /// Generate random values from a Frechet distribution
@@ -1113,7 +1113,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(output_shape))
+        Array::from_vec_shape(vec, output_shape)
     }
 
     /// Generate random values from a Generalized Extreme Value (GEV) distribution
@@ -1194,7 +1194,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(output_shape))
+        Array::from_vec_shape(vec, output_shape)
     }
 }
 

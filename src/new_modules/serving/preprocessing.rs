@@ -224,7 +224,7 @@ impl PreprocessingStage for Normalizer {
                     .collect();
 
                 let shape = input.shape().to_vec();
-                Ok(Array::from_vec(normalized).reshape(&shape))
+                Ok(Array::from_vec_shape(normalized, &shape)?)
             }
 
             NormalizationType::ZScore { mean, std } => {
@@ -327,7 +327,7 @@ impl PreprocessingStage for FeatureExtractor {
             }
 
             let new_shape = vec![batch_size, self.feature_indices.len()];
-            return Ok(Array::from_vec(extracted).reshape(&new_shape));
+            return Ok(Array::from_vec_shape(extracted, &new_shape)?);
         }
 
         Err(ServingError::PreprocessingError {

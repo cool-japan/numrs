@@ -65,7 +65,7 @@ impl<T: Clone> MaskedArray<T> {
                 }
                 m
             }
-            None => Array::from_vec(vec![false; data.size()]).reshape(&shape),
+            None => Array::from_vec_shape(vec![false; data.size()], &shape)?,
         };
 
         let fill_val = fill_value.unwrap_or_default();
@@ -106,15 +106,14 @@ impl<T: Clone> MaskedArray<T> {
         T: Clone + Default + PartialEq,
     {
         let shape = data.shape();
-        let data_vec = data.to_vec();
         let mut mask_vec = Vec::with_capacity(data.size());
 
         // Create mask where elements equal to value are masked
-        for elem in &data_vec {
+        for elem in data.array().iter() {
             mask_vec.push(*elem == value);
         }
 
-        let mask_array = Array::from_vec(mask_vec).reshape(&shape);
+        let mask_array = Array::from_vec_shape(mask_vec, &shape)?;
         let fill_val = fill_value.unwrap_or_default();
 
         Ok(Self {
@@ -139,15 +138,14 @@ impl<T: Clone> MaskedArray<T> {
     /// A new MaskedArray with invalid elements masked
     pub fn masked_invalid(data: Array<f64>, fill_value: Option<f64>) -> Result<MaskedArray<f64>> {
         let shape = data.shape();
-        let data_vec = data.to_vec();
         let mut mask_vec = Vec::with_capacity(data.size());
 
         // Create mask where elements are NaN or Inf
-        for &elem in &data_vec {
+        for &elem in data.array().iter() {
             mask_vec.push(elem.is_nan() || elem.is_infinite());
         }
 
-        let mask_array = Array::from_vec(mask_vec).reshape(&shape);
+        let mask_array = Array::from_vec_shape(mask_vec, &shape)?;
         let fill_val = fill_value.unwrap_or(0.0);
 
         Ok(MaskedArray {
@@ -223,7 +221,7 @@ impl<T: Clone> MaskedArray<T> {
         T: Clone + Default,
     {
         let shape = data.shape();
-        let mask_array = Array::from_vec(vec![true; data.size()]).reshape(&shape);
+        let mask_array = Array::from_vec_shape(vec![true; data.size()], &shape)?;
         let fill_val = fill_value.unwrap_or_default();
 
         Ok(Self {
@@ -270,7 +268,7 @@ impl<T: Clone> MaskedArray<T> {
 
     /// Get the number of masked (invalid) elements
     pub fn count_masked(&self) -> usize {
-        self.mask.to_vec().iter().filter(|&&x| x).count()
+        self.mask.array().iter().filter(|&&x| x).count()
     }
 
     /// Get the number of unmasked (valid) elements
@@ -292,11 +290,11 @@ impl<T: Clone> MaskedArray<T> {
         T: Clone,
     {
         let fill_val = fill_value.unwrap_or_else(|| self.fill_value.clone());
-        let data_vec = self.data.to_vec();
-        let mask_vec = self.mask.to_vec();
+        let data_op = crate::kernels::borrow::operand(&self.data);
+        let mask_op = crate::kernels::borrow::operand(&self.mask);
         let mut filled_vec = Vec::with_capacity(self.size());
 
-        for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
+        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
             if *is_masked {
                 filled_vec.push(fill_val.clone());
             } else {
@@ -304,7 +302,7 @@ impl<T: Clone> MaskedArray<T> {
             }
         }
 
-        Array::from_vec(filled_vec).reshape(&self.shape())
+        Array::from_vec_shape(filled_vec, &self.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Return a regular array of valid data (compressed to remove masked elements)
@@ -316,11 +314,11 @@ impl<T: Clone> MaskedArray<T> {
     where
         T: Clone,
     {
-        let data_vec = self.data.to_vec();
-        let mask_vec = self.mask.to_vec();
+        let data_op = crate::kernels::borrow::operand(&self.data);
+        let mask_op = crate::kernels::borrow::operand(&self.mask);
         let mut compressed_vec = Vec::new();
 
-        for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
+        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
             if !*is_masked {
                 compressed_vec.push(value.clone());
             }
@@ -620,15 +618,16 @@ impl<T: Clone + Div<Output = T> + PartialEq + Zero> Div for &MaskedArray<T> {
     fn div(self, other: &MaskedArray<T>) -> MaskedArray<T> {
         // Check for divisions by zero and mask them
         let zero = T::zero();
-        let other_data_vec = other.data.to_vec();
-        let other_mask_vec = other.mask.to_vec();
+        let other_data_op = crate::kernels::borrow::operand(&other.data);
+        let other_mask_op = crate::kernels::borrow::operand(&other.mask);
         let mut division_mask_vec = Vec::with_capacity(other.size());
 
-        for (value, is_masked) in other_data_vec.iter().zip(other_mask_vec.iter()) {
+        for (value, is_masked) in other_data_op.iter().zip(other_mask_op.iter()) {
             division_mask_vec.push(*is_masked || *value == zero);
         }
 
-        let division_mask = Array::from_vec(division_mask_vec).reshape(&other.shape());
+        let division_mask = Array::from_vec_shape(division_mask_vec, &other.shape())
+            .unwrap_or_else(|e| panic!("{e}"));
 
         // Divide the data arrays
         let result_data = match self.data.divide_broadcast(&other.data) {
@@ -666,12 +665,12 @@ impl<T: Clone + Add<Output = T> + Div<Output = T> + Zero + From<f64> + Into<f64>
     ///
     /// The mean value, or None if all elements are masked
     pub fn mean(&self) -> Option<T> {
-        let data_vec = self.data.to_vec();
-        let mask_vec = self.mask.to_vec();
+        let data_op = crate::kernels::borrow::operand(&self.data);
+        let mask_op = crate::kernels::borrow::operand(&self.mask);
         let mut sum = T::zero();
         let mut count = 0;
 
-        for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
+        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
             if !*is_masked {
                 sum = sum + value.clone();
                 count += 1;
@@ -694,12 +693,12 @@ impl<T: Clone + Add<Output = T> + Div<Output = T> + Zero + From<f64> + Into<f64>
     ///
     /// The sum, or None if all elements are masked
     pub fn sum(&self) -> Option<T> {
-        let data_vec = self.data.to_vec();
-        let mask_vec = self.mask.to_vec();
+        let data_op = crate::kernels::borrow::operand(&self.data);
+        let mask_op = crate::kernels::borrow::operand(&self.mask);
         let mut sum = T::zero();
         let mut count = 0;
 
-        for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
+        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
             if !*is_masked {
                 sum = sum + value.clone();
                 count += 1;
@@ -722,11 +721,11 @@ impl<T: Clone + Add<Output = T> + Div<Output = T> + Zero + From<f64> + Into<f64>
     where
         T: PartialOrd,
     {
-        let data_vec = self.data.to_vec();
-        let mask_vec = self.mask.to_vec();
+        let data_op = crate::kernels::borrow::operand(&self.data);
+        let mask_op = crate::kernels::borrow::operand(&self.mask);
         let mut min_val = None;
 
-        for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
+        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
             if !*is_masked {
                 match min_val {
                     None => min_val = Some(value.clone()),
@@ -748,11 +747,11 @@ impl<T: Clone + Add<Output = T> + Div<Output = T> + Zero + From<f64> + Into<f64>
     where
         T: PartialOrd,
     {
-        let data_vec = self.data.to_vec();
-        let mask_vec = self.mask.to_vec();
+        let data_op = crate::kernels::borrow::operand(&self.data);
+        let mask_op = crate::kernels::borrow::operand(&self.mask);
         let mut max_val = None;
 
-        for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
+        for (value, is_masked) in data_op.iter().zip(mask_op.iter()) {
             if !*is_masked {
                 match max_val {
                     None => max_val = Some(value.clone()),
@@ -769,8 +768,8 @@ impl<T: Clone + Add<Output = T> + Div<Output = T> + Zero + From<f64> + Into<f64>
 // Display implementation for MaskedArray
 impl<T: Clone + fmt::Display + Debug> fmt::Display for MaskedArray<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let data_vec = self.data.to_vec();
-        let mask_vec = self.mask.to_vec();
+        let data_op = crate::kernels::borrow::operand(&self.data);
+        let mask_op = crate::kernels::borrow::operand(&self.mask);
         let shape = self.shape();
 
         writeln!(f, "MaskedArray(")?;
@@ -778,7 +777,7 @@ impl<T: Clone + fmt::Display + Debug> fmt::Display for MaskedArray<T> {
         // Simple display for 1D arrays
         if shape.len() == 1 {
             write!(f, "[")?;
-            for (i, (val, &masked)) in data_vec.iter().zip(mask_vec.iter()).enumerate() {
+            for (i, (val, &masked)) in data_op.iter().zip(mask_op.iter()).enumerate() {
                 if i > 0 {
                     write!(f, ", ")?;
                 }
@@ -809,5 +808,66 @@ impl<T: Clone + Debug> fmt::Debug for MaskedArray<T> {
             .field("masked_count", &self.count_masked())
             .field("fill_value", &self.fill_value)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Manual timing probe (no `[[bench]]` entry available in this
+    /// lane's `Cargo.toml`, owned by another lane) for the `data`/`mask`
+    /// `to_vec()` pair -> `operand` conversion applied throughout this
+    /// file (`mean`, `sum`, `min`, `max`, `filled`, `compressed`,
+    /// `Display::fmt`, and `Div::div`'s zero-check all followed this
+    /// exact shape). `mean()` is representative: every other conversion
+    /// removes the same two full-array clones per call.
+    #[test]
+    fn probe_mean_perf_vs_naive_to_vec_pair() {
+        fn naive_mean(data: &Array<f64>, mask: &Array<bool>) -> Option<f64> {
+            let data_vec = data.to_vec();
+            let mask_vec = mask.to_vec();
+            let mut sum = 0.0;
+            let mut count = 0;
+            for (value, is_masked) in data_vec.iter().zip(mask_vec.iter()) {
+                if !*is_masked {
+                    sum += *value;
+                    count += 1;
+                }
+            }
+            if count == 0 {
+                None
+            } else {
+                Some(sum / count as f64)
+            }
+        }
+
+        let n = 100_000;
+        let data = Array::from_vec((0..n).map(|i| i as f64).collect::<Vec<_>>());
+        let mask = Array::from_vec((0..n).map(|i| i % 7 == 0).collect::<Vec<_>>());
+        let masked = MaskedArray::new(data.clone(), Some(mask.clone()), Some(0.0))
+            .expect("MaskedArray::new should succeed");
+        let iters = 200;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(naive_mean(&data, &mask));
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(masked.mean());
+        }
+        let operand = t1.elapsed();
+
+        eprintln!(
+            "[MaskedArray::mean, n={n}] naive(to_vec_pair)={:.1}us/iter operand={:.1}us/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e6 / iters as f64,
+            operand.as_secs_f64() * 1e6 / iters as f64,
+            naive.as_secs_f64() / operand.as_secs_f64(),
+        );
+
+        assert_eq!(naive_mean(&data, &mask), masked.mean());
     }
 }

@@ -386,7 +386,7 @@ impl<'a> EnsemblePredictor<'a> {
         }
 
         let shape = first_shape.to_vec();
-        Ok(Array::from_vec(weighted_sum).reshape(&shape))
+        Ok(Array::from_vec_shape(weighted_sum, &shape)?)
     }
 }
 

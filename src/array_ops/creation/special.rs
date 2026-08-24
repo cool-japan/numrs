@@ -65,7 +65,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(data).reshape(&[n, m]))
+    Array::from_vec_shape(data, &[n, m])
 }
 
 /// Create a 2D array with the flattened input as a diagonal
@@ -130,7 +130,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[size, size]))
+    Array::from_vec_shape(result, &[size, size])
 }
 
 /// Generate a Vandermonde matrix
@@ -235,7 +235,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[m, n_cols]))
+    Array::from_vec_shape(result, &[m, n_cols])
 }
 
 #[cfg(test)]

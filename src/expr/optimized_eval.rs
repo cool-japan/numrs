@@ -92,7 +92,7 @@ pub trait SimdExprEval<T: Clone + Copy>: Expr<T> {
             data.push(self.eval_at(i));
         }
 
-        let result = Array::from_vec(data).reshape(self.shape());
+        let result = Array::from_vec_shape(data, self.shape()).unwrap_or_else(|e| panic!("{e}"));
         result
     }
 
@@ -345,7 +345,7 @@ where
             BinaryOpType::Div => SimdBinaryEvaluator::div_f64(&left_data, &right_data),
         };
 
-        Array::from_vec(result_data).reshape(self.shape())
+        Array::from_vec_shape(result_data, self.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 

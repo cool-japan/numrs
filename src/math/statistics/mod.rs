@@ -35,6 +35,7 @@
 
 use crate::array::Array;
 use crate::error::Result;
+use crate::kernels::{borrow::operand, cast, reduce};
 use num_traits::{Float, NumCast, One, Zero};
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -176,7 +177,7 @@ where
                 result_data[out_idx] = max_idx;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -315,7 +316,7 @@ where
                 result_data[out_idx] = min_idx;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -479,7 +480,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&result_shape))
+    Array::from_vec_shape(result_data, &result_shape)
 }
 
 /// Round array elements to the given number of decimals
@@ -635,12 +636,14 @@ where
                 }
             }
 
-            // Flatten and compute cumsum (inherently sequential)
-            let data = array.to_vec();
-            let mut result = Vec::with_capacity(data.len());
+            // Flatten and compute cumsum (inherently sequential). Zero-copy via
+            // `kernels::borrow::operand` in the common contiguous case, instead of
+            // `Array::to_vec`'s unconditional copy.
+            let op = operand(array);
+            let mut result = Vec::with_capacity(op.len());
             let mut sum = T::zero();
 
-            for val in data {
+            for &val in op.iter() {
                 sum = sum + val;
                 result.push(sum);
             }
@@ -663,7 +666,7 @@ where
             }
 
             let shape = array.shape();
-            let data = array.to_vec();
+            let op = operand(array);
 
             // Calculate strides
             let mut strides = vec![1; array.ndim()];
@@ -675,12 +678,21 @@ where
             let axis_size = shape[axis];
             let n_iterations = array.size() / axis_size;
 
+            // Only `indices[axis]` ever changes across the inner `j`/step loops below (the
+            // other coordinates are fixed once per outer iteration), so the flat index along
+            // the axis can be advanced by the constant `axis_stride` per step instead of
+            // recomputing the full `indices[i] * strides[i]` dot product (over every
+            // dimension) on every one of the `axis_size` steps -- this turns that inner-loop
+            // work from O(ndim) per step into O(1) per step (O(ndim) once per outer iteration,
+            // to get the starting flat index).
+            let axis_stride = strides[axis];
+
             // Use parallel processing for large arrays
             if is_parallel_enabled() && n_iterations >= PARALLEL_THRESHOLD {
                 let result_data: Vec<T> = (0..n_iterations)
                     .into_par_iter()
                     .flat_map(|iter_idx| {
-                        // Determine the base indices for this iteration
+                        // Determine the base indices for this iteration (axis coordinate 0)
                         let mut indices = vec![0; shape.len()];
                         let mut temp = iter_idx;
 
@@ -691,18 +703,22 @@ where
                             }
                         }
 
+                        // Flat index of the axis=0 element for this iteration; see this
+                        // branch's outer comment for why stepping by `axis_stride` replaces
+                        // recomputing this dot product on every `j`.
+                        let mut flat_idx: usize = indices
+                            .iter()
+                            .enumerate()
+                            .map(|(i, &idx)| idx * strides[i])
+                            .sum();
+
                         // Compute cumulative sum along the axis
                         let mut local_results = Vec::with_capacity(axis_size);
                         let mut sum = T::zero();
-                        for j in 0..axis_size {
-                            indices[axis] = j;
-                            let flat_idx = indices
-                                .iter()
-                                .enumerate()
-                                .map(|(i, &idx)| idx * strides[i])
-                                .sum::<usize>();
-                            sum = sum + data[flat_idx];
+                        for _ in 0..axis_size {
+                            sum = sum + op[flat_idx];
                             local_results.push((flat_idx, sum));
+                            flat_idx += axis_stride;
                         }
                         local_results
                     })
@@ -713,13 +729,13 @@ where
                         acc
                     });
 
-                Ok(Array::from_vec(result_data).reshape(&shape))
+                Ok(Array::from_vec_shape(result_data, &shape)?)
             } else {
                 // Sequential processing for small arrays
                 let mut result_data = vec![T::zero(); array.size()];
 
                 for iter_idx in 0..n_iterations {
-                    // Determine the base indices for this iteration
+                    // Determine the base indices for this iteration (axis coordinate 0)
                     let mut indices = vec![0; array.ndim()];
                     let mut temp = iter_idx;
 
@@ -730,21 +746,24 @@ where
                         }
                     }
 
+                    // See this branch's outer comment: base-plus-stride walk, not a full dot
+                    // product recomputed per axis step.
+                    let mut flat_idx: usize = indices
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &idx)| idx * strides[i])
+                        .sum();
+
                     // Compute cumulative sum along the axis
                     let mut sum = T::zero();
-                    for j in 0..axis_size {
-                        indices[axis] = j;
-                        let flat_idx = indices
-                            .iter()
-                            .enumerate()
-                            .map(|(i, &idx)| idx * strides[i])
-                            .sum::<usize>();
-                        sum = sum + data[flat_idx];
+                    for _ in 0..axis_size {
+                        sum = sum + op[flat_idx];
                         result_data[flat_idx] = sum;
+                        flat_idx += axis_stride;
                     }
                 }
 
-                Ok(Array::from_vec(result_data).reshape(&shape))
+                Ok(Array::from_vec_shape(result_data, &shape)?)
             }
         }
     }
@@ -800,12 +819,14 @@ where
 
     match axis {
         None => {
-            // Flatten and compute cumprod (inherently sequential)
-            let data = array.to_vec();
-            let mut result = Vec::with_capacity(data.len());
+            // Flatten and compute cumprod (inherently sequential). Zero-copy via
+            // `kernels::borrow::operand` in the common contiguous case, instead of
+            // `Array::to_vec`'s unconditional copy.
+            let op = operand(array);
+            let mut result = Vec::with_capacity(op.len());
             let mut prod = T::one();
 
-            for val in data {
+            for &val in op.iter() {
                 prod = prod * val;
                 result.push(prod);
             }
@@ -828,7 +849,7 @@ where
             }
 
             let shape = array.shape();
-            let data = array.to_vec();
+            let op = operand(array);
 
             // Calculate strides
             let mut strides = vec![1; array.ndim()];
@@ -840,12 +861,19 @@ where
             let axis_size = shape[axis];
             let n_iterations = array.size() / axis_size;
 
+            // See `cumsum_no_out`'s identical comment above the equivalent branch: only
+            // `indices[axis]` changes across the inner step loops, so the flat index along
+            // the axis advances by the constant `axis_stride` per step (O(1)) instead of
+            // recomputing the full `indices[i] * strides[i]` dot product (O(ndim)) on every
+            // one of the `axis_size` steps.
+            let axis_stride = strides[axis];
+
             // Use parallel processing for large arrays
             if is_parallel_enabled() && n_iterations >= PARALLEL_THRESHOLD {
                 let result_data: Vec<T> = (0..n_iterations)
                     .into_par_iter()
                     .flat_map(|iter_idx| {
-                        // Determine the base indices for this iteration
+                        // Determine the base indices for this iteration (axis coordinate 0)
                         let mut indices = vec![0; shape.len()];
                         let mut temp = iter_idx;
 
@@ -856,18 +884,20 @@ where
                             }
                         }
 
+                        // Flat index of the axis=0 element for this iteration.
+                        let mut flat_idx: usize = indices
+                            .iter()
+                            .enumerate()
+                            .map(|(i, &idx)| idx * strides[i])
+                            .sum();
+
                         // Compute cumulative product along the axis
                         let mut local_results = Vec::with_capacity(axis_size);
                         let mut prod = T::one();
-                        for j in 0..axis_size {
-                            indices[axis] = j;
-                            let flat_idx = indices
-                                .iter()
-                                .enumerate()
-                                .map(|(i, &idx)| idx * strides[i])
-                                .sum::<usize>();
-                            prod = prod * data[flat_idx];
+                        for _ in 0..axis_size {
+                            prod = prod * op[flat_idx];
                             local_results.push((flat_idx, prod));
+                            flat_idx += axis_stride;
                         }
                         local_results
                     })
@@ -878,13 +908,13 @@ where
                         acc
                     });
 
-                Ok(Array::from_vec(result_data).reshape(&shape))
+                Ok(Array::from_vec_shape(result_data, &shape)?)
             } else {
                 // Sequential processing for small arrays
                 let mut result_data = vec![T::zero(); array.size()];
 
                 for iter_idx in 0..n_iterations {
-                    // Determine the base indices for this iteration
+                    // Determine the base indices for this iteration (axis coordinate 0)
                     let mut indices = vec![0; array.ndim()];
                     let mut temp = iter_idx;
 
@@ -895,21 +925,23 @@ where
                         }
                     }
 
+                    // Base-plus-stride walk, not a full dot product recomputed per axis step.
+                    let mut flat_idx: usize = indices
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &idx)| idx * strides[i])
+                        .sum();
+
                     // Compute cumulative product along the axis
                     let mut prod = T::one();
-                    for j in 0..axis_size {
-                        indices[axis] = j;
-                        let flat_idx = indices
-                            .iter()
-                            .enumerate()
-                            .map(|(i, &idx)| idx * strides[i])
-                            .sum::<usize>();
-                        prod = prod * data[flat_idx];
+                    for _ in 0..axis_size {
+                        prod = prod * op[flat_idx];
                         result_data[flat_idx] = prod;
+                        flat_idx += axis_stride;
                     }
                 }
 
-                Ok(Array::from_vec(result_data).reshape(&shape))
+                Ok(Array::from_vec_shape(result_data, &shape)?)
             }
         }
     }
@@ -938,7 +970,7 @@ where
 /// ```
 pub fn mean<T>(array: &Array<T>, axis: Option<isize>, keepdims: bool) -> Result<Array<T>>
 where
-    T: Float + Clone + Add<Output = T> + Div<Output = T> + NumCast,
+    T: Float + Clone + Add<Output = T> + Div<Output = T> + NumCast + 'static,
 {
     if array.is_empty() {
         return Err(crate::error::NumRs2Error::InvalidOperation(
@@ -948,15 +980,23 @@ where
 
     match axis {
         None => {
-            // Compute mean of flattened array
-            let data = array.to_vec();
-            let sum = data.iter().fold(T::zero(), |acc, x| acc + *x);
-            let count = T::from(data.len()).expect("data length should be representable");
-            let mean_val = sum / count;
+            // Compute mean of flattened array. Dispatches through
+            // `kernels::reduce::mean_f64`/`mean_f32` (zero-copy via `kernels::borrow::operand`)
+            // when `T` concretely is `f64`/`f32`; any other `T` keeps the original fold.
+            let op = operand(array);
+            let mean_val = if let Some(s) = cast::as_f64(&op) {
+                cast::f64_to(reduce::mean_f64(s)).expect("T == f64 per cast::as_f64 match")
+            } else if let Some(s) = cast::as_f32(&op) {
+                cast::f32_to(reduce::mean_f32(s)).expect("T == f32 per cast::as_f32 match")
+            } else {
+                let sum = op.iter().fold(T::zero(), |acc, &x| acc + x);
+                let count = T::from(op.len()).expect("data length should be representable");
+                sum / count
+            };
 
             if keepdims {
                 let shape = vec![1; array.ndim()];
-                Ok(Array::from_vec(vec![mean_val]).reshape(&shape))
+                Ok(Array::from_vec_shape(vec![mean_val], &shape)?)
             } else {
                 Ok(Array::from_vec(vec![mean_val]))
             }
@@ -1031,7 +1071,7 @@ where
                 result_data[out_idx] = sum / axis_size_t;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -1065,7 +1105,7 @@ pub fn prod<T>(
     initial: Option<T>,
 ) -> Result<Array<T>>
 where
-    T: Float + Clone + Mul<Output = T>,
+    T: Float + Clone + Mul<Output = T> + 'static,
 {
     if array.is_empty() && initial.is_none() {
         return Err(crate::error::NumRs2Error::InvalidOperation(
@@ -1073,17 +1113,35 @@ where
         ));
     }
 
+    let has_initial = initial.is_some();
     let init_val = initial.unwrap_or_else(|| T::one());
 
     match axis {
         None => {
-            // Compute product of flattened array
-            let data = array.to_vec();
-            let product = data.iter().fold(init_val, |acc, x| acc * *x);
+            // Compute product of flattened array. An explicit `initial` keeps the original
+            // fold unconditionally: `initial * kernels::reduce::prod_*(data)` would not
+            // generally be bit-identical to folding `initial` in as the seed (floating-point
+            // multiplication reassociates). Without one (`init_val == T::one()`), dispatch
+            // through `kernels::reduce::prod_f64`/`prod_f32` for `T == f64`/`f32` -- both
+            // that kernel and the fold below start from the multiplicative identity and
+            // multiply strictly left-to-right, so the two are bit-identical.
+            let product = if has_initial {
+                let data = array.to_vec();
+                data.iter().fold(init_val, |acc, x| acc * *x)
+            } else {
+                let op = operand(array);
+                if let Some(s) = cast::as_f64(&op) {
+                    cast::f64_to(reduce::prod_f64(s)).expect("T == f64 per cast::as_f64 match")
+                } else if let Some(s) = cast::as_f32(&op) {
+                    cast::f32_to(reduce::prod_f32(s)).expect("T == f32 per cast::as_f32 match")
+                } else {
+                    op.iter().fold(init_val, |acc, &x| acc * x)
+                }
+            };
 
             if keepdims {
                 let shape = vec![1; array.ndim()];
-                Ok(Array::from_vec(vec![product]).reshape(&shape))
+                Ok(Array::from_vec_shape(vec![product], &shape)?)
             } else {
                 Ok(Array::from_vec(vec![product]))
             }
@@ -1157,7 +1215,7 @@ where
                 result_data[out_idx] = product;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -1203,7 +1261,7 @@ where
         new_data.push(old_data[i % old_size].clone());
     }
 
-    Ok(Array::from_vec(new_data).reshape(new_shape))
+    Array::from_vec_shape(new_data, new_shape)
 }
 
 /// Compute the standard deviation along the specified axis
@@ -1242,9 +1300,11 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + NumCast,
+        + NumCast
+        + 'static,
 {
-    // First compute variance, then take square root
+    // First compute variance (kernel-dispatched for f64/f32, see `var`'s doc comment),
+    // then take square root.
     let variance = var(array, axis, ddof, keepdims)?;
     Ok(variance.map(|x| x.sqrt()))
 }
@@ -1284,7 +1344,8 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + NumCast,
+        + NumCast
+        + 'static,
 {
     if array.is_empty() {
         return Err(crate::error::NumRs2Error::InvalidOperation(
@@ -1292,24 +1353,22 @@ where
         ));
     }
 
-    // First compute the mean
-    let mean_arr = mean(array, axis, keepdims)?;
-
     match axis {
         None => {
-            // Compute variance of flattened array
-            let data = array.to_vec();
-            let mean_val = mean_arr.to_vec()[0];
-
-            let sum_sq = data
-                .iter()
-                .map(|x| {
-                    let diff = *x - mean_val;
-                    diff * diff
-                })
-                .fold(T::zero(), |acc, x| acc + x);
-
-            let n = data.len();
+            // Compute variance of flattened array: `ddof` is honored identically in every
+            // tier below (divisor is always `n - ddof`, population when `ddof == 0`,
+            // sample when `ddof == 1`, or any other explicit value). For `T == f64`/`f32`,
+            // dispatches through the *fused* `kernels::reduce::var_f64`/`var_f32`, which
+            // takes a single length-tier decision covering both of variance's passes
+            // instead of one per pass -- see that kernel's docs. Never
+            // `simd_variance`/`simd_std` -- see `kernels::reduce`'s module docs for why.
+            //
+            // The mean is computed inside that kernel, so `mean()` is deliberately NOT
+            // called on this path: it is a whole extra tiered reduction plus an `Array`
+            // allocation whose result the f64/f32 tier never reads. Only the generic tail
+            // below needs it, and it is computed there.
+            let op = operand(array);
+            let n = op.len();
             if n <= ddof {
                 return Err(crate::error::NumRs2Error::InvalidOperation(format!(
                     "Degrees of freedom {} >= number of elements {}",
@@ -1317,17 +1376,38 @@ where
                 )));
             }
 
-            let divisor = T::from(n - ddof).expect("n-ddof should be representable");
-            let var_val = sum_sq / divisor;
+            let var_val = if let Some(s) = cast::as_f64(&op) {
+                cast::f64_to(reduce::var_f64(s, ddof)).expect("T == f64 per cast::as_f64 match")
+            } else if let Some(s) = cast::as_f32(&op) {
+                cast::f32_to(reduce::var_f32(s, ddof)).expect("T == f32 per cast::as_f32 match")
+            } else {
+                let mean_val = mean(array, axis, keepdims)?.to_vec()[0];
+                let sum_sq = op
+                    .iter()
+                    .map(|x| {
+                        let diff = *x - mean_val;
+                        diff * diff
+                    })
+                    .fold(T::zero(), |acc, x| acc + x);
+                let divisor = T::from(n - ddof).expect("n-ddof should be representable");
+                sum_sq / divisor
+            };
 
             if keepdims {
                 let shape = vec![1; array.ndim()];
-                Ok(Array::from_vec(vec![var_val]).reshape(&shape))
+                Ok(Array::from_vec_shape(vec![var_val], &shape)?)
             } else {
                 Ok(Array::from_vec(vec![var_val]))
             }
         }
         Some(ax) => {
+            // The per-lane means, one per output element. Computed here rather than once
+            // for every `axis` up front, because the `None` arm above gets its mean from
+            // the fused `kernels::reduce::var_*` kernel and would otherwise pay for a
+            // second, discarded reduction. Kept as the arm's *first* statement so that an
+            // out-of-bounds `axis` still surfaces `mean`'s error, exactly as before.
+            let mean_arr = mean(array, axis, keepdims)?;
+
             let axis = if ax < 0 {
                 (array.ndim() as isize + ax) as usize
             } else {
@@ -1413,7 +1493,7 @@ where
                 result_data[out_idx] = sum_sq / divisor;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -1596,7 +1676,7 @@ where
                 };
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -1746,98 +1826,24 @@ where
                 };
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
 
+// -----------------------------------------------------------------------------------------
+// Test modules
+//
+// Extracted verbatim into sibling files -- which is the only reason this is a directory
+// module -- so that every file here stays under the 2,000-line cap. Nothing else moved:
+// every `crate::math::statistics::*` path resolves exactly as it did when the three `mod`
+// blocks were inline, these test modules' own paths included, and each file still opens with
+// the same `use super::*` it had inline (`super` is `math::statistics` either way).
+// -----------------------------------------------------------------------------------------
+
 #[cfg(test)]
-mod skew_kurtosis_tests {
-    use super::*;
-    use crate::array::Array;
-
-    #[test]
-    fn test_skew_symmetric_data() {
-        // Symmetric data should have skewness ≈ 0
-        let data = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 5.0]);
-        let s = skew(&data, None).expect("skew should succeed");
-        assert!(
-            s.to_vec()[0].abs() < 1e-10,
-            "symmetric distribution skewness should be ~0, got {}",
-            s.to_vec()[0]
-        );
-    }
-
-    #[test]
-    fn test_skew_right_skewed() {
-        // Right-skewed data (long tail on the right) should have positive skewness
-        let data = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 10.0]);
-        let s = skew(&data, None).expect("skew should succeed");
-        assert!(
-            s.to_vec()[0] > 0.0,
-            "right-skewed data should have positive skewness"
-        );
-    }
-
-    #[test]
-    fn test_skew_constant_array_returns_zero() {
-        let data = Array::from_vec(vec![5.0_f64, 5.0, 5.0, 5.0]);
-        let s = skew(&data, None).expect("constant array skew should succeed");
-        assert_eq!(s.to_vec()[0], 0.0);
-    }
-
-    #[test]
-    fn test_skew_too_few_elements_errors() {
-        let data = Array::from_vec(vec![42.0_f64]);
-        assert!(
-            skew(&data, None).is_err(),
-            "skew with 1 element should return error"
-        );
-    }
-
-    #[test]
-    fn test_kurtosis_uniform_like_data() {
-        // For uniform-like data the excess kurtosis should be negative (platykurtic)
-        let data = Array::from_vec(vec![1.0_f64, 2.0, 3.0, 4.0, 5.0]);
-        let k = kurtosis(&data, None).expect("kurtosis should succeed");
-        assert!(
-            k.to_vec()[0] < 0.0,
-            "uniform-like data should have negative excess kurtosis, got {}",
-            k.to_vec()[0]
-        );
-    }
-
-    #[test]
-    fn test_kurtosis_constant_array_returns_zero() {
-        let data = Array::from_vec(vec![3.0_f64, 3.0, 3.0, 3.0]);
-        let k = kurtosis(&data, None).expect("constant array kurtosis should succeed");
-        assert_eq!(k.to_vec()[0], 0.0);
-    }
-
-    #[test]
-    fn test_kurtosis_too_few_elements_errors() {
-        let data = Array::from_vec(vec![99.0_f64]);
-        assert!(
-            kurtosis(&data, None).is_err(),
-            "kurtosis with 1 element should return error"
-        );
-    }
-
-    #[test]
-    fn test_skew_empty_array_errors() {
-        let data: Array<f64> = Array::from_vec(vec![]);
-        assert!(
-            skew(&data, None).is_err(),
-            "skew on empty array should fail"
-        );
-    }
-
-    #[test]
-    fn test_kurtosis_empty_array_errors() {
-        let data: Array<f64> = Array::from_vec(vec![]);
-        assert!(
-            kurtosis(&data, None).is_err(),
-            "kurtosis on empty array should fail"
-        );
-    }
-}
+mod cumsum_cumprod_axis_stride_hoist_tests;
+#[cfg(test)]
+mod skew_kurtosis_tests;
+#[cfg(test)]
+mod var_std_ddof_tests;

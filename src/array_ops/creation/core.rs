@@ -75,7 +75,7 @@ where
     }
 
     // Create and reshape the array
-    Ok(Array::from_vec(result_data).reshape(shape))
+    Array::from_vec_shape(result_data, shape)
 }
 
 /// Create an array from a raw buffer
@@ -222,7 +222,7 @@ pub fn fromiter<T: Clone, I: Iterator<Item = T>>(
                     actual: vec![data.len()],
                 });
             }
-            Ok(Array::from_vec(data).reshape(s))
+            Ok(Array::from_vec_shape(data, s)?)
         }
         None => Ok(Array::from_vec(data)),
     }

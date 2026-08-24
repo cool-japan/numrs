@@ -85,7 +85,7 @@ where
         companion[i * n + (n - 1)] = -coeffs[i + 1].clone() / leading.clone();
     }
 
-    Ok(Array::from_vec(companion).reshape(&[n, n]))
+    Array::from_vec_shape(companion, &[n, n])
 }
 
 /// Trim leading zeros from polynomial coefficients
@@ -324,7 +324,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[n, cols]))
+    Array::from_vec_shape(result, &[n, cols])
 }
 
 /// Generate a 2D Vandermonde matrix
@@ -392,7 +392,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[n, cols]))
+    Array::from_vec_shape(result, &[n, cols])
 }
 
 /// Raise a polynomial to a power
@@ -519,7 +519,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[ny, nx]))
+    Array::from_vec_shape(result, &[ny, nx])
 }
 
 /// Evaluate polynomial at 2D points

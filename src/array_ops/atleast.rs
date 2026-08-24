@@ -29,7 +29,7 @@ pub fn atleast_1d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
             let scalar_value = array
                 .get(&[])
                 .expect("scalar array (ndim=0) should have a value at empty index");
-            result.push(Array::from_vec(vec![scalar_value]).reshape(&[1]));
+            result.push(Array::from_vec_shape(vec![scalar_value], &[1])?);
         } else {
             // Already at least 1-D, add a view of the array
             result.push(array.clone());
@@ -67,12 +67,12 @@ pub fn atleast_2d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
             let scalar_value = array
                 .get(&[])
                 .expect("scalar array (ndim=0) should have a value at empty index");
-            result.push(Array::from_vec(vec![scalar_value]).reshape(&[1, 1]));
+            result.push(Array::from_vec_shape(vec![scalar_value], &[1, 1])?);
         } else if array.ndim() == 1 {
             // 1-D, reshape to 2-D
             let data = array.to_vec();
             let new_shape = vec![1, data.len()];
-            result.push(Array::from_vec(data).reshape(&new_shape));
+            result.push(Array::from_vec_shape(data, &new_shape)?);
         } else {
             // Already at least 2-D, add a view of the array
             result.push(array.clone());
@@ -110,18 +110,18 @@ pub fn atleast_3d<T: Clone + num_traits::Zero>(arys: &[&Array<T>]) -> Result<Vec
             let scalar_value = array
                 .get(&[])
                 .expect("scalar array (ndim=0) should have a value at empty index");
-            result.push(Array::from_vec(vec![scalar_value]).reshape(&[1, 1, 1]));
+            result.push(Array::from_vec_shape(vec![scalar_value], &[1, 1, 1])?);
         } else if array.ndim() == 1 {
             // 1-D, reshape to 3-D
             let data = array.to_vec();
             let new_shape = vec![1, data.len(), 1];
-            result.push(Array::from_vec(data).reshape(&new_shape));
+            result.push(Array::from_vec_shape(data, &new_shape)?);
         } else if array.ndim() == 2 {
             // 2-D, reshape to 3-D
             let data = array.to_vec();
             let shape = array.shape();
             let new_shape = vec![shape[0], shape[1], 1];
-            result.push(Array::from_vec(data).reshape(&new_shape));
+            result.push(Array::from_vec_shape(data, &new_shape)?);
         } else {
             // Already at least 3-D, add a view of the array
             result.push(array.clone());

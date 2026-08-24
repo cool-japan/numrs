@@ -437,7 +437,7 @@ pub fn fmax<T: Float + Clone>(x1: &Array<T>, x2: &Array<T>) -> Result<Array<T>> 
         })
         .collect();
 
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }
 
 /// Element-wise minimum of array elements, ignoring NaN
@@ -489,5 +489,5 @@ pub fn fmin<T: Float + Clone>(x1: &Array<T>, x2: &Array<T>) -> Result<Array<T>> 
         })
         .collect();
 
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }

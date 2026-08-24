@@ -132,7 +132,7 @@ impl QuantizedArray {
             .map(|&x| self.params.dequantize(x))
             .collect();
 
-        Array::from_vec(dequantized).reshape(&self.shape)
+        Array::from_vec_shape(dequantized, &self.shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Get quantization parameters
@@ -312,7 +312,7 @@ impl OperatorFusion {
             let relu_data: Vec<f64> = data.iter().map(|&x| x.max(0.0)).collect();
 
             let shape = input.shape().to_vec();
-            Ok(Array::from_vec(relu_data).reshape(&shape))
+            Ok(Array::from_vec_shape(relu_data, &shape)?)
         })
     }
 
@@ -324,7 +324,7 @@ impl OperatorFusion {
             let relu_data: Vec<f64> = data.iter().map(|&x| x.max(0.0)).collect();
 
             let shape = input.shape().to_vec();
-            Ok(Array::from_vec(relu_data).reshape(&shape))
+            Ok(Array::from_vec_shape(relu_data, &shape)?)
         })
     }
 }
@@ -411,14 +411,14 @@ impl SimdOps {
             let data = input.to_vec();
             let relu_data: Vec<f64> = data.iter().map(|&x| x.max(0.0)).collect();
             let shape = input.shape().to_vec();
-            return Array::from_vec(relu_data).reshape(&shape);
+            return Array::from_vec_shape(relu_data, &shape).unwrap_or_else(|e| panic!("{e}"));
         }
 
         // SIMD-optimized ReLU (simulation)
         let data = input.to_vec();
         let relu_data: Vec<f64> = data.iter().map(|&x| x.max(0.0)).collect();
         let shape = input.shape().to_vec();
-        Array::from_vec(relu_data).reshape(&shape)
+        Array::from_vec_shape(relu_data, &shape).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 

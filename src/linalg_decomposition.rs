@@ -116,7 +116,8 @@ pub fn qr<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -350,7 +351,7 @@ pub fn eig<
 
     // Convert to Array objects
     let sorted_eigenvalues = Array::from_vec(sorted_evals);
-    let sorted_eigenvectors = Array::from_vec(sorted_evecs).reshape(&evec_shape);
+    let sorted_eigenvectors = Array::from_vec_shape(sorted_evecs, &evec_shape)?;
 
     Ok((sorted_eigenvalues, sorted_eigenvectors))
 }
@@ -460,7 +461,7 @@ pub fn eig<
 
     // Convert to Array objects
     let sorted_eigenvalues = Array::from_vec(sorted_evals);
-    let sorted_eigenvectors = Array::from_vec(sorted_evecs).reshape(&evec_shape);
+    let sorted_eigenvectors = Array::from_vec_shape(sorted_evecs, &evec_shape)?;
 
     Ok((sorted_eigenvalues, sorted_eigenvectors))
 }

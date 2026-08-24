@@ -236,7 +236,7 @@ where
     }
 
     // Update C with the computed result
-    *c = Array::from_vec(c_data).reshape(&[m, n]);
+    *c = Array::from_vec_shape(c_data, &[m, n])?;
 
     Ok(())
 }

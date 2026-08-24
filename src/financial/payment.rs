@@ -119,7 +119,7 @@ where
         result_vec.push(pmt_result);
     }
 
-    Ok(Array::from_vec(result_vec).reshape(&rate.shape()))
+    Array::from_vec_shape(result_vec, &rate.shape())
 }
 
 #[cfg(test)]

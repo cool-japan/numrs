@@ -432,7 +432,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(data).reshape(&shape))
+        Array::from_vec_shape(data, &shape)
     }
 
     /// Cumulative product along specified axis
@@ -478,7 +478,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(data).reshape(&shape))
+        Array::from_vec_shape(data, &shape)
     }
 
     /// Argmin along specified axis
@@ -559,7 +559,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(result_data).reshape(&output_shape))
+        Array::from_vec_shape(result_data, &output_shape)
     }
 
     /// Argmax along specified axis
@@ -640,7 +640,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(result_data).reshape(&output_shape))
+        Array::from_vec_shape(result_data, &output_shape)
     }
 
     /// Variance along specified axis
@@ -705,7 +705,7 @@ where
                     squared_diffs_data.push(diff * diff);
                 }
 
-                let squared_diffs = Array::from_vec(squared_diffs_data).reshape(&self.shape());
+                let squared_diffs = Array::from_vec_shape(squared_diffs_data, &self.shape())?;
 
                 // Calculate mean of squared differences
                 squared_diffs.mean_axis(Some(ax))
@@ -839,7 +839,7 @@ where
         Ok(Array::from_vec(results))
     } else {
         // Reshape to the output shape
-        Ok(Array::from_vec(results).reshape(&output_shape))
+        Ok(Array::from_vec_shape(results, &output_shape)?)
     }
 }
 
@@ -956,6 +956,6 @@ where
         let data = array.to_vec();
         let func_clone = func.clone();
         let results: Vec<U> = data.into_iter().map(func_clone).collect();
-        Array::from_vec(results).reshape(&array.shape())
+        Array::from_vec_shape(results, &array.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }

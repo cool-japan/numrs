@@ -21,6 +21,12 @@ pub mod decomposition;
 #[path = "../linalg_solve.rs"]
 pub mod solve;
 
+// `scirs2-linalg` fast-path backend for the primary impl block below.
+// Gated identically to that block, so nothing here is dead code in any
+// other feature combination.
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+mod backend;
+
 // Import submodules
 pub mod iterative_solvers;
 pub mod matrix_ops;
@@ -81,7 +87,8 @@ where
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     /// Compute the determinant of a matrix using LU decomposition for large matrices
     /// and direct formula for small matrices.
@@ -92,6 +99,13 @@ where
     /// 3. Scaling to prevent overflow/underflow in intermediate calculations
     /// 4. Near-zero detection with appropriate thresholds
     pub fn det(&self) -> Result<T> {
+        // Fast path: LAPACK-backed det for f32/f64 at n >= 16 (see
+        // `backend`). `None` == not eligible, so the body below is
+        // reached unchanged -- including for every malformed input.
+        if let Some(r) = backend::try_scirs2_det(self) {
+            return r;
+        }
+
         // Verify the array is square
         let shape = self.shape();
         if shape.len() != 2 || shape[0] != shape[1] {
@@ -138,7 +152,7 @@ where
                 }
 
                 // Create 3x3 submatrix for minor
-                let minor = Array::from_vec(minor_data).reshape(&[3, 3]);
+                let minor = Array::from_vec_shape(minor_data, &[3, 3])?;
 
                 // Compute 3x3 determinant (we know this works from the 3x3 case)
                 let minor_det = minor.det()?;
@@ -217,6 +231,13 @@ where
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
     pub fn inv(&self) -> Result<Array<T>> {
+        // Fast path: see `backend`. Declining is the norm (small,
+        // non-square, non-f32/f64, or a singular matrix), and every
+        // decline falls through to the LU path below untouched.
+        if let Some(r) = backend::try_scirs2_inv(self) {
+            return r;
+        }
+
         // Check if the matrix is square
         let shape = self.shape();
         if shape.len() != 2 || shape[0] != shape[1] {
@@ -241,7 +262,7 @@ where
             // For 1x1 matrix, inverse is 1/a
             let a = self.get(&[0, 0])?;
             let result = vec![T::one() / a];
-            return Ok(Array::from_vec(result).reshape(&[1, 1]));
+            return Array::from_vec_shape(result, &[1, 1]);
         } else if n == 2 {
             // For 2x2 matrix, use the formula:
             // [a b]^-1 = (1/det) * [d -b]
@@ -255,7 +276,7 @@ where
             let inv_det = T::one() / det;
             let result = vec![d * inv_det, -b * inv_det, -c * inv_det, a * inv_det];
 
-            return Ok(Array::from_vec(result).reshape(&[2, 2]));
+            return Array::from_vec_shape(result, &[2, 2]);
         } else if n == 3 {
             // For 3x3 matrix, use adjugate formula:
             // A^-1 = (1/det) * adj(A)
@@ -288,7 +309,7 @@ where
                 c22 * inv_det,
             ];
 
-            return Ok(Array::from_vec(result).reshape(&[3, 3]));
+            return Array::from_vec_shape(result, &[3, 3]);
         }
 
         // For larger matrices, use LU decomposition
@@ -399,6 +420,14 @@ where
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
+        // Fast path: see `backend`. Note the gate is n >= 4 here, not
+        // 16 -- the fallback below this point recurses infinitely (see
+        // `backend::SOLVE_MIN_DIM`), so eligible input must not be
+        // handed back to it.
+        if let Some(r) = backend::try_scirs2_solve(self, b) {
+            return r;
+        }
+
         // Check dimensions
         let a_shape = self.shape();
         let b_shape = b.shape();
@@ -806,6 +835,11 @@ where
 
     /// Compute the singular value decomposition of a matrix
     pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
+        // Fast path: see `backend` (square, n >= 16, f32/f64 only).
+        if let Some(r) = backend::try_scirs2_svd(self) {
+            return r;
+        }
+
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::svd;
         let (u, s_real, vt) = svd(self)?;
@@ -831,6 +865,12 @@ where
     /// Uses the QR iteration algorithm with Wilkinson shifts to compute real
     /// eigenvalues and eigenvectors of a square matrix.
     pub fn eig(&self) -> Result<(Array<T>, Array<T>)> {
+        // Fast path: see `backend` (symmetric input only; note the
+        // documented eigenvalue-ordering deviation there).
+        if let Some(r) = backend::try_scirs2_eig(self) {
+            return r;
+        }
+
         use crate::new_modules::matrix_decomp::qr as qr_decomp;
 
         // Check if the matrix is square
@@ -923,6 +963,12 @@ where
 
     /// Compute the Cholesky decomposition of a matrix
     pub fn cholesky(&self) -> Result<Array<T>> {
+        // Fast path: see `backend`. Declines on failure so the
+        // existing perturbation-based fallback still gets its turn.
+        if let Some(r) = backend::try_scirs2_cholesky(self) {
+            return r;
+        }
+
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::cholesky;
         cholesky(self)
@@ -930,6 +976,12 @@ where
 
     /// Compute the QR decomposition of a matrix
     pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
+        // Fast path: see `backend` (square input only, so full QR and
+        // the economy QR below agree on shapes).
+        if let Some(r) = backend::try_scirs2_qr(self) {
+            return r;
+        }
+
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::qr;
         qr(self)
@@ -1004,7 +1056,7 @@ where
                 }
 
                 // Create 3x3 submatrix for minor
-                let minor = Array::from_vec(minor_data).reshape(&[3, 3]);
+                let minor = Array::from_vec_shape(minor_data, &[3, 3])?;
 
                 // Compute 3x3 determinant (we know this works from the 3x3 case)
                 let minor_det = minor.det()?;
@@ -1132,7 +1184,7 @@ where
             // For 1x1 matrix, inverse is 1/a
             let a = self.get(&[0, 0])?;
             let result = vec![T::one() / a];
-            return Ok(Array::from_vec(result).reshape(&[1, 1]));
+            return Ok(Array::from_vec_shape(result, &[1, 1])?);
         } else if n == 2 {
             // For 2x2 matrix, use the formula:
             // [a b]^-1 = (1/det) * [d -b]
@@ -1146,7 +1198,7 @@ where
             let inv_det = T::one() / det;
             let result = vec![d * inv_det, -b * inv_det, -c * inv_det, a * inv_det];
 
-            return Ok(Array::from_vec(result).reshape(&[2, 2]));
+            return Ok(Array::from_vec_shape(result, &[2, 2])?);
         } else if n == 3 {
             // For 3x3 matrix, use adjugate formula:
             // A^-1 = (1/det) * adj(A)
@@ -1179,7 +1231,7 @@ where
                 c22 * inv_det,
             ];
 
-            return Ok(Array::from_vec(result).reshape(&[3, 3]));
+            return Ok(Array::from_vec_shape(result, &[3, 3])?);
         }
 
         // For larger matrices, use Gaussian elimination with identity matrix augmentation

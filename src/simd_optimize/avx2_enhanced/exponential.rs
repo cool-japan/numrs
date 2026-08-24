@@ -31,7 +31,7 @@ impl EnhancedSimdOps {
             Self::avx2_exp_f32(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized exponential function
@@ -108,7 +108,7 @@ impl EnhancedSimdOps {
             Self::avx2_exp_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized exponential function for f64
@@ -526,7 +526,7 @@ impl EnhancedSimdOps {
             Self::avx2_log2_f32(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized log2
@@ -604,7 +604,7 @@ impl EnhancedSimdOps {
             Self::avx2_log2_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized log2 for f64
@@ -946,7 +946,7 @@ impl EnhancedSimdOps {
             Self::avx2_sqrt_f32(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized square root for f32
@@ -984,7 +984,7 @@ impl EnhancedSimdOps {
             Self::avx2_sqrt_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized square root for f64
@@ -1026,7 +1026,7 @@ impl EnhancedSimdOps {
             Self::avx2_log1p_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized log1p for f64
@@ -1115,7 +1115,7 @@ impl EnhancedSimdOps {
             Self::avx2_expm1_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized expm1 for f64
@@ -1204,7 +1204,7 @@ impl EnhancedSimdOps {
             Self::avx2_cbrt_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized cube root for f64

@@ -190,7 +190,7 @@ where
         NumRs2Error::DeserializationError(format!("MessagePack deserialization error: {}", e))
     })?;
 
-    let array = Array::from_vec(msgpack_array.data).reshape(&msgpack_array.shape);
+    let array = Array::from_vec_shape(msgpack_array.data, &msgpack_array.shape)?;
 
     Ok(array)
 }
@@ -223,7 +223,7 @@ where
         NumRs2Error::DeserializationError(format!("MessagePack deserialization error: {}", e))
     })?;
 
-    let array = Array::from_vec(msgpack_array.data).reshape(&msgpack_array.shape);
+    let array = Array::from_vec_shape(msgpack_array.data, &msgpack_array.shape)?;
 
     Ok(array)
 }

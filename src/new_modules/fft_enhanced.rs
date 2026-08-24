@@ -406,7 +406,7 @@ impl FFTEnhanced {
         }
 
         // Reshape to (num_freqs, n) and return
-        Ok(Array::from_vec(st_result).reshape(&[num_freqs, n]))
+        Array::from_vec_shape(st_result, &[num_freqs, n])
     }
 
     /// Optimized FFT for real-valued inputs (Hermitian optimized FFT)

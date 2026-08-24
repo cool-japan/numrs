@@ -53,7 +53,7 @@ pub fn indices_grid<T: Clone + num_traits::Zero + num_traits::One + num_traits::
             })?);
         }
 
-        let index_array = Array::from_vec(index_data).reshape(&index_shape);
+        let index_array = Array::from_vec_shape(index_data, &index_shape)?;
         result.push(index_array);
     }
 
@@ -234,7 +234,7 @@ pub fn ravel_multi_index(
     if multi_index[0].ndim() == 1 {
         Ok(Array::from_vec(flat_indices))
     } else {
-        Ok(Array::from_vec(flat_indices).reshape(&shape))
+        Ok(Array::from_vec_shape(flat_indices, &shape)?)
     }
 }
 
@@ -313,7 +313,7 @@ pub fn unravel_index(indices: &Array<usize>, dims: &[usize]) -> Result<Vec<Array
             if shape.len() == 1 {
                 Array::from_vec(indices)
             } else {
-                Array::from_vec(indices).reshape(&shape)
+                Array::from_vec_shape(indices, &shape).unwrap_or_else(|e| panic!("{e}"))
             }
         })
         .collect();

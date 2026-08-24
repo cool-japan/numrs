@@ -33,7 +33,7 @@ impl PyArray {
                     PyValueError::new_err("Cannot convert NumPy array to contiguous slice")
                 })?
                 .to_vec();
-            let array = Array::from_vec(data_vec).reshape(&shape);
+            let array = Array::from_vec_shape(data_vec, &shape)?;
             return Ok(PyArray { inner: array });
         }
 
@@ -307,7 +307,7 @@ fn full(shape: Vec<usize>, fill_value: f64) -> PyArray {
     let size: usize = shape.iter().product();
     let data = vec![fill_value; size];
     PyArray {
-        inner: Array::from_vec(data).reshape(&shape),
+        inner: Array::from_vec_shape(data, &shape)?,
     }
 }
 

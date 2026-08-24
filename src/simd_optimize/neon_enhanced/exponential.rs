@@ -25,7 +25,7 @@ impl NeonEnhancedOps {
             Self::vectorized_exp_neon_f32(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON exponential implementation with polynomial approximation
@@ -102,7 +102,7 @@ impl NeonEnhancedOps {
             Self::vectorized_log_neon_f32(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON logarithm with polynomial approximation
@@ -190,7 +190,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].sqrt();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized exponential for f64 with polynomial approximation
@@ -261,7 +261,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].exp();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized natural logarithm for f64
@@ -324,7 +324,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].ln();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized power function for f64: x^y (scalar exponent)
@@ -341,7 +341,7 @@ impl NeonEnhancedOps {
         let data_exp = exp.to_vec();
         let len = data_base.len().min(data_exp.len());
         let result: Vec<f64> = (0..len).map(|i| data_base[i].powf(data_exp[i])).collect();
-        Array::from_vec(result).reshape(&base.shape())
+        Array::from_vec_shape(result, &base.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized cube root for f64
@@ -408,7 +408,7 @@ impl NeonEnhancedOps {
             result[i] = data_x[i].hypot(data_y[i]);
         }
 
-        Array::from_vec(result).reshape(&x.shape())
+        Array::from_vec_shape(result, &x.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 
@@ -447,7 +447,7 @@ impl NeonEnhancedOps {
         let data_exp = exp.to_vec();
         let len = data_base.len().min(data_exp.len());
         let result: Vec<f64> = (0..len).map(|i| data_base[i].powf(data_exp[i])).collect();
-        Array::from_vec(result).reshape(&base.shape())
+        Array::from_vec_shape(result, &base.shape())?
     }
 
     pub fn vectorized_cbrt_f64(input: &Array<f64>) -> Array<f64> {
@@ -479,6 +479,6 @@ impl NeonEnhancedOps {
         let data_y = y.to_vec();
         let len = data_x.len().min(data_y.len());
         let result: Vec<f64> = (0..len).map(|i| data_x[i].hypot(data_y[i])).collect();
-        Array::from_vec(result).reshape(&x.shape())
+        Array::from_vec_shape(result, &x.shape())?
     }
 }

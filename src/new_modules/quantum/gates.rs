@@ -47,7 +47,7 @@ where
         Complex::new(T::one(), T::zero()),
         Complex::new(T::zero(), T::zero()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// Pauli-Y gate
@@ -67,7 +67,7 @@ where
         Complex::new(T::zero(), T::one()),
         Complex::new(T::zero(), T::zero()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// Pauli-Z gate
@@ -87,7 +87,7 @@ where
         Complex::new(T::zero(), T::zero()),
         Complex::new(-T::one(), T::zero()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// Hadamard gate
@@ -110,7 +110,7 @@ where
         Complex::new(inv_sqrt2, T::zero()),
         Complex::new(-inv_sqrt2, T::zero()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// Phase gate (S gate)
@@ -130,7 +130,7 @@ where
         Complex::new(T::zero(), T::zero()),
         Complex::new(T::zero(), T::one()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// T gate (π/8 gate)
@@ -151,7 +151,7 @@ where
         Complex::new(T::zero(), T::zero()),
         Complex::new(phase.cos(), phase.sin()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// Rotation around X-axis
@@ -179,7 +179,7 @@ where
         Complex::new(T::zero(), -sin_val),
         Complex::new(cos_val, T::zero()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// Rotation around Y-axis
@@ -207,7 +207,7 @@ where
         Complex::new(sin_val, T::zero()),
         Complex::new(cos_val, T::zero()),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// Rotation around Z-axis
@@ -235,7 +235,7 @@ where
         Complex::new(T::zero(), T::zero()),
         Complex::new(cos_val, sin_val),
     ];
-    Ok(Array::from_vec(data).reshape(&[2, 2]))
+    Array::from_vec_shape(data, &[2, 2])
 }
 
 /// CNOT gate (Controlled-NOT)
@@ -261,7 +261,7 @@ where
     data[11] = Complex::new(T::one(), T::zero()); // |10⟩ -> |11⟩
     data[14] = Complex::new(T::one(), T::zero()); // |11⟩ -> |10⟩
 
-    Ok(Array::from_vec(data).reshape(&[4, 4]))
+    Array::from_vec_shape(data, &[4, 4])
 }
 
 /// SWAP gate
@@ -285,7 +285,7 @@ where
     data[9] = Complex::new(T::one(), T::zero()); // |10⟩ -> |01⟩
     data[15] = Complex::new(T::one(), T::zero()); // |11⟩ -> |11⟩
 
-    Ok(Array::from_vec(data).reshape(&[4, 4]))
+    Array::from_vec_shape(data, &[4, 4])
 }
 
 /// Controlled-Z gate
@@ -307,7 +307,7 @@ where
     data[10] = Complex::new(T::one(), T::zero());
     data[15] = Complex::new(-T::one(), T::zero());
 
-    Ok(Array::from_vec(data).reshape(&[4, 4]))
+    Array::from_vec_shape(data, &[4, 4])
 }
 
 /// Controlled-Y gate
@@ -329,7 +329,7 @@ where
     data[11] = Complex::new(T::zero(), -T::one());
     data[14] = Complex::new(T::zero(), T::one());
 
-    Ok(Array::from_vec(data).reshape(&[4, 4]))
+    Array::from_vec_shape(data, &[4, 4])
 }
 
 /// Toffoli gate (CCNOT, CCX)
@@ -353,7 +353,7 @@ where
     data[6 * 8 + 7] = Complex::new(T::one(), T::zero());
     data[7 * 8 + 6] = Complex::new(T::one(), T::zero());
 
-    Ok(Array::from_vec(data).reshape(&[8, 8]))
+    Array::from_vec_shape(data, &[8, 8])
 }
 
 /// Fredkin gate (CSWAP)
@@ -380,7 +380,7 @@ where
     // Identity for |111⟩
     data[7 * 8 + 7] = Complex::new(T::one(), T::zero());
 
-    Ok(Array::from_vec(data).reshape(&[8, 8]))
+    Array::from_vec_shape(data, &[8, 8])
 }
 
 /// Create a custom single-qubit gate from matrix elements
@@ -450,7 +450,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(data).reshape(&[4, 4]))
+    Array::from_vec_shape(data, &[4, 4])
 }
 
 /// Create a controlled-U gate for an arbitrary k-qubit unitary U with m control qubits.
@@ -518,7 +518,7 @@ where
         }
     }
 
-    let result = Array::from_vec(data).reshape(&[total_dim, total_dim]);
+    let result = Array::from_vec_shape(data, &[total_dim, total_dim])?;
 
     // Validate unitarity if runtime validation is enabled
     if super::unitarity::is_runtime_validation_enabled() {
@@ -548,7 +548,7 @@ where
         data[i * dim + i] = Complex::new(T::one(), T::zero());
     }
 
-    Ok(Array::from_vec(data).reshape(&[dim, dim]))
+    Array::from_vec_shape(data, &[dim, dim])
 }
 
 #[cfg(test)]

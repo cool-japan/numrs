@@ -288,7 +288,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
                 }
 
                 // Reshape to the correct output shape
-                Ok(Self::from_vec(result_data).reshape(&out_shape))
+                Ok(Self::from_vec_shape(result_data, &out_shape)?)
             }
         }
     }
@@ -406,7 +406,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             result_data.push(choice_slice[flat_idx].clone());
         }
 
-        Ok(Self::from_vec(result_data).reshape(&my_shape))
+        Self::from_vec_shape(result_data, &my_shape)
     }
 
     /// Select elements from an array using a boolean mask
@@ -560,7 +560,7 @@ impl<T: Clone + num_traits::Zero> Array<T> {
                 }
 
                 // Reshape to the correct output shape
-                Ok(Self::from_vec(result_data).reshape(&out_shape))
+                Ok(Self::from_vec_shape(result_data, &out_shape)?)
             }
         }
     }

@@ -108,7 +108,7 @@ impl Image {
                 width * height
             )));
         }
-        let array = Array::from_vec(data.to_vec()).reshape(&[height, width]);
+        let array = Array::from_vec_shape(data.to_vec(), &[height, width])?;
         Ok(Self {
             data: array,
             width,
@@ -136,7 +136,7 @@ impl Image {
                 width * height * 3
             )));
         }
-        let array = Array::from_vec(data.to_vec()).reshape(&[height, width, 3]);
+        let array = Array::from_vec_shape(data.to_vec(), &[height, width, 3])?;
         Ok(Self {
             data: array,
             width,

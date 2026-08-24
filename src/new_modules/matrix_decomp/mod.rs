@@ -131,7 +131,7 @@ where
                 .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
         );
     }
-    let u_converted = Array::from_vec(u_vec).reshape(&[u_f64.nrows(), u_f64.ncols()]);
+    let u_converted = Array::from_vec_shape(u_vec, &[u_f64.nrows(), u_f64.ncols()])?;
 
     // Convert singular values from f64 to T
     let s_f64 = svd_result.s;
@@ -153,7 +153,7 @@ where
                 .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
         );
     }
-    let vt_converted = Array::from_vec(vt_vec).reshape(&[vt_f64.nrows(), vt_f64.ncols()]);
+    let vt_converted = Array::from_vec_shape(vt_vec, &[vt_f64.nrows(), vt_f64.ncols()])?;
 
     // Rescale singular values if we scaled the matrix
     if scaling_factor != T::one() {
@@ -208,7 +208,8 @@ where
         + std::ops::AddAssign
         + std::ops::SubAssign
         + std::ops::MulAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     // Check if the matrix is 2D
     let shape = a.shape();
@@ -429,7 +430,8 @@ where
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     /// Enhanced SVD implementation using OxiBLAS
     pub fn svd_compute(&self) -> Result<SvdResult<T>> {

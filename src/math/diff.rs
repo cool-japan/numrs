@@ -177,7 +177,7 @@ where
             new_data.push(val2 - val1);
         }
 
-        result = Array::from_vec(new_data).reshape(&new_shape);
+        result = Array::from_vec_shape(new_data, &new_shape)?;
     }
 
     Ok(result)
@@ -372,7 +372,7 @@ where
         result_data[out_idx] = sum;
     }
 
-    Ok(Array::from_vec(result_data).reshape(&out_shape))
+    Array::from_vec_shape(result_data, &out_shape)
 }
 
 #[cfg(test)]

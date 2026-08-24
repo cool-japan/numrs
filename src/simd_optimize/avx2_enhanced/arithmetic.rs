@@ -31,7 +31,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_add_arrays_f64(&a_data[..len], &b_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized element-wise addition
@@ -89,7 +89,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_sub_arrays_f64(&a_data[..len], &b_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized element-wise subtraction
@@ -147,7 +147,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_mul_arrays_f64(&a_data[..len], &b_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized element-wise multiplication
@@ -205,7 +205,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_div_arrays_f64(&a_data[..len], &b_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized element-wise division
@@ -268,7 +268,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_fma_f64(&a_data[..len], &b_data[..len], &c_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized fused multiply-add
@@ -334,7 +334,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_scalar_mul_f64(&a_data, scalar, &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized scalar multiplication
@@ -389,7 +389,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_square_f64(&data, &mut result);
         }
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized square for f64
@@ -439,7 +439,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_reciprocal_f64(&data, &mut result);
         }
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized reciprocal for f64
@@ -497,7 +497,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_negative_f64(&data, &mut result);
         }
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized negation for f64

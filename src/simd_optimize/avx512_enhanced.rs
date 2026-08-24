@@ -72,7 +72,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        *c = Array::from_vec(c_data).reshape(&[m, n]);
+        *c = Array::from_vec_shape(c_data, &[m, n])?;
         Ok(())
     }
 
@@ -166,7 +166,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&a.shape()))
+        Ok(Array::from_vec_shape(result, &a.shape())?)
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -304,7 +304,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&[output_len]))
+        Ok(Array::from_vec_shape(result, &[output_len])?)
     }
 
     #[cfg(target_arch = "x86_64")]

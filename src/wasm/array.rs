@@ -93,7 +93,7 @@ impl WasmArray {
         }
 
         Ok(WasmArray {
-            inner: Array::from_vec(data.to_vec()).reshape(shape),
+            inner: Array::from_vec_shape(data.to_vec(), shape)?,
         })
     }
 

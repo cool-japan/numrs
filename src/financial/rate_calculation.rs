@@ -191,7 +191,7 @@ where
         result_vec.push(rate_result);
     }
 
-    Ok(Array::from_vec(result_vec).reshape(&nper.shape()))
+    Array::from_vec_shape(result_vec, &nper.shape())
 }
 
 #[cfg(test)]

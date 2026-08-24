@@ -206,7 +206,7 @@ fn gaussian_kernel_2d(size: usize, sigma: f64) -> Result<Array<f64>, NumRs2Error
         *v /= total;
     }
 
-    Ok(Array::from_vec(data).reshape(&[size, size]))
+    Array::from_vec_shape(data, &[size, size])
 }
 
 /// Applies Gaussian blur to a grayscale image.
@@ -249,7 +249,7 @@ pub fn gaussian_blur(img: &Image, kernel_size: usize, sigma: f64) -> Result<Imag
 /// A new image containing the horizontal gradient
 pub fn sobel_x(img: &Image) -> Result<Image, NumRs2Error> {
     let kernel_data = vec![-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
-    let kernel = Array::from_vec(kernel_data).reshape(&[3, 3]);
+    let kernel = Array::from_vec_shape(kernel_data, &[3, 3])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 
@@ -272,7 +272,7 @@ pub fn sobel_x(img: &Image) -> Result<Image, NumRs2Error> {
 /// A new image containing the vertical gradient
 pub fn sobel_y(img: &Image) -> Result<Image, NumRs2Error> {
     let kernel_data = vec![-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
-    let kernel = Array::from_vec(kernel_data).reshape(&[3, 3]);
+    let kernel = Array::from_vec_shape(kernel_data, &[3, 3])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 
@@ -296,7 +296,7 @@ pub fn sobel_y(img: &Image) -> Result<Image, NumRs2Error> {
 /// A new image containing the Laplacian response
 pub fn laplacian_filter(img: &Image) -> Result<Image, NumRs2Error> {
     let kernel_data = vec![0.0, 1.0, 0.0, 1.0, -4.0, 1.0, 0.0, 1.0, 0.0];
-    let kernel = Array::from_vec(kernel_data).reshape(&[3, 3]);
+    let kernel = Array::from_vec_shape(kernel_data, &[3, 3])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 
@@ -321,7 +321,7 @@ pub fn box_blur(img: &Image, kernel_size: usize) -> Result<Image, NumRs2Error> {
 
     let n = (kernel_size * kernel_size) as f64;
     let data = vec![1.0 / n; kernel_size * kernel_size];
-    let kernel = Array::from_vec(data).reshape(&[kernel_size, kernel_size]);
+    let kernel = Array::from_vec_shape(data, &[kernel_size, kernel_size])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 

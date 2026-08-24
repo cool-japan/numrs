@@ -456,7 +456,7 @@ pub mod array_ops {
 
         let string_vec = strings?;
         let shape = dts.shape();
-        Ok(Array::from_vec(string_vec).reshape(&shape))
+        Array::from_vec_shape(string_vec, &shape)
     }
 
     /// Check if datetime64 values are business days
@@ -466,7 +466,7 @@ pub mod array_ops {
 
         let result_vec = results?;
         let shape = dts.shape();
-        Ok(Array::from_vec(result_vec).reshape(&shape))
+        Array::from_vec_shape(result_vec, &shape)
     }
 
     /// Apply business day offset to a datetime64 array, element-wise.
@@ -499,7 +499,7 @@ pub mod array_ops {
 
         let result_vec = results?;
         let shape = dts.shape();
-        Ok(Array::from_vec(result_vec).reshape(&shape))
+        Array::from_vec_shape(result_vec, &shape)
     }
 
     /// Count business days between corresponding elements of two datetime64
@@ -532,7 +532,7 @@ pub mod array_ops {
 
         let result_vec = results?;
         let shape = begin_dts.shape();
-        Ok(Array::from_vec(result_vec).reshape(&shape))
+        Array::from_vec_shape(result_vec, &shape)
     }
 }
 

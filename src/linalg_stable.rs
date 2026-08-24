@@ -416,7 +416,7 @@ impl StableDecompositions {
         for row in vt_cols {
             vt_data.extend(row);
         }
-        let vt = Array::from_vec(vt_data).reshape(&[n, n]);
+        let vt = Array::from_vec_shape(vt_data, &[n, n])?;
 
         // Compute U = A * V * S^(-1)
         let mut u_data = Vec::with_capacity(m * min_mn);
@@ -433,7 +433,7 @@ impl StableDecompositions {
                 }
             }
         }
-        let u = Array::from_vec(u_data).reshape(&[m, min_mn]);
+        let u = Array::from_vec_shape(u_data, &[m, min_mn])?;
 
         // Estimate condition number and rank
         let s_max = s_sorted[0];
@@ -764,7 +764,7 @@ impl StableDecompositions {
 
         if n == 1 {
             let eigenvalue = a.get(&[0, 0])?;
-            let eigenvector = Array::from_vec(vec![T::one()]).reshape(&[1, 1]);
+            let eigenvector = Array::from_vec_shape(vec![T::one()], &[1, 1])?;
             return Ok((vec![eigenvalue], eigenvector));
         }
 

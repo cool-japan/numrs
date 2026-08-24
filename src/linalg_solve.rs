@@ -38,7 +38,8 @@ pub fn solve<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     b: &Array<T>,
@@ -74,7 +75,8 @@ pub fn inv<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -123,7 +125,8 @@ pub fn pinv<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     rcond: Option<T>,

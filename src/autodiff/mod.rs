@@ -405,7 +405,7 @@ where
     }
 
     // Reshape to m×n matrix (each column is ∂f/∂xᵢ)
-    Ok(Array::from_vec(jac).reshape(&[m, n]))
+    Array::from_vec_shape(jac, &[m, n])
 }
 
 // ============================================================================
@@ -738,7 +738,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(hess).reshape(&[n, n]))
+    Array::from_vec_shape(hess, &[n, n])
 }
 
 /// Compute directional derivative in direction v: ∇_v f = ∇f · v

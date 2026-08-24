@@ -42,7 +42,7 @@ pub(crate) fn from_nd_array<T: Clone + std::fmt::Debug + NumCast>(
     shape: &[usize],
 ) -> Array<T> {
     let data: Vec<T> = nd.into_iter().collect();
-    Array::from_vec(data).reshape(shape)
+    Array::from_vec_shape(data, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 // Basic element-wise math operations

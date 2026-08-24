@@ -447,7 +447,7 @@ where
             result[idx] = val;
         }
 
-        Ok(Array::from_vec(result).reshape(&[mode_size, other_size]))
+        Ok(Array::from_vec_shape(result, &[mode_size, other_size])?)
     } else {
         // Sequential unfolding for small tensors
         let mut result = vec![T::zero(); mode_size * other_size];
@@ -465,7 +465,7 @@ where
             result[row * other_size + col] = data[idx];
         }
 
-        Ok(Array::from_vec(result).reshape(&[mode_size, other_size]))
+        Ok(Array::from_vec_shape(result, &[mode_size, other_size])?)
     }
 }
 
@@ -551,7 +551,7 @@ where
             result[idx] = val;
         }
 
-        Ok(Array::from_vec(result).reshape(shape))
+        Ok(Array::from_vec_shape(result, shape)?)
     } else {
         // Sequential folding for small matrices
         let mut result = vec![T::zero(); total_size];
@@ -574,7 +574,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(result).reshape(shape))
+        Ok(Array::from_vec_shape(result, shape)?)
     }
 }
 
@@ -681,7 +681,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[n, m]))
+    Array::from_vec_shape(result, &[n, m])
 }
 
 /// Matrix multiplication
@@ -722,7 +722,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[m, n]))
+    Array::from_vec_shape(result, &[m, n])
 }
 
 /// Initialize factor matrix with random values
@@ -743,7 +743,7 @@ where
             T::from(rand).unwrap_or(T::one() / T::from(2.0).expect("2.0 is a valid f64 constant"));
     }
 
-    Array::from_vec(data).reshape(&[rows, cols])
+    Array::from_vec_shape(data, &[rows, cols]).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Initialize factor matrix with non-negative random values
@@ -763,7 +763,7 @@ where
             .unwrap_or(T::one() / T::from(2.0).expect("2.0 is a valid f64 constant"));
     }
 
-    Array::from_vec(data).reshape(&[rows, cols])
+    Array::from_vec_shape(data, &[rows, cols]).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Random matrix for initialization
@@ -826,7 +826,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[m, n]))
+    Array::from_vec_shape(result, &[m, n])
 }
 
 /// Simple QR decomposition using Gram-Schmidt
@@ -899,7 +899,7 @@ where
     let data = factor.to_vec();
     let projected: Vec<T> = data.iter().map(|&x| x.max(T::zero())).collect();
 
-    Ok(Array::from_vec(projected).reshape(&factor.shape()))
+    Array::from_vec_shape(projected, &factor.shape())
 }
 
 /// Khatri-Rao product (column-wise Kronecker product)
@@ -937,7 +937,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[m * n, r]))
+    Array::from_vec_shape(result, &[m * n, r])
 }
 
 /// Khatri-Rao product of all factors except one
@@ -987,7 +987,7 @@ where
         data[i * n + i] = data[i * n + i] + lambda;
     }
 
-    Ok(Array::from_vec(data).reshape(&[n, n]))
+    Array::from_vec_shape(data, &[n, n])
 }
 
 /// Simple matrix inversion (for small matrices)
@@ -1009,7 +1009,7 @@ where
         if data[0].abs() < T::epsilon() {
             return Err(NumRs2Error::InvalidOperation("Singular matrix".to_string()));
         }
-        return Ok(Array::from_vec(vec![T::one() / data[0]]).reshape(&[1, 1]));
+        return Array::from_vec_shape(vec![T::one() / data[0]], &[1, 1]);
     }
 
     if n == 2 {
@@ -1018,13 +1018,15 @@ where
             return Err(NumRs2Error::InvalidOperation("Singular matrix".to_string()));
         }
         let inv_det = T::one() / det;
-        return Ok(Array::from_vec(vec![
-            data[3] * inv_det,
-            -data[1] * inv_det,
-            -data[2] * inv_det,
-            data[0] * inv_det,
-        ])
-        .reshape(&[2, 2]));
+        return Array::from_vec_shape(
+            vec![
+                data[3] * inv_det,
+                -data[1] * inv_det,
+                -data[2] * inv_det,
+                data[0] * inv_det,
+            ],
+            &[2, 2],
+        );
     }
 
     // For larger matrices, use Gauss-Jordan elimination
@@ -1098,7 +1100,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[n, n]))
+    Array::from_vec_shape(result, &[n, n])
 }
 
 /// Normalize columns of a matrix
@@ -1130,7 +1132,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(data).reshape(&[m, n]))
+    Array::from_vec_shape(data, &[m, n])
 }
 
 /// Extract weights (column norms) from factor matrices
@@ -1216,7 +1218,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&shape))
+    Array::from_vec_shape(result, &shape)
 }
 
 /// Compute Frobenius norm error between two tensors

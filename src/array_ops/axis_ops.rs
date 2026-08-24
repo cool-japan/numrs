@@ -113,7 +113,7 @@ pub fn rollaxis<T: Clone + Zero>(array: &Array<T>, axis: usize, start: usize) ->
     }
 
     // Create the result array
-    let result = Array::from_vec(result_data).reshape(&target_shape);
+    let result = Array::from_vec_shape(result_data, &target_shape)?;
     Ok(result)
 }
 

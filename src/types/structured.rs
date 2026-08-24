@@ -255,7 +255,7 @@ impl StructuredArray {
             }
 
             // Create a NumRS Array
-            let arr = Array::from_vec(field_data).reshape(&self.shape);
+            let arr = Array::from_vec_shape(field_data, &self.shape)?;
             Ok(arr)
         } else {
             Err(NumRs2Error::ValueError(
@@ -429,7 +429,8 @@ impl<T: Clone + Default + 'static> RecordArrayT<T> {
         let size = shape.iter().product::<usize>();
         let mut field_cache = HashMap::new();
         for field in &fields {
-            let field_array = Array::from_vec(vec![T::default(); size]).reshape(shape);
+            let field_array = Array::from_vec_shape(vec![T::default(); size], shape)
+                .unwrap_or_else(|e| panic!("{e}"));
             field_cache.insert(field.name.clone(), field_array);
         }
 

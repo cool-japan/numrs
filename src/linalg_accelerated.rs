@@ -86,7 +86,7 @@ where
     let nrows = arr.nrows();
     let ncols = arr.ncols();
     let data: Vec<T> = arr.into_iter().collect();
-    Ok(Array::from_vec(data).reshape(&[nrows, ncols]))
+    Array::from_vec_shape(data, &[nrows, ncols])
 }
 
 /// Convert ndarray Array1 back to NumRS2 Array
@@ -432,7 +432,7 @@ where
 
     Ok((
         Array::from_vec(eigenvalues_vec),
-        Array::from_vec(eigenvectors_data).reshape(&[ev_shape[0], ev_shape[1]]),
+        Array::from_vec_shape(eigenvectors_data, &[ev_shape[0], ev_shape[1]])?,
     ))
 }
 

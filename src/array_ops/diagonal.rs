@@ -81,7 +81,7 @@ pub fn diag<T: Clone + Zero>(array: &Array<T>, k: impl Into<Option<isize>>) -> R
                 }
             }
 
-            Ok(Array::from_vec(result_vec).reshape(&[diag_size, diag_size]))
+            Ok(Array::from_vec_shape(result_vec, &[diag_size, diag_size])?)
         }
         2 => {
             // Extract the k-th diagonal from a 2D array
@@ -340,7 +340,7 @@ pub fn diagonal<T: Clone + num_traits::Zero>(
         increment_indices(&mut indices, &shape, axis1, axis2);
     }
 
-    Ok(Array::from_vec(result_vec).reshape(&result_shape))
+    Array::from_vec_shape(result_vec, &result_shape)
 }
 
 /// Fill the main diagonal of the given array of any dimensionality.

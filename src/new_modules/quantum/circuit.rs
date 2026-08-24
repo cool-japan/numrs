@@ -556,7 +556,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(data).reshape(&[big_dim, big_dim]))
+    Array::from_vec_shape(data, &[big_dim, big_dim])
 }
 
 /// Multiply two square gate matrices of the same size: result = a * b
@@ -610,7 +610,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[n, n]))
+    Array::from_vec_shape(result, &[n, n])
 }
 
 #[cfg(test)]

@@ -356,7 +356,7 @@ impl SpectralAnalyzer {
         let freq_axis = FFT::rfftfreq(fft_size, T::one())?;
 
         Ok(STFTResult {
-            stft: Array::from_vec(stft_data).reshape(&[time_axis.len(), n_freqs]),
+            stft: Array::from_vec_shape(stft_data, &[time_axis.len(), n_freqs])?,
             time_axis: Array::from_vec(time_axis),
             freq_axis,
         })

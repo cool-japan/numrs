@@ -44,7 +44,7 @@ pub fn bicgstab<T>(
     max_iter: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let shape = a.shape();
     if shape.len() != 2 || shape[0] != shape[1] {

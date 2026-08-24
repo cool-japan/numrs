@@ -509,14 +509,17 @@ pub fn row_stack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// let b = Array::from_vec(vec![4, 5, 6]);
 /// let stacked = column_stack(&[&a, &b]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![3, 2]);
-/// assert_eq!(stacked.to_vec(), vec![1, 2, 3, 4, 5, 6]);
+/// // Row-major (C-order) flattening of the (3,2) result: each row is [a_i, b_i],
+/// // matching NumPy: np.column_stack([[1,2,3],[4,5,6]]).flatten() == [1,4,2,5,3,6]
+/// assert_eq!(stacked.to_vec(), vec![1, 4, 2, 5, 3, 6]);
 ///
 /// // 2-D arrays are stacked horizontally
 /// let c = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
 /// let d = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
 /// let stacked = column_stack(&[&c, &d]).expect("operation should succeed");
 /// assert_eq!(stacked.shape(), vec![2, 4]);
-/// assert_eq!(stacked.to_vec(), vec![1, 3, 2, 4, 5, 7, 6, 8]);
+/// // NumPy: np.column_stack([[[1,2],[3,4]], [[5,6],[7,8]]]).flatten() == [1,2,5,6,3,4,7,8]
+/// assert_eq!(stacked.to_vec(), vec![1, 2, 5, 6, 3, 4, 7, 8]);
 /// ```
 pub fn column_stack<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
     if arrays.is_empty() {

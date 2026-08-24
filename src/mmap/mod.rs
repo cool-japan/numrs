@@ -457,7 +457,7 @@ impl<T: Copy> MmapArray<T> {
         }
 
         // Create a new Array from the data
-        let array = Array::from_vec(data).reshape(&self.shape);
+        let array = Array::from_vec_shape(data, &self.shape)?;
         Ok(array)
     }
 

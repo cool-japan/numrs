@@ -162,7 +162,7 @@ pub fn compute_histogram(arr: &WasmArray, bins: usize) -> Result<HistogramResult
 
     let arr_vec = arr.to_vec();
     let arr_shape = arr.shape();
-    let inner = Array::from_vec(arr_vec).reshape(&arr_shape);
+    let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
 
     histogram(&inner, bins, None, None)
         .map(|(counts, bin_edges)| HistogramResult {
@@ -186,7 +186,7 @@ impl HistogramResult {
     pub fn counts(&self) -> WasmArray {
         let counts_vec = self.counts.to_vec();
         let counts_shape = self.counts.shape();
-        WasmArray::from_array(Array::from_vec(counts_vec).reshape(&counts_shape))
+        WasmArray::from_array(Array::from_vec_shape(counts_vec, &counts_shape)?)
     }
 
     /// Get the bin edges
@@ -194,7 +194,7 @@ impl HistogramResult {
     pub fn bin_edges(&self) -> WasmArray {
         let edges_vec = self.bin_edges.to_vec();
         let edges_shape = self.bin_edges.shape();
-        WasmArray::from_array(Array::from_vec(edges_vec).reshape(&edges_shape))
+        WasmArray::from_array(Array::from_vec_shape(edges_vec, &edges_shape)?)
     }
 }
 
@@ -217,12 +217,12 @@ impl HistogramResult {
 pub fn correlation(x: &WasmArray, y: Option<WasmArray>) -> Result<WasmArray, JsValue> {
     let x_vec = x.to_vec();
     let x_shape = x.shape();
-    let x_inner = Array::from_vec(x_vec).reshape(&x_shape);
+    let x_inner = Array::from_vec_shape(x_vec, &x_shape)?;
 
     let y_inner = y.as_ref().map(|y_arr| {
         let y_vec = y_arr.to_vec();
         let y_shape = y_arr.shape();
-        Array::from_vec(y_vec).reshape(&y_shape)
+        Array::from_vec_shape(y_vec, &y_shape)?
     });
 
     corrcoef(&x_inner, y_inner.as_ref(), None)
@@ -249,12 +249,12 @@ pub fn correlation(x: &WasmArray, y: Option<WasmArray>) -> Result<WasmArray, JsV
 pub fn covariance(x: &WasmArray, y: Option<WasmArray>) -> Result<WasmArray, JsValue> {
     let x_vec = x.to_vec();
     let x_shape = x.shape();
-    let x_inner = Array::from_vec(x_vec).reshape(&x_shape);
+    let x_inner = Array::from_vec_shape(x_vec, &x_shape)?;
 
     let y_inner = y.as_ref().map(|y_arr| {
         let y_vec = y_arr.to_vec();
         let y_shape = y_arr.shape();
-        Array::from_vec(y_vec).reshape(&y_shape)
+        Array::from_vec_shape(y_vec, &y_shape)?
     });
 
     cov(&x_inner, y_inner.as_ref(), None, None, None)
@@ -305,7 +305,7 @@ impl WasmArray {
     pub(crate) fn percentile(&self, q: f64) -> f64 {
         let arr_vec = self.to_vec();
         let arr_shape = self.shape();
-        let inner = Array::from_vec(arr_vec).reshape(&arr_shape);
+        let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
 
         inner.percentile(q)
     }

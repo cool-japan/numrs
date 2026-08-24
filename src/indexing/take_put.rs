@@ -501,7 +501,7 @@ pub fn take<T: Clone + ToString + num_traits::Zero>(
             }
 
             // Reshape to the correct output shape
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -598,7 +598,7 @@ pub fn take_along_axis<T: Clone + ToString>(
         result_data.push(value);
     }
 
-    Ok(Array::from_vec(result_data).reshape(&result_shape))
+    Array::from_vec_shape(result_data, &result_shape)
 }
 
 /// Put values into array by matching 1D indices along axis

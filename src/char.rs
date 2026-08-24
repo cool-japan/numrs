@@ -90,7 +90,7 @@ pub fn decode(arr: &StringArray, encoding: &str, errors: &str) -> Result<StringA
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Encode string array elements to specified encoding
@@ -128,7 +128,7 @@ pub fn encode(arr: &StringArray, encoding: &str, errors: &str) -> Result<StringA
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Expand tabs in string array elements
@@ -160,7 +160,7 @@ pub fn expandtabs(arr: &StringArray, tabsize: Option<usize>) -> Result<StringArr
         result.push(StringElement::unicode(expanded));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Return string array element lengths
@@ -176,7 +176,7 @@ pub fn str_len(arr: &StringArray) -> Result<Array<i32>> {
         result.push(length);
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Translate characters in string array elements
@@ -203,7 +203,7 @@ pub fn translate(
         result.push(StringElement::unicode(translated));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Pad string array elements with zeros
@@ -228,7 +228,7 @@ pub fn zfill(arr: &StringArray, width: usize) -> Result<StringArray> {
         result.push(StringElement::unicode(filled));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Partition string array elements around separator
@@ -393,7 +393,7 @@ pub fn swapcase(arr: &StringArray) -> Result<StringArray> {
         result.push(StringElement::unicode(swapped));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Create array of strings with common prefix
@@ -491,7 +491,7 @@ pub mod regex_ops {
             result.push(StringElement::unicode(replaced));
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Test if pattern matches string array elements
@@ -508,7 +508,7 @@ pub mod regex_ops {
             result.push(matches);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Split string array elements using regex pattern

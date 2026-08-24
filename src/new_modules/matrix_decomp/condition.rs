@@ -148,7 +148,8 @@ where
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -406,7 +407,7 @@ where
 /// ```
 pub fn lstsq<T>(a: &Array<T>, b: &Array<T>, rcond: Option<T>) -> LstsqResult<T>
 where
-    T: Float + Clone + Debug,
+    T: Float + Clone + Debug + 'static,
 {
     // Check input dimensions
     let a_shape = a.shape();

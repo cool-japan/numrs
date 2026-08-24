@@ -447,7 +447,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(distances).reshape(&[n_samples_a, n_samples_b]))
+    Array::from_vec_shape(distances, &[n_samples_a, n_samples_b])
 }
 
 // ============================================================================

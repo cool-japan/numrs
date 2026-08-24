@@ -40,7 +40,8 @@ pub fn det<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<T> {
@@ -85,7 +86,8 @@ pub fn matrix_power<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     n: i32,

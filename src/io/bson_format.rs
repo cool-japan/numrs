@@ -316,7 +316,7 @@ where
         ));
     };
 
-    let array = Array::from_vec(data).reshape(&shape);
+    let array = Array::from_vec_shape(data, &shape)?;
 
     Ok(array)
 }

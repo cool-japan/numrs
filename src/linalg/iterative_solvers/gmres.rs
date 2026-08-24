@@ -48,7 +48,7 @@ pub fn gmres<T>(
     restart: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let shape = a.shape();
     if shape.len() != 2 || shape[0] != shape[1] {
@@ -300,7 +300,7 @@ pub fn gmres_precond<T, P>(
     restart: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
     P: Preconditioner<T>,
 {
     let shape = a.shape();
@@ -529,7 +529,7 @@ pub fn gmres_jacobi<T>(
     restart: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let precond = JacobiPreconditioner::new(a)?;
     gmres_precond(a, b, &precond, x0, tol, max_iter, restart)
@@ -583,7 +583,7 @@ pub fn fgmres<T, F>(
     restart: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
     F: Fn(&Array<T>) -> Result<Array<T>>,
 {
     let shape = a.shape();
@@ -813,7 +813,7 @@ pub fn fgmres_jacobi<T>(
     restart: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let precond = JacobiPreconditioner::new(a)?;
     fgmres(a, b, |v| precond.apply(v), x0, tol, max_iter, restart)

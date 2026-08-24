@@ -35,7 +35,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].floor();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized ceiling for f64
@@ -58,7 +58,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].ceil();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized round for f64
@@ -81,7 +81,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].round();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 

@@ -343,6 +343,26 @@ name = "allocation_hotpath_benchmark"
 path = "bench/allocation_hotpath_benchmark.rs"
 harness = false
 
+# ===================================================================
+# kernels/ dispatch foundation benchmarks (Wave 2 Phase 0) -- stubs for
+# now; the lanes migrating hot paths onto src/kernels/ fill these in.
+# ===================================================================
+
+[[bench]]
+name = "matmul_dispatch_benchmark"
+path = "bench/matmul_dispatch_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "elementwise_dispatch_benchmark"
+path = "bench/elementwise_dispatch_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "reduction_dispatch_benchmark"
+path = "bench/reduction_dispatch_benchmark.rs"
+harness = false
+
 [[example]]
 name = "visualization"
 required-features = ["visualization"]

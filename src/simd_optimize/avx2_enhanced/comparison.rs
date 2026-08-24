@@ -31,7 +31,7 @@ impl EnhancedSimdOps {
             Self::avx2_abs_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized absolute value for f64
@@ -70,7 +70,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_abs_f32(&data, &mut result);
         }
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized abs for f32
@@ -107,7 +107,7 @@ impl EnhancedSimdOps {
             Self::avx2_sign_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized sign function for f64
@@ -168,7 +168,7 @@ impl EnhancedSimdOps {
             Self::avx2_clip_f64(&data, &mut result, min_val, max_val);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized clip function for f64
@@ -209,7 +209,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_clip_f32(&data, min_val, max_val, &mut result);
         }
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized clip for f32
@@ -247,7 +247,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_copysign_f64(&x_data[..len], &y_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&x.shape())
+        Array::from_vec_shape(result, &x.shape())?
     }
 
     /// AVX2 optimized copysign for f64
@@ -293,7 +293,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_maximum_f64(&a_data[..len], &b_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized element-wise maximum
@@ -324,7 +324,7 @@ impl EnhancedSimdOps {
         unsafe {
             Self::avx2_minimum_f64(&a_data[..len], &b_data[..len], &mut result);
         }
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape())?
     }
 
     /// AVX2 optimized element-wise minimum
@@ -359,7 +359,7 @@ impl EnhancedSimdOps {
             Self::avx2_floor_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized floor for f64
@@ -398,7 +398,7 @@ impl EnhancedSimdOps {
             Self::avx2_ceil_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized ceil for f64
@@ -437,7 +437,7 @@ impl EnhancedSimdOps {
             Self::avx2_round_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized round for f64
@@ -476,7 +476,7 @@ impl EnhancedSimdOps {
             Self::avx2_trunc_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized trunc for f64
@@ -519,7 +519,7 @@ impl EnhancedSimdOps {
             Self::avx2_degrees_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized radians to degrees conversion
@@ -561,7 +561,7 @@ impl EnhancedSimdOps {
             Self::avx2_radians_f64(&data, &mut result);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())?
     }
 
     /// AVX2 optimized degrees to radians conversion
@@ -609,7 +609,7 @@ impl EnhancedSimdOps {
             Self::avx2_hypot_f64(&x_data[..len], &y_data[..len], &mut result);
         }
 
-        Array::from_vec(result).reshape(&x.shape())
+        Array::from_vec_shape(result, &x.shape())?
     }
 
     /// AVX2 optimized hypot for f64

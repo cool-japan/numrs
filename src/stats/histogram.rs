@@ -791,7 +791,7 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
     };
 
     Ok((
-        Array::from_vec(flat_hist).reshape(&[x_bins, y_bins]),
+        Array::from_vec_shape(flat_hist, &[x_bins, y_bins])?,
         Array::from_vec(x_edges),
         Array::from_vec(y_edges),
     ))
@@ -1024,7 +1024,7 @@ pub fn histogram_dd<T: Float + Clone + NumCast + std::fmt::Display>(
     }
 
     // Create the histogram array with proper shape
-    let hist = Array::from_vec(hist_data).reshape(&hist_shape);
+    let hist = Array::from_vec_shape(hist_data, &hist_shape)?;
 
     Ok((hist, edges))
 }

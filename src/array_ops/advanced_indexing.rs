@@ -40,20 +40,23 @@ pub fn compress<T: Clone + Zero>(
 ) -> Result<Array<T>> {
     match axis {
         None => {
-            // Work on flattened array
-            let flat = array.to_vec();
-            let cond_flat = condition.to_vec();
-
-            if flat.len() != cond_flat.len() {
+            // Work on flattened array. `.array().iter().cloned()` walks
+            // each operand's logical order directly, so the zip below
+            // needs no full-size intermediate `flat`/`cond_flat` `Vec`s
+            // -- only the (unavoidable, since the output is owned)
+            // per-selected-element clone that `filter_map` performs.
+            if array.size() != condition.size() {
                 return Err(NumRs2Error::ShapeMismatch {
-                    expected: vec![flat.len()],
-                    actual: vec![cond_flat.len()],
+                    expected: vec![array.size()],
+                    actual: vec![condition.size()],
                 });
             }
 
-            let compressed: Vec<T> = flat
-                .into_iter()
-                .zip(cond_flat)
+            let compressed: Vec<T> = array
+                .array()
+                .iter()
+                .cloned()
+                .zip(condition.array().iter().copied())
                 .filter_map(|(val, cond)| if cond { Some(val) } else { None })
                 .collect();
 
@@ -69,17 +72,18 @@ pub fn compress<T: Clone + Zero>(
                 )));
             }
 
-            let cond_vec = condition.to_vec();
-            if cond_vec.len() != shape[ax] {
+            if condition.size() != shape[ax] {
                 return Err(NumRs2Error::ShapeMismatch {
                     expected: vec![shape[ax]],
-                    actual: vec![cond_vec.len()],
+                    actual: vec![condition.size()],
                 });
             }
 
             // Determine which indices to keep
-            let indices: Vec<usize> = cond_vec
-                .into_iter()
+            let indices: Vec<usize> = condition
+                .array()
+                .iter()
+                .copied()
                 .enumerate()
                 .filter_map(|(i, cond)| if cond { Some(i) } else { None })
                 .collect();
@@ -119,7 +123,7 @@ pub fn compress<T: Clone + Zero>(
                 }
             }
 
-            Ok(Array::from_vec(result_data).reshape(&new_shape))
+            Ok(Array::from_vec_shape(result_data, &new_shape)?)
         }
     }
 }
@@ -153,12 +157,11 @@ pub fn extract<T: Clone>(array: &Array<T>, condition: &Array<bool>) -> Result<Ar
         });
     }
 
-    let data = array.to_vec();
-    let cond_data = condition.to_vec();
-
-    let extracted: Vec<T> = data
-        .into_iter()
-        .zip(cond_data)
+    let extracted: Vec<T> = array
+        .array()
+        .iter()
+        .cloned()
+        .zip(condition.array().iter().copied())
         .filter_map(|(val, cond)| if cond { Some(val) } else { None })
         .collect();
 
@@ -199,6 +202,24 @@ pub fn place<T: Clone>(array: &mut Array<T>, mask: &Array<bool>, values: &[T]) -
         ));
     }
 
+    // Deliberately still `mask.to_vec()`, not `operand(mask)`: this site
+    // was converted to a hoisted `operand` borrow earlier in this sweep
+    // (removing the copy `mask.array().iter()` re-walked in full for both
+    // the count below and the write loop), but measured *slower* than
+    // this `to_vec()` original in `probe_place_perf_vs_naive_to_vec`
+    // below -- 0.80x at full release, 0.69x at `[profile.test]`'s
+    // `opt-level = 2` -- once that probe's "naive" comparison was fixed
+    // to be equally generic (`T: Clone`) rather than hand-specialized to
+    // `f64`, which is the fair comparison against this actual (generic)
+    // function. Root cause not fully pinned down (plausibly the mutable
+    // write into `array_data` below losing some alias-analysis/
+    // vectorization opportunity against a slice borrowed from a *live*
+    // `mask`, vs. one LLVM can prove is a fresh, disjoint allocation), but
+    // the measurement itself is reproducible across both optimization
+    // levels and is what this revert is based on -- `put`, its structural
+    // twin below, shows the same effect (0.56x / 1.18x) and was reverted
+    // for the same reason. `take`/`outer`/`real_if_close` in this same
+    // sweep are the opposite case: those *did* win with `operand`.
     let mask_data = mask.to_vec();
     let num_true = mask_data.iter().filter(|&&x| x).count();
 
@@ -250,6 +271,19 @@ pub fn put<T: Clone>(array: &mut Array<T>, indices: &Array<usize>, values: &[T])
         ));
     }
 
+    // Deliberately still `indices.to_vec()`, not `operand(indices)`: same
+    // reasoning and same measurement as `place` just above (this sweep
+    // tried hoisting `indices` into a shared `operand` borrow for both the
+    // validation pass and the write pass, which is the behavior-preserving
+    // fix -- fusing the two into one pass, as `take`'s `None` arm does,
+    // would let indices before the first invalid one already be written
+    // before an early `Err` return, a caller-visible partial mutation the
+    // original never produced -- but even the correctly-two-pass `operand`
+    // version measured slower than this `to_vec()` original:
+    // `probe_put_perf_vs_naive_to_vec` below is 0.56x at full release,
+    // 1.18x only before that probe's "naive" comparison was made equally
+    // generic; see `place`'s comment for the fuller explanation and why
+    // this is a revert, not an oversight).
     let indices_vec = indices.to_vec();
     let array_len = array.size();
 
@@ -302,7 +336,12 @@ pub fn putmask<T: Clone>(
     mask: &Array<bool>,
     values: &Array<T>,
 ) -> Result<()> {
-    place(array, mask, &values.to_vec())
+    // `place` only reads `values` (indexed, never mutated/moved), so a
+    // zero-copy-when-possible `operand` borrow replaces the old owned
+    // `values.to_vec()`; `&values_op` coerces to `&[T]` via `Operand`'s
+    // `Deref`, matching `place`'s parameter type.
+    let values_op = crate::kernels::borrow::operand(values);
+    place(array, mask, &values_op)
 }
 
 /// Take values from array along an axis using indices
@@ -401,7 +440,7 @@ pub fn take_along_axis<T: Clone + Zero>(
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&ind_shape))
+    Array::from_vec_shape(result_data, &ind_shape)
 }
 
 /// Apply a function to 1-D slices along the given axis
@@ -494,7 +533,7 @@ where
         result_data.push(result);
     }
 
-    Ok(Array::from_vec(result_data).reshape(&out_shape))
+    Array::from_vec_shape(result_data, &out_shape)
 }
 
 /// Apply a function over multiple axes
@@ -600,12 +639,44 @@ pub fn take<T: Clone + Zero>(
 ) -> Result<Array<T>> {
     match axis {
         None => {
-            // Flatten array and take elements
-            let flat = array.to_vec();
-            let idx_vec = indices.to_vec();
+            // Flatten array and take elements. `flat` is indexed by
+            // arbitrary (repeatable, out-of-order) values from `indices`,
+            // so it needs slice-like random access -- `operand` borrows
+            // it zero-copy (when contiguous) instead of the old owned
+            // `array.to_vec()`.
+            //
+            // `indices` is walked sequentially, but *twice* in this arm
+            // (once to validate, once to gather) -- an earlier version of
+            // this fix left that as two `indices.array().iter()` passes
+            // (recipe [B]: no buffer), on the reasoning that each pass is
+            // individually sequential. Measured against the pre-sweep
+            // `indices.to_vec()` baseline (`probe_take_none_perf_vs_naive_to_vec_pair`
+            // below), that was **9x slower in release** and ~1.7x slower
+            // even at `[profile.test]`'s `opt-level = 2`: `indices.array()`
+            // is an `NdArray<usize, IxDyn>` (see `Array::array`'s
+            // signature), and `IxDyn`'s generic, rank-erased iterator
+            // re-walks dynamic stride bookkeeping on every element every
+            // time it's constructed -- LLVM cannot fold that down to a
+            // pointer-bump loop the way it does for a `&[usize]`, so
+            // paying that cost *twice* over the whole array was actually
+            // worse than the one `memcpy`-speed `to_vec()` copy it
+            // replaced. Hoisting `indices` into an `operand` borrow once
+            // (zero-copy here too, `indices` being contiguous) and fusing
+            // the validate-then-gather double pass into one loop over
+            // that single fast `&[usize]` iterator fixes both: one flat
+            // pass instead of two `IxDyn` passes, and no copy either way.
+            // The fused loop preserves the original's exact error
+            // behavior -- both scan `indices` in the same left-to-right
+            // order, so the first out-of-bounds index reported is
+            // identical, and an error return simply drops whatever prefix
+            // of `result` had been gathered so far, exactly as the
+            // two-pass version discarded its not-yet-started `result` on
+            // a validation failure.
+            let flat = crate::kernels::borrow::operand(array);
+            let idx_op = crate::kernels::borrow::operand(indices);
 
-            // Validate indices
-            for &idx in &idx_vec {
+            let mut result = Vec::with_capacity(idx_op.len());
+            for &idx in idx_op.iter() {
                 if idx >= flat.len() {
                     return Err(NumRs2Error::IndexOutOfBounds(format!(
                         "index {} is out of bounds for flattened array of size {}",
@@ -613,13 +684,11 @@ pub fn take<T: Clone + Zero>(
                         flat.len()
                     )));
                 }
+                result.push(flat[idx].clone());
             }
 
-            // Take elements
-            let result: Vec<T> = idx_vec.iter().map(|&idx| flat[idx].clone()).collect();
-
             // Result has same shape as indices
-            Ok(Array::from_vec(result).reshape(&indices.shape()))
+            Ok(Array::from_vec_shape(result, &indices.shape())?)
         }
         Some(ax) => {
             let shape = array.shape();
@@ -632,10 +701,15 @@ pub fn take<T: Clone + Zero>(
                 )));
             }
 
-            let idx_vec = indices.to_vec();
+            // `idx_vec[current_pos[ax]]` below indexes by a position that
+            // cycles repeatedly as the multi-dimensional loop advances
+            // (not a single sequential pass), so this needs slice-like
+            // random access -- `operand` borrows it zero-copy (when
+            // contiguous) instead of the old owned `indices.to_vec()`.
+            let idx_vec = crate::kernels::borrow::operand(indices);
 
             // Validate indices
-            for &idx in &idx_vec {
+            for &idx in idx_vec.iter() {
                 if idx >= shape[ax] {
                     return Err(NumRs2Error::IndexOutOfBounds(format!(
                         "index {} is out of bounds for axis {} with size {}",
@@ -675,7 +749,7 @@ pub fn take<T: Clone + Zero>(
                 }
             }
 
-            Ok(Array::from_vec(result_data).reshape(&result_shape))
+            Ok(Array::from_vec_shape(result_data, &result_shape)?)
         }
     }
 }
@@ -749,8 +823,14 @@ pub fn fancy_index<T: Clone + Zero>(
     let num_elements = indices[0].size();
     let mut result_data = Vec::with_capacity(num_elements);
 
-    // Convert all index arrays to vectors
-    let idx_vecs: Vec<Vec<usize>> = indices.iter().map(|arr| arr.to_vec()).collect();
+    // Borrow all index arrays zero-copy (when contiguous). Each is
+    // indexed by `i` below across every element position, not walked
+    // once sequentially, so `operand`'s slice-like random access replaces
+    // the old owned `arr.to_vec()` per index array.
+    let idx_vecs: Vec<_> = indices
+        .iter()
+        .map(crate::kernels::borrow::operand)
+        .collect();
 
     // For each element position
     for i in 0..num_elements {
@@ -776,7 +856,7 @@ pub fn fancy_index<T: Clone + Zero>(
     }
 
     // Result has same shape as the index arrays
-    Ok(Array::from_vec(result_data).reshape(&idx_shape))
+    Array::from_vec_shape(result_data, &idx_shape)
 }
 
 /// Boolean indexing convenience method
@@ -882,9 +962,18 @@ pub fn select<T: Clone>(
         }
     }
 
-    // Convert to vectors for easier access
-    let cond_vecs: Vec<Vec<bool>> = conditions.iter().map(|c| c.to_vec()).collect();
-    let choice_vecs: Vec<Vec<T>> = choices.iter().map(|c| c.to_vec()).collect();
+    // Borrow zero-copy (when contiguous) for easier access. Each is
+    // indexed by `i` below across every element position, not walked
+    // once sequentially, so `operand`'s slice-like random access replaces
+    // the old owned `c.to_vec()` per condition/choice array.
+    let cond_vecs: Vec<_> = conditions
+        .iter()
+        .map(crate::kernels::borrow::operand)
+        .collect();
+    let choice_vecs: Vec<_> = choices
+        .iter()
+        .map(crate::kernels::borrow::operand)
+        .collect();
 
     let num_elements = conditions[0].size();
     let mut result_data = Vec::with_capacity(num_elements);
@@ -908,12 +997,223 @@ pub fn select<T: Clone>(
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&shape))
+    Array::from_vec_shape(result_data, &shape)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // `place`/`put`/`putmask` had no coverage at all before this sweep
+    // touched them (see the `place`/`put` fix comments above for why
+    // `mask`/`indices` are now hoisted into one shared `operand` borrow
+    // instead of two separate `.array().iter()` passes) -- added here
+    // alongside that fix, not just for the new behavior, but because a
+    // correctness net was missing for these functions entirely.
+
+    #[test]
+    fn test_place_basic() {
+        let mut arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
+        let mask = Array::from_vec(vec![false, true, false, true, false]);
+        place(&mut arr, &mask, &[10, 20]).expect("place should succeed");
+        assert_eq!(arr.to_vec(), vec![1, 10, 3, 20, 5]);
+    }
+
+    #[test]
+    fn test_place_values_cycle_when_fewer_than_masked() {
+        let mut arr = Array::from_vec(vec![0, 0, 0, 0, 0]);
+        let mask = Array::from_vec(vec![true, true, true, true, true]);
+        place(&mut arr, &mask, &[1, 2]).expect("place should succeed");
+        // Only one value supplied per two `true`s: cycles 1, 2, 1, 2, 1.
+        assert_eq!(arr.to_vec(), vec![1, 2, 1, 2, 1]);
+    }
+
+    #[test]
+    fn test_place_no_true_values_is_noop() {
+        let mut arr = Array::from_vec(vec![1, 2, 3]);
+        let mask = Array::from_vec(vec![false, false, false]);
+        place(&mut arr, &mask, &[99]).expect("place should succeed");
+        assert_eq!(arr.to_vec(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_place_empty_values_errors() {
+        let mut arr = Array::from_vec(vec![1, 2, 3]);
+        let mask = Array::from_vec(vec![true, false, false]);
+        let empty: [i32; 0] = [];
+        assert!(place(&mut arr, &mask, &empty).is_err());
+    }
+
+    #[test]
+    fn test_put_basic() {
+        let mut arr = Array::from_vec(vec![0, 0, 0, 0, 0]);
+        let indices = Array::from_vec(vec![0, 2, 4]);
+        put(&mut arr, &indices, &[10, 20, 30]).expect("put should succeed");
+        assert_eq!(arr.to_vec(), vec![10, 0, 20, 0, 30]);
+    }
+
+    /// Explicitly requested when `put` gained a hoisted-`operand`
+    /// validation pass: confirm the out-of-bounds error path still fires,
+    /// and (since `put`'s two passes are deliberately kept separate so
+    /// validation never touches `array` -- see `put`'s fix comment) that
+    /// `array` is left completely untouched when it does.
+    #[test]
+    fn test_put_out_of_bounds_leaves_array_untouched() {
+        let mut arr = Array::from_vec(vec![1, 2, 3]);
+        let original = arr.to_vec();
+        let indices = Array::from_vec(vec![0, 5]); // 5 is out of bounds
+        let result = put(&mut arr, &indices, &[10, 20]);
+        assert!(result.is_err());
+        assert_eq!(
+            arr.to_vec(),
+            original,
+            "put must not partially mutate on error"
+        );
+    }
+
+    #[test]
+    fn test_putmask_basic() {
+        let mut arr = Array::from_vec(vec![1, 2, 3, 4, 5]);
+        let mask = Array::from_vec(vec![false, true, false, true, false]);
+        let values = Array::from_vec(vec![10, 20]);
+        putmask(&mut arr, &mask, &values).expect("putmask should succeed");
+        assert_eq!(arr.to_vec(), vec![1, 10, 3, 20, 5]);
+    }
+
+    /// Regression guard, not just a perf note: this sweep tried converting
+    /// `place`'s `mask.to_vec()` to a hoisted `operand(mask)` borrow (the
+    /// same fix that helped `take`/`outer`/`real_if_close` elsewhere in
+    /// this lane), and it measured *slower* than the `to_vec()` `place`
+    /// keeps today -- 0.80x at full release, 0.69x at `[profile.test]`'s
+    /// `opt-level = 2` (both against this exact generic-matched
+    /// comparison). `operand_based_place` reproduces that rejected
+    /// alternative so the comparison stays runnable: both approaches
+    /// still produce identical values (the assertion below passes either
+    /// way), so the eprintln! ratio -- not the assertion -- is the signal
+    /// to watch if someone re-applies the `operand` conversion here
+    /// without re-measuring.
+    #[test]
+    fn probe_place_perf_vs_naive_to_vec() {
+        // Generic over `T: Clone`, matching `place<T: Clone>`'s own bound
+        // exactly (instantiated at `f64` below, same as the real call) --
+        // comparing a hand-specialized concrete `fn(&mut Array<f64>, ..)`
+        // against the actual (generic) `place` would conflate "to_vec()
+        // vs operand()" with "concrete vs generic monomorphization",
+        // which is a different question this probe isn't meant to answer.
+        fn operand_based_place<T: Clone>(array: &mut Array<T>, mask: &Array<bool>, values: &[T]) {
+            let mask_op = crate::kernels::borrow::operand(mask);
+            let num_true = mask_op.iter().filter(|&&x| x).count();
+            if num_true == 0 {
+                return;
+            }
+            let array_data = array
+                .array_mut()
+                .as_slice_mut()
+                .expect("test array is contiguous");
+            let mut value_idx = 0;
+            for (i, &is_true) in mask_op.iter().enumerate() {
+                if is_true {
+                    array_data[i] = values[value_idx % values.len()].clone();
+                    value_idx += 1;
+                }
+            }
+        }
+
+        let n = 100_000;
+        let values = [1.0, 2.0, 3.0];
+        let mask_src = Array::from_vec((0..n).map(|i| i % 3 == 0).collect::<Vec<_>>());
+        let iters = 100;
+
+        let mut a1 = Array::from_vec(vec![0.0; n]);
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            place(&mut a1, &mask_src, &values).expect("place should succeed");
+        }
+        let to_vec_current = t0.elapsed();
+
+        let mut a2 = Array::from_vec(vec![0.0; n]);
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            operand_based_place(&mut a2, &mask_src, &values);
+        }
+        let operand_rejected = t1.elapsed();
+
+        eprintln!(
+            "[place, n={n}] to_vec(current)={:.1}us/iter operand(rejected)={:.1}us/iter ({:.2}x)",
+            to_vec_current.as_secs_f64() * 1e6 / iters as f64,
+            operand_rejected.as_secs_f64() * 1e6 / iters as f64,
+            operand_rejected.as_secs_f64() / to_vec_current.as_secs_f64(),
+        );
+
+        assert_eq!(
+            a1.to_vec(),
+            a2.to_vec(),
+            "both approaches must produce the same values"
+        );
+    }
+
+    /// Same shape and same purpose as `probe_place_perf_vs_naive_to_vec`
+    /// (see its doc comment): a regression guard reproducing the
+    /// `operand`-based alternative this sweep tried and rejected for
+    /// `put`'s `indices.to_vec()` (0.56x at full release, 1.18x only
+    /// before this probe's comparison was made equally generic -- see
+    /// `put`'s comment for the full explanation). Two passes over the
+    /// rejected `operand` borrow are kept separate here too (never fused
+    /// into one, unlike `take`'s `None` arm) -- fusing would itself be an
+    /// observable behavior change (partial mutation on an out-of-bounds
+    /// error), a second, independent reason not to prefer this
+    /// alternative even where it happened to win.
+    #[test]
+    fn probe_put_perf_vs_naive_to_vec() {
+        // Generic over `T: Clone`, matching `put<T: Clone>` (see
+        // `probe_place_perf_vs_naive_to_vec`'s comment above for why).
+        fn operand_based_put<T: Clone>(array: &mut Array<T>, indices: &Array<usize>, values: &[T]) {
+            let idx_op = crate::kernels::borrow::operand(indices);
+            let array_len = array.size();
+            for &idx in idx_op.iter() {
+                assert!(idx < array_len, "index out of bounds");
+            }
+            let array_data = array
+                .array_mut()
+                .as_slice_mut()
+                .expect("test array is contiguous");
+            for (i, &idx) in idx_op.iter().enumerate() {
+                array_data[idx] = values[i % values.len()].clone();
+            }
+        }
+
+        let n = 100_000;
+        let values = [1.0, 2.0, 3.0];
+        let indices_src = Array::from_vec((0..n).map(|i| i % 997).collect::<Vec<_>>());
+        let iters = 100;
+
+        let mut a1 = Array::from_vec(vec![0.0; n]);
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            put(&mut a1, &indices_src, &values).expect("put should succeed");
+        }
+        let to_vec_current = t0.elapsed();
+
+        let mut a2 = Array::from_vec(vec![0.0; n]);
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            operand_based_put(&mut a2, &indices_src, &values);
+        }
+        let operand_rejected = t1.elapsed();
+
+        eprintln!(
+            "[put, n={n}] to_vec(current)={:.1}us/iter operand(rejected)={:.1}us/iter ({:.2}x)",
+            to_vec_current.as_secs_f64() * 1e6 / iters as f64,
+            operand_rejected.as_secs_f64() * 1e6 / iters as f64,
+            operand_rejected.as_secs_f64() / to_vec_current.as_secs_f64(),
+        );
+
+        assert_eq!(
+            a1.to_vec(),
+            a2.to_vec(),
+            "both approaches must produce the same values"
+        );
+    }
 
     #[test]
     fn test_take_1d() {
@@ -1201,5 +1501,69 @@ mod tests {
         let result = take(&arr, &indices, None).expect("operation should succeed");
 
         assert_eq!(result.to_vec(), vec![10, 10, 20, 20, 30, 30]);
+    }
+
+    #[test]
+    fn probe_take_none_perf_vs_naive_to_vec_pair() {
+        // Old behavior: `array.to_vec()` (owned copy of the whole source
+        // buffer) plus `indices.to_vec()` (owned copy of the index
+        // buffer) as two separate passes (validate, then gather), each
+        // walking a plain `&[_]` slice. Reproduced here verbatim
+        // (including the validation pass `take`'s `None` arm has always
+        // run before its gather loop) since omitting it would make this
+        // "naive" baseline artificially cheaper than the real
+        // pre-optimization `take` ever was and understate the actual
+        // before/after delta. New behavior: `operand(array)` +
+        // `operand(indices)` (both zero-copy when contiguous), fused into
+        // *one* validate-and-gather pass -- see `take`'s doc comments
+        // above for why the fused single pass matters, not just the
+        // to_vec() removal.
+        fn naive_take_none(array: &Array<f64>, indices: &Array<usize>) -> Vec<f64> {
+            let flat = array.to_vec();
+            let idx_vec = indices.to_vec();
+            for &idx in &idx_vec {
+                assert!(
+                    idx < flat.len(),
+                    "index {idx} out of bounds for flattened array of size {}",
+                    flat.len()
+                );
+            }
+            idx_vec.iter().map(|&idx| flat[idx]).collect()
+        }
+
+        let n = 100_000;
+        let array = Array::from_vec((0..n).map(|i| i as f64).collect::<Vec<_>>());
+        // Repeated-index pattern: cycle through a much smaller range so
+        // most lookups repeat, matching the "gathered outputs" shape
+        // this hot path is meant for.
+        let indices = Array::from_vec((0..n).map(|i| i % 997).collect::<Vec<_>>());
+        let iters = 50;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(naive_take_none(&array, &indices));
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ =
+                std::hint::black_box(take(&array, &indices, None).expect("take should succeed"));
+        }
+        let operand = t1.elapsed();
+
+        eprintln!(
+            "[take(axis=None), n={n}] naive(to_vec_pair)={:.1}us/iter operand={:.1}us/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e6 / iters as f64,
+            operand.as_secs_f64() * 1e6 / iters as f64,
+            naive.as_secs_f64() / operand.as_secs_f64(),
+        );
+
+        assert_eq!(
+            naive_take_none(&array, &indices),
+            take(&array, &indices, None)
+                .expect("take should succeed")
+                .to_vec()
+        );
     }
 }
