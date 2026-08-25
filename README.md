@@ -1,13 +1,25 @@
 # NumRS2 - High-Performance Numerical Computing for Rust
 
-[![Build Status](https://github.com/cool-japan/numrs/workflows/CI/badge.svg)](https://github.com/cool-japan/numrs/actions)
 [![Crates.io](https://img.shields.io/crates/v/numrs2.svg)](https://crates.io/crates/numrs2)
 [![Documentation](https://docs.rs/numrs2/badge.svg)](https://docs.rs/numrs2)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **Version 0.4.1** - Patch release (2026-06-21): zero-copy `Array::as_slice()` / `as_cow_1d()` API; erfinv/Bessel Y_n/K_n precision fixes (Winitzki 2008 + DLMF recurrences); irfft Hermitian reconstruction corrected; generic controlled-U quantum gate + multi-qubit gate fusion; `ArrayView::iter()` restored; `split` axis=1 enabled; visualization example activated; benchmark suite completed; pure-Rust `alloca` patch unblocks criterion on Apple Silicon. Features 128+ SIMD-vectorized functions (AVX2, AVX512, ARM NEON), 4,223 tests passing, 297,657+ lines of production Rust code, built on pure Rust SciRS2 v0.5.0 ecosystem. The core array, linear algebra, SIMD, and autodiff paths are production-ready; some advanced modules (e.g. quantum and parts of the reinforcement-learning suite) are experimental.
+> **Version 0.4.1** (in development on the `0.4.1` branch) is a production-hardening pass: `Array<T>`
+> is now `Arc`-backed copy-on-write (O(1) clone); a new `kernels` dispatch layer backs matmul,
+> elementwise ops, and reductions (matmul up to ~18.8x faster at `512^3` than the prior loop); the
+> `distributed` feature's collectives and TSQR/Cholesky linear algebra now run over a real TCP
+> transport instead of returning fabricated local data; `lapack` (core linear algebra) is a default
+> feature; and a large batch of NumPy-parity additions landed (ufunc `reduce`/`accumulate`/`at`,
+> N-D FFT wrappers, 9 NumPy>=1.22 quantile methods, masked-array completion, polynomial classes,
+> `SeedSequence`/`Philox`/`SFC64` random generators). See [CHANGELOG.md](CHANGELOG.md) for the full,
+> verified list, including a **Known Upstream Issues** section for the `scirs2-core`/`scirs2-fft`
+> bugs this release works around rather than silently inherits. The core array, linear algebra,
+> SIMD, and autodiff paths are production-ready; some advanced modules (e.g. quantum and parts of
+> the reinforcement-learning suite) remain experimental, and the `distributed` feature's
+> `DistributedArray`-based linear algebra convenience functions are intentionally unimplemented in
+> favor of the real `DistributedMatrix`-based versions (see CHANGELOG.md).
 
 ## ✨ Architecture Highlights
 
@@ -18,11 +30,18 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
 - **Comprehensive documentation** with migration guides and best practices
 
 ### 🔧 Core Features
-- **N-dimensional arrays** with efficient memory layout and broadcasting
+- **N-dimensional arrays** with efficient memory layout, broadcasting, and `Arc`-backed
+  copy-on-write cloning (O(1) `Clone`; the first mutation after a clone unshares)
 - **Advanced linear algebra** with BLAS/LAPACK integration and matrix decompositions
-- **SIMD optimization** with automatic vectorization and CPU feature detection
-- **Thread safety** with parallel processing support via Rayon
-- **Python interoperability** for easy migration from NumPy
+  (enabled by default via the `lapack` feature)
+- **SIMD optimization** with automatic vectorization and CPU feature detection, backed by a
+  shared, dtype-dispatched `kernels` layer for matmul/elementwise/reduction hot paths
+- **Thread safety** with parallel processing support via `scirs2_core::parallel_ops`
+  (COOLJAPAN policy: no direct `rayon` dependency)
+- **Distributed computing** (`distributed` feature) over a real point-to-point TCP transport:
+  collectives (broadcast/reduce/allreduce/gather/scatter/...), Tall-Skinny QR, and block-cyclic
+  Cholesky, tested with an in-process multi-rank harness
+- **Python interoperability** for easy migration from NumPy (`python` feature, `maturin` wheels)
 
 ## Main Features
 
@@ -56,31 +75,44 @@ NumRS2 is a high-performance numerical computing library for Rust, designed as a
 
 ## Optional Features
 
-NumRS2 includes several optional features that can be enabled in your `Cargo.toml`:
+The default feature set is `["matrix_decomp", "scirs", "lapack"]`. NumRS2 includes the following
+features, all definable in your `Cargo.toml` (see `Cargo.toml`'s `[features]` table for the
+authoritative list):
 
-- **matrix_decomp** (enabled by default): Matrix decomposition functions (SVD, QR, LU, etc.)
-- **lapack**: Enable LAPACK-dependent linear algebra operations (eigenvalues, matrix decompositions)
+**Enabled by default**
+- **matrix_decomp**: Matrix decomposition functions (SVD, QR, LU, etc.)
+- **scirs**: Mandatory SciRS2 ecosystem integration; kept only for backward-compatible opt-out syntax and must not be disabled
+- **lapack**: LAPACK-dependent linear algebra (det/inv/svd/eig/qr/cholesky), through `scirs2-linalg` (OxiBLAS-backed, pure Rust)
+
+**Off by default**
 - **validation**: Additional runtime validation checks for array operations
+- **unstable** / **fast**: Development-time feature combinations (minimal build for fast iteration)
+- **gpu**: GPU acceleration for array operations using WGPU (Vulkan/Metal/DX12/WebGPU; no native CUDA/ROCm)
+- **python**: Python bindings via PyO3 for NumPy interoperability (wheel builds via `maturin`)
+- **distributed**: Pure-Rust distributed computing (no MPI) — real point-to-point TCP transport, collectives, TSQR, block-cyclic Cholesky
+- **wasm**: WebAssembly bindings (`dlmalloc` global allocator on `wasm32` targets)
 - **arrow**: Apache Arrow integration for zero-copy data exchange with Python/Polars/DataFusion
-- **python**: Python bindings via PyO3 for NumPy interoperability
-- **gpu**: GPU acceleration for array operations using WGPU
+- **parquet** / **netcdf** / **matlab** / **messagepack** / **bson**: additional pure-Rust I/O formats (or **io-all** for all five at once)
+- **visualization**: Plotters-based 2D/3D/matrix/stats/performance plots (pure Rust, via `resvg`/`tiny-skia`)
+- **ci-safe**: `matrix_decomp` + `validation` only, for CI environments without external dependencies
 
 To enable a feature:
 
 ```toml
 [dependencies]
-numrs2 = { version = "0.4.1", features = ["arrow"] }
+numrs2 = { version = "0.4.1", features = ["distributed"] }
 ```
 
 Or, when building:
 
 ```bash
-cargo build --features scirs
+cargo build --features distributed
+cargo build --all-features
 ```
 
 ### 🚀 Performance Optimizations
 
-NumRS2 leverages SciRS2-Core (v0.5.0) for cutting-edge performance optimizations:
+NumRS2 leverages SciRS2-Core (v0.6.5) for cutting-edge performance optimizations:
 
 - **Unified SIMD Operations**: All SIMD code goes through SciRS2-Core's SimdUnifiedOps trait
 - **Adaptive Algorithm Selection**: AutoOptimizer automatically chooses between scalar, SIMD, or GPU implementations
@@ -133,25 +165,34 @@ For examples, see [gpu_example.rs](examples/gpu_example.rs)
 - Forward, backward, central differences
 - Richardson extrapolation for high accuracy
 
-**SIMD Optimization Infrastructure**
-- 86 AVX2-optimized functions with automatic threshold-based dispatch
-- 4-way loop unrolling and FMA (fused multiply-add) instructions
-- ARM NEON support with 42 vectorized f64 operations
+**SIMD & Dispatch Infrastructure**
+- A shared, dtype-dispatched `kernels` layer (`src/kernels/`) backs matmul, elementwise ops, and
+  reductions with explicit SIMD/parallel thresholds and deterministic accumulation order, replacing
+  a set of previously per-call-site, hand-rolled dispatch decisions
+- AVX2/AVX512 (x86_64) and ARM NEON vectorization via `scirs2-core`, with automatic
+  threshold-based dispatch between scalar, SIMD, and parallel implementations
 - Support for both f32 and f64 numeric types
 
-**Production-Ready Features**
-- Complete multi-array NPZ support for NumPy compatibility
-- Zero clippy warnings and zero critical errors
-- 4,223 tests passing across all features (0 failures)
-- Enhanced scheduler with critical deadlock fix (1,143x speedup)
-- 297,657+ lines of production Rust code (676 Rust files)
-- 5,813+ public API items; core array, linear algebra, SIMD, and autodiff paths are production-ready, with some advanced modules (e.g. quantum and parts of the reinforcement-learning suite) still experimental
+**Production-Hardening Status (0.4.1)**
+- `Array<T>` is `Arc`-backed copy-on-write: O(1) `Clone`, unshare-on-first-mutation, enforced to
+  exactly one `Arc::make_mut` / `Arc::try_unwrap` call site by a CI policy check
+  (`scripts/ci-local.sh`)
+- No production `unwrap()`, zero clippy warnings under the current lint configuration
+  (`cargo clippy --all-targets`)
+- ~262,000 lines of Rust across 529 files in `src/` (`tokei src`); see CHANGELOG.md for the
+  per-release test-count baseline (nextest + doctests)
+- Core array, linear algebra, SIMD, autodiff, and (as of this release) `distributed` transport
+  paths are production-hardened; some advanced modules (e.g. quantum and parts of the
+  reinforcement-learning suite) remain experimental — see TODO.md for the current, short list of
+  known deferred items and NumPy deviations
 
 **Enhanced Modules**
-- Linear algebra: Extended iterative solvers (CG, GMRES, BiCGSTAB, FGMRES, MINRES)
-- Mathematical functions: 1,187 lines of enhanced operations
-- Statistics: 1,397 lines of enhanced distributions and testing
-- Polynomial operations: Complete NumPy polynomial compatibility
+- Linear algebra: Extended iterative solvers (CG, GMRES, BiCGSTAB, FGMRES, MINRES), plus
+  distributed TSQR / block-cyclic Cholesky under the `distributed` feature
+- Statistics: `quantile`/`percentile` (9 NumPy>=1.22 methods + 4 legacy), `histogramdd` with
+  `density=`, masked-array reductions
+- Polynomial operations: `Chebyshev`/`Legendre`/`Hermite`/`HermiteE`/`Laguerre`/`Power`/`Series`
+  classes plus NumPy polynomial-module compatibility
 - Special functions: Spherical harmonics, Jacobi elliptic, Lambert W, and more
 
 ## Example
@@ -209,7 +250,7 @@ fn main() -> Result<()> {
     println!("Density: {}", sparse.density());
     
     // SIMD-accelerated operations
-    let result = simd_ops::apply_simd(&data, |x| x * x + 2.0 * x + 1.0)?;
+    let result = numrs2::simd::simd_sqrt(&data);
     println!("SIMD result: {}", result);
 
     // Random number generation
@@ -340,10 +381,11 @@ OxiBLAS provides:
 
 NumRS2 is built on top of the SciRS2 ecosystem and pure Rust libraries:
 
-- **SciRS2 ecosystem** (scirs2-core, scirs2-linalg, scirs2-stats, etc. v0.5.0): Provides the foundation for n-dimensional arrays, linear algebra, statistics, survival analysis, causal inference, bioinformatics, and combinatorics
+- **SciRS2 ecosystem** (scirs2-core, scirs2-linalg, scirs2-stats, etc. v0.6.5): Provides the foundation for n-dimensional arrays, linear algebra, statistics, survival analysis, causal inference, bioinformatics, and combinatorics
 - **OxiBLAS** (pure Rust BLAS/LAPACK): Powers high-performance linear algebra routines with no C dependencies
 - **Oxicode**: Pure Rust serialization for data persistence
-- **Rayon**: Enables parallel computation capabilities
+- **`scirs2_core::parallel_ops`**: Rayon-backed parallel computation, reached only through the SciRS2 re-export (COOLJAPAN policy: no direct `rayon` dependency)
+- **oxiarc-lz4** / **oxiarc-archive**: Pure Rust compression for the `distributed` transport and NPZ archives
 - **num-traits / num-complex**: Provides generic numeric traits and complex number support for numerical operations
 
 ## Features
@@ -371,10 +413,11 @@ NumRS2 provides a comprehensive suite of numerical computing capabilities:
 - **Statistical analysis** functions and descriptive statistics
 
 ### Integration & Interoperability
-- **GPU acceleration** support via WGPU (optional)
-- **SciRS2 integration** for advanced statistical distributions (optional)
+- **GPU acceleration** support via WGPU (optional, `gpu` feature)
+- **Distributed computing** over a real TCP transport (optional, `distributed` feature)
+- **SciRS2 integration** — the foundation for arrays, linear algebra, statistics, and FFT (mandatory; the `scirs` feature flag exists only for backward-compatible syntax and cannot be disabled)
 - **Memory-mapped arrays** for large dataset handling
-- **Serialization support** for data persistence
+- **Serialization support** for data persistence (NPY/NPZ, Arrow, Parquet, NetCDF-3, MATLAB, MessagePack, BSON — see Optional Features)
 
 ## 📖 Documentation
 
@@ -384,15 +427,32 @@ NumRS2 provides a comprehensive suite of numerical computing capabilities:
 - **[Trait System Guide](docs/TRAIT_GUIDE.md)** - Generic programming with NumRS2
 - **[Error Handling Guide](docs/ERROR_HANDLING.md)** - Robust error management
 - **[Memory Management Guide](docs/MEMORY_MANAGEMENT.md)** - Optimizing memory usage
+- **[GPU Acceleration Guide](docs/GPU_ACCELERATION.md)** - WGPU-backed GPU operations
+- **[Python Bindings Guide](docs/PYTHON_GUIDE.md)** - PyO3 bindings and `maturin` wheel builds
+- **[WebAssembly Guide](docs/WASM_GUIDE.md)** - Browser/Node.js WASM builds
 
 ### 🔗 Additional Resources
 - [Official API Documentation](https://docs.rs/numrs2) - Complete API reference
-- [Getting Started Guide](GETTING_STARTED.md) - Essential information for beginners
-- [Installation Guide](INSTALL.md) - Detailed installation instructions
-- [User Guide](GUIDE.md) - Comprehensive guide to all NumRS features
 - [NumPy Migration Guide](NUMPY_MIGRATION.md) - Guide for NumPy users transitioning to NumRS2
-- [Implementation Status](IMPLEMENTATION_STATUS.md) - Current status and next steps
+- [Benchmarking Guide](BENCHMARKING.md) - Running and interpreting NumRS2's benchmark suite
+- [Development Roadmap](TODO.md) - Current status and known deferred items
+- [Changelog](CHANGELOG.md) - Full, per-release list of additions, changes, and fixes
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute to NumRS2
+
+### 🔧 Local CI
+
+GitHub Actions is restricted by project policy to publish workflows only
+(`.github/workflows/pypi-publish.yml`). There is no hosted CI build; instead, run the same checks
+CI would locally:
+
+```bash
+./scripts/ci-local.sh          # fmt-check, build, clippy, test, doctest, deny, wasm-check, policy
+./scripts/ci-local.sh clippy deny   # or a subset of steps
+```
+
+This script is the authoritative pre-merge gate — it enforces the no-`unwrap()` policy, the
+`<2000`-line-per-file policy, the `Arc` copy-on-write invariant (exactly one `Arc::make_mut` / one
+`Arc::try_unwrap`, both in `src/array/core.rs`), and `cargo deny check bans`.
 
 Module-specific documentation:
   - [Random Module Guide](examples/README_RANDOM.md) - Random number generation
@@ -420,12 +480,14 @@ Testing Documentation:
 Check out the `examples/` directory for more usage examples:
 
 - `basic_usage.rs`: Core array operations and manipulations
-- `linalg_example.rs`: Linear algebra operations and solvers
+- `matrix_decomp_example.rs`: Linear algebra decompositions and solvers
 - `simd_example.rs`: SIMD-accelerated computations
 - `memory_optimize_example.rs`: Memory layout optimization for cache efficiency
 - `parallel_optimize_example.rs`: Parallelization optimization techniques
 - `random_distributions_example.rs`: Comprehensive examples of random number generation
-- See the [examples README](examples/README.md) for more details
+- `distributed_basics.rs` / `distributed_computing.rs`: Distributed arrays, collectives, and TSQR under the `distributed` feature
+- `gpu_acceleration.rs` / `gpu_batching.rs`: GPU-accelerated operations under the `gpu` feature
+- See the [examples README](examples/README.md) for the full, current list (62 example programs)
 
 ## Development
 

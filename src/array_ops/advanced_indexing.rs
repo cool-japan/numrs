@@ -10,9 +10,18 @@ use num_traits::Zero;
 
 /// Return selected slices of an array along given axis
 ///
+/// This is the canonical `compress` implementation; [`crate::array_ops::manipulation::compress`]
+/// (a one-line delegate) and [`crate::Array::compress`] (which adapts a
+/// generic, stringify-based condition into `Array<bool>` before delegating)
+/// both forward here.
+///
 /// # Arguments
 /// * `array` - Input array
-/// * `condition` - 1-D array of booleans corresponding to indices to select
+/// * `condition` - 1-D array of booleans corresponding to indices to select. Following NumPy,
+///   `condition` need not have the same length as `array` (when `axis` is `None`) or as
+///   `array.shape()[axis]` (when `axis` is given): it may be shorter (the tail is treated as
+///   absent, not as `false`) and it may be longer as long as no `true` entry falls beyond the
+///   selected length -- only an out-of-bounds `true` is an error.
 /// * `axis` - Axis along which to take slices. If None, work on flattened array
 ///
 /// # Returns
@@ -32,26 +41,61 @@ use num_traits::Zero;
 /// let cond = Array::from_vec(vec![true, false, true]);
 /// let compressed = compress(&arr2d, &cond, Some(1)).expect("operation should succeed");
 /// // Returns [[1, 3], [4, 6]] (columns 0 and 2)
+///
+/// // `condition` shorter than the array is allowed (NumPy: `np.compress([True], [1,2,3])`)
+/// let short_cond = Array::from_vec(vec![true]);
+/// let compressed = compress(&arr, &short_cond, None).expect("operation should succeed");
+/// assert_eq!(compressed.to_vec(), vec![1]);
 /// ```
 pub fn compress<T: Clone + Zero>(
     array: &Array<T>,
     condition: &Array<bool>,
     axis: Option<usize>,
 ) -> Result<Array<T>> {
+    // NumPy rejects a non-1-D condition outright (`"condition must be a 1-d
+    // array"`) regardless of `axis`; neither the flattened nor the
+    // axis-given path below assumes anything about condition shape beyond
+    // this, so check it once, up front.
+    if condition.ndim() != 1 {
+        return Err(NumRs2Error::InvalidOperation(
+            "condition must be a 1-D array".to_string(),
+        ));
+    }
+
+    // Positions selected by `condition`, in ascending order (so the
+    // out-of-bounds check below is a single last-element comparison and the
+    // per-position lookup in the axis-given branch can binary-search
+    // instead of doing an O(condition-length) scan per output element).
+    let selected: Vec<usize> = condition
+        .array()
+        .iter()
+        .copied()
+        .enumerate()
+        .filter_map(|(i, cond)| if cond { Some(i) } else { None })
+        .collect();
+
     match axis {
         None => {
-            // Work on flattened array. `.array().iter().cloned()` walks
-            // each operand's logical order directly, so the zip below
-            // needs no full-size intermediate `flat`/`cond_flat` `Vec`s
-            // -- only the (unavoidable, since the output is owned)
-            // per-selected-element clone that `filter_map` performs.
-            if array.size() != condition.size() {
-                return Err(NumRs2Error::ShapeMismatch {
-                    expected: vec![array.size()],
-                    actual: vec![condition.size()],
-                });
+            // Work on flattened array. `condition` need not match
+            // `array`'s length: `zip` truncates to the shorter of the two,
+            // which is exactly right when `condition` is shorter (NumPy
+            // treats the unreached tail as simply never selected, not as
+            // `false`) -- the only remaining way `condition` can be
+            // invalid is a `true` beyond `array`'s length, which `zip`
+            // would silently drop instead of erroring on, so that's
+            // checked explicitly first via `selected`'s largest entry.
+            let total = array.size();
+            if let Some(&bad) = selected.last().filter(|&&i| i >= total) {
+                return Err(NumRs2Error::IndexOutOfBounds(format!(
+                    "index {} is out of bounds for axis 0 with size {}",
+                    bad, total
+                )));
             }
 
+            // `.array().iter()` walks the operand's logical order directly
+            // (zero-copy when contiguous); `zip` with the (already
+            // bounds-checked) condition needs no full-size intermediate
+            // `Vec` for either side.
             let compressed: Vec<T> = array
                 .array()
                 .iter()
@@ -72,28 +116,23 @@ pub fn compress<T: Clone + Zero>(
                 )));
             }
 
-            if condition.size() != shape[ax] {
-                return Err(NumRs2Error::ShapeMismatch {
-                    expected: vec![shape[ax]],
-                    actual: vec![condition.size()],
-                });
+            let axis_size = shape[ax];
+            if let Some(&bad) = selected.last().filter(|&&i| i >= axis_size) {
+                return Err(NumRs2Error::IndexOutOfBounds(format!(
+                    "index {} is out of bounds for axis {} with size {}",
+                    bad, ax, axis_size
+                )));
             }
-
-            // Determine which indices to keep
-            let indices: Vec<usize> = condition
-                .array()
-                .iter()
-                .copied()
-                .enumerate()
-                .filter_map(|(i, cond)| if cond { Some(i) } else { None })
-                .collect();
 
             // Calculate new shape
             let mut new_shape = shape.clone();
-            new_shape[ax] = indices.len();
+            new_shape[ax] = selected.len();
 
-            if indices.is_empty() {
-                return Ok(Array::zeros(&new_shape));
+            if selected.is_empty() {
+                // Return an empty array with the right shape: `new_shape`
+                // has a 0 dimension along `ax`, so `vec![]` is already the
+                // right (empty) element count for it.
+                return Array::from_vec_shape(vec![], &new_shape);
             }
 
             // Extract selected slices
@@ -105,7 +144,7 @@ pub fn compress<T: Clone + Zero>(
 
             for _ in 0..total_elements {
                 // Check if current index along axis is in our selection
-                if indices.contains(&current_indices[ax]) {
+                if selected.binary_search(&current_indices[ax]).is_ok() {
                     let value = array.get(&current_indices)?;
                     result_data.push(value);
                 }
@@ -346,6 +385,10 @@ pub fn putmask<T: Clone>(
 
 /// Take values from array along an axis using indices
 ///
+/// This is the canonical `take_along_axis` implementation;
+/// [`crate::indexing::take_put::take_along_axis`] (a one-line delegate)
+/// forwards here.
+///
 /// # Arguments
 /// * `array` - Input array
 /// * `indices` - Array of indices to take
@@ -365,6 +408,16 @@ pub fn putmask<T: Clone>(
 /// // For row 0: takes elements at indices [0, 2] -> [1, 3]
 /// // For row 1: takes elements at indices [1, 0] -> [5, 4]
 /// // Result is [[1, 3], [5, 4]]
+/// assert_eq!(result.to_vec(), vec![1, 3, 5, 4]);
+///
+/// // `array` and `indices` need not match exactly on non-`axis` dimensions:
+/// // NumPy broadcasts them there (equal, or either is 1), same as
+/// // `numpy.take_along_axis`.
+/// let arr2 = Array::from_vec(vec![10, 20, 30, 40, 50, 60]).reshape(&[2, 3]);
+/// let idx2 = Array::from_vec(vec![2, 0]).reshape(&[1, 2]);
+/// let result2 = take_along_axis(&arr2, &idx2, 1).expect("operation should succeed");
+/// assert_eq!(result2.shape(), vec![2, 2]);
+/// assert_eq!(result2.to_vec(), vec![30, 10, 60, 40]);
 /// ```
 pub fn take_along_axis<T: Clone + Zero>(
     array: &Array<T>,
@@ -382,7 +435,8 @@ pub fn take_along_axis<T: Clone + Zero>(
         )));
     }
 
-    // Check that shapes match except along the specified axis
+    // NumPy requires `array` and `indices` to have the same number of
+    // dimensions (no implicit reshape/prepend).
     if arr_shape.len() != ind_shape.len() {
         return Err(NumRs2Error::DimensionMismatch(format!(
             "array and indices must have same number of dimensions, got {} and {}",
@@ -391,56 +445,79 @@ pub fn take_along_axis<T: Clone + Zero>(
         )));
     }
 
-    for (i, (&arr_dim, &ind_dim)) in arr_shape.iter().zip(ind_shape.iter()).enumerate() {
-        if i != axis && arr_dim != ind_dim {
-            return Err(NumRs2Error::ShapeMismatch {
-                expected: arr_shape.clone(),
-                actual: ind_shape.clone(),
-            });
+    let ndim = arr_shape.len();
+
+    // NumPy broadcasts `array` and `indices` against each other on every
+    // dimension *other than* `axis` (equal, or either is 1) rather than
+    // requiring an exact match there -- this previously rejected e.g.
+    // `array` shape (2,3)/`indices` shape (1,2) with a `ShapeMismatch`,
+    // where real `numpy.take_along_axis` broadcasts dimension 0 (1 -> 2)
+    // and returns shape (2,2). `axis` itself is exempt from this: `array`'s
+    // extent there only bounds the index *values* (checked below), while
+    // `indices`' extent there fixes the output's size along it.
+    let mut out_shape = vec![0usize; ndim];
+    for d in 0..ndim {
+        if d == axis {
+            out_shape[d] = ind_shape[d];
+            continue;
         }
+        out_shape[d] = match (arr_shape[d], ind_shape[d]) {
+            (a, i) if a == i => a,
+            (1, i) => i,
+            (a, 1) => a,
+            _ => {
+                return Err(NumRs2Error::ShapeMismatch {
+                    expected: arr_shape.clone(),
+                    actual: ind_shape.clone(),
+                })
+            }
+        };
     }
 
-    // Create result array with same shape as indices
-    let mut result_data = Vec::with_capacity(indices.size());
+    let total: usize = out_shape.iter().product();
+    let mut result_data = Vec::with_capacity(total);
+    let mut out_pos = vec![0usize; ndim];
 
-    // Iterate through all positions in indices array
-    let mut current_pos = vec![0; ind_shape.len()];
-    let total_elements = indices.size();
-
-    for _ in 0..total_elements {
-        // Get the index value at current position
-        let idx = indices.get(&current_pos)?;
-
-        // Check bounds
-        if idx >= arr_shape[axis] {
-            return Err(NumRs2Error::IndexOutOfBounds(format!(
-                "index {} is out of bounds for axis {} with size {}",
-                idx, axis, arr_shape[axis]
-            )));
-        }
-
-        // Build position in source array
-        let mut source_pos = current_pos.clone();
-        source_pos[axis] = idx;
-
-        // Get value and add to result
-        let value = array.get(&source_pos)?;
-        result_data.push(value);
-
-        // Increment position
-        let mut carry = true;
-        for dim in (0..ind_shape.len()).rev() {
-            if carry {
-                current_pos[dim] += 1;
-                carry = current_pos[dim] >= ind_shape[dim];
-                if carry {
-                    current_pos[dim] = 0;
-                }
+    for _ in 0..total {
+        // A broadcast (size-1) dimension always reads its single element
+        // (position 0) regardless of where we are in the output; a
+        // non-broadcast dimension reads the output's own coordinate.
+        let mut ind_pos = out_pos.clone();
+        let mut arr_pos = out_pos.clone();
+        for d in 0..ndim {
+            if d == axis {
+                continue;
+            }
+            if ind_shape[d] == 1 {
+                ind_pos[d] = 0;
+            }
+            if arr_shape[d] == 1 {
+                arr_pos[d] = 0;
             }
         }
+
+        let idx_value = indices.get(&ind_pos)?;
+        if idx_value >= arr_shape[axis] {
+            return Err(NumRs2Error::IndexOutOfBounds(format!(
+                "index {} is out of bounds for axis {} with size {}",
+                idx_value, axis, arr_shape[axis]
+            )));
+        }
+        arr_pos[axis] = idx_value;
+
+        result_data.push(array.get(&arr_pos)?);
+
+        // Advance `out_pos` in row-major (C) order.
+        for d in (0..ndim).rev() {
+            out_pos[d] += 1;
+            if out_pos[d] < out_shape[d] {
+                break;
+            }
+            out_pos[d] = 0;
+        }
     }
 
-    Array::from_vec_shape(result_data, &ind_shape)
+    Array::from_vec_shape(result_data, &out_shape)
 }
 
 /// Apply a function to 1-D slices along the given axis
@@ -923,86 +1000,147 @@ pub fn boolean_index<T: Clone>(array: &Array<T>, mask: &Array<bool>) -> Result<A
 /// let result = select(&[cond1, cond2], &[choice1, choice2], 0).expect("operation should succeed");
 /// // Returns [10, 20, 300, 400, 500]
 /// ```
+///
+/// Delegates to the canonical broadcasting core shared with
+/// [`crate::array_ops::conditional::select`] (that function's
+/// `Option<T> + Zero`-defaulted `default` versus this one's required
+/// `default: T` is the only difference); see its docs for full
+/// NumPy-compatible semantics, including its more permissive handling of
+/// `condlist`/`choicelist` entries that are broadcastable but not
+/// identically shaped (this copy previously required an exact match).
 pub fn select<T: Clone>(
     conditions: &[Array<bool>],
     choices: &[Array<T>],
     default: T,
 ) -> Result<Array<T>> {
-    if conditions.is_empty() {
-        return Err(NumRs2Error::ValueError(
-            "conditions array cannot be empty".to_string(),
-        ));
-    }
-
-    if conditions.len() != choices.len() {
-        return Err(NumRs2Error::ValueError(format!(
-            "number of conditions ({}) must match number of choices ({})",
-            conditions.len(),
-            choices.len()
-        )));
-    }
-
-    // All conditions and choices must have same shape
-    let shape = conditions[0].shape();
-    for cond in &conditions[1..] {
-        if cond.shape() != shape {
-            return Err(NumRs2Error::ShapeMismatch {
-                expected: shape.clone(),
-                actual: cond.shape(),
-            });
-        }
-    }
-
-    for choice in choices {
-        if choice.shape() != shape {
-            return Err(NumRs2Error::ShapeMismatch {
-                expected: shape.clone(),
-                actual: choice.shape(),
-            });
-        }
-    }
-
-    // Borrow zero-copy (when contiguous) for easier access. Each is
-    // indexed by `i` below across every element position, not walked
-    // once sequentially, so `operand`'s slice-like random access replaces
-    // the old owned `c.to_vec()` per condition/choice array.
-    let cond_vecs: Vec<_> = conditions
-        .iter()
-        .map(crate::kernels::borrow::operand)
-        .collect();
-    let choice_vecs: Vec<_> = choices
-        .iter()
-        .map(crate::kernels::borrow::operand)
-        .collect();
-
-    let num_elements = conditions[0].size();
-    let mut result_data = Vec::with_capacity(num_elements);
-
-    // For each element position
-    for i in 0..num_elements {
-        let mut selected = false;
-
-        // Check conditions in order
-        for (cond_vec, choice_vec) in cond_vecs.iter().zip(choice_vecs.iter()) {
-            if cond_vec[i] {
-                result_data.push(choice_vec[i].clone());
-                selected = true;
-                break;
-            }
-        }
-
-        // If no condition matched, use default
-        if !selected {
-            result_data.push(default.clone());
-        }
-    }
-
-    Array::from_vec_shape(result_data, &shape)
+    let cond_refs: Vec<&Array<bool>> = conditions.iter().collect();
+    let choice_refs: Vec<&Array<T>> = choices.iter().collect();
+    crate::array_ops::conditional::select_with_default(&cond_refs, &choice_refs, default)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `condition` shorter than `array` (axis=None): NumPy treats the
+    /// unreached tail as simply absent, not as `false`. Pinned against
+    /// `numpy.compress([True, False], [1,2,3,4])` (numpy 2.4.2) == `[1]`.
+    #[test]
+    fn test_compress_flat_condition_shorter_than_array() {
+        let arr = Array::from_vec(vec![1, 2, 3, 4]);
+        let cond = Array::from_vec(vec![true, false]);
+        let result = compress(&arr, &cond, None).expect("operation should succeed");
+        assert_eq!(result.to_vec(), vec![1]);
+    }
+
+    /// `condition` longer than `array` (axis=None) with only trailing
+    /// `false`s is not an error -- only a `true` beyond the array's length
+    /// is. Pinned against numpy 2.4.2:
+    /// `np.compress([True,False,True,False,False], [1,2,3])` == `[1,3]`.
+    #[test]
+    fn test_compress_flat_condition_longer_with_trailing_false() {
+        let arr = Array::from_vec(vec![1, 2, 3]);
+        let cond = Array::from_vec(vec![true, false, true, false, false]);
+        let result = compress(&arr, &cond, None).expect("operation should succeed");
+        assert_eq!(result.to_vec(), vec![1, 3]);
+    }
+
+    /// A `true` beyond `array`'s length IS an error, whether reached via
+    /// the flattened (`axis=None`) or per-axis path. Pinned against numpy
+    /// 2.4.2: `np.compress([True,False,True,False,True], [1,2,3])` raises
+    /// `IndexError: index 4 is out of bounds for axis 0 with size 3`.
+    #[test]
+    fn test_compress_flat_condition_true_out_of_bounds_errors() {
+        let arr = Array::from_vec(vec![1, 2, 3]);
+        let cond = Array::from_vec(vec![true, false, true, false, true]);
+        assert!(compress(&arr, &cond, None).is_err());
+    }
+
+    /// This exact axis + shorter-condition combination was the concrete bug
+    /// this sweep fixed: the previous implementation required
+    /// `condition.size() == shape[axis]` and errored otherwise, and its
+    /// axis-given branch (unlike its own `axis=None` branch) additionally
+    /// never accounted for a `condition` even one entry longer needing an
+    /// out-of-bounds check rather than a silent index-into-nothing. Pinned
+    /// against numpy 2.4.2:
+    /// `np.compress([True], np.arange(1,7).reshape(2,3), axis=1)` ==
+    /// `[[1],[4]]`.
+    #[test]
+    fn test_compress_axis_condition_shorter_than_axis_size() {
+        let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+        let cond = Array::from_vec(vec![true]);
+        let result = compress(&arr, &cond, Some(1)).expect("operation should succeed");
+        assert_eq!(result.shape(), vec![2, 1]);
+        assert_eq!(result.to_vec(), vec![1, 4]);
+    }
+
+    /// Pinned against numpy 2.4.2:
+    /// `np.compress([True,False,True,True], np.arange(1,7).reshape(2,3),
+    /// axis=1)` raises `IndexError: index 3 is out of bounds for axis 1
+    /// with size 3` (excess `true` beyond the axis size is an error; excess
+    /// `false`, as in the case above generalized, would not be).
+    #[test]
+    fn test_compress_axis_condition_true_out_of_bounds_errors() {
+        let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+        let cond = Array::from_vec(vec![true, false, true, true]);
+        assert!(compress(&arr, &cond, Some(1)).is_err());
+    }
+
+    /// A non-1-D `condition` is rejected regardless of `axis`. Pinned
+    /// against numpy 2.4.2: `np.compress([[True,False]], [1,2])` raises
+    /// `ValueError: condition must be a 1-d array`.
+    #[test]
+    fn test_compress_condition_must_be_1d() {
+        let arr = Array::from_vec(vec![1, 2]);
+        let cond = Array::from_vec(vec![true, false]).reshape(&[1, 2]);
+        assert!(compress(&arr, &cond, None).is_err());
+    }
+
+    #[test]
+    fn test_take_along_axis_exact_shape() {
+        let arr = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+        let indices = Array::from_vec(vec![0, 2, 1, 0]).reshape(&[2, 2]);
+        let result = take_along_axis(&arr, &indices, 1).expect("operation should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![1, 3, 5, 4]);
+    }
+
+    /// Regression test: `array` and `indices` need only broadcast (not
+    /// match exactly) on dimensions other than `axis`. Pinned against
+    /// `numpy.take_along_axis` (numpy 2.4.2):
+    /// `np.take_along_axis(np.array([[10,20,30],[40,50,60]]),
+    /// np.array([[2,0]]), axis=1)` == `[[30, 10], [60, 40]]`, shape `(2,2)`.
+    /// This previously raised `ShapeMismatch` because dimension 0 (array:
+    /// 2, indices: 1) was required to match exactly rather than broadcast.
+    #[test]
+    fn test_take_along_axis_broadcasts_non_axis_dims() {
+        let arr = Array::from_vec(vec![10, 20, 30, 40, 50, 60]).reshape(&[2, 3]);
+        let indices = Array::from_vec(vec![2, 0]).reshape(&[1, 2]);
+        let result = take_along_axis(&arr, &indices, 1).expect("operation should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![30, 10, 60, 40]);
+    }
+
+    /// Same broadcasting rule, but with `indices` the larger side (shape
+    /// (2,2)) and `array` the size-1 side (shape (1,3)). Pinned against
+    /// `numpy.take_along_axis` 2.4.2:
+    /// `np.take_along_axis(np.array([[10,20,30]]),
+    /// np.array([[2,0],[1,1]]), axis=1)` == `[[30, 10], [20, 20]]`.
+    #[test]
+    fn test_take_along_axis_broadcasts_array_side() {
+        let arr = Array::from_vec(vec![10, 20, 30]).reshape(&[1, 3]);
+        let indices = Array::from_vec(vec![2, 0, 1, 1]).reshape(&[2, 2]);
+        let result = take_along_axis(&arr, &indices, 1).expect("operation should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![30, 10, 20, 20]);
+    }
+
+    #[test]
+    fn test_take_along_axis_out_of_bounds_index_errors() {
+        let arr = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
+        let indices = Array::from_vec(vec![0, 5]).reshape(&[1, 2]);
+        assert!(take_along_axis(&arr, &indices, 1).is_err());
+    }
 
     // `place`/`put`/`putmask` had no coverage at all before this sweep
     // touched them (see the `place`/`put` fix comments above for why

@@ -301,74 +301,15 @@ pub fn logspace<T: Float + Clone + 'static>(
 /// - "ij": Matrix indexing, where i is the first axis (rows) and j is the second axis (columns)
 ///
 /// For n > 2 dimensions, the remaining dimensions follow normal matrix indexing.
+///
+/// Delegates to the canonical
+/// [`crate::array_ops::creation::grids::meshgrid`] (always passing
+/// `sparse: false`, since this signature has no `sparse` parameter of its
+/// own); see that function's docs for full NumPy-compatible semantics,
+/// including its `sparse: true` option that this narrower signature cannot
+/// reach.
 pub fn meshgrid<T: Clone>(arrays: &[&Array<T>], indexing: Option<&str>) -> Result<Vec<Array<T>>> {
-    if arrays.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let indexing_mode = indexing.unwrap_or("xy");
-
-    if indexing_mode != "xy" && indexing_mode != "ij" {
-        return Err(NumRs2Error::InvalidOperation(format!(
-            "Indexing mode '{}' not supported, must be 'xy' or 'ij'",
-            indexing_mode
-        )));
-    }
-
-    let n = arrays.len();
-    let mut shape = vec![0; n];
-
-    // Determine the shape of the output arrays
-    for (i, arr) in arrays.iter().enumerate() {
-        shape[i] = arr.size();
-    }
-
-    // Prepare output arrays
-    let mut output = Vec::with_capacity(n);
-
-    for i in 0..n {
-        // Create a shape with all 1s
-        let mut out_shape = vec![1; n];
-
-        // For each output array, we insert the size of the source array
-        // in the dimension corresponding to the coordinate
-        if indexing_mode == "xy" && n >= 2 && (i == 0 || i == 1) {
-            // Special case for xy indexing: swap the first two dimensions
-            out_shape[0] = if i == 1 { arrays[i].size() } else { 1 };
-            out_shape[1] = if i == 0 { arrays[i].size() } else { 1 };
-        } else {
-            // For ij indexing or dimensions beyond the first two
-            out_shape[i] = arrays[i].size();
-        }
-
-        // Reshape the source array
-        let reshaped = Array::from_vec_shape(arrays[i].to_vec(), &out_shape)?;
-
-        // Determine the target broadcast shape
-        let target_shape = if indexing_mode == "xy" && n >= 2 {
-            // For xy indexing, the first two dimensions are swapped
-            let mut broadcast_shape = Vec::with_capacity(n);
-            for j in 0..n {
-                if j == 0 && n >= 1 {
-                    broadcast_shape.push(shape[1]); // y dimension
-                } else if j == 1 && n >= 2 {
-                    broadcast_shape.push(shape[0]); // x dimension
-                } else {
-                    broadcast_shape.push(shape[j]); // other dimensions
-                }
-            }
-            broadcast_shape
-        } else {
-            // For ij indexing, use the shape directly
-            shape.clone()
-        };
-
-        // Broadcast to the target shape
-        let broadcast_result = reshaped.broadcast_to(&target_shape)?;
-        output.push(broadcast_result);
-    }
-
-    Ok(output)
+    crate::array_ops::creation::grids::meshgrid(arrays, indexing.unwrap_or("xy"), false)
 }
 
 /// Legacy function for 2D meshgrid with xy indexing

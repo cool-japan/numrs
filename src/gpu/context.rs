@@ -10,6 +10,93 @@ use wgpu::util::DeviceExt;
 /// Thread-safe reference to the GPU context
 pub type GpuContextRef = Arc<GpuContext>;
 
+/// Environment variable that opts into a software (fallback) adapter.
+///
+/// Setting `NUMRS2_GPU_FALLBACK=1` makes [`GpuContext::new`] request an
+/// adapter with `force_fallback_adapter: true`, which selects the platform's
+/// software rasteriser (for example lavapipe on Linux or WARP on Windows)
+/// instead of a physical GPU. That allows the GPU test suite to run on
+/// machines that have no usable GPU at all, at the cost of speed.
+///
+/// Note that a fallback adapter only exists when the platform provides one;
+/// macOS/Metal has no software adapter, so on macOS the variable makes
+/// context creation fail rather than silently using the real GPU.
+pub const FALLBACK_ENV_VAR: &str = "NUMRS2_GPU_FALLBACK";
+
+/// Returns whether a software (fallback) adapter has been requested through
+/// the [`FALLBACK_ENV_VAR`] environment variable.
+pub fn fallback_adapter_requested() -> bool {
+    match std::env::var(FALLBACK_ENV_VAR) {
+        Ok(value) => {
+            let value = value.trim();
+            value == "1" || value.eq_ignore_ascii_case("true")
+        }
+        Err(_) => false,
+    }
+}
+
+/// Builds the adapter options used by every entry point in this crate.
+pub(crate) fn adapter_options(
+    force_fallback: bool,
+) -> wgpu::RequestAdapterOptions<'static, 'static> {
+    wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        force_fallback_adapter: force_fallback,
+        compatible_surface: None,
+        // Limit bucketing exists to reduce GPU fingerprinting when
+        // `wgpu` is exposed to untrusted web content; this is a
+        // native compute library with no such surface, so it is
+        // unneeded here (matches `wgpu`'s own `Default` behavior).
+        apply_limit_buckets: false,
+    }
+}
+
+/// Replaces the scalar placeholders of a WGSL template with a concrete type.
+///
+/// The shader templates in `shaders/` are written once and instantiated for
+/// every supported scalar type, so that the f32 and f64 kernels can never
+/// drift apart.
+///
+/// The placeholders are:
+///
+/// * `SCALAR` - the WGSL type name,
+/// * `NEG_LIMIT` / `POS_LIMIT` - the finite extrema of that type, used as the
+///   identity elements of `max` and `min`,
+/// * `IS_NAN_EXPR` - a NaN test on the parameter `x`. For f32 it inspects the
+///   bit pattern rather than writing `x != x`, because backends that compile
+///   with fast-math relaxations (Metal among them) fold the comparison away
+///   and would stop propagating NaN the way NumPy does.
+fn instantiate_template(template: &str, substitutions: &[(&str, &str)]) -> String {
+    let mut source = template.to_string();
+    for (placeholder, value) in substitutions {
+        source = source.replace(placeholder, value);
+    }
+    source
+}
+
+/// Template substitutions producing the f32 variant of a shader.
+const F32_SUBSTITUTIONS: &[(&str, &str)] = &[
+    ("SCALAR", "f32"),
+    ("NEG_LIMIT", "-3.4028234663852886e38"),
+    ("POS_LIMIT", "3.4028234663852886e38"),
+    (
+        "IS_NAN_EXPR",
+        "(bitcast<u32>(x) & 0x7fffffffu) > 0x7f800000u",
+    ),
+];
+
+/// Template substitutions producing the f64 variant of a shader.
+///
+/// f64 has no `bitcast` to a single integer in WGSL, so the NaN test stays a
+/// comparison; devices that expose `SHADER_F64` are Vulkan-class and do not
+/// apply the fast-math folding that makes this unreliable on Metal.
+const F64_SUBSTITUTIONS: &[(&str, &str)] = &[
+    ("SCALAR", "f64"),
+    ("NEG_LIMIT", "-1.7976931348623157e308"),
+    ("POS_LIMIT", "1.7976931348623157e308"),
+    ("IS_NAN_EXPR", "x != x"),
+];
+
 /// Manages GPU device, queue, and other resources
 ///
 /// CACHE ALIGNMENT: Aligned to 64-byte cache lines for optimal GPU command submission.
@@ -44,29 +131,47 @@ struct ShaderModules {
     reduction_f64: Option<wgpu::ShaderModule>,
     matmul_f32: wgpu::ShaderModule,
     matmul_f64: Option<wgpu::ShaderModule>,
+    broadcast_f32: wgpu::ShaderModule,
+    broadcast_f64: Option<wgpu::ShaderModule>,
+    /// Type-agnostic strided gather (transpose / permutation / slicing).
+    gather: wgpu::ShaderModule,
+    /// Type-agnostic im2col patch-matrix materialisation.
+    im2col: wgpu::ShaderModule,
 }
 
 impl GpuContext {
     /// Creates a new GPU context using the default adapter
+    ///
+    /// When the [`FALLBACK_ENV_VAR`] environment variable is set, a software
+    /// (fallback) adapter is requested instead of a physical GPU.
     pub async fn new() -> Result<Self> {
+        Self::with_fallback_adapter(fallback_adapter_requested()).await
+    }
+
+    /// Creates a new GPU context, optionally forcing a software adapter
+    ///
+    /// `force_fallback` maps directly onto wgpu's `force_fallback_adapter`
+    /// option: when it is `true` only a software rasteriser is considered,
+    /// which makes GPU code runnable (slowly) on machines without a usable
+    /// GPU. Platforms that do not ship a software adapter - macOS/Metal in
+    /// particular - fail to find one instead of falling back to the real GPU.
+    pub async fn with_fallback_adapter(force_fallback: bool) -> Result<Self> {
         // Get an adapter that supports compute operations
         let adapter = wgpu::Instance::default()
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: false,
-                compatible_surface: None,
-                // Limit bucketing exists to reduce GPU fingerprinting when
-                // `wgpu` is exposed to untrusted web content; this is a
-                // native compute library with no such surface, so it is
-                // unneeded here (matches `wgpu`'s own `Default` behavior).
-                apply_limit_buckets: false,
-            })
+            .request_adapter(&adapter_options(force_fallback))
             .await
             .map_err(|e| {
-                NumRs2Error::RuntimeError(format!(
-                    "Failed to find an appropriate GPU adapter: {}",
-                    e
-                ))
+                if force_fallback {
+                    NumRs2Error::RuntimeError(format!(
+                        "Failed to find a software (fallback) GPU adapter requested through {}=1: {}",
+                        FALLBACK_ENV_VAR, e
+                    ))
+                } else {
+                    NumRs2Error::RuntimeError(format!(
+                        "Failed to find an appropriate GPU adapter: {}",
+                        e
+                    ))
+                }
             })?;
 
         // Get information about the adapter
@@ -136,20 +241,59 @@ impl GpuContext {
             None
         };
 
-        // Load reduction operation shaders
+        // Load reduction operation shaders. Both precisions are instantiated
+        // from one template so the f32 and f64 kernels cannot drift apart.
+        let reduction_template = include_str!("shaders/reduction_template.wgsl");
         let reduction_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Reduction F32 Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f32.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                instantiate_template(reduction_template, F32_SUBSTITUTIONS).into(),
+            ),
         });
 
         let reduction_f64 = if f64_supported {
             Some(device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Reduction F64 Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/reduction_f64.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(
+                    instantiate_template(reduction_template, F64_SUBSTITUTIONS).into(),
+                ),
             }))
         } else {
             None
         };
+
+        // Broadcasting element-wise binary operations, same template scheme.
+        let broadcast_template = include_str!("shaders/broadcast_template.wgsl");
+        let broadcast_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Broadcast F32 Shader"),
+            source: wgpu::ShaderSource::Wgsl(
+                instantiate_template(broadcast_template, F32_SUBSTITUTIONS).into(),
+            ),
+        });
+
+        let broadcast_f64 = if f64_supported {
+            Some(device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Broadcast F64 Shader"),
+                source: wgpu::ShaderSource::Wgsl(
+                    instantiate_template(broadcast_template, F64_SUBSTITUTIONS).into(),
+                ),
+            }))
+        } else {
+            None
+        };
+
+        // Data-movement kernels. These copy raw 32-bit words and perform no
+        // arithmetic on the payload, so a single module serves every element
+        // type whose size is a multiple of four bytes.
+        let gather = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Strided Gather Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/gather_words.wgsl").into()),
+        });
+
+        let im2col = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("im2col Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/im2col_words.wgsl").into()),
+        });
 
         // Load matrix multiplication shaders
         let matmul_f32 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -173,6 +317,10 @@ impl GpuContext {
             reduction_f64,
             matmul_f32,
             matmul_f64,
+            broadcast_f32,
+            broadcast_f64,
+            gather,
+            im2col,
         })
     }
 
@@ -241,6 +389,37 @@ impl GpuContext {
             .matmul_f64
             .as_ref()
             .ok_or_else(Self::f64_unsupported_error)
+    }
+
+    /// Get a reference to the broadcasting binary-operation shader for f32
+    pub fn broadcast_f32_shader(&self) -> &wgpu::ShaderModule {
+        &self.shader_modules.broadcast_f32
+    }
+
+    /// Get a reference to the broadcasting binary-operation shader for f64
+    ///
+    /// Returns an error when the device does not support the `SHADER_F64`
+    /// feature, ensuring f64 operations never silently fall back to an f32
+    /// kernel.
+    pub fn broadcast_f64_shader(&self) -> Result<&wgpu::ShaderModule> {
+        self.shader_modules
+            .broadcast_f64
+            .as_ref()
+            .ok_or_else(Self::f64_unsupported_error)
+    }
+
+    /// Get a reference to the type-agnostic strided gather shader
+    ///
+    /// The gather kernel moves raw 32-bit words and therefore serves every
+    /// element type whose size is a multiple of four bytes, including f64 on
+    /// devices without the `SHADER_F64` feature.
+    pub fn gather_shader(&self) -> &wgpu::ShaderModule {
+        &self.shader_modules.gather
+    }
+
+    /// Get a reference to the type-agnostic im2col shader
+    pub fn im2col_shader(&self) -> &wgpu::ShaderModule {
+        &self.shader_modules.im2col
     }
 
     /// Builds the error returned when an f64 GPU operation is requested on a

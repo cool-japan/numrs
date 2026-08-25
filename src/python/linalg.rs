@@ -166,15 +166,46 @@ fn eig(a: &PyArray) -> PyResult<(PyArray, PyArray)> {
 }
 
 /// Compute the singular value decomposition (SVD)
+///
+/// PyO3 0.29 does not infer a default of `None` for a trailing `Option<T>`
+/// parameter without an explicit `#[pyo3(signature = ...)]` -- every
+/// function in this file taking an `Option<T>` needed this added (see
+/// `eye`'s doc comment in `src/python/array.rs` for how this was found:
+/// empirically, via a `TypeError: missing required positional argument`
+/// from calling one of these with its optional argument omitted).
+///
+/// Note: `full_matrices` is accepted (for API compatibility with
+/// `numpy.linalg.svd`) but not yet honored -- `crate::linalg::svd` does not
+/// expose an economy-vs-full switch, so this always returns the same shapes
+/// regardless of the argument. `u`/`vt` are therefore always the "full
+/// matrices" shapes.
 #[pyfunction]
+#[pyo3(signature = (a, full_matrices=None))]
 fn svd(a: &PyArray, full_matrices: Option<bool>) -> PyResult<(PyArray, PyArray, PyArray)> {
     let _full_matrices = full_matrices.unwrap_or(true);
 
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     {
         use crate::linalg;
-        let (u, s, vt) = linalg::svd(&a.inner)
+        let (u, s_mat, vt) = linalg::svd(&a.inner)
             .map_err(|e| PyValueError::new_err(format!("SVD failed: {}", e)))?;
+
+        // `crate::linalg::svd` returns `s` embedded as a full `(m, n)`
+        // matrix with the singular values on its diagonal (so a Rust caller
+        // can reconstruct `a` as a plain `u.matmul(&s).matmul(&vt)`).
+        // `numpy.linalg.svd`, which this binding otherwise mirrors, instead
+        // returns `s` as the 1-D vector of singular values themselves (see
+        // `test_linalg_svd` in `tests/python/test_linalg.py`, which asserts
+        // `s.ndim == 1`); extract that diagonal here so the Python-facing
+        // `s` matches NumPy's convention instead of leaking this crate's
+        // internal Rust-side representation.
+        let s_shape = s_mat.shape();
+        let k = s_shape[0].min(s_shape[1]);
+        let n_cols = s_shape[1];
+        let s_data = s_mat.to_vec();
+        let diag: Vec<f64> = (0..k).map(|i| s_data[i * n_cols + i]).collect();
+        let s = crate::array::Array::from_vec(diag);
+
         Ok((
             PyArray { inner: u },
             PyArray { inner: s },
@@ -258,6 +289,7 @@ fn lu(a: &PyArray) -> PyResult<(PyArray, PyArray, PyArray)> {
 
 /// Compute the matrix norm
 #[pyfunction]
+#[pyo3(signature = (a, ord=None))]
 fn norm(a: &PyArray, ord: Option<String>) -> PyResult<f64> {
     use crate::linalg;
 
@@ -293,6 +325,7 @@ fn cond(a: &PyArray) -> PyResult<f64> {
 
 /// Compute the matrix rank
 #[pyfunction]
+#[pyo3(signature = (a, tol=None))]
 fn matrix_rank(a: &PyArray, tol: Option<f64>) -> PyResult<usize> {
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     {

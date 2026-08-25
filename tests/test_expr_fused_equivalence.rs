@@ -581,11 +581,19 @@ proptest! {
 // Seeded sweeps that proptest's deliberately tiny shapes would not reach
 // ---------------------------------------------------------------------------
 
-/// The fused engine's chunked interpreter works in 1024-element blocks. This
-/// sweep straddles that boundary in both directions, so a block-indexing bug
-/// cannot hide behind the small shapes above.
+/// Sweeps a handful of sizes -- including 1023/1024/1025/2049, which were
+/// meaningful block-boundary values under an earlier "interpret the tree in
+/// 1024-element blocks" design. That third tier was measured against the
+/// current design and lost (see `expr::fused_eval`'s module docs) and was
+/// removed in favor of today's two-tier engine: a fixed set of specialized
+/// fused shapes evaluated via monomorphic whole-array `zip` loops, falling
+/// back to `eval_eager` for every other tree. Neither tier chunks, so there
+/// is no longer a "boundary" here in the original sense -- but sweeping this
+/// same range of sizes (including the tiny `cols=1` case) remains a
+/// reasonable general guard against size-dependent indexing bugs in either
+/// tier, so the sweep is kept rather than dropped.
 #[test]
-fn chunk_boundary_sizes_match_eager() -> Result<()> {
+fn varied_size_sweep_matches_eager() -> Result<()> {
     let mut fused_seen = 0usize;
     let mut total = 0usize;
     for &cols in &[1usize, 1023, 1024, 1025, 2049] {

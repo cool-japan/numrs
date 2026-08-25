@@ -164,7 +164,7 @@ pub fn compute_histogram(arr: &WasmArray, bins: usize) -> Result<HistogramResult
     let arr_shape = arr.shape();
     let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
 
-    histogram(&inner, bins, None, None)
+    histogram(&inner, bins, None, None, None)
         .map(|(counts, bin_edges)| HistogramResult {
             counts: WasmArray::from_array(counts),
             bin_edges: WasmArray::from_array(bin_edges),
@@ -184,17 +184,15 @@ impl HistogramResult {
     /// Get the bin counts
     #[wasm_bindgen(getter)]
     pub fn counts(&self) -> WasmArray {
-        let counts_vec = self.counts.to_vec();
-        let counts_shape = self.counts.shape();
-        WasmArray::from_array(Array::from_vec_shape(counts_vec, &counts_shape)?)
+        // `WasmArray` clones are O(1) (Arc-backed copy-on-write `Array`),
+        // so this avoids an unnecessary `to_vec()` + reconstruction round-trip.
+        self.counts.clone()
     }
 
     /// Get the bin edges
     #[wasm_bindgen(getter)]
     pub fn bin_edges(&self) -> WasmArray {
-        let edges_vec = self.bin_edges.to_vec();
-        let edges_shape = self.bin_edges.shape();
-        WasmArray::from_array(Array::from_vec_shape(edges_vec, &edges_shape)?)
+        self.bin_edges.clone()
     }
 }
 
@@ -219,11 +217,14 @@ pub fn correlation(x: &WasmArray, y: Option<WasmArray>) -> Result<WasmArray, JsV
     let x_shape = x.shape();
     let x_inner = Array::from_vec_shape(x_vec, &x_shape)?;
 
-    let y_inner = y.as_ref().map(|y_arr| {
-        let y_vec = y_arr.to_vec();
-        let y_shape = y_arr.shape();
-        Array::from_vec_shape(y_vec, &y_shape)?
-    });
+    let y_inner = y
+        .as_ref()
+        .map(|y_arr| {
+            let y_vec = y_arr.to_vec();
+            let y_shape = y_arr.shape();
+            Array::from_vec_shape(y_vec, &y_shape)
+        })
+        .transpose()?;
 
     corrcoef(&x_inner, y_inner.as_ref(), None)
         .map(WasmArray::from_array)
@@ -251,11 +252,14 @@ pub fn covariance(x: &WasmArray, y: Option<WasmArray>) -> Result<WasmArray, JsVa
     let x_shape = x.shape();
     let x_inner = Array::from_vec_shape(x_vec, &x_shape)?;
 
-    let y_inner = y.as_ref().map(|y_arr| {
-        let y_vec = y_arr.to_vec();
-        let y_shape = y_arr.shape();
-        Array::from_vec_shape(y_vec, &y_shape)?
-    });
+    let y_inner = y
+        .as_ref()
+        .map(|y_arr| {
+            let y_vec = y_arr.to_vec();
+            let y_shape = y_arr.shape();
+            Array::from_vec_shape(y_vec, &y_shape)
+        })
+        .transpose()?;
 
     cov(&x_inner, y_inner.as_ref(), None, None, None)
         .map(WasmArray::from_array)
@@ -303,11 +307,7 @@ pub fn product(arr: &WasmArray) -> f64 {
 impl WasmArray {
     /// Internal helper to get percentile
     pub(crate) fn percentile(&self, q: f64) -> f64 {
-        let arr_vec = self.to_vec();
-        let arr_shape = self.shape();
-        let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
-
-        inner.percentile(q)
+        self.inner().percentile(q)
     }
 
     /// Internal helper to get variance
@@ -374,6 +374,57 @@ mod tests {
         let p75 = compute_percentile(&arr, 0.75).expect("percentile should succeed");
         assert!((1.0..=3.0).contains(&p25));
         assert!((3.0..=5.0).contains(&p75));
+    }
+
+    // `WasmArray::percentile` (the `pub(crate)` helper behind `median()` and
+    // `compute_percentile()`) reads through `WasmArray::inner()` -- a plain
+    // borrow of the wrapped `Array<f64>` -- rather than the previous
+    // `to_vec()` + `Array::from_vec_shape()` round-trip. That is only a
+    // no-op simplification if reading a *non-contiguous* (e.g. transposed)
+    // `Array` in logical order still visits every element exactly once,
+    // with the same values, as reading an already-flat array with the same
+    // logical layout. These two tests pin that invariant down directly, so
+    // a future change to `Array::to_vec()`, `WasmArray::inner()`, or
+    // `percentile()` that broke it would fail here rather than silently
+    // shipping a wrong median/percentile to JS callers.
+    #[test]
+    fn test_transpose_preserves_logical_order_for_to_vec() {
+        // [[1, 2, 3],      [[1, 4],
+        //  [4, 5, 6]]  -T->  [2, 5],
+        //                    [3, 6]]
+        // Row-major flatten of the transpose is [1, 4, 2, 5, 3, 6], not the
+        // untouched backing buffer [1, 2, 3, 4, 5, 6].
+        let matrix = WasmArray::from_vec(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3])
+            .expect("from_vec should succeed");
+        let transposed = matrix.transpose();
+        assert_eq!(transposed.shape(), vec![3, 2]);
+        assert_eq!(transposed.to_vec(), vec![1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
+    }
+
+    #[test]
+    fn test_percentile_after_transpose_matches_equivalent_flat_array() {
+        let matrix = WasmArray::from_vec(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3])
+            .expect("from_vec should succeed");
+        let transposed = matrix.transpose();
+        // Same six values, same logical order as `transposed.to_vec()`
+        // (see test above), laid out contiguously from the start.
+        let flat = WasmArray::from_vec(&[1.0, 4.0, 2.0, 5.0, 3.0, 6.0], &[6])
+            .expect("from_vec should succeed");
+
+        for q in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let expected = call_percentile(&flat, q);
+            let actual = call_percentile(&transposed, q);
+            assert!(
+                (actual - expected).abs() < 1e-12,
+                "percentile({q}) mismatch after transpose: expected {expected}, got {actual}"
+            );
+        }
+    }
+
+    // `WasmArray::percentile` is `pub(crate)`, not `#[wasm_bindgen]`-exported,
+    // so it is directly callable from this same-crate test module.
+    fn call_percentile(arr: &WasmArray, q: f64) -> f64 {
+        arr.percentile(q)
     }
 
     #[test]

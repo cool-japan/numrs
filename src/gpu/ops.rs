@@ -6,13 +6,20 @@
 
 use crate::error::{NumRs2Error, Result};
 use crate::gpu::array::GpuArray;
+use crate::gpu::nd::{self, SliceRange};
+use crate::gpu::reduce::{reduce_to_scalar, ReductionOp};
 use wgpu::util::DeviceExt;
 
 // Constants for compute shader configuration
 const WORKGROUP_SIZE: u32 = 256;
 
 /// Enumerates the types of element-wise operations
-enum ElementWiseOp {
+///
+/// The discriminants are part of the shader ABI: they are written into the
+/// operation-type field of the element-wise and broadcast kernels and switched
+/// on inside WGSL.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ElementWiseOp {
     Add = 0,
     Subtract = 1,
     Multiply = 2,
@@ -364,8 +371,12 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
                 compilation_options: Default::default(),
             });
 
-        // Create dimensions buffer
-        let dims = [a.shape()[0] as u32, a.shape()[1] as u32, 0, 0];
+        // Create dimensions buffer. The shader indexes the input as
+        // `y * width + x`, so `width` is the length of a row - the number of
+        // input columns - and `height` is the number of input rows.
+        let rows = a.shape()[0] as u32;
+        let cols = a.shape()[1] as u32;
+        let dims = [cols, rows, 0, 0];
 
         let dimensions_buffer =
             context
@@ -398,9 +409,9 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
                 ],
             });
 
-        // Calculate workgroup dimensions
-        let workgroup_count_x = (out_shape[1] as f32 / 16.0).ceil() as u32;
-        let workgroup_count_y = (out_shape[0] as f32 / 16.0).ceil() as u32;
+        // One thread per input element, tiled 16x16 over (column, row).
+        let workgroup_count_x = cols.div_ceil(16);
+        let workgroup_count_y = rows.div_ceil(16);
 
         // Run the compute pass
         context.run_compute(
@@ -412,11 +423,24 @@ pub fn transpose<T: bytemuck::Pod + bytemuck::Zeroable>(a: &GpuArray<T>) -> Resu
         return Ok(result);
     }
 
-    // For higher dimensions, we need a more complex implementation
-    // (not covered in this initial version)
-    Err(NumRs2Error::NotImplemented(
-        "Transpose for arrays with more than 2 dimensions is not implemented yet".to_string(),
-    ))
+    // Higher-rank arrays go through the general permutation kernel, which
+    // reverses the axis order exactly like NumPy's `a.T`.
+    nd::reverse_axes(a)
+}
+
+/// Permutes the axes of a GPU array (NumPy's `transpose(a, axes)`)
+///
+/// `axes` must be a permutation of `0..ndim`; output axis `d` is taken from
+/// input axis `axes[d]`.
+///
+/// # Errors
+///
+/// Returns an error if `axes` is not a permutation of the array's axes.
+pub fn permute_axes<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    axes: &[usize],
+) -> Result<GpuArray<T>> {
+    nd::permute_axes(a, axes)
 }
 
 /// Helper function for element-wise binary operations
@@ -566,15 +590,6 @@ fn element_wise_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     Ok(result)
 }
 
-/// Enumerates the types of reduction operations
-#[derive(Clone, Copy)]
-enum ReductionOp {
-    Sum = 0,
-    Mean = 1,
-    Max = 2,
-    Min = 3,
-}
-
 /// Computes the sum of all elements in a GPU array (f32 version)
 pub fn sum_f32(a: &GpuArray<f32>) -> Result<f32> {
     reduction_op_f32(a, ReductionOp::Sum)
@@ -614,385 +629,35 @@ pub fn min_f32(a: &GpuArray<f32>) -> Result<f32> {
 pub fn min_f64(a: &GpuArray<f64>) -> Result<f64> {
     reduction_op_f64(a, ReductionOp::Min)
 }
-
 /// Helper function for f32 reduction operations
+///
+/// The whole reduction runs on the GPU: repeated passes of the workgroup
+/// tree-reduction kernel shrink the array by a factor of 256 per pass until a
+/// single value remains, which is the only value copied back to the host.
 fn reduction_op_f32(a: &GpuArray<f32>, op: ReductionOp) -> Result<f32> {
-    let context = a.context().clone();
-    let total_elements = a.size() as u32;
+    let total_elements = a.size();
+    let value = reduce_to_scalar(a, op, false)?;
 
-    // Calculate number of workgroups needed
-    let workgroup_count = total_elements.div_ceil(WORKGROUP_SIZE);
-
-    // Create output buffer for partial results (one per workgroup)
-    let partial_results_size = workgroup_count as usize * std::mem::size_of::<f32>();
-    let partial_results_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Reduction Partial Results"),
-        size: partial_results_size as u64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
-
-    // Create bind group layout
-    let bind_group_layout =
-        context
-            .device()
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("NumRS2 Reduction Bind Group Layout"),
-                entries: &[
-                    // Input array
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Output partial results
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Parameters (operation type, array size)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-
-    let shader = context.reduction_f32_shader();
-
-    // Create pipeline
-    let pipeline_layout =
-        context
-            .device()
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("NumRS2 Reduction Pipeline Layout"),
-                bind_group_layouts: &[Some(&bind_group_layout)],
-                immediate_size: 0,
-            });
-
-    let pipeline = context
-        .device()
-        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("NumRS2 Reduction Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: shader,
-            entry_point: Some("reduction"),
-            cache: None,
-            compilation_options: Default::default(),
-        });
-
-    // Create uniform buffer with operation type and size
-    let params = [op as u32, total_elements, 0, 0];
-
-    let params_buffer = context
-        .device()
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Reduction Op Params"),
-            contents: bytemuck::cast_slice(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-
-    // Create bind group
-    let bind_group = context
-        .device()
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("NumRS2 Reduction Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: a.buffer().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: partial_results_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
-
-    // Run the compute pass
-    context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));
-
-    // Read back partial results
-    let staging_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Reduction Staging Buffer"),
-        size: partial_results_size as u64,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-
-    // Copy from GPU to staging buffer
-    let mut encoder = context
-        .device()
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Reduction Copy Encoder"),
-        });
-
-    encoder.copy_buffer_to_buffer(
-        &partial_results_buffer,
-        0,
-        &staging_buffer,
-        0,
-        partial_results_size as u64,
-    );
-
-    context.queue().submit(Some(encoder.finish()));
-
-    // Map the staging buffer and read results
-    let buffer_slice = staging_buffer.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-        tx.send(result)
-            .expect("Failed to send f32 reduction buffer mapping result - receiver dropped");
-    });
-
-    context
-        .device()
-        .poll(wgpu::PollType::wait_indefinitely())
-        .expect("GPU device poll failed during f32 reduction buffer mapping");
-    rx.recv()
-        .map_err(|e| {
-            NumRs2Error::RuntimeError(format!(
-                "Failed to receive f32 reduction buffer mapping result: {:?}",
-                e
-            ))
-        })?
-        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
-
-    let data = buffer_slice
-        .get_mapped_range()
-        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
-    let partial_results: &[f32] = bytemuck::cast_slice(&data);
-
-    // Perform final reduction on CPU
-    let final_result = match op {
-        ReductionOp::Sum => partial_results.iter().sum(),
-        ReductionOp::Mean => partial_results.iter().sum::<f32>() / total_elements as f32,
-        ReductionOp::Max => partial_results
-            .iter()
-            .cloned()
-            .fold(f32::NEG_INFINITY, f32::max),
-        ReductionOp::Min => partial_results
-            .iter()
-            .cloned()
-            .fold(f32::INFINITY, f32::min),
-    };
-
-    drop(data);
-    staging_buffer.unmap();
-
-    Ok(final_result)
+    // The kernel sums for `Mean`; scaling by the element count on the host
+    // keeps the per-workgroup element bookkeeping out of the shader.
+    match op {
+        ReductionOp::Mean => Ok(value / total_elements as f32),
+        _ => Ok(value),
+    }
 }
 
 /// Helper function for f64 reduction operations
+///
+/// See [`reduction_op_f32`]; this variant requires a device with the
+/// `SHADER_F64` feature.
 fn reduction_op_f64(a: &GpuArray<f64>, op: ReductionOp) -> Result<f64> {
-    let context = a.context().clone();
-    let total_elements = a.size() as u32;
+    let total_elements = a.size();
+    let value = reduce_to_scalar(a, op, false)?;
 
-    // Calculate number of workgroups needed
-    let workgroup_count = total_elements.div_ceil(WORKGROUP_SIZE);
-
-    // Create output buffer for partial results (one per workgroup)
-    let partial_results_size = workgroup_count as usize * std::mem::size_of::<f64>();
-    let partial_results_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Reduction Partial Results"),
-        size: partial_results_size as u64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
-
-    // Create bind group layout
-    let bind_group_layout =
-        context
-            .device()
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("NumRS2 Reduction Bind Group Layout"),
-                entries: &[
-                    // Input array
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Output partial results
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Parameters (operation type, array size)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-
-    let shader = context.reduction_f64_shader()?;
-
-    // Create pipeline
-    let pipeline_layout =
-        context
-            .device()
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("NumRS2 Reduction Pipeline Layout"),
-                bind_group_layouts: &[Some(&bind_group_layout)],
-                immediate_size: 0,
-            });
-
-    let pipeline = context
-        .device()
-        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("NumRS2 Reduction Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: shader,
-            entry_point: Some("reduction"),
-            cache: None,
-            compilation_options: Default::default(),
-        });
-
-    // Create uniform buffer with operation type and size
-    let params = [op as u32, total_elements, 0, 0];
-
-    let params_buffer = context
-        .device()
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Reduction Op Params"),
-            contents: bytemuck::cast_slice(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-
-    // Create bind group
-    let bind_group = context
-        .device()
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("NumRS2 Reduction Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: a.buffer().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: partial_results_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
-
-    // Run the compute pass
-    context.run_compute(&pipeline, &[&bind_group], (workgroup_count, 1, 1));
-
-    // Read back partial results
-    let staging_buffer = context.device().create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Reduction Staging Buffer"),
-        size: partial_results_size as u64,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-
-    // Copy from GPU to staging buffer
-    let mut encoder = context
-        .device()
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Reduction Copy Encoder"),
-        });
-
-    encoder.copy_buffer_to_buffer(
-        &partial_results_buffer,
-        0,
-        &staging_buffer,
-        0,
-        partial_results_size as u64,
-    );
-
-    context.queue().submit(Some(encoder.finish()));
-
-    // Map the staging buffer and read results
-    let buffer_slice = staging_buffer.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-        tx.send(result)
-            .expect("Failed to send f64 reduction buffer mapping result - receiver dropped");
-    });
-
-    context
-        .device()
-        .poll(wgpu::PollType::wait_indefinitely())
-        .expect("GPU device poll failed during f64 reduction buffer mapping");
-    rx.recv()
-        .map_err(|e| {
-            NumRs2Error::RuntimeError(format!(
-                "Failed to receive f64 reduction buffer mapping result: {:?}",
-                e
-            ))
-        })?
-        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
-
-    let data = buffer_slice
-        .get_mapped_range()
-        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to map buffer: {:?}", e)))?;
-    let partial_results: &[f64] = bytemuck::cast_slice(&data);
-
-    // Perform final reduction on CPU
-    let final_result = match op {
-        ReductionOp::Sum => partial_results.iter().sum(),
-        ReductionOp::Mean => partial_results.iter().sum::<f64>() / total_elements as f64,
-        ReductionOp::Max => partial_results
-            .iter()
-            .cloned()
-            .fold(f64::NEG_INFINITY, f64::max),
-        ReductionOp::Min => partial_results
-            .iter()
-            .cloned()
-            .fold(f64::INFINITY, f64::min),
-    };
-
-    drop(data);
-    staging_buffer.unmap();
-
-    Ok(final_result)
+    match op {
+        ReductionOp::Mean => Ok(value / total_elements as f64),
+        _ => Ok(value),
+    }
 }
 
 /// Helper function for element-wise unary operations
@@ -1130,6 +795,15 @@ pub fn broadcast_add<T: bytemuck::Pod + bytemuck::Zeroable>(
     broadcast_binary_op(a, b, &output_shape, ElementWiseOp::Add)
 }
 
+/// Performs broadcasting-aware element-wise subtraction
+pub fn broadcast_subtract<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
+    let output_shape = broadcast_shapes(a.shape(), b.shape())?;
+    broadcast_binary_op(a, b, &output_shape, ElementWiseOp::Subtract)
+}
+
 /// Performs broadcasting-aware element-wise multiplication
 pub fn broadcast_multiply<T: bytemuck::Pod + bytemuck::Zeroable>(
     a: &GpuArray<T>,
@@ -1139,8 +813,29 @@ pub fn broadcast_multiply<T: bytemuck::Pod + bytemuck::Zeroable>(
     broadcast_binary_op(a, b, &output_shape, ElementWiseOp::Multiply)
 }
 
+/// Performs broadcasting-aware element-wise division
+pub fn broadcast_divide<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
+    let output_shape = broadcast_shapes(a.shape(), b.shape())?;
+    broadcast_binary_op(a, b, &output_shape, ElementWiseOp::Divide)
+}
+
+/// Performs broadcasting-aware element-wise power (`a ** b`)
+pub fn broadcast_pow<T: bytemuck::Pod + bytemuck::Zeroable>(
+    a: &GpuArray<T>,
+    b: &GpuArray<T>,
+) -> Result<GpuArray<T>> {
+    let output_shape = broadcast_shapes(a.shape(), b.shape())?;
+    broadcast_binary_op(a, b, &output_shape, ElementWiseOp::Pow)
+}
+
 /// Determines the output shape for broadcasting two arrays
-fn broadcast_shapes(shape_a: &[usize], shape_b: &[usize]) -> Result<Vec<usize>> {
+///
+/// Implements NumPy's rule: the shapes are right-aligned, and each axis pair
+/// must either match or contain a one, which is stretched.
+pub fn broadcast_shapes(shape_a: &[usize], shape_b: &[usize]) -> Result<Vec<usize>> {
     let max_dims = shape_a.len().max(shape_b.len());
     let mut result = vec![1; max_dims];
 
@@ -1174,22 +869,22 @@ fn broadcast_shapes(shape_a: &[usize], shape_b: &[usize]) -> Result<Vec<usize>> 
 }
 
 /// Helper function for broadcasting binary operations
+///
+/// Equal shapes take the dense element-wise kernel, which needs no index
+/// arithmetic at all; every other compatible shape pair goes to the
+/// stride-driven broadcast kernel, where a stretched axis is expressed as a
+/// stride of zero.
 fn broadcast_binary_op<T: bytemuck::Pod + bytemuck::Zeroable>(
     a: &GpuArray<T>,
     b: &GpuArray<T>,
     output_shape: &[usize],
     op: ElementWiseOp,
 ) -> Result<GpuArray<T>> {
-    // For now, if shapes match exactly, use regular operation
     if a.shape() == b.shape() {
         return element_wise_op(a, b, op);
     }
 
-    // Otherwise, we need broadcasting support
-    // This is a simplified implementation - full broadcasting requires more complex shader code
-    Err(NumRs2Error::NotImplemented(
-        "Full broadcasting support is not yet implemented for GPU arrays".to_string(),
-    ))
+    nd::broadcast_binary(a, b, output_shape, op)
 }
 
 /// Copies a GPU array with optional format conversion
@@ -1232,51 +927,32 @@ pub fn fill<T: bytemuck::Pod + bytemuck::Zeroable + Clone>(
     Ok(())
 }
 
-/// Creates a slice view of a GPU array
+/// Extracts a contiguous slice of a GPU array
 ///
-/// Note: This creates a new array with a copy of the sliced data
+/// One `(start, end)` range per axis is required. The data never leaves the
+/// GPU: the strided gather kernel writes the selected elements directly into
+/// a new, dense array.
+///
+/// # Errors
+///
+/// Returns an error if the number of ranges does not match the rank, or if a
+/// range is empty or out of bounds.
 pub fn slice<T: bytemuck::Pod + bytemuck::Zeroable>(
     array: &GpuArray<T>,
     ranges: &[(usize, usize)],
 ) -> Result<GpuArray<T>> {
-    if ranges.len() != array.shape().len() {
-        return Err(NumRs2Error::DimensionMismatch(format!(
-            "Number of slice ranges ({}) does not match array dimensions ({})",
-            ranges.len(),
-            array.shape().len()
-        )));
-    }
+    let ranges: Vec<SliceRange> = ranges.iter().copied().map(SliceRange::from).collect();
+    nd::slice_strided(array, &ranges)
+}
 
-    // Validate ranges and calculate new shape
-    let mut new_shape = Vec::with_capacity(ranges.len());
-    for (i, (start, end)) in ranges.iter().enumerate() {
-        if *start >= *end || *end > array.shape()[i] {
-            return Err(NumRs2Error::IndexError(format!(
-                "Invalid range [{}..{}] for dimension {} with size {}",
-                start,
-                end,
-                i,
-                array.shape()[i]
-            )));
-        }
-        new_shape.push(*end - *start);
-    }
-
-    // For now, we need to transfer to CPU, slice, and transfer back
-    // A more efficient implementation would use GPU compute shaders
-    let cpu_array = array.to_array()?;
-
-    // Build slice indices
-    let mut slice_spec = String::new();
-    for (i, (start, end)) in ranges.iter().enumerate() {
-        if i > 0 {
-            slice_spec.push_str(", ");
-        }
-        slice_spec.push_str(&format!("{}..{}", start, end));
-    }
-
-    // This is a simplified implementation - full slicing would require ndarray slice support
-    Err(NumRs2Error::NotImplemented(
-        "GPU array slicing is not yet fully implemented".to_string(),
-    ))
+/// Extracts a strided slice of a GPU array
+///
+/// Like [`slice`], but every axis also carries a step, so
+/// `SliceRange::with_step(0, 8, 2)` keeps indices `0, 2, 4, 6` of that axis -
+/// NumPy's `a[0:8:2]`.
+pub fn slice_with_steps<T: bytemuck::Pod + bytemuck::Zeroable>(
+    array: &GpuArray<T>,
+    ranges: &[SliceRange],
+) -> Result<GpuArray<T>> {
+    nd::slice_strided(array, ranges)
 }

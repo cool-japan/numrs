@@ -299,6 +299,24 @@ pub fn select<T: Clone + num_traits::Zero>(
     choicelist: &[&Array<T>],
     default: Option<T>,
 ) -> Result<Array<T>> {
+    select_with_default(condlist, choicelist, default.unwrap_or_else(T::zero))
+}
+
+/// Core of [`select`], taking a required `default` rather than
+/// `Option<T> + Zero`.
+///
+/// This is the canonical broadcasting implementation that both `select`
+/// above and [`crate::array_ops::advanced_indexing::select`] (a delegate
+/// that adapts its owned, non-broadcasting `&[Array<bool>]` /
+/// `&[Array<T>]` parameters into this function's borrowed-slice-of-refs,
+/// required-`default` form) build on; kept `pub(crate)` rather than public
+/// since `select`'s `Option<T> + Zero` signature is the intended public
+/// NumPy-facing surface (matching `numpy.select`'s `default=0` keyword).
+pub(crate) fn select_with_default<T: Clone>(
+    condlist: &[&Array<bool>],
+    choicelist: &[&Array<T>],
+    default: T,
+) -> Result<Array<T>> {
     if condlist.len() != choicelist.len() {
         return Err(NumRs2Error::InvalidOperation(
             "condlist and choicelist must have the same length".to_string(),
@@ -332,8 +350,7 @@ pub fn select<T: Clone + num_traits::Zero>(
     }
 
     // Create result array with default values
-    let default_val = default.unwrap_or_else(T::zero);
-    let mut result = Array::full(&broadcast_shape, default_val);
+    let mut result = Array::full(&broadcast_shape, default);
 
     // Process each element. `result` starts as write-only (`Array::full`
     // already populated every slot with `default_val`) and every actual
@@ -414,6 +431,16 @@ pub fn select<T: Clone + num_traits::Zero>(
 /// ];
 /// let result = choose(&indices, &choices.iter().collect::<Vec<_>>(), "raise").expect("operation should succeed");
 /// assert_eq!(result.to_vec(), vec![5, 7, 7, 5]);
+///
+/// // `a` itself also participates in the broadcast, not just `choices`
+/// // against each other: NumPy's `np.choose(np.array([0]),
+/// // [np.array([10,20,30,40]), np.array([50,60,70,80])])` returns shape
+/// // `(4,)`, not `(1,)`.
+/// let a_small = Array::from_vec(vec![0usize]);
+/// let c0 = Array::from_vec(vec![10, 20, 30, 40]);
+/// let c1 = Array::from_vec(vec![50, 60, 70, 80]);
+/// let result = choose(&a_small, &[&c0, &c1], "raise").expect("operation should succeed");
+/// assert_eq!(result.to_vec(), vec![10, 20, 30, 40]);
 /// ```
 pub fn choose<T: Clone + num_traits::Zero>(
     a: &Array<usize>,
@@ -428,23 +455,37 @@ pub fn choose<T: Clone + num_traits::Zero>(
 
     let n_choices = choices.len();
 
-    // Find the broadcast shape for all choice arrays and the index array
+    // Find the broadcast shape for the index array *and* every choice
+    // array together -- NumPy broadcasts `a` against `choices`, not just
+    // the choices against each other. Broadcasting only the choices (as
+    // this previously did) and then iterating/returning at `a`'s own,
+    // unbroadcast shape silently produced the wrong output whenever `a`
+    // was the smaller side (e.g. `a` shape `(1,)` against choices shape
+    // `(4,)` returned shape `(1,)` instead of NumPy's `(4,)`).
     let mut broadcast_shape = a.shape();
     for choice in choices.iter() {
         broadcast_shape = Array::<T>::broadcast_shape(&broadcast_shape, &choice.shape())?;
     }
 
-    // Broadcast all choice arrays to the common shape
+    let a_broadcast = a.broadcast_to(&broadcast_shape)?;
     let mut choice_broadcasts = Vec::with_capacity(n_choices);
     for choice in choices.iter() {
         choice_broadcasts.push(choice.broadcast_to(&broadcast_shape)?);
     }
 
-    // Create result array
-    let mut result_data = Vec::with_capacity(a.len());
+    let total_size: usize = broadcast_shape.iter().product();
+    let mut result_data = Vec::with_capacity(total_size);
+    let ndim = broadcast_shape.len();
+    let mut indices = vec![0usize; ndim];
 
-    // Process each index
-    for (i, &idx) in a.to_vec().iter().enumerate() {
+    for flat in 0..total_size {
+        let mut temp = flat;
+        for d in (0..ndim).rev() {
+            indices[d] = temp % broadcast_shape[d];
+            temp /= broadcast_shape[d];
+        }
+
+        let idx = a_broadcast.get(&indices)?;
         let actual_idx = match mode {
             "raise" => {
                 if idx >= n_choices {
@@ -471,23 +512,12 @@ pub fn choose<T: Clone + num_traits::Zero>(
             }
         };
 
-        // Get element from the appropriate choice array
-        let chosen_array = &choice_broadcasts[actual_idx];
-
-        // Calculate multi-dimensional indices from flat index i
-        let mut indices = Vec::with_capacity(a.ndim());
-        let mut temp = i;
-        for &dim in a.shape().iter().rev() {
-            indices.insert(0, temp % dim);
-            temp /= dim;
-        }
-
-        // Get value from chosen array
-        let value = chosen_array.get(&indices)?;
+        // Get value from the appropriate (already-broadcast) choice array
+        let value = choice_broadcasts[actual_idx].get(&indices)?;
         result_data.push(value);
     }
 
-    Array::from_vec_shape(result_data, &a.shape())
+    Array::from_vec_shape(result_data, &broadcast_shape)
 }
 
 /// Evaluate a piecewise-defined function
@@ -601,4 +631,79 @@ where
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pinned against `numpy.select` (numpy 2.4.2):
+    /// `np.select([np.array([[True, False]]), np.array([[False],[True]])],
+    /// [np.array([1,2]), np.array([10,20])], default=-1)` ==
+    /// `[[1, -1], [1, 20]]`. `condlist`/`choicelist` here have mismatched
+    /// (but mutually broadcastable) shapes: `(1,2)` and `(2,1)`/`(2,)`.
+    #[test]
+    fn test_select_broadcasts_condlist_and_choicelist() {
+        let cond1 = Array::from_vec(vec![true, false]).reshape(&[1, 2]);
+        let cond2 = Array::from_vec(vec![false, true]).reshape(&[2, 1]);
+        let choice1 = Array::from_vec(vec![1, 2]);
+        let choice2 = Array::from_vec(vec![10, 20]);
+
+        let result = select(&[&cond1, &cond2], &[&choice1, &choice2], Some(-1))
+            .expect("operation should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![1, -1, 1, 20]);
+    }
+
+    /// Pinned against `numpy.select` 2.4.2 with `default` omitted (NumPy's
+    /// keyword default is `0`, matching this crate's `None -> T::zero()`):
+    /// `np.select([c1, c2], [ch1, ch2])` == `[1, 20, 0]` for
+    /// `c1=[True,False,False]`, `c2=[False,True,False]`.
+    #[test]
+    fn test_select_default_omitted_is_zero() {
+        let cond1 = Array::from_vec(vec![true, false, false]);
+        let cond2 = Array::from_vec(vec![false, true, false]);
+        let choice1 = Array::from_vec(vec![1, 2, 3]);
+        let choice2 = Array::from_vec(vec![10, 20, 30]);
+
+        let result = select(&[&cond1, &cond2], &[&choice1, &choice2], None)
+            .expect("operation should succeed");
+        assert_eq!(result.to_vec(), vec![1, 20, 0]);
+    }
+
+    /// Regression test: `a` (the index array) must broadcast against
+    /// `choices`, not just the choice arrays against each other. Pinned
+    /// against `numpy.choose` (numpy 2.4.2): `np.choose(np.array([0]),
+    /// [np.array([10,20,30,40]), np.array([50,60,70,80])])` ==
+    /// `[10, 20, 30, 40]`, shape `(4,)`. This previously returned shape
+    /// `(1,)` (`a`'s own, unbroadcast shape).
+    #[test]
+    fn test_choose_broadcasts_index_array() {
+        let a = Array::from_vec(vec![0usize]);
+        let c0 = Array::from_vec(vec![10, 20, 30, 40]);
+        let c1 = Array::from_vec(vec![50, 60, 70, 80]);
+
+        let result = choose(&a, &[&c0, &c1], "raise").expect("operation should succeed");
+        assert_eq!(result.shape(), vec![4]);
+        assert_eq!(result.to_vec(), vec![10, 20, 30, 40]);
+    }
+
+    /// Pinned against `numpy.choose` 2.4.2:
+    /// `np.choose(np.array([0,1,5]), [np.full(3,100), np.full(3,200)],
+    /// mode='wrap')` == `[100, 200, 200]` (`5 % 2 == 1`), and the same
+    /// under `mode='clip'` (`5` clipped to `1`); `mode='raise'` errors.
+    #[test]
+    fn test_choose_wrap_and_clip_out_of_bounds() {
+        let a = Array::from_vec(vec![0usize, 1, 5]);
+        let c0 = Array::from_vec(vec![100, 100, 100]);
+        let c1 = Array::from_vec(vec![200, 200, 200]);
+
+        let wrapped = choose(&a, &[&c0, &c1], "wrap").expect("operation should succeed");
+        assert_eq!(wrapped.to_vec(), vec![100, 200, 200]);
+
+        let clipped = choose(&a, &[&c0, &c1], "clip").expect("operation should succeed");
+        assert_eq!(clipped.to_vec(), vec![100, 200, 200]);
+
+        assert!(choose(&a, &[&c0, &c1], "raise").is_err());
+    }
 }

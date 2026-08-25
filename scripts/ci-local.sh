@@ -241,8 +241,39 @@ step_wasm_check() {
     record_result "wasm-check: target" SKIP "wasm32-unknown-unknown target not installed"
     return
   fi
+  # NOTE: intentionally NOT --no-default-features. Cargo.toml marks `scirs`
+  # "MANDATORY: Always enabled by default per SCIRS2 POLICY - DO NOT
+  # DISABLE", and two of the wasm-exported functions (determinant/inverse in
+  # src/wasm/linalg.rs) are behind `#[cfg(feature = "lapack")]`, itself a
+  # default feature -- disabling defaults here would silently stop checking
+  # those two exports. `--features wasm` on top of the default set is also
+  # the literal command this project's WASM build-story task verifies
+  # against, so this step should match it exactly.
+  #
+  # 2026-08-25 update: the 7 `?`-on-non-Result errors formerly here (in the
+  # `#[cfg(not(target_arch = "aarch64"))]` fallback impls of
+  # src/simd_optimize/neon_enhanced/{arithmetic,comparison,exponential,
+  # trigonometric}.rs -- unrelated to the wasm feature, only reachable
+  # because that module has no arch cfg of its own and an aarch64 host masks
+  # its "not aarch64" branch) are fixed: those 7 sites now use the same
+  # `.unwrap_or_else(|e| panic!("{e}"))` pattern the sibling
+  # `#[cfg(target_arch = "aarch64")]` impls in the same files already used.
+  # `cargo check --target wasm32-unknown-unknown --features wasm` passes as
+  # of this update (verified on this aarch64 host, which is why the fix
+  # above matters at all -- this step would not have caught the regression
+  # itself).
+  #
+  # Still an out-of-scope, out-of-ownership gap for a full `cargo build` /
+  # `wasm-pack build` (this step only runs `cargo check`, which does not hit
+  # this): src/memory_alloc/large_scale.rs:43 (`8 * 1024 * 1024 * 1024` as a
+  # `usize` literal, "8GB default") and src/new_modules/fft_enhanced.rs:494
+  # (`v |= v >> 32`, a shift equal to the type's bit width) both deny
+  # `arithmetic_overflow` on any 32-bit target incl. wasm32-unknown-unknown
+  # (usize is 32-bit there); both are unmodified at HEAD (not mid-edit by
+  # another wave) and need a real per-`target_pointer_width` decision, not a
+  # mechanical fix, so they are left for their owning module's wave.
   run_cmd_step "wasm-check: cargo check --target wasm32-unknown-unknown --features wasm" \
-    cargo check --target wasm32-unknown-unknown --no-default-features --features wasm
+    cargo check --target wasm32-unknown-unknown --features wasm
 }
 
 # ---------------------------------------------------------------------------
@@ -513,6 +544,28 @@ for step in "${ALL_STEPS[@]}"; do
     esac
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Perf/bench (opt-in only -- NOT in ALL_STEPS, NOT run by `all`/no-args)
+# ---------------------------------------------------------------------------
+# matrix_decomp's lu/cholesky/qr `perf_verification` modules hold wall-clock
+# COW-vs-precow ratio assertions that flake under parallel/shared-machine
+# load, so they are `#[ignore]`d in the default suite (see each module for
+# its exact reason string). This is the single place to invoke ignored perf
+# tests with `--run-ignored`: if you add another wall-clock perf test
+# elsewhere, add its own opt-in-gated `run_cmd_step` line here rather than a
+# new section, so there is one shared, documented opt-in surface instead of
+# several.
+if [ "${RUN_PERF_VERIFICATION:-0}" = "1" ]; then
+  banner "perf/bench  (opt-in via RUN_PERF_VERIFICATION=1; --run-ignored, wall-clock)"
+  # `--run-ignored only` (nextest's actual flag value -- NOT `ignored-only`,
+  # which nextest rejects) restricts to `#[ignore]`d tests; `test(cow_vs_precow)`
+  # substring-matches all three matrix_decomp perf_verification benches
+  # (`bench_lu_cow_vs_precow`, `bench_pivoted_cholesky_cow_vs_precow`,
+  # `bench_householder_qr_cow_vs_precow`).
+  run_cmd_step "perf: matrix_decomp COW-vs-precow wall-clock ratio (lu/cholesky/qr, --release --run-ignored)" \
+    cargo nextest run --release --run-ignored only -E 'test(cow_vs_precow)'
+fi
 
 # ---------------------------------------------------------------------------
 # Summary table

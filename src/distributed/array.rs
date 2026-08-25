@@ -43,11 +43,28 @@
 //! # }
 //! ```
 
-use super::collective::{allgather, gather, scatter, CollectiveError};
+use super::collective::{
+    allgather, allreduce, gather, recv_vec, scatter, send_slice, CollectiveError, ReduceOp,
+};
 use super::process::{Communicator, ProcessError};
 use scirs2_core::ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+// ===========================================================================
+// Wire tags for ghost-cell boundary exchange
+//
+// This is point-to-point, not a collective, but it shares one communicator's
+// `ctx` (always `comm.context().0`) with every collective in
+// `super::collective`, so it needs its own tag range those can never step
+// into. `super::collective`'s own `TAG_*_BASE` constants occupy
+// `0x1_0000_0000` through `0xA_0000_0000` (one `0x1_0000_0000`-wide band per
+// collective, each call's rounds folded into the low bits of its band — see
+// that module's tag-block comment), so `0x10_0000_0000` and up is
+// unreachable to any of them regardless of world size.
+// ===========================================================================
+const TAG_GHOST_TO_RIGHT: u64 = 0x10_0000_0000;
+const TAG_GHOST_TO_LEFT: u64 = 0x11_0000_0000;
 
 /// Errors that can occur with distributed arrays
 #[derive(Error, Debug)]
@@ -428,46 +445,89 @@ impl<T: Clone + Serialize + for<'de> Deserialize<'de> + Send + 'static> Distribu
         self.ghost_cells = Some(GhostCells::new(width));
     }
 
-    /// Synchronize ghost cells with neighboring processes
-    pub async fn sync_ghost_cells(&mut self) -> Result<(), DistributedArrayError>
-    where
-        T: Clone,
-    {
-        let ghost_cells = self.ghost_cells.as_mut().ok_or_else(|| {
-            DistributedArrayError::GhostCellError("Ghost cells not initialized".to_string())
-        })?;
+    /// Synchronize ghost cells with neighboring processes.
+    ///
+    /// Real point-to-point boundary exchange over [`super::collective`]'s
+    /// `Endpoint`-backed `send_slice`/`recv_vec` — an earlier version of this
+    /// method dropped every boundary on the floor and always populated both
+    /// ghost regions with an empty `vec![]`, regardless of what a neighbor
+    /// actually held. Rank 0 has no left neighbor and the last rank has no
+    /// right neighbor, so each half of the exchange is skipped there, and
+    /// [`GhostCells::left`]/[`GhostCells::right`] stay at their
+    /// [`GhostCells::new`] default (empty) on those ends.
+    pub async fn sync_ghost_cells(&mut self) -> Result<(), DistributedArrayError> {
+        let width = self
+            .ghost_cells
+            .as_ref()
+            .ok_or_else(|| {
+                DistributedArrayError::GhostCellError("Ghost cells not initialized".to_string())
+            })?
+            .width();
 
-        let width = ghost_cells.width();
+        // Without this check, a rank whose local block is narrower than
+        // `width` would slice its *entire* block as the boundary (via
+        // `saturating_sub`/a `min`-clamped range) and a neighbor would
+        // silently store a short ghost region instead of the `width`
+        // elements it asked for — reject the mismatch instead.
+        //
+        // This must be a *collective* decision, not a rank-local early
+        // return: every rank below the threshold does return `Err` on its
+        // own, correctly, but a rank *at or above* it would fall through
+        // to the sends/receives below and then block forever on a peer
+        // that took the error path and never sent anything. `allreduce`'s
+        // `Max` here turns "does any rank's local block violate the
+        // width?" into a value every rank agrees on before anyone commits
+        // to a send.
+        let violation = if width > self.local_data.len() {
+            1u32
+        } else {
+            0
+        };
+        let any_violation = allreduce(&[violation], ReduceOp::Max, &self.comm)
+            .await
+            .map_err(DistributedArrayError::from)?;
+        if any_violation.first().copied().unwrap_or(0) > 0 {
+            return Err(DistributedArrayError::GhostCellError(format!(
+                "ghost cell width {width} exceeds some rank's local size (this rank: {})",
+                self.local_data.len()
+            )));
+        }
+
         let rank = self.comm.rank();
         let size = self.comm.size();
 
-        // Send right boundary to next rank, receive left boundary from previous rank
+        // Send right boundary to next rank, receive left boundary from previous rank.
         if rank < size - 1 {
-            let right_boundary =
-                self.local_data[self.local_data.len().saturating_sub(width)..].to_vec();
-            // In real implementation: send right_boundary to rank + 1
-            // For now, placeholder
-            let _ = right_boundary;
+            let right_boundary = self.local_data[self.local_data.len() - width..].to_vec();
+            send_slice(&self.comm, rank + 1, TAG_GHOST_TO_RIGHT, &right_boundary).await?;
         }
-
         if rank > 0 {
-            // In real implementation: receive left boundary from rank - 1
-            // For now, placeholder
-            let left_boundary = vec![];
-            ghost_cells.set_left(left_boundary);
+            let left_boundary: Vec<T> = recv_vec(&self.comm, rank - 1, TAG_GHOST_TO_RIGHT).await?;
+            self.ghost_cells
+                .as_mut()
+                .ok_or_else(|| {
+                    DistributedArrayError::GhostCellError(
+                        "ghost cells were cleared mid-sync".to_string(),
+                    )
+                })?
+                .set_left(left_boundary);
         }
 
-        // Send left boundary to previous rank, receive right boundary from next rank
+        // Send left boundary to previous rank, receive right boundary from next rank.
         if rank > 0 {
-            let left_boundary = self.local_data[..width.min(self.local_data.len())].to_vec();
-            // In real implementation: send left_boundary to rank - 1
-            let _ = left_boundary;
+            let left_boundary = self.local_data[..width].to_vec();
+            send_slice(&self.comm, rank - 1, TAG_GHOST_TO_LEFT, &left_boundary).await?;
         }
-
         if rank < size - 1 {
-            // In real implementation: receive right boundary from rank + 1
-            let right_boundary = vec![];
-            ghost_cells.set_right(right_boundary);
+            let right_boundary: Vec<T> = recv_vec(&self.comm, rank + 1, TAG_GHOST_TO_LEFT).await?;
+            self.ghost_cells
+                .as_mut()
+                .ok_or_else(|| {
+                    DistributedArrayError::GhostCellError(
+                        "ghost cells were cleared mid-sync".to_string(),
+                    )
+                })?
+                .set_right(right_boundary);
         }
 
         Ok(())
@@ -570,5 +630,101 @@ mod tests {
 
         assert_eq!(ghost.left(), &[1.0, 2.0, 3.0]);
         assert_eq!(ghost.right(), &[4.0, 5.0, 6.0]);
+    }
+
+    // -----------------------------------------------------------------
+    // sync_ghost_cells: real point-to-point exchange over a LocalCluster.
+    // An earlier version never sent or received anything and always set
+    // both ghost regions to an empty vec![], regardless of a neighbor's
+    // actual data — these exercise the genuine network path instead.
+    // -----------------------------------------------------------------
+
+    use crate::distributed::net::NetError;
+    use crate::distributed::process::{ProcessGroup, ProcessInfo};
+    use crate::distributed::testing::{ClusterNode, LocalCluster};
+    use std::collections::HashMap;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn sync_ghost_cells_exchanges_real_neighbor_boundaries() {
+        const WORLD_SIZE: u32 = 4;
+        const PER_RANK: usize = 5;
+        const WIDTH: usize = 2;
+
+        let results = LocalCluster::run_connected(WORLD_SIZE, |node: ClusterNode| async move {
+            let comm = Communicator::from_endpoint(Arc::new(node.endpoint))?;
+            let rank = comm.rank();
+
+            let local_data: Vec<f64> = (0..PER_RANK).map(|i| (rank * 100 + i) as f64).collect();
+            let mut array = DistributedArray::from_local(
+                local_data,
+                DistributionStrategy::Block,
+                PER_RANK * WORLD_SIZE as usize,
+                &comm,
+            )
+            .map_err(|e| NetError::Io(e.to_string()))?;
+
+            array.init_ghost_cells(WIDTH);
+            array
+                .sync_ghost_cells()
+                .await
+                .map_err(|e| NetError::Io(e.to_string()))?;
+
+            let ghosts = array.ghost_cells().ok_or_else(|| {
+                NetError::Io("ghost cells vanished after sync_ghost_cells".to_string())
+            })?;
+            Ok((ghosts.left().to_vec(), ghosts.right().to_vec()))
+        })
+        .await
+        .expect("cluster run should succeed");
+
+        // Rank 0 has no left neighbor: left ghost stays at its `new` default (empty).
+        assert_eq!(results[0].0, Vec::<f64>::new());
+        assert_eq!(
+            results[0].1,
+            vec![100.0, 101.0],
+            "rank 0's right ghost is rank 1's first WIDTH elements"
+        );
+
+        assert_eq!(
+            results[1].0,
+            vec![3.0, 4.0],
+            "rank 1's left ghost is rank 0's last WIDTH elements"
+        );
+        assert_eq!(results[1].1, vec![200.0, 201.0]);
+
+        assert_eq!(results[2].0, vec![103.0, 104.0]);
+        assert_eq!(results[2].1, vec![300.0, 301.0]);
+
+        assert_eq!(results[3].0, vec![203.0, 204.0]);
+        // The last rank has no right neighbor: right ghost stays empty.
+        assert_eq!(results[3].1, Vec::<f64>::new());
+    }
+
+    #[tokio::test]
+    async fn sync_ghost_cells_rejects_a_width_wider_than_the_local_block() {
+        // A size-one offline `Communicator` needs no tokio-bound socket: both
+        // neighbor branches are unreachable at world size 1, so the width
+        // check is the only thing this test can be exercising.
+        let addr: SocketAddr = "127.0.0.1:5000".parse().expect("valid addr");
+        let info = ProcessInfo::new(0, 1, addr, "localhost".to_string()).expect("valid info");
+        let group = ProcessGroup::new(vec![0]).expect("valid group");
+        let comm = Communicator::new(info, group, HashMap::new()).expect("valid communicator");
+
+        let mut array = DistributedArray::from_local(
+            vec![1.0_f64, 2.0, 3.0],
+            DistributionStrategy::Block,
+            3,
+            &comm,
+        )
+        .expect("valid distributed array");
+
+        array.init_ghost_cells(5); // wider than the 3-element local block
+        let err = array
+            .sync_ghost_cells()
+            .await
+            .expect_err("width wider than the local block must be rejected");
+        assert!(matches!(err, DistributedArrayError::GhostCellError(_)));
     }
 }

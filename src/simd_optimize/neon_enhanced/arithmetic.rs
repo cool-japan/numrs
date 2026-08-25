@@ -364,7 +364,7 @@ impl NeonEnhancedOps {
         let result: Vec<f64> = (0..len)
             .map(|i| data_a[i].mul_add(data_b[i], data_c[i]))
             .collect();
-        Array::from_vec_shape(result, &a.shape())?
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     pub fn vectorized_negative_f64(input: &Array<f64>) -> Array<f64> {

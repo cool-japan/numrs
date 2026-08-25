@@ -258,22 +258,59 @@ fn test_inverse_reference() {
 }
 
 #[test]
-#[ignore = "Eigenvalue computation differences between implementations"]
 fn test_eigendecomposition_reference() {
-    // Test eigendecomposition against known values
+    // Was `#[ignore]`d as "Eigenvalue computation differences between
+    // implementations": the previous body only ever compared eigen*values*
+    // (the eigenvectors were discarded via `_`), but different backends are
+    // free to return eigenvectors -- and even same-magnitude eigenvalues --
+    // in different orders, and eigenvectors are only defined up to sign (and,
+    // for repeated eigenvalues, up to an arbitrary rotation within the
+    // eigenspace). Comparing raw eigenvector elements against one backend's
+    // specific choice is therefore not a portable cross-implementation check.
+    //
+    // Rewritten to check the two properties that any correct symmetric
+    // eigendecomposition must satisfy, regardless of backend conventions:
+    //   1. The eigenvalue *multiset* matches the reference values (order
+    //      doesn't matter -- both sides are sorted before comparing).
+    //   2. Every returned eigenpair actually satisfies `A v = lambda v`
+    //      (the defining residual) with `v` unit-norm.
     let m = create_test_matrix();
+    let n = 3;
 
-    // The eigenvalues of the test matrix should be approximately 5.214, 2.372, and 1.414
-    let (eigenvalues, _) = eigh(&m, "lower").unwrap();
+    let (eigenvalues, eigenvectors) = eigh(&m, "lower").unwrap();
 
-    // Sort eigenvalues (they might not be in order)
-    let mut eigenvalues_vec = eigenvalues.to_vec();
-    eigenvalues_vec.sort_by(|a, b| b.partial_cmp(a).unwrap()); // Sort in descending order
+    // Reference eigenvalues for `create_test_matrix()` ([[4,1,1],[1,3,1],[1,1,2]]):
+    // trace = 9 and det = 17 both check out against these three values.
+    let mut eigenvalues_sorted = eigenvalues.to_vec();
+    eigenvalues_sorted.sort_by(|a, b| b.partial_cmp(a).unwrap()); // descending
+    let expected_desc = [5.214319743377534_f64, 2.4608111271891095, 1.324869129433354];
+    for (got, want) in eigenvalues_sorted.iter().zip(expected_desc.iter()) {
+        assert_relative_eq!(*got, *want, epsilon = TOLERANCE);
+    }
 
-    // Check against expected values (computed from actual eigendecomposition)
-    assert_relative_eq!(eigenvalues_vec[0], 5.214319743377534, epsilon = TOLERANCE);
-    assert_relative_eq!(eigenvalues_vec[1], 2.4608111271891095, epsilon = TOLERANCE);
-    assert_relative_eq!(eigenvalues_vec[2], 1.324869129433354, epsilon = TOLERANCE);
+    // Residual check: pair each eigenvalue with its *own* column (backend
+    // order, not the sorted-for-comparison order above) and verify
+    // `A v_k - lambda_k v_k ~= 0`, plus that `v_k` is unit-norm.
+    const RESIDUAL_TOL: f64 = 1e-8;
+    for k in 0..n {
+        let lambda = eigenvalues.get(&[k]).unwrap();
+        let v: Vec<f64> = (0..n).map(|i| eigenvectors.get(&[i, k]).unwrap()).collect();
+
+        let norm_sq: f64 = v.iter().map(|x| x * x).sum();
+        assert!(
+            (norm_sq - 1.0).abs() < RESIDUAL_TOL,
+            "eigenvector {k} should be unit-norm, got ||v||^2 = {norm_sq}"
+        );
+
+        for i in 0..n {
+            let av_i: f64 = (0..n).map(|j| m.get(&[i, j]).unwrap() * v[j]).sum();
+            let residual = av_i - lambda * v[i];
+            assert!(
+                residual.abs() < RESIDUAL_TOL,
+                "eigenpair {k} (lambda={lambda}): (A v - lambda v)[{i}] = {residual}, expected ~0"
+            );
+        }
+    }
 }
 
 #[test]
@@ -490,6 +527,34 @@ fn test_norm_reference() {
 }
 
 #[test]
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#[allow(deprecated)]
+fn test_norm_ord_neg2_and_nuclear_reference() {
+    use numrs2::linalg::nuclear_norm;
+
+    // Diagonal matrix: singular values are the absolute values of the
+    // diagonal entries, {3, 4}.
+    let m = Array::<f64>::from_vec(vec![3.0, 0.0, 0.0, -4.0]).reshape(&[2, 2]);
+
+    // np.linalg.norm(m, ord=-2) == 3.0 (smallest singular value)
+    let smallest_sv = norm(&m, Some(-2.0)).unwrap();
+    assert_relative_eq!(smallest_sv, 3.0, epsilon = TOLERANCE);
+
+    // np.linalg.norm(m, ord='nuc') == 7.0 (sum of singular values)
+    let nuc = nuclear_norm(&m).unwrap();
+    assert_relative_eq!(nuc, 7.0, epsilon = TOLERANCE);
+
+    // Non-square matrix, cross-checked against numpy.linalg.norm with
+    // ord=-2/'nuc' (numpy 2.4.2): B = [[1,2],[3,4],[5,6]], singular values
+    // ~= [9.52551809156511, 0.5143005806586446].
+    let b = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
+    let b_smallest_sv = norm(&b, Some(-2.0)).unwrap();
+    assert_relative_eq!(b_smallest_sv, 0.5143005806586446, epsilon = 1e-9);
+    let b_nuc = nuclear_norm(&b).unwrap();
+    assert_relative_eq!(b_nuc, 9.52551809156511 + 0.5143005806586446, epsilon = 1e-8);
+}
+
+#[test]
 fn test_trace_reference() {
     // Test trace against known values
 
@@ -645,6 +710,26 @@ fn test_matrix_power_reference() {
     assert_relative_eq!(m5.get(&[0, 1]).unwrap(), 5.0, epsilon = TOLERANCE);
     assert_relative_eq!(m5.get(&[1, 0]).unwrap(), 5.0, epsilon = TOLERANCE);
     assert_relative_eq!(m5.get(&[1, 1]).unwrap(), 3.0, epsilon = TOLERANCE);
+
+    // m^-2 should be (m^-1)^2 = [1 -1; -1 2] -- np.linalg.matrix_power(m,
+    // -2) (numpy 2.4.2). `n = -2` is the case that specifically exercises
+    // `binary_pow` on the negative side (`n = -1` above is handled by its
+    // own special case in `matrix_power`, never reaching `binary_pow` at
+    // all).
+    let m_neg2 = matrix_power(&m, -2).unwrap();
+    assert_relative_eq!(m_neg2.get(&[0, 0]).unwrap(), 1.0, epsilon = TOLERANCE);
+    assert_relative_eq!(m_neg2.get(&[0, 1]).unwrap(), -1.0, epsilon = TOLERANCE);
+    assert_relative_eq!(m_neg2.get(&[1, 0]).unwrap(), -1.0, epsilon = TOLERANCE);
+    assert_relative_eq!(m_neg2.get(&[1, 1]).unwrap(), 2.0, epsilon = TOLERANCE);
+
+    // m^-3 should be [-1 2; 2 -3] -- np.linalg.matrix_power(m, -3), and an
+    // odd negative exponent, exercising `binary_pow`'s "extra multiply on
+    // an odd bit" branch on the inverted base.
+    let m_neg3 = matrix_power(&m, -3).unwrap();
+    assert_relative_eq!(m_neg3.get(&[0, 0]).unwrap(), -1.0, epsilon = TOLERANCE);
+    assert_relative_eq!(m_neg3.get(&[0, 1]).unwrap(), 2.0, epsilon = TOLERANCE);
+    assert_relative_eq!(m_neg3.get(&[1, 0]).unwrap(), 2.0, epsilon = TOLERANCE);
+    assert_relative_eq!(m_neg3.get(&[1, 1]).unwrap(), -3.0, epsilon = TOLERANCE);
 }
 
 /*
@@ -844,6 +929,92 @@ fn test_tensordot_reference() {
     assert_relative_eq!(c.get(&[1, 1, 0, 0]).unwrap(), 154.0, epsilon = TOLERANCE);
 }
 
+/// Regression test for the previously-`NotImplemented` general-axes hole in
+/// `tensordot` (`src/linalg/tensor_ops.rs`, the `a_axis == 0 && b_axis == 1`
+/// case used to silently return a wrongly-transposed result instead, and
+/// every other axis combination on non-2-D inputs errored outright).
+///
+/// Reference: `np.tensordot(A, B, axes=([0], [1]))` (numpy 2.4.2) with
+/// `A = [[1,2,3],[4,5,6]]` (2x3), `B = [[1,2],[3,4],[5,6],[7,8]]` (4x2) ->
+/// `[[9,19,29,39],[12,26,40,54],[15,33,51,69]]`.
+#[test]
+fn test_tensordot_axis0_axis1_reference() {
+    let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+    let b = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[4, 2]);
+
+    let result = tensordot(&a, &b, &[0, 1]).expect("tensordot should succeed");
+    assert_eq!(result.shape(), vec![3, 4]);
+
+    #[rustfmt::skip]
+    let expected = [
+        [9.0, 19.0, 29.0, 39.0],
+        [12.0, 26.0, 40.0, 54.0],
+        [15.0, 33.0, 51.0, 69.0],
+    ];
+    for i in 0..3 {
+        for j in 0..4 {
+            assert_relative_eq!(
+                result.get(&[i, j]).unwrap(),
+                expected[i][j],
+                epsilon = TOLERANCE
+            );
+        }
+    }
+}
+
+/// General N-D `tensordot`, contracting a non-edge axis of each 3-D operand
+/// -- the case the old implementation rejected outright (it only ever
+/// handled 2-D operands). Reference: `np.tensordot(a, b, axes=([1], [1]))`
+/// on `a = np.random.RandomState(42).rand(2, 3, 4)`, `b =
+/// np.random.RandomState(42)`-continued `.rand(5, 3, 6)` (numpy 2.4.2).
+#[test]
+fn test_tensordot_general_3d_reference() {
+    #[rustfmt::skip]
+    let a = Array::<f64>::from_vec(vec![
+        0.3745401188473625, 0.9507143064099162, 0.7319939418114051, 0.5986584841970366,
+        0.15601864044243652, 0.15599452033620265, 0.05808361216819946, 0.8661761457749352,
+        0.6011150117432088, 0.7080725777960455, 0.02058449429580245, 0.9699098521619943,
+        0.8324426408004217, 0.21233911067827616, 0.18182496720710062, 0.18340450985343382,
+        0.3042422429595377, 0.5247564316322378, 0.43194501864211576, 0.2912291401980419,
+        0.6118528947223795, 0.13949386065204183, 0.29214464853521815, 0.3663618432936917,
+    ])
+    .reshape(&[2, 3, 4]);
+
+    #[rustfmt::skip]
+    let b = Array::<f64>::from_vec(vec![
+        0.45606998421703593, 0.7851759613930136, 0.19967378215835974, 0.5142344384136116, 0.5924145688620425, 0.04645041271999772,
+        0.6075448519014384, 0.17052412368729153, 0.06505159298527952, 0.9488855372533332, 0.9656320330745594, 0.8083973481164611,
+        0.3046137691733707, 0.09767211400638387, 0.6842330265121569, 0.4401524937396013, 0.12203823484477883, 0.4951769101112702,
+        0.0343885211152184, 0.9093204020787821, 0.2587799816000169, 0.662522284353982, 0.31171107608941095, 0.5200680211778108,
+        0.5467102793432796, 0.18485445552552704, 0.9695846277645586, 0.7751328233611146, 0.9394989415641891, 0.8948273504276488,
+        0.5978999788110851, 0.9218742350231168, 0.0884925020519195, 0.1959828624191452, 0.04522728891053807, 0.32533033076326434,
+        0.388677289689482, 0.2713490317738959, 0.8287375091519293, 0.3567533266935893, 0.28093450968738076, 0.5426960831582485,
+        0.14092422497476265, 0.8021969807540397, 0.07455064367977082, 0.9868869366005173, 0.7722447692966574, 0.1987156815341724,
+        0.0055221171236024, 0.8154614284548342, 0.7068573438476171, 0.7290071680409873, 0.7712703466859457, 0.07404465173409036,
+        0.3584657285442726, 0.11586905952512971, 0.8631034258755935, 0.6232981268275579, 0.3308980248526492, 0.06355835028602363,
+        0.3109823217156622, 0.32518332202674705, 0.7296061783380641, 0.6375574713552131, 0.8872127425763265, 0.4722149251619493,
+        0.1195942459383017, 0.713244787222995, 0.7607850486168974, 0.5612771975694962, 0.770967179954561, 0.49379559636439074,
+        0.5227328293819941, 0.42754101835854963, 0.02541912674409519, 0.10789142699330445, 0.03142918568673425, 0.6364104112637804,
+        0.3143559810763267, 0.5085706911647028, 0.907566473926093, 0.24929222914887494, 0.41038292303562973, 0.7555511385430487,
+        0.22879816549162246, 0.07697990982879299, 0.289751452913768, 0.16122128725400442, 0.9296976523425731, 0.808120379564417,
+    ])
+    .reshape(&[5, 3, 6]);
+
+    let result = tensordot(&a, &b, &[1, 1]).expect("tensordot should succeed");
+    // np.tensordot(a, b, axes=([1],[1])).shape == (2, 4, 5, 6)
+    assert_eq!(result.shape(), vec![2, 4, 5, 6]);
+    assert_relative_eq!(
+        result.get(&[0, 0, 0, 0]).unwrap(),
+        0.44871273732662104,
+        epsilon = 1e-9
+    );
+    assert_relative_eq!(
+        result.get(&[1, 2, 4, 5]).unwrap(),
+        0.6781598970433369,
+        epsilon = 1e-9
+    );
+}
+
 #[test]
 fn test_kron_reference() {
     // Test Kronecker product against known values
@@ -873,5 +1044,267 @@ fn test_kron_reference() {
     let k_vec = k.to_vec();
     for (actual, expected) in k_vec.iter().zip(expected.iter()) {
         assert_relative_eq!(*actual, *expected, epsilon = TOLERANCE);
+    }
+}
+
+/// Reference values from `numpy.linalg.multi_dot` (numpy 2.4.2):
+/// `A1` is 3x2, `A2` is 2x3, `A3` is 3x2 -- deliberately non-square and
+/// non-uniform so the matrix-chain-order DP has more than one
+/// parenthesization to choose between (`(A1 @ A2) @ A3` vs.
+/// `A1 @ (A2 @ A3)`), not just the single-choice 2- or 3-matrix square case.
+#[test]
+fn test_multi_dot_three_matrices_reference() {
+    use numrs2::linalg::multi_dot;
+
+    let a1 = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
+    let a2 = Array::<f64>::from_vec(vec![1.0, 0.0, 2.0, 0.0, 1.0, 1.0]).reshape(&[2, 3]);
+    let a3 = Array::<f64>::from_vec(vec![1.0, 1.0, 0.0, 1.0, 1.0, 0.0]).reshape(&[3, 2]);
+
+    let result = multi_dot(&[&a1, &a2, &a3]).expect("multi_dot should succeed");
+    assert_eq!(result.shape(), vec![3, 2]);
+
+    // np.linalg.multi_dot([A1, A2, A3]) == [[5, 3], [13, 7], [21, 11]]
+    let expected = [[5.0, 3.0], [13.0, 7.0], [21.0, 11.0]];
+    for i in 0..3 {
+        for j in 0..2 {
+            assert_relative_eq!(
+                result.get(&[i, j]).unwrap(),
+                expected[i][j],
+                epsilon = TOLERANCE
+            );
+        }
+    }
+
+    // Must also agree with naive sequential evaluation, independent of
+    // which parenthesization the DP picked -- matrix multiplication is
+    // associative, so both orders are exactly the same computation up to
+    // floating-point rounding at this scale.
+    let naive = a1.matmul(&a2).unwrap().matmul(&a3).unwrap();
+    for i in 0..3 {
+        for j in 0..2 {
+            assert_relative_eq!(
+                result.get(&[i, j]).unwrap(),
+                naive.get(&[i, j]).unwrap(),
+                epsilon = TOLERANCE
+            );
+        }
+    }
+}
+
+/// The 2-matrix fast path (no DP needed) and vector-first/vector-last
+/// squeeze handling, both required by NumPy's `multi_dot` semantics.
+#[test]
+fn test_multi_dot_two_matrices_and_vector_ends_reference() {
+    use numrs2::linalg::multi_dot;
+
+    let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+    let b = Array::<f64>::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
+
+    // Two matrices: must exactly match `matmul`.
+    let two_result = multi_dot(&[&a, &b]).expect("2-matrix multi_dot should succeed");
+    let expected_two = a.matmul(&b).unwrap();
+    assert_eq!(two_result.shape(), expected_two.shape());
+    for i in 0..2 {
+        for j in 0..2 {
+            assert_relative_eq!(
+                two_result.get(&[i, j]).unwrap(),
+                expected_two.get(&[i, j]).unwrap(),
+                epsilon = TOLERANCE
+            );
+        }
+    }
+
+    // Vector-first: np.linalg.multi_dot([[1,1], A, B]) == [62, 72]
+    // (v @ A == [1+3, 2+4] == [4, 6]; then [4, 6] @ B == [4*5+6*7, 4*6+6*8]
+    // == [62, 72] -- confirmed against `np.linalg.multi_dot` directly).
+    let v = Array::<f64>::from_vec(vec![1.0, 1.0]);
+    let vec_first = multi_dot(&[&v, &a, &b]).expect("vector-first multi_dot should succeed");
+    assert_eq!(vec_first.shape(), vec![2]);
+    assert_relative_eq!(vec_first.get(&[0]).unwrap(), 62.0, epsilon = TOLERANCE);
+    assert_relative_eq!(vec_first.get(&[1]).unwrap(), 72.0, epsilon = TOLERANCE);
+
+    // Vector-last: np.linalg.multi_dot([A, B, [1,1]]) == [41, 93]
+    // (B @ w == [5+6, 7+8] == [11, 15]; then A @ [11, 15] ==
+    // [1*11+2*15, 3*11+4*15] == [41, 93]).
+    let w = Array::<f64>::from_vec(vec![1.0, 1.0]);
+    let vec_last = multi_dot(&[&a, &b, &w]).expect("vector-last multi_dot should succeed");
+    assert_eq!(vec_last.shape(), vec![2]);
+    assert_relative_eq!(vec_last.get(&[0]).unwrap(), 41.0, epsilon = TOLERANCE);
+    assert_relative_eq!(vec_last.get(&[1]).unwrap(), 93.0, epsilon = TOLERANCE);
+}
+
+/// `numpy.linalg.tensorsolve`, pinned against NumPy's own doc example (with
+/// a fixed seed via `numpy.random.default_rng(0)`).
+#[test]
+fn test_tensorsolve_reference() {
+    use numrs2::linalg::tensorsolve;
+
+    // a = eye(24).reshape(6, 4, 2, 3, 4): a "square" tensor coefficient
+    // (prod(a.shape[b.ndim:]) == prod(a.shape[:b.ndim]) == 24) equal to the
+    // identity in flattened form, so tensorsolve(a, b) == b reshaped to
+    // a.shape()[b.ndim..] -- i.e. this reduces to a reshape, independent of
+    // the actual solve path (a useful property check on top of the direct
+    // value pin below).
+    let a = Array::<f64>::eye(24, 24, 0).reshape(&[6, 4, 2, 3, 4]);
+
+    // b, pinned from `numpy.random.default_rng(0).normal(size=(6, 4))`.
+    #[rustfmt::skip]
+    let b_data = vec![
+        0.1257302210933933, -0.1321048632913019, 0.6404226504432821, 0.10490011715303971,
+        -0.535669373161111, 0.36159505490948474, 1.3040000451301372, 0.9470809631292422,
+        -0.7037352358069926, -1.2654214710460525, -0.6232744625373522, 0.0413259793472436,
+        -2.3250307746388343, -0.21879166393254573, -1.2459109472530652, -0.7322673547034516,
+        -0.5442589828573099, -0.31630015636915454, 0.4116305363741328, 1.0425133694426776,
+        -0.12853466294403426, 1.3664634705496859, -0.6651946734866135, 0.3515100700930197,
+    ];
+    let b = Array::from_vec(b_data.clone()).reshape(&[6, 4]);
+
+    let x = tensorsolve(&a, &b, None).expect("tensorsolve should succeed");
+    assert_eq!(x.shape(), vec![2, 3, 4]);
+
+    // Since `a` is the identity (reshaped), `x` must equal `b` reshaped to
+    // `a.shape()[b.ndim..]` -- exactly `b_data` in the same flat order.
+    let x_vec = x.to_vec();
+    for i in 0..24 {
+        assert_relative_eq!(x_vec[i], b_data[i], epsilon = 1e-9);
+    }
+}
+
+/// `numpy.linalg.tensorsolve` with an explicit `axes` argument -- the
+/// reorder-before-solve path (`allaxes.remove(k); allaxes.insert(an, k)`
+/// per NumPy's own source), not exercised by the identity-shaped `a` above
+/// (whose default `axes=None` path never permutes anything).
+///
+/// `a` is 4-D `(2, 2, 3, 3)`, NOT already "square" in tensorsolve's sense
+/// with `b`'s 2-D `(2, 3)` prefix -- axes `(0, 3)` must be moved to the end
+/// first (yielding effective shape `(2, 3, 2, 3)`) before it becomes
+/// solvable. Reference values from `numpy.linalg.tensorsolve(a, b,
+/// axes=(0, 3))` (numpy 2.4.2, `a`/`b` from
+/// `numpy.random.default_rng(5).normal(...)`).
+#[test]
+fn test_tensorsolve_with_axes_reference() {
+    use numrs2::linalg::tensorsolve;
+
+    #[rustfmt::skip]
+    let a_data = vec![
+        -0.8019314252534474, -1.324358995628145, -0.24836162209524854,
+        0.4204452380655215, 1.1360465324896427, 0.10970639932180819,
+        -0.5526473205362324, -0.7847803553442784, 0.7487457707345911,
+        1.6347830429585775, 0.27276877584472176, -1.2333286640307717,
+        -0.9582652054360887, 1.6000190889991115, 0.2028824405086084,
+        -1.7321348424395848, -0.08369619281702581, -1.1632259734447485,
+        -0.6292880940615545, -0.48800582327685743, -0.7133133716322436,
+        0.5533784703532895, -0.06308597192528916, -0.5894312580326048,
+        0.40963782655711695, 0.8298553070613239, -1.643023371405677,
+        -0.256730126365494, -0.9807473560440125, -0.17315522486203205,
+        -1.2894187467538587, 0.0206903940375912, -0.03788574104406823,
+        -0.304337750958489, -1.0479265051202462, -0.3961903304730927,
+    ];
+    let a = Array::from_vec(a_data).reshape(&[2, 2, 3, 3]);
+
+    #[rustfmt::skip]
+    let b_data = vec![
+        -1.091328901695709, -1.3552087462047395, 0.22478573245989314,
+        -1.109349937891366, 1.1702961011782933, 0.7165876558738361,
+    ];
+    let b = Array::from_vec(b_data).reshape(&[2, 3]);
+
+    let x = tensorsolve(&a, &b, Some(&[0, 3])).expect("tensorsolve with axes should succeed");
+    assert_eq!(x.shape(), vec![2, 3]);
+
+    #[rustfmt::skip]
+    let expected = [
+        -0.7663260286978177, 0.2505573754360905, -3.7309172928094645,
+        -0.5546132418172874, 4.668466795395245, 0.5207123902231279,
+    ];
+    let x_vec = x.to_vec();
+    for i in 0..6 {
+        assert_relative_eq!(x_vec[i], expected[i], epsilon = 1e-8);
+    }
+}
+
+/// A duplicate entry in `tensorsolve`'s `axes` must be rejected with a
+/// normal `Err`, not panic. This is not tested by NumPy conformance (NumPy
+/// itself does not validate `axes` for duplicates either, and silently
+/// produces a nonsensical permutation instead) -- it targets this crate's
+/// own defensive check, added because a duplicate can otherwise underflow
+/// `an - k` (`k = axes.len()` counting the duplicate twice, so it can
+/// exceed `an` even though every individual entry is in-bounds) before
+/// `moveaxis` is ever reached.
+#[test]
+fn test_tensorsolve_duplicate_axes_errors() {
+    use numrs2::linalg::tensorsolve;
+
+    let a = Array::<f64>::eye(4, 4, 0).reshape(&[2, 2, 2, 2]);
+    let b = Array::<f64>::from_vec(vec![1.0, 2.0]);
+
+    let result = tensorsolve(&a, &b, Some(&[0, 0, 0]));
+    assert!(
+        result.is_err(),
+        "duplicate axes entries must error, not panic or silently misbehave"
+    );
+}
+
+/// `numpy.linalg.tensorinv`, pinned against NumPy's own doc example: `a =
+/// eye(24).reshape(24, 8, 3)`, `ind=1`. Also exercises the identity this
+/// operation is defined by (`tensordot(tensorinv(a), b, axes=1) ==
+/// tensorsolve(a, b)`) against a fixed-seed random `b` -- `ind=1` and a 1-D
+/// `b` keep the verification `tensordot` call to a single contracted axis
+/// pair, matching this crate's `tensordot(&a, &b, &[a_axis, b_axis])`
+/// signature exactly (unlike NumPy's `axes=N` form, which can contract
+/// several trailing/leading axes at once).
+#[test]
+fn test_tensorinv_reference() {
+    use numrs2::linalg::{tensordot, tensorinv, tensorsolve};
+
+    let a = Array::<f64>::eye(24, 24, 0).reshape(&[24, 8, 3]);
+    let a_inv = tensorinv(&a, 1).expect("tensorinv should succeed");
+    assert_eq!(a_inv.shape(), vec![8, 3, 24]);
+
+    // b, pinned from `numpy.random.default_rng(2).normal(size=24)`.
+    #[rustfmt::skip]
+    let b_data = vec![
+        0.18905338179353307, -0.5227484414807474, -0.41306354339189344,
+        -2.4414673826398556, 1.799707382720902, 1.1441658720372287,
+        -0.32542283686782436, 0.7738065867276614, 0.28121066979764925,
+        -0.5538228364240524, 0.9775674511260357, -0.31055654665915255,
+        -0.3288239040579627, -0.7921467553588982, 0.45495807124085547,
+        -0.09919805171738795, 0.5452887139646817, -0.6071856998706371,
+        0.12682784711186987, -0.8922740434297903, 0.8414649723701431,
+        0.18803508698068597, 0.33057100813532614, 0.41050391297026284,
+    ];
+    let b = Array::from_vec(b_data);
+
+    // `tensordot(ainv, b, axes=1)`: contract ainv's last axis (index 2)
+    // against b's only axis (index 0) -- a single axis pair.
+    let lhs = tensordot(&a_inv, &b, &[2, 0]).expect("tensordot should succeed");
+    let rhs = tensorsolve(&a, &b, None).expect("tensorsolve should succeed");
+
+    assert_eq!(lhs.shape(), vec![8, 3]);
+    assert_eq!(rhs.shape(), vec![8, 3]);
+
+    let lhs_vec = lhs.to_vec();
+    let rhs_vec = rhs.to_vec();
+    for i in 0..lhs_vec.len() {
+        assert_relative_eq!(lhs_vec[i], rhs_vec[i], epsilon = 1e-9);
+    }
+
+    // Reference values: `np.tensordot(np.linalg.tensorinv(a, ind=1), b,
+    // axes=1)` with the `a`/`b` above.
+    #[rustfmt::skip]
+    let expected = [
+        [0.18905338179353307, -0.5227484414807474, -0.41306354339189344],
+        [-2.4414673826398556, 1.799707382720902, 1.1441658720372287],
+        [-0.32542283686782436, 0.7738065867276614, 0.28121066979764925],
+        [-0.5538228364240524, 0.9775674511260357, -0.31055654665915255],
+        [-0.3288239040579627, -0.7921467553588982, 0.45495807124085547],
+        [-0.09919805171738795, 0.5452887139646817, -0.6071856998706371],
+        [0.12682784711186987, -0.8922740434297903, 0.8414649723701431],
+        [0.18803508698068597, 0.33057100813532614, 0.41050391297026284],
+    ];
+    for i in 0..8 {
+        for j in 0..3 {
+            assert_relative_eq!(lhs.get(&[i, j]).unwrap(), expected[i][j], epsilon = 1e-9);
+        }
     }
 }

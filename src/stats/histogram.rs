@@ -26,14 +26,25 @@ use super::basic::PARALLEL_THRESHOLD;
 ///
 /// An explicit `range` is validated (its lower bound must not exceed its
 /// upper bound); otherwise the auto-detected `(auto_min, auto_max)` from the
-/// data is used. Either way, a degenerate range (`min == max`, e.g. a
-/// constant array) is expanded to `(min - 0.5, max + 0.5)` to avoid a
-/// zero-width bin (which would otherwise divide by zero).
+/// data is used. Either way:
+///
+/// * a non-finite result (`NaN`, `+inf`, or `-inf` in either bound) is
+///   rejected -- matching NumPy's own `_get_outer_edges`, which raises
+///   `"... range of [.., ..] is not finite"` in exactly this case, for
+///   both an explicit and an auto-detected range. Note this only catches a
+///   range that is *itself* non-finite (e.g. all-`NaN`/all-infinite data
+///   with no explicit `range`, or an explicit `NaN`/infinite bound); a
+///   finite range with a `NaN`/infinite sample merely *outside* it is
+///   handled by each caller's own in-range check, not here.
+/// * a degenerate range (`min == max`, e.g. a constant array) is expanded
+///   to `(min - 0.5, max + 0.5)` to avoid a zero-width bin (which would
+///   otherwise divide by zero).
 fn resolve_range<T: Float + NumCast + std::fmt::Display>(
     auto_min: T,
     auto_max: T,
     range: Option<(T, T)>,
 ) -> Result<(T, T)> {
+    let is_explicit = range.is_some();
     let (lo, hi) = match range {
         Some((lo, hi)) => {
             if lo > hi {
@@ -46,6 +57,19 @@ fn resolve_range<T: Float + NumCast + std::fmt::Display>(
         }
         None => (auto_min, auto_max),
     };
+    if !lo.is_finite() || !hi.is_finite() {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "{} range ({}, {}) is not finite (contains NaN or +/-infinity); \
+             pass an explicit, finite `range` to exclude NaN/infinite samples instead",
+            if is_explicit {
+                "Supplied"
+            } else {
+                "Autodetected"
+            },
+            lo,
+            hi
+        )));
+    }
     if lo == hi {
         let half = T::from(0.5).expect("0.5 should be representable");
         Ok((lo - half, hi + half))
@@ -54,19 +78,49 @@ fn resolve_range<T: Float + NumCast + std::fmt::Display>(
     }
 }
 
+/// Fold a slice down to its `(min, max)`, propagating `NaN` like NumPy's
+/// plain `.min()`/`.max()`: a single `NaN` anywhere poisons *both* bounds.
+///
+/// Deliberately not `Float::min`/`Float::max` (or a bare `<`/`>`
+/// comparison): both treat `NaN` as "the other operand wins" -- e.g.
+/// `num_traits::float::FloatCore::min`'s own doc example, `1.0.min(NaN) ==
+/// 1.0` -- which would silently drop an interior `NaN` from an
+/// auto-detected range instead of letting [`resolve_range`]'s finiteness
+/// check reject it. Panics if `data` is empty; every call site here
+/// already rejects an empty input earlier with a proper `Err`.
+fn auto_min_max<T: Float>(data: &[T]) -> (T, T) {
+    data.iter()
+        .skip(1)
+        .fold((data[0], data[0]), |(mn, mx), &val| {
+            let mn = if mn.is_nan() || val.is_nan() {
+                T::nan()
+            } else if val < mn {
+                val
+            } else {
+                mn
+            };
+            let mx = if mx.is_nan() || val.is_nan() {
+                T::nan()
+            } else if val > mx {
+                val
+            } else {
+                mx
+            };
+            (mn, mx)
+        })
+}
+
 /// Normalize raw (possibly weighted) bin counts into a probability density,
 /// matching NumPy's `density=True`: `density[i] = count[i] / (bin_width *
 /// total)`, so that `sum(density * bin_width) == 1`. Bins are assumed
 /// uniform width (`edges[i+1] - edges[i]` constant), which holds for every
 /// histogram function in this module.
 ///
-/// If `total` is zero (no samples fell inside the range), the density is
-/// all zeros rather than dividing by zero.
+/// If `total` is zero (no samples fell inside the range), every density
+/// value is `NaN` (`0.0 / 0.0`), matching NumPy's own `n / db / n.sum()`
+/// (a well-defined, non-panicking IEEE-754 float operation).
 fn normalize_density<T: Float + NumCast>(counts: &[T], bin_width: T) -> Vec<T> {
     let total = counts.iter().cloned().fold(T::zero(), |acc, c| acc + c);
-    if total == T::zero() {
-        return vec![T::zero(); counts.len()];
-    }
     let denom = bin_width * total;
     counts.iter().map(|&c| c / denom).collect()
 }
@@ -344,7 +398,13 @@ pub fn histogram_bin_edges<T: Float + Clone + NumCast + std::fmt::Display + Send
 
     let bins_spec = bins.into();
 
-    // Get min and max values - either from range parameter or from data
+    // Get min and max values - either from range parameter or from data.
+    // Either way, the resulting bound pair must be finite -- matching
+    // NumPy's `histogram_bin_edges`, which rejects a `NaN`/infinite bound
+    // whether it was supplied explicitly or auto-detected from the data
+    // (auto-detection uses `auto_min_max`, which itself propagates `NaN`
+    // like NumPy's plain `.min()`/`.max()` rather than silently dropping
+    // it -- see that function's doc comment).
     let (min_val, max_val) = match range {
         Some((min, max)) => {
             if min >= max {
@@ -353,14 +413,23 @@ pub fn histogram_bin_edges<T: Float + Clone + NumCast + std::fmt::Display + Send
                     min, max
                 )));
             }
+            if !min.is_finite() || !max.is_finite() {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Range ({}, {}) is not finite (contains NaN or +/-infinity)",
+                    min, max
+                )));
+            }
             (min, max)
         }
         None => {
-            let min = data.iter().cloned().fold(T::infinity(), |a, b| a.min(b));
-            let max = data
-                .iter()
-                .cloned()
-                .fold(T::neg_infinity(), |a, b| a.max(b));
+            let (min, max) = auto_min_max(&data);
+            if !min.is_finite() || !max.is_finite() {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Autodetected range ({}, {}) is not finite (contains NaN or +/-infinity); \
+                     pass an explicit, finite `range` to exclude NaN/infinite samples instead",
+                    min, max
+                )));
+            }
             (min, max)
         }
     };
@@ -610,25 +679,16 @@ pub fn histogram2d<T: Float + Clone + NumCast + std::fmt::Display + Send + Sync>
         ));
     }
 
-    // Get min and max values - either from range parameter or from data
-    let (x_auto_min, x_auto_max) = x_data
-        .iter()
-        .fold((x_data[0], x_data[0]), |(mn, mx), &val| {
-            (
-                if val < mn { val } else { mn },
-                if val > mx { val } else { mx },
-            )
-        });
+    // Get min and max values - either from range parameter or from data.
+    // Propagates NaN like NumPy's plain `.min()`/`.max()` (a single NaN
+    // anywhere poisons the auto-detected bound), rather than a bare
+    // `<`/`>` comparison, which is always false against NaN and would
+    // otherwise silently drop it instead of letting `resolve_range`'s
+    // finiteness check reject it below.
+    let (x_auto_min, x_auto_max) = auto_min_max(&x_data);
     let (x_min, x_max) = resolve_range(x_auto_min, x_auto_max, range.map(|(xr, _)| xr))?;
 
-    let (y_auto_min, y_auto_max) = y_data
-        .iter()
-        .fold((y_data[0], y_data[0]), |(mn, mx), &val| {
-            (
-                if val < mn { val } else { mn },
-                if val > mx { val } else { mx },
-            )
-        });
+    let (y_auto_min, y_auto_max) = auto_min_max(&y_data);
     let (y_min, y_max) = resolve_range(y_auto_min, y_auto_max, range.map(|(_, yr)| yr))?;
 
     // Create bin edges
@@ -966,22 +1026,19 @@ pub fn histogramdd<T: Float + Clone + NumCast + std::fmt::Display>(
             ranges.push(resolve_range(T::zero(), T::zero(), Some(dim_range))?);
         }
     } else {
-        // Compute min and max for each dimension, then apply the same
-        // degenerate-range (min == max) expansion as `histogram`.
+        // Compute min and max for each dimension via `auto_min_max` (which
+        // propagates NaN like NumPy's plain `.min()`/`.max()`, so a single
+        // NaN anywhere in a dimension poisons that dimension's
+        // auto-detected bounds), then apply the same finiteness check and
+        // degenerate-range (min == max) expansion as `histogram`, via
+        // `resolve_range` -- which now rejects a non-finite (NaN or
+        // infinite) auto-detected range itself, so this no longer needs
+        // its own separate finiteness check.
         for d in 0..n_dims {
-            let mut min_val = sample_data[d];
-            let mut max_val = sample_data[d];
-
-            for i in 0..n_samples {
-                let val = sample_data[i * n_dims + d];
-                if val < min_val {
-                    min_val = val;
-                }
-                if val > max_val {
-                    max_val = val;
-                }
-            }
-
+            let dim_vals: Vec<T> = (0..n_samples)
+                .map(|i| sample_data[i * n_dims + d])
+                .collect();
+            let (min_val, max_val) = auto_min_max(&dim_vals);
             ranges.push(resolve_range(min_val, max_val, None)?);
         }
     }
@@ -1030,7 +1087,12 @@ pub fn histogramdd<T: Float + Clone + NumCast + std::fmt::Display>(
                 let val = sample_data[i * n_dims + d];
                 let (min_val, max_val) = ranges[d];
 
-                if val < min_val || val > max_val {
+                // Written as the positive form (rather than
+                // `val < min_val || val > max_val`) so that NaN -- for
+                // which neither `>=` nor `<=` holds -- is correctly
+                // excluded instead of falling through to the (panicking)
+                // bin-index conversion below.
+                if !(val >= min_val && val <= max_val) {
                     in_bounds = false;
                     break;
                 }
@@ -1060,7 +1122,12 @@ pub fn histogramdd<T: Float + Clone + NumCast + std::fmt::Display>(
                 let val = sample_data[i * n_dims + d];
                 let (min_val, max_val) = ranges[d];
 
-                if val < min_val || val > max_val {
+                // Written as the positive form (rather than
+                // `val < min_val || val > max_val`) so that NaN -- for
+                // which neither `>=` nor `<=` holds -- is correctly
+                // excluded instead of falling through to the (panicking)
+                // bin-index conversion below.
+                if !(val >= min_val && val <= max_val) {
                     in_bounds = false;
                     break;
                 }

@@ -140,6 +140,10 @@ pub fn c_concatenate<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// let y = Array::from_vec(vec![20, 30]);
 /// let grid_indices = ix_(&[&x, &y]).expect("operation should succeed");
 /// ```
+///
+/// This is the canonical `ix_` implementation (it rejects non-1-D inputs,
+/// matching `numpy.ix_`); [`crate::indexing::take_put::ix_`] (a one-line
+/// delegate) forwards here.
 pub fn ix_<T: Clone>(sequences: &[&Array<T>]) -> Result<Vec<Array<T>>> {
     if sequences.is_empty() {
         return Ok(vec![]);

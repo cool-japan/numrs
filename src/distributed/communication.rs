@@ -1,8 +1,9 @@
 //! Efficient Communication Backends for Distributed Training
 //!
 //! This module provides high-performance communication primitives optimized for
-//! distributed deep learning workloads. It builds on the base `comm` module with
-//! specialized features for tensor communication and bandwidth optimization.
+//! distributed deep learning workloads. It builds on [`Communicator`]'s shared
+//! [`super::net::Endpoint`] with specialized features for tensor communication
+//! and bandwidth optimization.
 //!
 //! # Features
 //!
@@ -10,8 +11,27 @@
 //! - **Async Primitives**: Non-blocking send/recv with async/await
 //! - **Bandwidth Optimization**: Compression, batching, pipelining
 //! - **Latency Hiding**: Computation/communication overlap
-//! - **Priority Queues**: Prioritized message delivery
 //! - **Topology-Aware**: Network-aware routing strategies
+//!
+//! # `isend`/`irecv` versus `send`/`recv`
+//!
+//! [`AsyncCommunicator::isend`]/[`AsyncCommunicator::send`] are the same
+//! real, non-blocking-on-the-socket send ([`super::net::Endpoint::send_owned`]
+//! already only awaits queue capacity, never the wire — see its docs), kept
+//! as two names for API compatibility with callers written against the
+//! historical isend/send split. [`AsyncCommunicator::irecv`] and
+//! [`AsyncCommunicator::recv`] are genuinely different: `irecv` polls once
+//! and returns immediately if nothing has arrived yet
+//! ([`super::net::Endpoint::try_recv_bytes`]); `recv` waits up to the
+//! endpoint's configured `recv_timeout`
+//! ([`super::net::Endpoint::recv_bytes`]).
+//!
+//! All `AsyncCommunicator` traffic between two ranks travels under one fixed
+//! wire tag (`ASYNC_COMM_TAG`) within the wrapped [`Communicator`]'s own
+//! context — this API has no per-call tag parameter, so distinguishing
+//! logical channels is left to [`TensorMessage::tag`] as user-level metadata
+//! (matched by the application after receipt) rather than a transport-level
+//! routing key.
 //!
 //! # Example
 //!
@@ -39,16 +59,14 @@
 //! # }
 //! ```
 
-use super::comm::{CommunicationChannel, ConnectionManager, Message};
+use super::net::SendOpts;
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
 use oxicode::{Decode, Encode};
-use scirs2_core::ndarray::Array1;
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::Mutex;
 
 /// Errors that can occur during communication operations
 #[derive(Error, Debug)]
@@ -90,7 +108,15 @@ impl From<CommunicationError> for NumRs2Error {
     }
 }
 
-/// Message priority for prioritized communication
+/// Message priority for prioritized communication.
+///
+/// Kept as message-level metadata (see the module docs): the underlying
+/// [`super::net::Endpoint`] delivers strictly FIFO per `(src, ctx, tag)` key
+/// with no cross-key reordering, so this no longer drives an actual send
+/// order the way the old in-memory priority queue did. It remains useful for
+/// an application to attach urgency information to a [`TensorMessage`] that
+/// the receiving side can act on (e.g. process urgent messages first once
+/// several have arrived).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub enum MessagePriority {
     /// Low priority - background operations
@@ -103,24 +129,15 @@ pub enum MessagePriority {
     Urgent = 3,
 }
 
-/// Compression strategy for bandwidth optimization
-#[derive(Debug, Clone, Encode, Decode)]
-pub enum CompressionStrategy {
-    /// No compression
-    None,
-
-    /// Top-k sparsification: keep only k largest absolute values
-    TopK { k: usize },
-
-    /// Random-k: randomly select k elements
-    RandomK { k: usize },
-
-    /// Quantization to reduce precision
-    Quantization { bits: u8 },
-
-    /// Threshold-based sparsification
-    Threshold { threshold: f64 },
-}
+/// Compression strategy for bandwidth optimization.
+///
+/// Definition and behavior moved to
+/// [`super::compression`] — re-exported here so existing `communication::`
+/// call sites keep working unchanged. `compress_tensor`/`decompress_tensor`
+/// are re-exported the same way; see that module for the real
+/// TopK/RandomK/Threshold/Quantization implementations and
+/// [`super::compression::QuantizedTensor`] for bit-packed quantization.
+pub use super::compression::CompressionStrategy;
 
 /// Tensor message with metadata for efficient communication
 #[derive(Debug, Clone, Encode, Decode)]
@@ -214,57 +231,21 @@ where
     }
 }
 
-/// Prioritized message wrapper for priority queue
-#[derive(Debug)]
-struct PrioritizedMessage<T> {
-    message: T,
-    priority: MessagePriority,
-    sequence: u64,
-}
+/// Fixed wire tag every [`AsyncCommunicator`] send/recv uses. See the module
+/// docs for why this API has no per-call tag parameter of its own, and
+/// [`super::collective`]'s `TAG_*` constants for the (disjoint, far lower)
+/// range the collective operations use on the same kind of communicator —
+/// the two can never collide.
+const ASYNC_COMM_TAG: u64 = 0xACC0_0000_0000_0001;
 
-impl<T> PartialEq for PrioritizedMessage<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.priority == other.priority && self.sequence == other.sequence
-    }
-}
-
-impl<T> Eq for PrioritizedMessage<T> {}
-
-impl<T> PartialOrd for PrioritizedMessage<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T> Ord for PrioritizedMessage<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // Higher priority first, then earlier sequence
-        match self.priority.cmp(&other.priority) {
-            Ordering::Equal => other.sequence.cmp(&self.sequence), // Earlier sequence first
-            ord => ord,
-        }
-    }
-}
-
-/// Type alias for send queue structure
-type SendQueues = Arc<RwLock<HashMap<usize, BinaryHeap<PrioritizedMessage<Vec<u8>>>>>>;
-
-/// Asynchronous communicator with non-blocking operations
+/// Asynchronous communicator with non-blocking operations, built directly on
+/// a [`Communicator`]'s shared [`super::net::Endpoint`].
 pub struct AsyncCommunicator {
     /// Underlying communicator
     communicator: Arc<Communicator>,
 
-    /// Send queue per destination rank
-    send_queues: SendQueues,
-
-    /// Receive buffer per source rank
-    recv_buffers: Arc<RwLock<HashMap<usize, VecDeque<Vec<u8>>>>>,
-
     /// Sequence counter for message ordering
     sequence_counter: Arc<Mutex<u64>>,
-
-    /// Channel manager for async communication
-    channels: Arc<Mutex<HashMap<usize, mpsc::Sender<Vec<u8>>>>>,
 }
 
 impl AsyncCommunicator {
@@ -272,10 +253,7 @@ impl AsyncCommunicator {
     pub fn new(communicator: Arc<Communicator>) -> Result<Self, CommunicationError> {
         Ok(Self {
             communicator,
-            send_queues: Arc::new(RwLock::new(HashMap::new())),
-            recv_buffers: Arc::new(RwLock::new(HashMap::new())),
             sequence_counter: Arc::new(Mutex::new(0)),
-            channels: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -287,7 +265,20 @@ impl AsyncCommunicator {
         seq
     }
 
-    /// Non-blocking send
+    fn check_rank(&self, rank: usize) -> Result<(), CommunicationError> {
+        if rank >= self.communicator.size() {
+            return Err(CommunicationError::InvalidRank {
+                rank,
+                size: self.communicator.size(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Non-blocking send: encodes `message` and hands it to the shared
+    /// endpoint, which only awaits queue capacity (never the socket) before
+    /// returning. See the module docs for why this is effectively the same
+    /// operation as [`Self::send`] under this transport.
     pub async fn isend<T>(
         &self,
         message: TensorMessage<T>,
@@ -296,59 +287,54 @@ impl AsyncCommunicator {
     where
         T: Clone + Encode + Decode,
     {
-        // Validate destination rank
-        if dest >= self.communicator.size() {
-            return Err(CommunicationError::InvalidRank {
-                rank: dest,
-                size: self.communicator.size(),
-            });
-        }
-
-        // Serialize message
+        self.check_rank(dest)?;
         let data = oxicode::encode_to_vec(&message).map_err(|e| {
             CommunicationError::Serialization(format!("Failed to serialize message: {}", e))
         })?;
-
-        // Add to send queue with priority
-        let prioritized = PrioritizedMessage {
-            message: data,
-            priority: message.priority,
-            sequence: message.sequence,
-        };
-
-        let mut queues = self.send_queues.write().await;
-        queues
-            .entry(dest)
-            .or_insert_with(BinaryHeap::new)
-            .push(prioritized);
-
+        let endpoint = self
+            .communicator
+            .require_endpoint()
+            .map_err(CommunicationError::Process)?;
+        let dst_global = self
+            .communicator
+            .global_rank(dest)
+            .map_err(CommunicationError::Process)?;
+        endpoint
+            .send_owned(
+                dst_global,
+                self.communicator.context().0,
+                ASYNC_COMM_TAG,
+                data,
+                SendOpts::default(),
+            )
+            .await
+            .map_err(|e| CommunicationError::Network(e.to_string()))?;
         Ok(())
     }
 
-    /// Non-blocking receive
+    /// Non-blocking receive: returns immediately with
+    /// [`CommunicationError::Channel`] if nothing has arrived yet, rather
+    /// than waiting — see [`Self::recv`] for the blocking version.
     pub async fn irecv<T>(&self, source: usize) -> Result<TensorMessage<T>, CommunicationError>
     where
         T: Clone + Encode + Decode,
     {
-        // Validate source rank
-        if source >= self.communicator.size() {
-            return Err(CommunicationError::InvalidRank {
-                rank: source,
-                size: self.communicator.size(),
-            });
-        }
+        self.check_rank(source)?;
+        let endpoint = self
+            .communicator
+            .require_endpoint()
+            .map_err(CommunicationError::Process)?;
+        let src_global = self
+            .communicator
+            .global_rank(source)
+            .map_err(CommunicationError::Process)?;
+        let data = endpoint
+            .try_recv_bytes(src_global, self.communicator.context().0, ASYNC_COMM_TAG)
+            .map_err(|e| CommunicationError::Network(e.to_string()))?
+            .ok_or_else(|| {
+                CommunicationError::Channel(format!("no data available yet from rank {source}"))
+            })?;
 
-        // Check receive buffer
-        let mut buffers = self.recv_buffers.write().await;
-        let buffer = buffers.entry(source).or_insert_with(VecDeque::new);
-
-        // For now, return error if no data available
-        // In a real implementation, this would wait for data
-        let data = buffer
-            .pop_front()
-            .ok_or_else(|| CommunicationError::Channel("No data available".to_string()))?;
-
-        // Deserialize message
         let (message, _) = oxicode::decode_from_slice(&data).map_err(|e| {
             CommunicationError::Deserialization(format!("Failed to deserialize message: {}", e))
         })?;
@@ -356,7 +342,8 @@ impl AsyncCommunicator {
         Ok(message)
     }
 
-    /// Blocking send (waits for completion)
+    /// Blocking send (waits for completion) — see the module docs on why
+    /// this and [`Self::isend`] are the same operation under this transport.
     pub async fn send<T>(
         &self,
         message: TensorMessage<T>,
@@ -365,31 +352,35 @@ impl AsyncCommunicator {
     where
         T: Clone + Encode + Decode,
     {
-        self.isend(message, dest).await?;
-        self.flush_send_queue(dest).await?;
-        Ok(())
+        self.isend(message, dest).await
     }
 
-    /// Blocking receive
+    /// Blocking receive: waits up to the shared endpoint's configured
+    /// `recv_timeout` for a message from `source`, unlike [`Self::irecv`]
+    /// which never waits.
     pub async fn recv<T>(&self, source: usize) -> Result<TensorMessage<T>, CommunicationError>
     where
         T: Clone + Encode + Decode,
     {
-        // In a real implementation, this would block until data arrives
-        self.irecv(source).await
-    }
+        self.check_rank(source)?;
+        let endpoint = self
+            .communicator
+            .require_endpoint()
+            .map_err(CommunicationError::Process)?;
+        let src_global = self
+            .communicator
+            .global_rank(source)
+            .map_err(CommunicationError::Process)?;
+        let data = endpoint
+            .recv_bytes(src_global, self.communicator.context().0, ASYNC_COMM_TAG)
+            .await
+            .map_err(|e| CommunicationError::Network(e.to_string()))?;
 
-    /// Flush send queue for a specific destination
-    async fn flush_send_queue(&self, dest: usize) -> Result<(), CommunicationError> {
-        let mut queues = self.send_queues.write().await;
-        if let Some(queue) = queues.get_mut(&dest) {
-            while let Some(prioritized) = queue.pop() {
-                // In a real implementation, actually send the data
-                // For now, just clear the queue
-                let _ = prioritized.message;
-            }
-        }
-        Ok(())
+        let (message, _) = oxicode::decode_from_slice(&data).map_err(|e| {
+            CommunicationError::Deserialization(format!("Failed to deserialize message: {}", e))
+        })?;
+
+        Ok(message)
     }
 
     /// Get communicator rank
@@ -459,8 +450,9 @@ impl PipelinedCommunicator {
             operation_id: op_id,
             status: PipelineStatus::Pending,
         });
+        drop(stages);
 
-        // Start async send
+        // Start the real (enqueue-and-return) send.
         self.base.isend(message, dest).await?;
 
         Ok(op_id)
@@ -521,98 +513,19 @@ impl PipelinedCommunicator {
     }
 }
 
-/// Compress tensor data using the specified strategy
-pub fn compress_tensor<T>(
-    data: &[T],
-    strategy: &CompressionStrategy,
-) -> Result<(Vec<T>, Option<Vec<usize>>), CommunicationError>
-where
-    T: Clone + PartialOrd + Default,
-{
-    match strategy {
-        CompressionStrategy::None => Ok((data.to_vec(), None)),
-
-        CompressionStrategy::TopK { k } => {
-            if *k >= data.len() {
-                return Ok((data.to_vec(), None));
-            }
-
-            // Find top-k elements by absolute value (simplified - assumes Ord)
-            let mut indexed: Vec<(usize, T)> = data
-                .iter()
-                .enumerate()
-                .map(|(i, v)| (i, v.clone()))
-                .collect();
-
-            // Partial sort to get top k
-            if *k < indexed.len() {
-                indexed.select_nth_unstable_by(*k, |a, b| {
-                    b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal)
-                });
-            }
-
-            let mut values = Vec::with_capacity(*k);
-            let mut indices = Vec::with_capacity(*k);
-
-            for (idx, val) in indexed.iter().take(*k) {
-                indices.push(*idx);
-                values.push(val.clone());
-            }
-
-            Ok((values, Some(indices)))
-        }
-
-        CompressionStrategy::RandomK { k } => {
-            if *k >= data.len() {
-                return Ok((data.to_vec(), None));
-            }
-
-            // Simple deterministic selection for now
-            let step = data.len() / k;
-            let values: Vec<T> = (0..*k).map(|i| data[i * step].clone()).collect();
-            let indices: Vec<usize> = (0..*k).map(|i| i * step).collect();
-
-            Ok((values, Some(indices)))
-        }
-
-        CompressionStrategy::Quantization { .. } => {
-            // For now, just pass through - full quantization requires more type constraints
-            Ok((data.to_vec(), None))
-        }
-
-        CompressionStrategy::Threshold { .. } => {
-            // For now, just pass through - threshold requires numeric operations
-            Ok((data.to_vec(), None))
-        }
-    }
-}
-
-/// Decompress tensor data
-pub fn decompress_tensor<T>(
-    compressed: &[T],
-    indices: Option<&[usize]>,
-    original_size: usize,
-) -> Result<Vec<T>, CommunicationError>
-where
-    T: Clone + Default,
-{
-    match indices {
-        None => Ok(compressed.to_vec()),
-        Some(idx) => {
-            let mut result = vec![T::default(); original_size];
-            for (i, &pos) in idx.iter().enumerate() {
-                if pos < original_size && i < compressed.len() {
-                    result[pos] = compressed[i].clone();
-                }
-            }
-            Ok(result)
-        }
-    }
-}
+// `compress_tensor`/`decompress_tensor` implementations moved to
+// `super::compression` (bound relaxed to `Float`, TopK now selects by
+// absolute value, RandomK does real seeded sampling, Threshold actually
+// thresholds, Quantization returns a clear error pointing at
+// `compression::QuantizedTensor`). Re-exported here for existing call sites.
+pub use super::compression::{compress_tensor, decompress_tensor};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::distributed::process::Communicator;
+    use crate::distributed::testing::{ClusterNode, LocalCluster};
+    use std::time::Duration;
 
     #[test]
     fn test_tensor_message_creation() {
@@ -651,65 +564,9 @@ mod tests {
         assert!(MessagePriority::Normal > MessagePriority::Low);
     }
 
-    #[test]
-    fn test_compression_none() {
-        let data = vec![1.0, 2.0, 3.0, 4.0];
-        let result = compress_tensor(&data, &CompressionStrategy::None);
-        assert!(result.is_ok());
-
-        let (compressed, indices) = result.expect("compression failed");
-        assert_eq!(compressed, data);
-        assert!(indices.is_none());
-    }
-
-    #[test]
-    fn test_compression_topk() {
-        let data = vec![5.0, 1.0, 8.0, 3.0, 9.0, 2.0];
-        let result = compress_tensor(&data, &CompressionStrategy::TopK { k: 3 });
-        assert!(result.is_ok());
-
-        let (compressed, indices) = result.expect("compression failed");
-        assert_eq!(compressed.len(), 3);
-        assert!(indices.is_some());
-        assert_eq!(indices.as_ref().expect("indices missing").len(), 3);
-    }
-
-    #[test]
-    fn test_compression_randomk() {
-        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
-        let result = compress_tensor(&data, &CompressionStrategy::RandomK { k: 3 });
-        assert!(result.is_ok());
-
-        let (compressed, indices) = result.expect("compression failed");
-        assert_eq!(compressed.len(), 3);
-        assert!(indices.is_some());
-    }
-
-    #[test]
-    fn test_decompress_none() {
-        let data = vec![1.0, 2.0, 3.0, 4.0];
-        let result = decompress_tensor(&data, None, data.len());
-        assert!(result.is_ok());
-
-        let decompressed = result.expect("decompression failed");
-        assert_eq!(decompressed, data);
-    }
-
-    #[test]
-    fn test_decompress_with_indices() {
-        let compressed = vec![5.0, 8.0, 9.0];
-        let indices = vec![0, 2, 4];
-        let original_size = 6;
-
-        let result = decompress_tensor(&compressed, Some(&indices), original_size);
-        assert!(result.is_ok());
-
-        let decompressed = result.expect("decompression failed");
-        assert_eq!(decompressed.len(), original_size);
-        assert_eq!(decompressed[0], 5.0);
-        assert_eq!(decompressed[2], 8.0);
-        assert_eq!(decompressed[4], 9.0);
-    }
+    // Compression/decompression behavior tests (compress_tensor,
+    // decompress_tensor, CompressionStrategy serialization, QuantizedTensor)
+    // live in `super::compression`, which now owns those implementations.
 
     #[test]
     fn test_tensor_message_serialization() {
@@ -723,27 +580,6 @@ mod tests {
         let deserialized: Result<(TensorMessage<f32>, usize), _> =
             oxicode::decode_from_slice(&bytes);
         assert!(deserialized.is_ok());
-    }
-
-    #[test]
-    fn test_compression_strategy_serialization() {
-        let strategies = vec![
-            CompressionStrategy::None,
-            CompressionStrategy::TopK { k: 10 },
-            CompressionStrategy::RandomK { k: 5 },
-            CompressionStrategy::Quantization { bits: 8 },
-            CompressionStrategy::Threshold { threshold: 0.01 },
-        ];
-
-        for strategy in strategies {
-            let serialized = oxicode::encode_to_vec(&strategy);
-            assert!(serialized.is_ok());
-
-            let bytes = serialized.expect("serialization failed");
-            let deserialized: Result<(CompressionStrategy, usize), _> =
-                oxicode::decode_from_slice(&bytes);
-            assert!(deserialized.is_ok());
-        }
     }
 
     #[test]
@@ -775,25 +611,117 @@ mod tests {
         assert_eq!(size, 1000 * std::mem::size_of::<f64>());
     }
 
-    #[test]
-    fn test_compression_topk_full_data() {
-        let data = vec![1.0, 2.0, 3.0];
-        let result = compress_tensor(&data, &CompressionStrategy::TopK { k: 10 });
-        assert!(result.is_ok());
-
-        let (compressed, indices) = result.expect("compression failed");
-        assert_eq!(compressed, data);
-        assert!(indices.is_none());
+    fn short_timeout_config() -> super::super::net::EndpointConfig {
+        super::super::net::EndpointConfig {
+            recv_timeout: Duration::from_secs(2),
+            ..super::super::net::EndpointConfig::default()
+        }
     }
 
-    #[test]
-    fn test_compression_randomk_full_data() {
-        let data = vec![1.0, 2.0, 3.0];
-        let result = compress_tensor(&data, &CompressionStrategy::RandomK { k: 10 });
-        assert!(result.is_ok());
+    /// `irecv` must be truly non-blocking: nothing has been sent yet, so it
+    /// must fail immediately rather than hang.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn irecv_returns_immediately_when_nothing_has_arrived() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(10),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(std::sync::Arc::new(node.endpoint))?;
+                let async_comm = AsyncCommunicator::new(std::sync::Arc::new(comm))
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                let other = if async_comm.rank() == 0 { 1 } else { 0 };
+                let result: Result<TensorMessage<f32>, _> = async_comm.irecv(other).await;
+                Ok(result.is_err())
+            },
+        )
+        .await
+        .expect("run");
+        assert!(results.iter().all(|&was_err| was_err));
+    }
 
-        let (compressed, indices) = result.expect("compression failed");
-        assert_eq!(compressed, data);
-        assert!(indices.is_none());
+    /// A real send/recv round trip: rank 0 sends a tensor to rank 1, which
+    /// receives it (blocking `recv`, since it may need to wait a moment for
+    /// the send to land) and checks the payload survived intact.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn isend_and_recv_round_trip_a_real_tensor() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(10),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(std::sync::Arc::new(node.endpoint))?;
+                let rank = comm.rank();
+                let async_comm = AsyncCommunicator::new(std::sync::Arc::new(comm))
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                if rank == 0 {
+                    let msg = TensorMessage::new(
+                        vec![1.0_f32, 2.0, 3.0, 4.0],
+                        CompressionStrategy::None,
+                        MessagePriority::High,
+                    );
+                    async_comm
+                        .isend(msg, 1)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok(Vec::new())
+                } else {
+                    let got: TensorMessage<f32> = async_comm
+                        .recv(0)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok(got.data)
+                }
+            },
+        )
+        .await
+        .expect("run");
+        assert_eq!(results[1], vec![1.0, 2.0, 3.0, 4.0]);
+    }
+
+    /// `PipelinedCommunicator` sends must also be real: this drives
+    /// `pipeline_send` end to end and confirms the payload actually arrives.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn pipelined_send_delivers_a_real_message() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(10),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(std::sync::Arc::new(node.endpoint))?;
+                let rank = comm.rank();
+                let pipeline = PipelinedCommunicator::new(std::sync::Arc::new(comm), 4)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                if rank == 0 {
+                    let msg = TensorMessage::new(
+                        vec![9_i32, 8, 7],
+                        CompressionStrategy::None,
+                        MessagePriority::Normal,
+                    );
+                    let op_id = pipeline
+                        .pipeline_send(msg, 1)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    pipeline
+                        .wait_operation(op_id)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok(Vec::new())
+                } else {
+                    let got: TensorMessage<i32> = pipeline
+                        .base
+                        .recv(0)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok(got.data)
+                }
+            },
+        )
+        .await
+        .expect("run");
+        assert_eq!(results[1], vec![9, 8, 7]);
     }
 }

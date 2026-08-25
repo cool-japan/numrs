@@ -24,15 +24,39 @@ impl PyArray {
     /// Create a new array from a Python sequence
     #[new]
     fn new(data: &Bound<'_, PyAny>) -> PyResult<Self> {
-        // Try to extract as NumPy array first
+        // Try to extract as NumPy array first. `.as_array()` is a safe,
+        // stride-aware view (unlike `.as_slice()`, which only succeeds for
+        // a C-contiguous buffer and errors out otherwise), so this also
+        // accepts non-contiguous NumPy input (e.g. a transposed or
+        // strided view) instead of rejecting it; `.to_vec()` walks that
+        // view in the array's logical (row-major) element order,
+        // materializing exactly one copy -- the same single copy
+        // `.as_slice()` + `.to_vec()` paid in the contiguous-only case,
+        // just handling the general case too.
         if let Ok(np_arr) = data.extract::<PyReadonlyArrayDyn<f64>>() {
             let shape = np_arr.shape().to_vec();
-            let data_vec: Vec<f64> = np_arr
-                .as_slice()
-                .map_err(|_| {
-                    PyValueError::new_err("Cannot convert NumPy array to contiguous slice")
-                })?
-                .to_vec();
+            // `ArrayBase::to_vec()` only exists for 1-D arrays (see
+            // ndarray's `impl_1d.rs`); `.iter().cloned().collect()` is the
+            // ND-generic equivalent, walking the view in logical
+            // (row-major) order regardless of its strides.
+            let data_vec: Vec<f64> = np_arr.as_array().iter().cloned().collect();
+            let array = Array::from_vec_shape(data_vec, &shape)?;
+            return Ok(PyArray { inner: array });
+        }
+
+        // `Array` (this binding's `PyArray`) is f64-only storage -- there is
+        // no zero-copy view onto a `float32` NumPy buffer to offer, so an
+        // `np.float32` input still costs a copy same as the `f64` path
+        // above, just with an added widening cast per element instead of a
+        // plain clone. Without this branch, a `float32` array fails the
+        // `PyReadonlyArrayDyn<f64>` extraction above (exact-dtype match,
+        // no implicit cast) and then *also* fails the list/tuple checks
+        // below (a NumPy array is neither), surfacing the misleading
+        // "Expected list, tuple, or NumPy array" error for input that
+        // plainly was a NumPy array.
+        if let Ok(np_arr) = data.extract::<PyReadonlyArrayDyn<f32>>() {
+            let shape = np_arr.shape().to_vec();
+            let data_vec: Vec<f64> = np_arr.as_array().iter().map(|&v| v as f64).collect();
             let array = Array::from_vec_shape(data_vec, &shape)?;
             return Ok(PyArray { inner: array });
         }
@@ -53,7 +77,9 @@ impl PyArray {
             });
         }
 
-        Err(PyTypeError::new_err("Expected list, tuple, or NumPy array"))
+        Err(PyTypeError::new_err(
+            "Expected list, tuple, or NumPy array (float32 or float64)",
+        ))
     }
 
     /// Get the shape of the array
@@ -127,15 +153,26 @@ impl PyArray {
         self.inner.to_vec()
     }
 
-    /// Convert to NumPy array
+    /// Convert to NumPy array.
+    ///
+    /// Always copies once into an independently-owned NumPy buffer:
+    /// NumRS2's `Array` is `Arc`-based copy-on-write (`Clone` is O(1) and
+    /// shares storage), so handing NumPy that same buffer without copying
+    /// would let NumPy code mutate memory another `Array` handle still
+    /// expects to be untouched -- unsound under this crate's COW
+    /// invariant, so a copy is unavoidable here regardless of whether this
+    /// particular handle happens to be uniquely owned. `from_array` builds
+    /// the NumPy array directly from the source view in one pass (already
+    /// shaped correctly, so unlike the previous implementation this has no
+    /// separate fallible reshape step to `.expect()`), rather than via an
+    /// intermediate flat `Vec` + a second reshape-copy.
+    ///
+    /// Contrast `crate::python::fft`, whose `fft`/`ifft`/`rfft`/`fftn`/
+    /// `ifftn`/`rfftn` return a genuine zero-copy NumPy array: those
+    /// results are freshly computed with no other referents, so handing
+    /// their buffer to NumPy via `IntoPyArray` is safe.
     fn to_numpy<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDyn<f64>> {
-        let vec = self.inner.to_vec();
-        let shape: Vec<usize> = self.inner.shape();
-
-        // Convert to NumPy array with proper shape
-        let arr = vec.to_pyarray(py);
-        arr.reshape(shape)
-            .expect("reshape to array shape should not fail since shape is valid")
+        PyArrayDyn::from_array(py, self.inner.array())
     }
 
     /// Copy the array
@@ -257,7 +294,15 @@ fn ones(shape: Vec<usize>) -> PyArray {
 }
 
 /// Create a 2D array with ones on the diagonal and zeros elsewhere
+///
+/// PyO3 0.29 does not infer a default of `None` for a trailing `Option<T>`
+/// parameter on its own; without `#[pyo3(signature = ...)]` every
+/// parameter -- `Option<T>` or not -- is required, so `eye(3)` from Python
+/// would raise `TypeError: eye() missing 2 required positional arguments`
+/// (confirmed empirically: `tests/python_smoke.py`'s `nr.eye(2)` failed
+/// exactly this way before this attribute was added).
 #[pyfunction]
+#[pyo3(signature = (n, m=None, k=None))]
 fn eye(n: usize, m: Option<usize>, k: Option<isize>) -> PyArray {
     let m = m.unwrap_or(n);
     let k = k.unwrap_or(0);
@@ -276,6 +321,7 @@ fn identity(n: usize) -> PyArray {
 
 /// Create an array with evenly spaced values
 #[pyfunction]
+#[pyo3(signature = (start, stop, num, endpoint=None))]
 fn linspace(start: f64, stop: f64, num: usize, endpoint: Option<bool>) -> PyArray {
     let endpoint = endpoint.unwrap_or(true);
     if endpoint {
@@ -294,6 +340,7 @@ fn linspace(start: f64, stop: f64, num: usize, endpoint: Option<bool>) -> PyArra
 
 /// Create an array with values in a range
 #[pyfunction]
+#[pyo3(signature = (start, stop, step=None))]
 fn arange(start: f64, stop: f64, step: Option<f64>) -> PyArray {
     let step = step.unwrap_or(1.0);
     PyArray {
@@ -303,12 +350,12 @@ fn arange(start: f64, stop: f64, step: Option<f64>) -> PyArray {
 
 /// Create an array filled with a constant value
 #[pyfunction]
-fn full(shape: Vec<usize>, fill_value: f64) -> PyArray {
+fn full(shape: Vec<usize>, fill_value: f64) -> PyResult<PyArray> {
     let size: usize = shape.iter().product();
     let data = vec![fill_value; size];
-    PyArray {
+    Ok(PyArray {
         inner: Array::from_vec_shape(data, &shape)?,
-    }
+    })
 }
 
 /// Create an array filled with zeros (like another array)
@@ -323,18 +370,20 @@ fn ones_like(a: &PyArray) -> PyArray {
     ones(a.shape())
 }
 
-/// Concatenate arrays along an axis
+/// Concatenate arrays along an axis (default 0), matching NumPy's
+/// `concatenate` (join along the given axis, preserving every other
+/// dimension) rather than flattening every input first -- flattening was
+/// the previous "simplified implementation", which silently discarded
+/// shape/axis and only happened to be correct for 1-D inputs concatenated
+/// along axis 0.
 #[pyfunction]
+#[pyo3(signature = (arrays, axis=None))]
 fn concatenate(arrays: Vec<PyArray>, axis: Option<usize>) -> PyResult<PyArray> {
-    let _axis = axis.unwrap_or(0);
-    // Simplified implementation - just concatenate flattened arrays
-    let mut result = Vec::new();
-    for arr in arrays {
-        result.extend(arr.tolist());
-    }
-    Ok(PyArray {
-        inner: Array::from_vec(result),
-    })
+    let axis = axis.unwrap_or(0);
+    let refs: Vec<&Array<f64>> = arrays.iter().map(|a| &a.inner).collect();
+    let result = crate::array_ops::joining::concatenate(&refs, axis)
+        .map_err(|e| PyValueError::new_err(format!("concatenate failed: {e}")))?;
+    Ok(PyArray { inner: result })
 }
 
 /// Register array module functions and classes

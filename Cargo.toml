@@ -173,15 +173,37 @@ serial_test = "4.0.1"  # For tests that require serial execution (global state)
 wasm-bindgen-test = "0.3.76"  # Testing framework for WebAssembly
 # For performance benchmarks in bench.rs
 serde_json = "1.0.150"  # For loading NumPy benchmark results
-tokio = { version = "1.52.3", features = ["rt", "macros"] }  # For GPU tests
+tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread", "macros", "time"] }  # For GPU tests and the distributed::testing::LocalCluster harness
 
 [workspace.lints.rust]
-unused_variables = "allow"
-unused_imports = "allow"
-mismatched_lifetime_syntaxes = "allow"
-dead_code = "allow"
-unpredictable_function_pointer_comparisons = "allow"
-unknown_lints = "allow"
+# --- W6-PREP (2026-08-25): blanket allow-list removed, lints flipped to truth ---
+# All six lints formerly allowed workspace-wide here (unused_variables,
+# unused_imports, mismatched_lifetime_syntaxes, dead_code,
+# unpredictable_function_pointer_comparisons, unknown_lints) were introduced
+# verbatim in the 0.1.0-beta.1 scaffolding commit (7aba46d) with no written
+# rationale, and have masked real warnings ever since. None had a written
+# justification, so per policy none are kept:
+#   - unused_variables / unused_imports / dead_code / mismatched_lifetime_syntaxes:
+#     removed as directed; the resulting fallout is inventoried for the fix
+#     wave (scratchpad w6_lint_inventory.txt) rather than fixed here.
+#   - unpredictable_function_pointer_comparisons: removed too -- a repo-wide
+#     grep (src/, tests/, bench/, benches/, examples/) found zero `as fn(...)`
+#     pointer casts and no PartialEq derive on the one fn-pointer-holding
+#     struct in the tree (FusedScalarBroadcast::fma_fn in
+#     src/expr/fusion.rs), so this allow was suppressing nothing real.
+#   - unknown_lints: removed too -- its only plausible purpose was as the
+#     standard companion to `mismatched_lifetime_syntaxes` (so toolchains
+#     that don't recognize that lint name wouldn't warn about the allow
+#     attribute naming it). With that entry gone, blanket-suppressing
+#     "unknown lint" crate-wide has no remaining justification and is itself
+#     a mask -- e.g. a typo'd lint name in a local #[allow(...)] would go
+#     silently unreported.
+# This table intentionally has zero active entries below. It must stay
+# present (even empty) because `[lints] workspace = true` in [package]
+# requires a `[workspace.lints]` table to resolve against. Going forward,
+# an entry may only be reintroduced here alongside a comment stating the
+# concrete, current reason it is needed -- an unjustified blanket allow is
+# exactly what this section exists to prevent.
 
 # ===================================================================
 # PERFORMANCE OPTIMIZATION PROFILES
@@ -193,7 +215,37 @@ lto = "fat"                # Full Link-Time Optimization for cross-crate inlinin
 codegen-units = 1          # Single codegen unit for better optimization (slower compile)
 strip = true               # Strip symbols from binary (smaller size, no debug info)
 panic = "abort"            # Abort on panic (smaller binary, faster code)
-overflow-checks = false    # Disable overflow checks in release (use with caution)
+# --- W6-B decision (2026-08-25): keep overflow-checks OFF in release, documented not flipped ---
+# numrs2 is a numerics library whose hot paths are tight indexing/reduction/
+# BLAS-adjacent loops over large arrays; overflow-checked arithmetic on every
+# element of every such loop would regress exactly the workloads this crate
+# exists to make fast, for a bug class (usize/isize arithmetic overflow) that
+# is already caught two other ways in this codebase:
+#   1. Indexing *through the ndarray API layer* (Index/IndexMut, `.get()`,
+#      slicing, etc.) is bounds-checked regardless of this flag, on every
+#      profile including release -- that check does not depend on
+#      overflow-checks being on. This does not cover every index-adjacent
+#      computation in the crate: lower-level paths (the kernels/ dispatch
+#      layer, stride_tricks.rs, memory_alloc/, mmap/, and any
+#      `get_unchecked`-style fast path) compute strides/offsets themselves
+#      before reaching that checked layer, and their correctness has to
+#      come from the code itself -- overflow-checks would not have covered
+#      them in release either way, since this flag is off there regardless.
+#   2. [profile.dev] and [profile.test] below both explicitly set
+#      overflow-checks = true, so plain `cargo build` / `cargo test` (the
+#      default, non-release paths developers and CI run day to day) still
+#      catch real arithmetic-overflow bugs during normal development.
+# The tradeoff is opt-in: [profile.bench] (below) inherits this release
+# profile and does not override overflow-checks, so it is off there too --
+# deliberately, since bench exists to measure real release performance.
+# Likewise, `cargo test --release` compiles against this [profile.release]
+# directly (verified empirically: opt-level 3, debug-assertions off,
+# overflow-checks off, identical to a plain `cargo build --release`) rather
+# than against [profile.test] -- so opting into --release for either
+# benchmarking or a faster test run trades away overflow coverage by design.
+# The default `cargo test` / `cargo nextest run` (no --release) is where
+# that coverage actually lives, and it is not weakened by this setting.
+overflow-checks = false    # Disable overflow checks in release (use with caution) -- see rationale above
 debug = false              # No debug information in release builds
 
 # Benchmark profile with debug info for profiling
@@ -201,18 +253,21 @@ debug = false              # No debug information in release builds
 inherits = "release"
 debug = true               # Keep debug info for flamegraph/profiling tools
 strip = false              # Keep symbols for profiling
+# overflow-checks: not set here -> inherited from [profile.release] above
+# (false). Intentional, not an oversight: bench measures real release-mode
+# performance, so it must match release's checks-off behavior exactly.
 
 # Development profile optimized for compilation speed
 [profile.dev]
 opt-level = 0              # No optimization for fast compilation
 debug = true               # Full debug information
-overflow-checks = true     # Enable overflow checks in debug
+overflow-checks = true     # Enable overflow checks in debug -- explicit (W6-B verified, not defaulted); this is where overflow coverage lives day to day
 
 # Test profile with optimizations for faster test execution
 [profile.test]
 opt-level = 2              # Some optimization for faster tests
 debug = true               # Keep debug info for debugging test failures
-overflow-checks = true     # Keep safety checks in tests
+overflow-checks = true     # Keep safety checks in tests -- explicit (W6-B verified, not defaulted); default `cargo test`/`cargo nextest run` use this profile, so overflow coverage holds in CI
 
 [[bench]]
 name = "numpy_comparison"
@@ -426,6 +481,19 @@ required-features = ["distributed"]
 [[example]]
 name = "distributed_computing"
 required-features = ["distributed"]
+
+# ===================================================================
+# FEATURE-GATED INTEGRATION TESTS
+# ===================================================================
+# tests/gpu_integration.rs wires the previously-orphaned tests/gpu/{test_gpu_ops,
+# test_gpu_linalg,test_gpu_memory}.rs (never `mod`-included by any harness, so
+# never compiled) into an actual cargo test target. `required-features` makes
+# cargo skip building it entirely under default features, rather than compiling
+# a stub that immediately hits `numrs2::gpu` symbols that don't exist without
+# the `gpu` feature.
+[[test]]
+name = "gpu_integration"
+required-features = ["gpu"]
 
 # ===================================================================
 # PATCH: Use local oxiarc workspace (crates.io version missing progress/cancel modules)

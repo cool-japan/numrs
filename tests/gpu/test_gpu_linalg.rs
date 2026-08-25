@@ -12,10 +12,10 @@ async fn test_matmul_basic() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
     let b = Array::from_vec(vec![5.0f32, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
     let c_gpu = linalg::matmul(&a_gpu, &b_gpu).expect("Failed to perform matmul");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
@@ -36,10 +36,10 @@ async fn test_matmul_rectangular() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).reshape(&[2, 4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
     let c_gpu = linalg::matmul(&a_gpu, &b_gpu).expect("Failed to perform matmul");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
@@ -56,10 +56,10 @@ async fn test_matmul_incompatible_shapes() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
     // This should fail
     let result = linalg::matmul(&a_gpu, &b_gpu);
@@ -74,10 +74,10 @@ async fn test_dot_product() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
     let b = Array::from_vec(vec![5.0f32, 6.0, 7.0, 8.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
     let result = linalg::dot(&a_gpu, &b_gpu).expect("Failed to compute dot product");
 
@@ -93,10 +93,10 @@ async fn test_dot_incompatible_shapes() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0]).reshape(&[3]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
     // This should fail
     let result = linalg::dot(&a_gpu, &b_gpu);
@@ -110,8 +110,8 @@ async fn test_norm_l2() {
     // Create a vector [3.0, 4.0]
     let a = Array::from_vec(vec![3.0f32, 4.0]).reshape(&[2]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
     let norm = linalg::norm_l2(&a_gpu).expect("Failed to compute L2 norm");
 
@@ -127,10 +127,10 @@ async fn test_matvec() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
     let x = Array::from_vec(vec![1.0f32, 2.0, 3.0]).reshape(&[3]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let x_gpu = GpuArray::from_array_with_context(&x, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let x_gpu =
+        GpuArray::from_array_with_context(&x, context.clone()).expect("Failed to create GPU array");
 
     let y_gpu = linalg::matvec(&a_gpu, &x_gpu).expect("Failed to compute matvec");
     let y = y_gpu.to_array().expect("Failed to convert to CPU array");
@@ -149,10 +149,10 @@ async fn test_vecmat() {
     let x = Array::from_vec(vec![1.0f32, 2.0]).reshape(&[2]);
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
-    let x_gpu = GpuArray::from_array_with_context(&x, context.clone())
-        .expect("Failed to create GPU array");
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let x_gpu =
+        GpuArray::from_array_with_context(&x, context.clone()).expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
     let y_gpu = linalg::vecmat(&x_gpu, &a_gpu).expect("Failed to compute vecmat");
     let y = y_gpu.to_array().expect("Failed to convert to CPU array");
@@ -172,10 +172,10 @@ async fn test_matmul_identity() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
     let i = Array::from_vec(vec![1.0f32, 0.0, 0.0, 1.0]).reshape(&[2, 2]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let i_gpu = GpuArray::from_array_with_context(&i, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let i_gpu =
+        GpuArray::from_array_with_context(&i, context.clone()).expect("Failed to create GPU array");
 
     let c_gpu = linalg::matmul(&a_gpu, &i_gpu).expect("Failed to perform matmul");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
@@ -197,8 +197,8 @@ async fn test_reshape() {
 
     // Create a 1D array
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[6]);
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
     // Reshape to 2x3
     let a_2d = a_gpu.reshape(&[2, 3]).expect("Failed to reshape");

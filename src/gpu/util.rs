@@ -2,28 +2,37 @@
 //!
 //! This module provides utility functions for working with GPU arrays and contexts.
 
-use crate::error::Result;
-use crate::gpu::context::{GpuContext, GpuContextRef};
+use crate::error::{NumRs2Error, Result};
+use crate::gpu::context::{adapter_options, fallback_adapter_requested, GpuContext, GpuContextRef};
 use std::sync::{Mutex, OnceLock};
 
 // Global context for GPU operations
 static DEFAULT_CONTEXT: OnceLock<Mutex<Option<GpuContextRef>>> = OnceLock::new();
 
 /// Gets the default GPU context, creating it if it doesn't exist
+///
+/// The context is created once and shared by every GPU array that does not
+/// name a context explicitly, so a program only ever opens one device.
 pub fn get_default_context() -> Result<GpuContextRef> {
     let context_mutex = DEFAULT_CONTEXT.get_or_init(|| Mutex::new(None));
-    let mut context_guard = context_mutex
-        .lock()
-        .expect("GPU context mutex poisoned - another thread panicked while holding the lock");
+    let mut context_guard = context_mutex.lock().map_err(|_| {
+        NumRs2Error::RuntimeError(
+            "GPU context mutex poisoned - another thread panicked while holding the lock"
+                .to_string(),
+        )
+    })?;
 
-    if context_guard.is_none() {
-        *context_guard = Some(crate::gpu::context::new_context()?);
+    // Populate the slot on first use, then hand out clones of the stored
+    // reference. Matching on the slot avoids re-reading it (and the
+    // unreachable "must be initialized" assumption that came with it).
+    match context_guard.as_ref() {
+        Some(context) => Ok(context.clone()),
+        None => {
+            let context = crate::gpu::context::new_context()?;
+            *context_guard = Some(context.clone());
+            Ok(context)
+        }
     }
-
-    Ok(context_guard
-        .as_ref()
-        .expect("GPU context should be initialized at this point")
-        .clone())
 }
 
 /// Checks if the hardware supports GPU acceleration
@@ -54,17 +63,9 @@ pub fn get_gpu_info() -> Option<String> {
     // Create a new instance
     let instance = wgpu::Instance::default();
 
-    // Request an adapter
-    let adapter_future = instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::HighPerformance,
-        force_fallback_adapter: false,
-        compatible_surface: None,
-        // Limit bucketing exists to reduce GPU fingerprinting when `wgpu` is
-        // exposed to untrusted web content; this is a native compute library
-        // with no such surface, so it is unneeded here (matches `wgpu`'s own
-        // `Default` behavior).
-        apply_limit_buckets: false,
-    });
+    // Request an adapter, honouring the software-adapter opt-in so that the
+    // reported device matches the one operations would actually run on.
+    let adapter_future = instance.request_adapter(&adapter_options(fallback_adapter_requested()));
 
     let adapter = rt.block_on(adapter_future).ok()?;
     let info = adapter.get_info();

@@ -286,6 +286,16 @@ fn test_studentt_to_normal_relation() {
 fn test_uniform_sum_to_approximate_normal() {
     // By the Central Limit Theorem, sums of uniform random variables
     // approximate a normal distribution
+    //
+    // W6-TESTS flake audit: this was flagged as a candidate flake, but it
+    // is already fully deterministic -- `set_seed` below (load-bearing: do
+    // not remove) drives a single-threaded, mutex-guarded global RNG (see
+    // `random::distributions::RandomState`), `#[serial]` protects it under
+    // a `cargo test` fallback (no per-test process isolation there, unlike
+    // nextest), and the KS-test critical value in
+    // `test_standard_normal_conformance` above is already a generous 99%
+    // confidence bound. See the W6-TESTS report for the 10/10 verification
+    // run; left behaviorally unchanged.
 
     let num_uniforms = 12; // Sum of 12 uniform(0,1) is close to normal(6,1)
 

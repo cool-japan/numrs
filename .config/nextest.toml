@@ -1,0 +1,12 @@
+# nextest configuration for numrs2.
+#
+# `distributed` profile: distributed-module tests spin up real tokio tasks
+# and TCP listeners (see src/distributed/testing.rs's LocalCluster, whose
+# own default deadline is 20s) and this machine regularly runs many cargo
+# invocations concurrently, so the default nextest slow-timeout is too
+# tight for them. This profile only raises the bar at which a still-running
+# test gets flagged/logged as "slow" (and, per-test, eventually killed) —
+# it does not change which tests run. Invoke explicitly:
+#   cargo nextest run --profile distributed --features distributed
+[profile.distributed]
+slow-timeout = "30s"

@@ -533,45 +533,15 @@ pub fn extract<T: Clone>(array: &Array<T>, condition: &Array<bool>) -> Result<Ar
 /// place(&mut b, &mask, &[10, 20, 30]).expect("operation should succeed");
 /// assert_eq!(b.to_vec(), vec![1, 10, 3, 20, 5, 30]);
 /// ```
+///
+/// Delegates to the canonical
+/// [`crate::array_ops::advanced_indexing::place`], which additionally
+/// cycles through `values` when there are fewer of them than `true`
+/// entries in `mask` (this copy required an exact count match and errored
+/// otherwise); see that function's docs for full NumPy-compatible
+/// semantics, matching `numpy.place`'s own repeat-as-needed behavior.
 pub fn place<T: Clone>(array: &mut Array<T>, mask: &Array<bool>, values: &[T]) -> Result<()> {
-    // Check that arrays have the same shape
-    if array.shape() != mask.shape() {
-        return Err(NumRs2Error::DimensionMismatch(format!(
-            "Array and mask must have the same shape, got {:?} and {:?}",
-            array.shape(),
-            mask.shape()
-        )));
-    }
-
-    // Count true values in mask
-    let mask_flat = mask.to_vec();
-    let true_count = mask_flat.iter().filter(|&&x| x).count();
-
-    // Check that we have the right number of values
-    if values.len() != true_count {
-        return Err(NumRs2Error::InvalidOperation(format!(
-            "Number of values ({}) must match number of true elements in mask ({})",
-            values.len(),
-            true_count
-        )));
-    }
-
-    // Get mutable slice of array data
-    let array_slice = array
-        .array_mut()
-        .as_slice_mut()
-        .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to get mutable slice".into()))?;
-
-    // Place values where mask is true
-    let mut value_idx = 0;
-    for (i, &mask_val) in mask_flat.iter().enumerate() {
-        if mask_val {
-            array_slice[i] = values[value_idx].clone();
-            value_idx += 1;
-        }
-    }
-
-    Ok(())
+    crate::array_ops::advanced_indexing::place(array, mask, values)
 }
 
 /// Replace specified elements of an array with given values
@@ -635,6 +605,11 @@ pub fn put<T: Clone>(array: &mut Array<T>, indices: &[usize], values: &[T]) -> R
 
 /// Select slices from an array along a given axis
 ///
+/// Delegates to the canonical [`crate::array_ops::advanced_indexing::compress`];
+/// see that function's docs for full NumPy-compatible semantics, including
+/// its more permissive handling of a `condition` shorter or longer than the
+/// selected axis/array length.
+///
 /// # Parameters
 ///
 /// * `array` - Array from which to select slices
@@ -668,87 +643,5 @@ pub fn compress<T: Clone + Zero>(
     condition: &Array<bool>,
     axis: Option<usize>,
 ) -> Result<Array<T>> {
-    // Ensure condition is 1-D
-    if condition.ndim() != 1 {
-        return Err(NumRs2Error::InvalidOperation(
-            "Condition must be a 1-D array".into(),
-        ));
-    }
-
-    match axis {
-        Some(ax) => {
-            // Compress along specified axis
-            if ax >= array.ndim() {
-                return Err(NumRs2Error::DimensionMismatch(format!(
-                    "Axis {} out of bounds for array of dimension {}",
-                    ax,
-                    array.ndim()
-                )));
-            }
-
-            let shape = array.shape();
-            let axis_size = shape[ax];
-
-            // Check condition length matches axis size
-            if condition.size() != axis_size {
-                return Err(NumRs2Error::DimensionMismatch(format!(
-                    "Condition length {} doesn't match axis {} size {}",
-                    condition.size(),
-                    ax,
-                    axis_size
-                )));
-            }
-
-            // Get indices where condition is true
-            let condition_vec = condition.to_vec();
-            let selected_indices: Vec<usize> = condition_vec
-                .iter()
-                .enumerate()
-                .filter_map(|(i, &val)| if val { Some(i) } else { None })
-                .collect();
-
-            if selected_indices.is_empty() {
-                // Return empty array with appropriate shape
-                let mut new_shape = shape.clone();
-                new_shape[ax] = 0;
-                return Array::from_vec_shape(vec![], &new_shape);
-            }
-
-            // Calculate new shape
-            let mut new_shape = shape.clone();
-            new_shape[ax] = selected_indices.len();
-
-            // Calculate strides for indexing
-            let mut strides = vec![1; shape.len()];
-            for i in (0..shape.len() - 1).rev() {
-                strides[i] = strides[i + 1] * shape[i + 1];
-            }
-
-            // Collect selected slices
-            let total_size: usize = new_shape.iter().product();
-            let mut result_data = Vec::with_capacity(total_size);
-
-            for i in 0..total_size {
-                // Convert flat index to multi-dimensional indices
-                let mut indices_arr = vec![0; shape.len()];
-                let mut temp = i;
-                for j in 0..new_shape.len() {
-                    indices_arr[j] = temp / strides[j];
-                    temp %= strides[j];
-                }
-
-                // Map the index along the compressed axis
-                if ax < indices_arr.len() && indices_arr[ax] < selected_indices.len() {
-                    indices_arr[ax] = selected_indices[indices_arr[ax]];
-                    result_data.push(array.get(&indices_arr)?);
-                }
-            }
-
-            Ok(Array::from_vec_shape(result_data, &new_shape)?)
-        }
-        None => {
-            // Flatten array and compress
-            extract(array, condition)
-        }
-    }
+    crate::array_ops::advanced_indexing::compress(array, condition, axis)
 }

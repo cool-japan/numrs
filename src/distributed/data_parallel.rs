@@ -8,13 +8,21 @@
 //! - **Distributed Data Loader**: Automatic data sharding across workers
 //! - **Mini-Batch Distribution**: Efficient batch partitioning
 //! - **Gradient Aggregation**: AllReduce and Ring-AllReduce strategies
-//! - **Synchronous SGD**: Lock-step gradient updates
-//! - **Asynchronous SGD**: Non-blocking parameter updates
+//! - **Synchronous SGD**: Lock-step gradient updates, real multi-rank
+//!   all-reduce via [`SyncDataParallel`]
+//! - **Asynchronous SGD**: Non-blocking parameter updates via
+//!   [`AsyncDataParallel`] — single-process only, see its docs
 //! - **Gradient Accumulation**: Multi-step gradient aggregation
 //!
 //! # Data Parallel Patterns
 //!
 //! ## Synchronous Data Parallel
+//!
+//! Real, multi-rank: every rank in `Step 3` genuinely exchanges gradients
+//! with every other rank over the network (via
+//! [`SyncDataParallel::aggregate_gradients`], which all-reduces then
+//! divides by the world size — every rank ends this step holding the same
+//! mean gradient).
 //! ```text
 //! Step 1: Forward pass on local data
 //! Step 2: Compute gradients
@@ -23,6 +31,11 @@
 //! ```
 //!
 //! ## Asynchronous Data Parallel
+//!
+//! [`AsyncDataParallel`] models this shape, but — see its docs and
+//! [`ParameterServer`]'s — "Worker 0"/"Worker 1"/"Parameter Server" below
+//! are logical roles sharing one process today, not separate ranks: nothing
+//! here yet sends a push or a pull across a real network boundary.
 //! ```text
 //! Worker 0: compute → push gradients → continue
 //! Worker 1: compute → push gradients → continue
@@ -63,9 +76,8 @@
 //! # }
 //! ```
 
-use super::communication::{
-    AsyncCommunicator, CommunicationError, CompressionStrategy, MessagePriority, TensorMessage,
-};
+use super::collective::{allreduce, ReduceOp};
+use super::communication::{CommunicationError, CompressionStrategy};
 use super::coordinator::{CoordinatorError, ParameterServer, RingAllReduce};
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
@@ -375,26 +387,34 @@ impl SyncDataParallel {
         }
     }
 
-    /// Internal gradient aggregation implementation
+    /// Internal gradient aggregation implementation.
+    ///
+    /// A real all-reduce **sum** across every rank, then divided by the
+    /// world size — every rank contributes and every rank gets the same
+    /// mean gradient, which is what every doc example calling the result
+    /// `averaged` expects. An earlier version's `AllReduce`/`Hierarchical`
+    /// branch never talked to another rank at all: it divided *this rank's
+    /// own* gradients by the world size and returned that, so every rank
+    /// silently produced a different, wrong result (that of `RingAllReduce`
+    /// was wrong the other way — a real cross-rank sum, but never divided
+    /// down to a mean).
     async fn aggregate_impl(&self, gradients: &[f32]) -> Result<Vec<f32>, DataParallelError> {
-        match self.aggregation {
+        let world_size = self.communicator.size() as f32;
+        let summed = match self.aggregation {
             GradientAggregation::RingAllReduce => {
-                if let Some(ref reducer) = self.ring_reducer {
-                    Ok(reducer.allreduce(gradients).await?)
-                } else {
-                    Err(DataParallelError::AggregationError(
-                        "Ring reducer not initialized".to_string(),
-                    ))
-                }
+                let reducer = self.ring_reducer.as_ref().ok_or_else(|| {
+                    DataParallelError::AggregationError("Ring reducer not initialized".to_string())
+                })?;
+                reducer.allreduce(gradients).await?
             }
 
             GradientAggregation::AllReduce | GradientAggregation::Hierarchical => {
-                // Simple averaging for now
-                // In real implementation, would use actual AllReduce
-                let world_size = self.communicator.size() as f32;
-                Ok(gradients.iter().map(|&g| g / world_size).collect())
+                allreduce(gradients, ReduceOp::Sum, &self.communicator)
+                    .await
+                    .map_err(CoordinatorError::from)?
             }
-        }
+        };
+        Ok(summed.into_iter().map(|g| g / world_size).collect())
     }
 
     /// Get current accumulation step
@@ -408,27 +428,30 @@ impl SyncDataParallel {
     }
 }
 
-/// Asynchronous data parallel trainer
+/// Asynchronous data parallel trainer.
+///
+/// Thin wrapper over [`ParameterServer`]; see that type's docs for why
+/// [`Self::new`] rejects a multi-rank `communicator`.
 pub struct AsyncDataParallel {
     /// Parameter server
     ps: ParameterServer,
-
-    /// Async communicator
-    async_comm: AsyncCommunicator,
 
     /// Staleness threshold for stale gradient rejection
     staleness_threshold: Option<u64>,
 }
 
 impl AsyncDataParallel {
-    /// Create new asynchronous data parallel trainer
+    /// Create new asynchronous data parallel trainer.
+    ///
+    /// # Errors
+    ///
+    /// See [`ParameterServer::new`]: this rejects the same multi-rank
+    /// `communicator`, for the same reason.
     pub fn new(communicator: Arc<Communicator>, num_ps: usize) -> Result<Self, DataParallelError> {
-        let ps = ParameterServer::new(communicator.clone(), num_ps)?;
-        let async_comm = AsyncCommunicator::new(communicator)?;
+        let ps = ParameterServer::new(communicator, num_ps)?;
 
         Ok(Self {
             ps,
-            async_comm,
             staleness_threshold: None,
         })
     }
@@ -591,6 +614,30 @@ mod tests {
         assert!(local.len() <= 100);
     }
 
+    /// [`AsyncDataParallel::new`] must propagate
+    /// [`ParameterServer::new`]'s multi-rank rejection rather than
+    /// swallowing it — see that type's docs on why a multi-rank
+    /// `ParameterServer` would silently desynchronize instead of erroring.
+    #[test]
+    fn async_data_parallel_rejects_a_multi_rank_communicator() {
+        let comm = create_mock_comm(0, 4).expect("Failed to create mock communicator");
+        // `expect_err` needs `AsyncDataParallel: Debug` (the success case),
+        // which this type deliberately does not derive — match instead.
+        match AsyncDataParallel::new(Arc::new(comm), 2) {
+            Err(DataParallelError::Coordinator(CoordinatorError::Configuration(_))) => {}
+            Err(other) => {
+                panic!("expected DataParallelError::Coordinator(Configuration), got {other}")
+            }
+            Ok(_) => panic!("a 4-rank communicator must be rejected"),
+        }
+    }
+
+    #[test]
+    fn async_data_parallel_accepts_a_single_rank_communicator() {
+        let comm = create_mock_comm(0, 1).expect("Failed to create mock communicator");
+        assert!(AsyncDataParallel::new(Arc::new(comm), 1).is_ok());
+    }
+
     #[test]
     fn test_invalid_batch_size() {
         let comm = create_mock_comm(0, 1).expect("Failed to create mock communicator");
@@ -667,5 +714,58 @@ mod tests {
         loader.reset();
         let batch = loader.next_batch();
         assert!(batch.is_some());
+    }
+
+    // -----------------------------------------------------------------
+    // aggregate_impl: a real all-reduce-then-mean over a LocalCluster, for
+    // every `GradientAggregation` strategy. An earlier version's
+    // `AllReduce`/`Hierarchical` branch never left its own rank (dividing
+    // *this rank's own* gradients by the world size), so every rank
+    // produced a different, wrong result; `RingAllReduce` really summed
+    // across ranks but never divided down to a mean. Both are wrong in
+    // exactly the way a genuine cross-rank average would catch.
+    // -----------------------------------------------------------------
+
+    use crate::distributed::testing::{ClusterNode, LocalCluster};
+
+    async fn averages_four_ranks_gradients(
+        aggregation: GradientAggregation,
+    ) -> Vec<Result<Vec<f32>, DataParallelError>> {
+        LocalCluster::run_connected(4, move |node: ClusterNode| async move {
+            let comm = Arc::new(Communicator::from_endpoint(Arc::new(node.endpoint))?);
+            let rank = comm.rank();
+            let trainer = SyncDataParallel::new(comm, aggregation)
+                .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+            // Rank r contributes [r + 1.0, 2 * (r + 1.0)]; the mean over
+            // ranks 0..4 is [(1+2+3+4)/4, 2*(1+2+3+4)/4] = [2.5, 5.0].
+            let local = vec![(rank + 1) as f32, 2.0 * (rank + 1) as f32];
+            Ok(trainer.aggregate_gradients(&local).await)
+        })
+        .await
+        .expect("cluster run should succeed")
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn aggregate_gradients_averages_across_ranks_with_all_reduce() {
+        for result in averages_four_ranks_gradients(GradientAggregation::AllReduce).await {
+            let averaged = result.expect("aggregate_gradients should succeed");
+            assert_eq!(averaged, vec![2.5, 5.0]);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn aggregate_gradients_averages_across_ranks_with_hierarchical() {
+        for result in averages_four_ranks_gradients(GradientAggregation::Hierarchical).await {
+            let averaged = result.expect("aggregate_gradients should succeed");
+            assert_eq!(averaged, vec![2.5, 5.0]);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn aggregate_gradients_averages_across_ranks_with_ring_all_reduce() {
+        for result in averages_four_ranks_gradients(GradientAggregation::RingAllReduce).await {
+            let averaged = result.expect("aggregate_gradients should succeed");
+            assert_eq!(averaged, vec![2.5, 5.0]);
+        }
     }
 }

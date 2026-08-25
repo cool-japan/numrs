@@ -43,6 +43,20 @@ Thumbs.db
 
 # Python
 **/__pycache__/
+.pytest_cache/
+**/.pytest_cache/
+
+# Compiled PyO3/maturin extension module: `maturin develop` (mixed
+# python-source layout, see pyproject.toml's `[tool.maturin]`) copies the
+# built cdylib directly into `python/numrs2/` as `_numrs2*.so`/`.pyd`/`.dll`
+# for an editable install; without this, that per-machine, per-interpreter
+# binary (one distinct file per Python ABI/platform, and tens of MB) is
+# untracked but not ignored, so a broad `git add -A`/`git add .` picks it up.
+python/numrs2/_numrs2*.so
+python/numrs2/_numrs2*.pyd
+python/numrs2/_numrs2*.dll
+*.egg-info/
+/dist/
 
 # Rustc ICE dumps
 rustc-ice-*.txt

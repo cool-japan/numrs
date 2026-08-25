@@ -11,7 +11,13 @@ use std::cell::RefCell;
 /// Bridges a Python callable to the Rust optimizer.
 /// Supported methods: `"nelder-mead"` (default) and `"bfgs"` (uses numerical gradient).
 /// Returns a Python dict with keys `x`, `fun`, `success`, `nit`, `nfev`, `message`.
+///
+/// PyO3 0.29 does not infer a default of `None` for a trailing `Option<T>`
+/// parameter without an explicit `#[pyo3(signature = ...)]` (confirmed
+/// empirically -- see `eye`'s doc comment in `src/python/array.rs`), so
+/// this and `root_scalar` below both need one.
 #[pyfunction]
+#[pyo3(signature = (fun, x0, method=None, tol=None))]
 fn minimize(
     py: Python<'_>,
     fun: Py<PyAny>,
@@ -170,6 +176,7 @@ fn minimize(
 /// Supported methods: `"brentq"` (default), `"bisect"`.
 /// Returns the root as f64.
 #[pyfunction]
+#[pyo3(signature = (fun, bracket, method=None))]
 fn root_scalar(fun: Py<PyAny>, bracket: (f64, f64), method: Option<String>) -> PyResult<f64> {
     let (a, b) = bracket;
 

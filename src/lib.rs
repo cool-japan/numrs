@@ -4,11 +4,15 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.4.1** - Patch release (2026-08-18): zero-copy `Array::as_slice()` / `as_cow_1d()`
-//! API; erfinv/Bessel Y_n/K_n precision fixes; irfft Hermitian reconstruction corrected; generic
-//! controlled-U quantum gate and multi-qubit gate fusion; random-number generation migrated to
-//! `scirs2_core::random` with reproducible seeding; GPU buffer-mapping errors now propagate via
-//! `Result` instead of panicking; SciRS2 ecosystem updated to v0.6.5.
+//! **Version 0.4.1** - A production-hardening pass: `Array<T>` is now `Arc`-backed copy-on-write
+//! (O(1) `Clone`); a shared `kernels` dispatch layer backs matmul/elementwise/reduction hot paths;
+//! the `distributed` feature's collectives and linear algebra now run over a real TCP transport
+//! instead of returning fabricated results; `lapack` is a default feature; and a large batch of
+//! NumPy-parity additions landed (ufunc `reduce`/`accumulate`/`at`, N-D FFT wrappers, 9
+//! NumPy>=1.22 quantile methods, masked-array completion, polynomial classes, `SeedSequence`/
+//! `Philox`/`SFC64` random generators). See `CHANGELOG.md` for the full, verified list, including
+//! a Known Upstream Issues section for the `scirs2-core`/`scirs2-fft` bugs this release works
+//! around rather than silently inherits.
 //!
 //! ## Quick Start
 //!
@@ -298,8 +302,11 @@ pub mod prelude {
     pub use crate::mmap::MmapArray;
     pub use crate::random::advanced_distributions;
     pub use crate::random::distributions;
-    pub use crate::random::generator::{default_rng, BitGenerator, Generator, StdBitGenerator};
+    pub use crate::random::generator::{
+        default_rng, BitGenerator, Generator, SeedableBitGenerator, StdBitGenerator,
+    };
     pub use crate::random::{self, RandomState};
+    pub use crate::random::{Philox4x64BitGenerator, SFC64BitGenerator, SeedSequence};
     pub use crate::set_ops::{
         in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options,
     };

@@ -426,6 +426,7 @@ mod perf_verification {
     /// Min-of-N, alternating A/B timing: interleaving avoids attributing a
     /// transient load spike on this (possibly shared) machine to one side.
     #[test]
+    #[ignore = "wall-clock perf assertion — run with --run-ignored, load-sensitive"]
     fn bench_lu_cow_vs_precow() {
         // Full sizes only under `--release`: in an unoptimized `test`-profile
         // build, O(n^3) hand-rolled LU at n=256 is slow enough to noticeably

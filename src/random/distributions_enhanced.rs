@@ -1405,14 +1405,37 @@ mod tests {
 
     #[test]
     #[serial]
-    #[ignore = "Performance optimization needed - function works but is too slow for CI"]
     fn test_mixture_of_normals() {
+        // Was `#[ignore]`d as "too slow for CI", which was never true: the
+        // impl above (`RandomState::mixture_of_normals`) is O(size *
+        // n_components) -- generate `size` component selections, batch-draw
+        // normals per component, reassign in order -- microseconds even at
+        // the original size=100. The real problem was statistical, not
+        // performance: with weights=[0.3, 0.7] and no seed, the number of
+        // draws from the -3 component is ~Binomial(100, 0.3), and
+        // `p25 = sorted[25]` needs at least ~26 of those to land negative
+        // for the assertion to hold. P(Binomial(100, 0.3) <= 25) ~= 16% --
+        // an honest ~1-in-6 flake with an *unseeded* global RNG, misdiagnosed
+        // as a perf problem at some point and `#[ignore]`d instead of fixed.
+        //
+        // Fixed by (a) seeding the global RNG explicitly -- deterministic
+        // per the CI policy on stochastic tests -- and (b) raising size to
+        // 1000, which pushes the analogous tail probability to ~3e-4
+        // (mean 300, std ~14.5 for the same binomial, needing <=250) so the
+        // seed has comfortable margin rather than merely happening to pass.
+        // Order-of-magnitude estimate: the sorted index (250 of ~300 draws
+        // from the -3 component) sits near that component's own 83rd
+        // percentile, i.e. roughly -3 + 0.97*std ~= -2.0 (symmetric +2.0 for
+        // p75) -- tightened the assertions accordingly, from the original
+        // "merely negative" (a razor-thin margin at the 0.0 line) to
+        // comfortably inside each component's mass.
+        crate::random::distributions::set_seed(20260825);
+
         let weights = vec![0.3, 0.7];
         let means = vec![-3.0, 3.0];
         let stds = vec![1.0, 1.0];
 
-        // Generate mixture samples (reduced size for performance)
-        let samples = mixture_of_normals(&weights, &means, &stds, &[100])
+        let samples = mixture_of_normals(&weights, &means, &stds, &[1000])
             .expect("test: mixture_of_normals should succeed");
 
         let data = samples.to_vec();
@@ -1429,11 +1452,20 @@ mod tests {
         let p25 = sorted_data[(0.25 * sorted_data.len() as f64) as usize];
         let p75 = sorted_data[(0.75 * sorted_data.len() as f64) as usize];
 
-        // For a bimodal distribution with these parameters,
-        // we expect the 25th percentile to be negative and
-        // the 75th percentile to be positive
-        assert!(p25 < 0.0, "25th percentile should be negative, got {}", p25);
-        assert!(p75 > 0.0, "75th percentile should be positive, got {}", p75);
+        // For a bimodal distribution with these parameters, the 25th
+        // percentile should sit well inside the -3 component's mass and the
+        // 75th percentile well inside the +3 component's mass -- not merely
+        // on the correct side of zero (see the margin note above).
+        assert!(
+            p25 < -0.5,
+            "25th percentile should be clearly negative, got {}",
+            p25
+        );
+        assert!(
+            p75 > 0.5,
+            "75th percentile should be clearly positive, got {}",
+            p75
+        );
     }
 
     // ------------------------------------------------------------------

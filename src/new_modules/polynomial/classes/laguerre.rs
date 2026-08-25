@@ -217,6 +217,22 @@ mod tests {
     }
 
     #[test]
+    fn integ_with_nonzero_constant_matches_numpy_lagint_example() {
+        // numpy: lagint((1,2,3,4), m=1, k=[5]) == [6, 1, 1, 1, -4]. Laguerre's
+        // own `int_once` (unlike every other family here) leaves index 0 at
+        // `c[0]` rather than zero, so this specifically exercises that the
+        // shared `Series::integ` constant-fixing step still adds the
+        // correction on top of that nonzero placeholder correctly.
+        let p = Laguerre::<f64>::from_coef(vec![1.0, 2.0, 3.0, 4.0]);
+        let integral = p.integ(1, &[5.0]);
+        let expected = [6.0, 1.0, 1.0, 1.0, -4.0];
+        assert_eq!(integral.coef().len(), expected.len());
+        for (got, want) in integral.coef().iter().zip(expected.iter()) {
+            assert_relative_eq!(got, want, epsilon = 1e-9);
+        }
+    }
+
+    #[test]
     #[cfg(feature = "lapack")]
     fn fit_recovers_known_coefficients_exactly_noise_free() {
         // f(x) = 1*L0 + 2*L1 + 3*L2 = 1 + 2*(1-x) + 3*(x^2-4x+2)/2, x in

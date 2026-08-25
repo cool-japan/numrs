@@ -7,9 +7,7 @@
 
 use super::{add_coefs, mapdomain, mapparms, sub_coefs, trim_coefs, Basis};
 use crate::array::Array;
-#[cfg(feature = "lapack")]
-use crate::error::NumRs2Error;
-use crate::error::Result;
+use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -140,19 +138,39 @@ where
     /// The `m`-th antiderivative, with integration constants `k` (missing
     /// trailing entries default to zero, matching `numpy.polynomial`'s
     /// `integ`). Each antiderivative's basis-constant term is fixed so the
-    /// series evaluates to `k[i]` at domain-space `0`. Unlike [`Series::deriv`],
-    /// the per-step scaling by `1/scl` (from `mapparms(domain, window)`)
-    /// cannot be hoisted out of the loop: the constant-fixing step
-    /// `tmp[0] += k[i] - val(lbnd, tmp)` reads the *already-scaled* `tmp`,
-    /// so each of the `m` passes must scale before integrating, not after.
+    /// series evaluates to `k[i]` at **window**-space `0`. Unlike
+    /// [`Series::deriv`], the per-step scaling by `1/scl` (from
+    /// `mapparms(domain, window)`) cannot be hoisted out of the loop: the
+    /// constant-fixing step `tmp[0] += k[i] - val(lbnd, tmp)` reads the
+    /// *already-scaled* `tmp`, so each of the `m` passes must scale before
+    /// integrating, not after.
     pub fn integ(&self, m: usize, k: &[T]) -> Self {
         if m == 0 {
             return self.clone();
         }
-        let (off, scl) = mapparms(self.domain, self.window);
-        // Lower bound is fixed at domain-space 0 (matching NumPy's own
-        // `integ` default of `lbnd=None` -> 0); mapped into window space.
-        let lbnd_window = off;
+        let (_, scl) = mapparms(self.domain, self.window);
+        // Lower bound is literal window-space 0, NOT domain-space 0 mapped
+        // into window space (i.e. NOT `off`). This mirrors NumPy's own
+        // `ABCPolyBase.integ` exactly:
+        //   off, scl = self.mapparms()
+        //   if lbnd is None:
+        //       lbnd = 0                  # <- literal, no `off + scl*lbnd`
+        //   else:
+        //       lbnd = off + scl * lbnd   # only for an explicit domain-space lbnd
+        // This method (matching the task's `integ(m, k)` signature) never
+        // accepts an explicit `lbnd`, so the `if` branch -- literal `0` -- is
+        // the only one ever taken. `off` and `0` coincide only when
+        // `domain == window` (every class's default, so every pre-existing
+        // test here was blind to this), but diverge whenever a series has a
+        // shifted domain -- e.g. one produced by `fit` on data outside
+        // `[-1, 1]`. Verified directly against
+        // `numpy.polynomial.Chebyshev([1,2,3], domain=[0,10]).integ().coef`
+        // (`[2.5, -2.5, 2.5, 2.5]`, reproduced by
+        // `chebyshev.chebint([1,2,3], lbnd=0, scl=5)`, NOT by
+        // `lbnd=off=-1`, which flips the sign of `coef[0]`); see
+        // `integ_uses_window_space_zero_not_domain_space_zero_as_lower_bound`
+        // below.
+        let lbnd_window = T::zero();
         let inv_scl = T::one() / scl;
         let mut k_vals = k.to_vec();
         k_vals.resize(m, T::zero());
@@ -176,12 +194,12 @@ where
     /// one operand.
     fn check_compatible(&self, other: &Self) -> Result<()> {
         if self.domain != other.domain {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
+            return Err(NumRs2Error::InvalidOperation(
                 "cannot combine two series with different domains".to_string(),
             ));
         }
         if self.window != other.window {
-            return Err(crate::error::NumRs2Error::InvalidOperation(
+            return Err(NumRs2Error::InvalidOperation(
                 "cannot combine two series with different windows".to_string(),
             ));
         }
@@ -259,17 +277,46 @@ where
     /// `window` is this class's default window, and `x` is mapped from
     /// `domain` into `window` before building the pseudo-Vandermonde design
     /// matrix. Columns of that matrix are scaled to unit 2-norm before
-    /// solving (via [`crate::new_modules::matrix_decomp::lstsq`], an SVD-based
-    /// least-squares solve) and the fitted coefficients rescaled back
-    /// afterward -- the same column-scaling `numpy.polynomial.polyutils._fit`
-    /// applies, needed because raw Vandermonde-like columns at different
-    /// degrees can differ in magnitude by many orders and otherwise dominate
-    /// the conditioning of the solve.
+    /// solving and the fitted coefficients rescaled back afterward -- the
+    /// same column-scaling `numpy.polynomial.polyutils._fit` applies. This
+    /// isn't just a numerical nicety here: `_fit` itself solves this same
+    /// column-scaled system via `np.linalg.lstsq`, so matching both the
+    /// scaling *and* the solver family is what makes this a port of NumPy's
+    /// actual algorithm rather than a merely-equivalent one.
+    ///
+    /// Solved via [`crate::new_modules::matrix_decomp::lstsq`] (SVD-based
+    /// pseudo-inverse), per the task's explicit direction to use it now that
+    /// it has been fixed for non-square input by a concurrent lane -- two
+    /// fixes, in fact, both in `src/new_modules/matrix_decomp/condition.rs`
+    /// (outside this module's ownership): an already-landed rewrite of the
+    /// `S^+ @ U^T @ b` step to build a fresh `n`-row buffer instead of
+    /// editing `U^T @ b`'s `m` rows in place (only ever correct when
+    /// `m == n`), and a smaller, separately in-flight fix to how the
+    /// (unused by this caller) residuals are read back out of `Ax` once that
+    /// larger fix made the `m != n` path reachable at all. This method
+    /// discards the residuals/rank/singular-values `matrix_decomp::lstsq`
+    /// also returns -- NumPy's own `fit` surfaces rank/singular-values only
+    /// via its `full=True` option, which this port's `fit(x, y, deg)`
+    /// signature (matching the task's spec) has no parameter for.
+    ///
+    /// Gated behind `#[cfg(feature = "lapack")]`, like [`Series::roots`]
+    /// below: `matrix_decomp::lstsq` needs an SVD, and every SVD in this
+    /// crate lives behind that same feature. An earlier version of this
+    /// method instead hand-rolled Gaussian elimination on the column-scaled
+    /// normal equations `(A^T A) c = A^T y`, which would have kept `fit`
+    /// available without `lapack` at the cost of not being the function the
+    /// task pointed at and of squaring `A`'s condition number; not used here
+    /// per that direction, but see this method's git history if a
+    /// `lapack`-free fallback is ever wanted back.
     ///
     /// Errors if `x`/`y` aren't 1D, don't share a length, or there are not
     /// more data points than `deg` (mirroring the sibling
     /// [`super::super::fitting::polyfit`]'s behavior, rather than emitting
-    /// NumPy's `RankWarning` and returning a rank-deficient fit).
+    /// NumPy's `RankWarning` and returning a rank-deficient fit). A
+    /// rank-deficient (but not under-determined) design matrix is, however,
+    /// *not* specially rejected -- like NumPy's own `lstsq`-backed `_fit`,
+    /// it falls through to whatever minimum-norm solution the underlying
+    /// solver produces.
     #[cfg(feature = "lapack")]
     pub fn fit(x: &Array<T>, y: &Array<T>, deg: usize) -> Result<Self> {
         if x.ndim() != 1 || y.ndim() != 1 {
@@ -341,15 +388,26 @@ where
             }
         }
 
+        // Solve the column-scaled least-squares system `scaled * c_scaled =
+        // y` directly via SVD (see the doc comment above). `rcond: None`
+        // lets `matrix_decomp::lstsq` use its own default cutoff
+        // `eps * max(m, ncols) * largest_singular_value`, which is exactly
+        // NumPy's own `_fit` default `rcond = len(x) * eps` (i.e. `m * eps`,
+        // the same relative-to-largest-singular-value cutoff convention)
+        // whenever `max(m, ncols) == m` -- true unconditionally here, since
+        // the `m <= deg` check above already guarantees `m > deg`, i.e.
+        // `m >= deg + 1 == ncols`. `b` is 1D, so the returned solution comes
+        // back already squeezed to 1D (`ncols` elements) -- residuals/rank/
+        // singular-values are discarded (see doc comment above).
         let a = Array::from_vec_shape(scaled, &[m, ncols])?;
         let b = Array::from_vec(y_vec);
-        let (c_scaled, _residuals, _rank, _singular_values) =
+        let (c_scaled_arr, _residuals, _rank, _singular_values) =
             crate::new_modules::matrix_decomp::lstsq(&a, &b, None)?;
-        let c_scaled_vec = c_scaled.to_vec();
+        let c_scaled = c_scaled_arr.to_vec();
 
         let mut coef = vec![T::zero(); ncols];
         for (j, coef_j) in coef.iter_mut().enumerate() {
-            *coef_j = c_scaled_vec[j] / scl[j];
+            *coef_j = c_scaled[j] / scl[j];
         }
 
         Ok(Series::new(coef, domain, window))
@@ -455,14 +513,51 @@ mod tests {
     }
 
     #[test]
-    fn trim_coefs_drops_trailing_near_zero_and_keeps_leading_zero() {
-        let out = trim_coefs(&[1.0, 0.0, 1e-15, 0.0], 1e-10);
-        assert_eq!(out, vec![1.0, 0.0]);
+    fn trim_coefs_drops_trailing_near_zero_and_keeps_interior_zero() {
+        // Trailing coefficients (indices 3, 4) are below tolerance and get
+        // dropped; the interior zero at index 1 is kept, since trimming
+        // only ever removes from the high-degree end.
+        let out = trim_coefs(&[1.0, 0.0, 5.0, 1e-15, 0.0], 1e-10);
+        assert_eq!(out, vec![1.0, 0.0, 5.0]);
     }
 
     #[test]
     fn trim_coefs_of_all_zero_series_returns_single_zero() {
         let out = trim_coefs(&[0.0, 0.0, 0.0], 1e-10);
         assert_eq!(out, vec![0.0]);
+    }
+
+    #[test]
+    fn integ_uses_window_space_zero_not_domain_space_zero_as_lower_bound() {
+        // Regression test: `integ`'s lower bound must be literal
+        // window-space `0`, not `off` (domain-space `0` mapped into window
+        // space) -- see the doc comment on `integ` above. A default-domain
+        // series can never distinguish the two (`off == 0` there), so this
+        // deliberately uses `domain=[0,10]` with the class's default
+        // `window=[-1,1]` (`off=-1, scl=0.2`, both nonzero/non-unit) to force
+        // a real distinction. Pinned via numpy:
+        //   >>> import numpy.polynomial as P
+        //   >>> P.Chebyshev([1.,2.,3.], domain=[0.,10.]).integ().coef
+        //   array([ 2.5, -2.5,  2.5,  2.5])
+        //   >>> P.Chebyshev([1.,2.,3.], domain=[0.,10.]).integ(2).coef
+        //   array([-7.8125    ,  6.25      , -6.25      ,  2.08333333,  1.5625    ])
+        // (using `off` instead of literal `0` gives `[-2.5, -2.5, 2.5, 2.5]`
+        // for m=1 -- sign-flipped constant term only -- which is the bug
+        // this test catches.)
+        let c = super::super::Chebyshev::<f64>::new(vec![1.0, 2.0, 3.0], [0.0, 10.0], [-1.0, 1.0]);
+
+        let integral1 = c.integ(1, &[]);
+        let expected1 = [2.5, -2.5, 2.5, 2.5];
+        assert_eq!(integral1.coef().len(), expected1.len());
+        for (got, want) in integral1.coef().iter().zip(expected1.iter()) {
+            assert_relative_eq!(got, want, epsilon = 1e-9);
+        }
+
+        let integral2 = c.integ(2, &[]);
+        let expected2 = [-7.8125, 6.25, -6.25, 2.083_333_333_333_333, 1.5625];
+        assert_eq!(integral2.coef().len(), expected2.len());
+        for (got, want) in integral2.coef().iter().zip(expected2.iter()) {
+            assert_relative_eq!(got, want, epsilon = 1e-8);
+        }
     }
 }

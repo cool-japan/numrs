@@ -4,6 +4,7 @@
 //! integer array indexing, boolean indexing, and advanced slicing operations.
 
 use super::advanced_ops::{ArrayView, IndexSpec, ResolvedIndex, Shape};
+use crate::array::Array as OwnedArray;
 use crate::error::{NumRs2Error, Result};
 use crate::traits::NumericElement;
 
@@ -422,9 +423,22 @@ impl FancyIndexEngine {
     }
 
     /// Choose elements from array using index arrays
+    ///
+    /// Adapts each `ArrayView` in `choices` (and `index_array`) into an
+    /// owned [`crate::array::Array`] and delegates the actual gather to the
+    /// canonical [`crate::array_ops::conditional::choose`]; see that
+    /// function's docs for full NumPy-compatible semantics. This method has
+    /// no `mode` parameter of its own, so it always behaves as `"raise"`,
+    /// matching its previous out-of-bounds-errors behavior.
+    ///
+    /// The `+ num_traits::Zero` bound (beyond this method's pre-existing
+    /// `NumericElement + Copy`) is required transitively by the canonical's
+    /// own `Array::get`; every concrete type this module is used with
+    /// (the float/integer primitives `NumericElement` is implemented for)
+    /// already satisfies it.
     pub fn choose<T>(&self, choices: &[&ArrayView<T>], index_array: &[usize]) -> Result<Vec<T>>
     where
-        T: NumericElement + Copy,
+        T: NumericElement + Copy + num_traits::Zero,
     {
         if choices.is_empty() {
             return Err(NumRs2Error::InvalidOperation(
@@ -449,26 +463,27 @@ impl FancyIndexEngine {
             ));
         }
 
-        let mut result = Vec::with_capacity(index_array.len());
+        let dims = &reference_shape.dims;
 
-        for (flat_idx, &choice_idx) in index_array.iter().enumerate() {
-            if choice_idx >= choices.len() {
-                return Err(NumRs2Error::IndexOutOfBounds(format!(
-                    "Choice index {} is out of bounds for {} choices",
-                    choice_idx,
-                    choices.len()
-                )));
+        // Copy each borrowed `ArrayView` into an owned `Array` -- the
+        // canonical operates on `crate::array::Array`, not this module's
+        // own borrowed-slice-plus-strides `ArrayView` -- and hand the
+        // actual gather (and its bounds checking) off to it rather than
+        // re-implementing it here.
+        let mut choice_arrays = Vec::with_capacity(choices.len());
+        for choice in choices {
+            let mut data = Vec::with_capacity(reference_shape.size());
+            for flat_idx in 0..reference_shape.size() {
+                let multi_index = self.flat_to_multi_index(flat_idx, dims);
+                data.push(*choice.get(&multi_index)?);
             }
-
-            // Convert flat index to multi-dimensional index for accessing the element
-            let multi_index = self.flat_to_multi_index(flat_idx, &reference_shape.dims);
-
-            // Choose the element from the specified choice array at the same position
-            let element = choices[choice_idx].get(&multi_index)?;
-            result.push(*element);
+            choice_arrays.push(OwnedArray::from_vec_shape(data, dims)?);
         }
+        let choice_refs: Vec<&OwnedArray<T>> = choice_arrays.iter().collect();
 
-        Ok(result)
+        let idx_array = OwnedArray::from_vec_shape(index_array.to_vec(), dims)?;
+        let result = crate::array_ops::conditional::choose(&idx_array, &choice_refs, "raise")?;
+        Ok(result.to_vec())
     }
 
     // Helper methods

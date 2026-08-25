@@ -1,6 +1,5 @@
 //! Tests for GPU memory management
 
-use numrs2::array::Array;
 use numrs2::gpu::memory::{GpuMemoryPool, PoolConfig, TransferOptimizer, TransferStrategy};
 use numrs2::gpu::new_context;
 use std::time::Duration;
@@ -225,7 +224,11 @@ async fn test_transfer_with_offset() {
 
     // Write to second half
     optimizer
-        .queue_transfer_with_offset(&data, &buffer, (data.len() * std::mem::size_of::<f32>()) as u64)
+        .queue_transfer_with_offset(
+            &data,
+            &buffer,
+            (data.len() * std::mem::size_of::<f32>()) as u64,
+        )
         .expect("Failed to queue transfer with offset");
 }
 
@@ -336,13 +339,18 @@ async fn test_buffer_alias_reuse() {
     let context = new_context().expect("Failed to create GPU context");
     let mut manager = BufferAliasManager::new(context);
 
-    // Create buffer
-    let buffer1 = manager
+    // Create buffer. `get_or_create_buffer` returns an owned `wgpu::Buffer`
+    // (not a reference/handle we could compare by pointer), so -- as the
+    // comment below has always said -- there is no easy identity check
+    // available here; both are bound as `_`-prefixed to document that they
+    // are intentionally unused beyond driving `manager`'s alias bookkeeping,
+    // which the `stats` assertions below do check.
+    let _buffer1 = manager
         .get_or_create_buffer(1024, wgpu::BufferUsages::STORAGE)
         .expect("Failed to create buffer");
 
     // Request same size and usage - should get aliased buffer
-    let buffer2 = manager
+    let _buffer2 = manager
         .get_or_create_buffer(1024, wgpu::BufferUsages::STORAGE)
         .expect("Failed to get buffer");
 

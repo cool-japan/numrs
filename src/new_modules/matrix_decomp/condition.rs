@@ -517,9 +517,16 @@ where
         // Compute ||Ax - b||²
         let ax = a.matmul(&x_final)?;
         let diff = if b_is_vector {
-            // Both ax and b should be vectors for element-wise operations
+            // NOTE: `ax` is NOT a 1-D `[m]` array here, even though
+            // `x_final` (matmul's second operand) is 1-D `[n]`: `Array::
+            // matmul`'s "both operands already 2-D" fast path requires
+            // *both* sides to already be 2-D, and only `x_final` is. So it
+            // falls through to the general broadcasting path instead,
+            // which promotes `x_final` to `[n, 1]` and returns the product
+            // at that shape too, `[m, 1]` -- 2-D, with no squeeze back
+            // down. Read `ax` at `[i, 0]` accordingly, not `[i]`.
             let ax_vec: Vec<T> = (0..ax.shape()[0])
-                .map(|i| ax.get(&[i]).expect("index should be valid"))
+                .map(|i| ax.get(&[i, 0]).expect("index should be valid"))
                 .collect();
             let b_vec = b.to_vec();
             let diff_vec: Vec<T> = ax_vec

@@ -495,6 +495,31 @@ impl<T: Float + Default> MaskedArray<T> {
     /// count is even -- exactly `numpy.ma.median`'s definition, applied
     /// to the unmasked elements of each lane instead of the whole array.
     ///
+    /// # `NaN`
+    ///
+    /// A `NaN` among a lane's *unmasked* elements makes that lane's median
+    /// `NaN` -- **unmasked**, not a masked slot -- regardless of the
+    /// `NaN`'s position, matching `numpy.ma.median` exactly (confirmed
+    /// against `numpy 2.4.2` at every position in a 5- and a 4-element
+    /// lane: leading, interior and trailing all give `NaN`). This needs
+    /// an explicit check rather than falling out of the sort the way
+    /// [`Self::mean_axis`]/[`Self::sum_axis`]/[`Self::var`]'s plain `+`
+    /// folds do: `f64`/`f32`'s `partial_cmp` returns `None` for any
+    /// comparison against `NaN`, and the `unwrap_or(Equal)` fallback a
+    /// sort comparator is forced to supply for that case is not
+    /// transitive (`NaN` compares `Equal` to *everything*, including
+    /// values that are not mutually `Equal`) -- so plugging it into
+    /// `sort_by` does not reliably relocate every `NaN` to a
+    /// position-independent place in the output; empirically, it
+    /// silently drops the propagation for a `NaN` at some positions while
+    /// keeping it at others (checked exhaustively across leading,
+    /// interior and trailing placements in both odd- and even-length
+    /// lanes; the version of this function that shipped without this
+    /// paragraph, and the check below, reproduced exactly that: `NaN` at
+    /// position 0 of `[NaN,1,3,4]` was silently lost, coming back as
+    /// `2.0` instead of `NaN`, while every other tested position
+    /// propagated correctly).
+    ///
     /// Pinned against `numpy.ma`: for
     /// `x = ma.array([[5,--,3],[2,4,--]])`, `ma.median(x, axis=1) == [4.0, 3.0]`
     /// (row 0's unmasked elements are `[5,3]`, mean `4.0`; row 1's are
@@ -509,6 +534,12 @@ impl<T: Float + Default> MaskedArray<T> {
                 .collect();
             if unmasked.is_empty() {
                 return None;
+            }
+            if unmasked.iter().any(|v| v.is_nan()) {
+                // Unmasked `NaN`, exactly like `numpy.ma.median` -- see
+                // this method's `# NaN` doc section for why this check
+                // has to come before the sort below, not fall out of it.
+                return Some(T::nan());
             }
             unmasked.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let n = unmasked.len();
@@ -665,6 +696,54 @@ mod tests {
         assert_eq!(r.get_data().to_vec(), vec![2.5, 5.0, 3.0]);
     }
 
+    /// A genuinely 3-D case (shape `[2, 3, 4]`, reducing the *middle* axis)
+    /// with a scattered mask, pinned against `numpy.ma`. Every other test
+    /// in this file uses `ndim <= 2`, where `outer` or `inner` in
+    /// [`reduce_lanes`] is trivially `1`; this is the only test that
+    /// exercises both being `> 1` simultaneously (`outer = 2`,
+    /// `inner = 4`), which is what actually confirms the flat-index
+    /// formula `o * axis_size * inner + i + k * inner` in
+    /// [`axis_lane_shape`]'s doc comment, rather than merely a
+    /// 2-D-shaped special case of it. Reference values from
+    /// `numpy 2.4.2`:
+    /// ```python
+    /// data = np.arange(24.).reshape(2,3,4)
+    /// mask = np.zeros((2,3,4), dtype=bool)
+    /// mask[0,1,2]=True; mask[1,0,0]=True; mask[1,2,3]=True
+    /// mask[0,0,3]=True; mask[0,1,3]=True; mask[0,2,3]=True  # (0,:,3) fully masked
+    /// ma.array(data, mask=mask).mean(axis=1)
+    /// # -> data [[4,5,6,--],[18,17,18,17]], mask [[F,F,F,T],[F,F,F,F]]
+    /// ```
+    #[test]
+    fn mean_axis_1_matches_numpy_ma_on_a_3d_array() {
+        let data: Vec<f64> = (0..24).map(|i| i as f64).collect();
+        let mut mask = vec![false; 24];
+        // Flat C-order index for (d0, d1, d2) in shape [2,3,4] is
+        // d0*12 + d1*4 + d2.
+        for &(d0, d1, d2) in &[
+            (0usize, 1usize, 2usize),
+            (1, 0, 0),
+            (1, 2, 3),
+            (0, 0, 3),
+            (0, 1, 3),
+            (0, 2, 3),
+        ] {
+            mask[d0 * 12 + d1 * 4 + d2] = true;
+        }
+        let m = ma(data, mask, &[2, 3, 4]);
+        let r = m.mean_axis(Some(1), false).expect("axis 1 valid");
+        assert_eq!(r.shape(), vec![2, 4]);
+        assert_eq!(
+            r.get_mask().to_vec(),
+            vec![false, false, false, true, false, false, false, false]
+        );
+        let got = r.get_data().to_vec();
+        let want = [4.0, 5.0, 6.0, 0.0, 18.0, 17.0, 18.0, 17.0];
+        for (g, w) in got.iter().zip(want.iter()) {
+            assert!((g - w).abs() < 1e-12, "got {got:?}, want {want:?}");
+        }
+    }
+
     /// `ma.array([1,2,3,4],mask=[T,T,F,F]).reshape(2,2).mean(axis=1) == [--, 3.5]`, mask `[T,F]`.
     #[test]
     fn mean_axis_masks_a_fully_masked_lane_but_not_others() {
@@ -735,6 +814,56 @@ mod tests {
         assert_eq!(r1.get_data().to_vec(), vec![4.0, 3.0]);
         let r0 = m.median(Some(0), false).expect("axis 0 valid");
         assert_eq!(r0.get_data().to_vec(), vec![3.5, 4.0, 3.0]);
+    }
+
+    /// An unmasked `NaN` makes the median `NaN`, at every position, in
+    /// both an odd- and an even-length lane -- pinned against `numpy.ma`
+    /// (`numpy 2.4.2`) at every position tested. This is the regression
+    /// this method's `# NaN` doc section describes: a naive
+    /// `sort_by(partial_cmp().unwrap_or(Equal))` silently loses the
+    /// propagation for some (not all) of these exact positions.
+    #[test]
+    fn median_propagates_unmasked_nan_at_every_position() {
+        let nan = f64::NAN;
+        // Odd length (5): median index 2.
+        for data in [
+            vec![nan, 5.0, 3.0, 2.0, 4.0],
+            vec![5.0, nan, 3.0, 2.0, 4.0],
+            vec![5.0, 3.0, 2.0, 4.0, nan],
+        ] {
+            let m = ma(data.clone(), vec![false; 5], &[5]);
+            let r = m.median(None, false).expect("has unmasked data");
+            assert!(
+                r.get_data().to_vec()[0].is_nan(),
+                "data={data:?} should have produced a NaN median"
+            );
+            assert!(!r.get_mask().to_vec()[0], "NaN median must be unmasked");
+        }
+        // Even length (4): the two middle elements average.
+        for data in [
+            vec![nan, 1.0, 3.0, 4.0],
+            vec![1.0, nan, 3.0, 4.0],
+            vec![1.0, 3.0, 4.0, nan],
+        ] {
+            let m = ma(data.clone(), vec![false; 4], &[4]);
+            let r = m.median(None, false).expect("has unmasked data");
+            assert!(
+                r.get_data().to_vec()[0].is_nan(),
+                "data={data:?} should have produced a NaN median"
+            );
+        }
+    }
+
+    /// A `NaN` sitting under a *masked* element must NOT propagate: it is
+    /// excluded from the lane's unmasked values entirely, the same as any
+    /// other masked value, and the median is computed from the remaining
+    /// unmasked (non-`NaN`) elements. `ma.median(ma.array([1.,nan,3.],mask=[F,T,F])) == 2.0`.
+    #[test]
+    fn median_ignores_nan_under_a_mask() {
+        let m = ma(vec![1.0, f64::NAN, 3.0], vec![false, true, false], &[3]);
+        let r = m.median(None, false).expect("has unmasked data");
+        assert_eq!(r.get_data().to_vec()[0], 2.0);
+        assert!(!r.get_mask().to_vec()[0]);
     }
 
     /// `ma.array([[--,2],[3,4]]).ptp(axis=1) == [0.0, 1.0]` -- a

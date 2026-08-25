@@ -616,14 +616,18 @@ where
         }
     }
 
-    // Find maximum value to determine output size
-    let max_val = x_data
-        .iter()
-        .filter_map(|v| v.to_usize())
-        .max()
-        .unwrap_or(0);
-
-    let output_len = std::cmp::max(max_val + 1, minlength.unwrap_or(0));
+    // Find maximum value to determine output size. NumPy's output length is
+    // `max(x) + 1` when `x` is non-empty, and exactly `minlength` (0 if
+    // unspecified) when `x` is empty -- there is no implicit "+1" bin for an
+    // empty array (`np.bincount([])` is `array([], dtype=int64)`, not a
+    // single zero bin). Folding the empty case into `.max().unwrap_or(0)`
+    // then unconditionally adding 1 below would produce a length-1 output
+    // for empty, non-`minlength` input instead of NumPy's length-0 one, so
+    // the "+1" only applies when a real maximum was found.
+    let output_len = match x_data.iter().filter_map(|v| v.to_usize()).max() {
+        Some(max_val) => std::cmp::max(max_val + 1, minlength.unwrap_or(0)),
+        None => minlength.unwrap_or(0),
+    };
 
     // Initialize output array
     let mut counts = vec![W::zero(); output_len];
@@ -744,11 +748,21 @@ where
 
     for val in x.array().iter() {
         let idx = if increasing {
-            // Use binary search for increasing bins
+            // Use binary search for increasing bins. NumPy defines digitize
+            // in terms of searchsorted as `bins.searchsorted(x, side='right'
+            // if not right else 'left')` -- i.e. `right=False` (the
+            // NumPy-default, half-open-on-the-right bins `bins[i-1] <= x <
+            // bins[i]`) needs the *rightmost* insertion point (count of
+            // bin edges <= x), and `right=True` needs the *leftmost* one
+            // (count of edges < x). Swapped relative to the naive
+            // `right -> binary_search_right` reading, which silently
+            // inverts the two on every value that lands exactly on a bin
+            // edge (interior, non-edge values happen to agree either way,
+            // which is how this went unnoticed).
             if right {
-                binary_search_right(&bins_data, val)
-            } else {
                 binary_search_left(&bins_data, val)
+            } else {
+                binary_search_right(&bins_data, val)
             }
         } else {
             // For decreasing bins, we need to reverse the logic
@@ -979,6 +993,27 @@ mod tests {
         assert_eq!(indices_right.to_vec(), vec![3, 5]); // After last occurrence
     }
 
+    /// `searchsorted`'s `sorter` argument (an unsorted `a` plus the
+    /// permutation that would sort it, typically `argsort(a)`'s output) is
+    /// the one piece of the NumPy signature the `math::search` duplicate
+    /// has no way to reach at all -- pinned against
+    /// `numpy.searchsorted(np.array([5,1,3,9,7]), [0,2,6,10],
+    /// side=..., sorter=np.argsort([5,1,3,9,7]))` (numpy 2.4.2).
+    #[test]
+    fn test_searchsorted_with_sorter() {
+        let a = Array::from_vec(vec![5, 1, 3, 9, 7]); // unsorted
+        let sorter = Array::from_vec(vec![1usize, 2, 0, 4, 3]); // argsort(a)
+        let v = Array::from_vec(vec![0, 2, 6, 10]);
+
+        let left =
+            searchsorted(&a, &v, Some("left"), Some(&sorter)).expect("operation should succeed");
+        assert_eq!(left.to_vec(), vec![0, 1, 3, 5]);
+
+        let right =
+            searchsorted(&a, &v, Some("right"), Some(&sorter)).expect("operation should succeed");
+        assert_eq!(right.to_vec(), vec![0, 1, 3, 5]);
+    }
+
     #[test]
     fn test_binary_search_functions() {
         let arr = vec![1, 3, 5, 7, 9];
@@ -1024,6 +1059,43 @@ mod tests {
         assert_eq!(counts.to_vec(), vec![0, 0, 0, 0, 0]);
     }
 
+    /// Regression test: an empty input array with no `minlength` must
+    /// produce a length-0 output, not a length-1 `[0]` output. Pinned
+    /// against `numpy.bincount(np.array([], dtype=int))` (numpy 2.4.2),
+    /// which is `array([], dtype=int64)` -- there is no implicit "empty
+    /// array has a max of 0, so allocate one bin" behavior. This previously
+    /// failed because the output length was computed as
+    /// `max(x_data.max().unwrap_or(0) + 1, minlength.unwrap_or(0))`: for an
+    /// empty `x_data` that reads as `max(0 + 1, 0) == 1`, one bin too many.
+    /// `minlength` and `weights` combined: pinned against
+    /// `numpy.bincount(np.array([1,2,3]), minlength=8,
+    /// weights=np.array([0.5,1.0,1.5]))` (numpy 2.4.2) ==
+    /// `[0., 0.5, 1., 1.5, 0., 0., 0., 0.]` -- `minlength` pads the tail
+    /// with zero-weight bins past `max(x)+1`, and every bin (including the
+    /// padding) is `weights`-typed (`f64`), not the input's own (`i32`)
+    /// dtype.
+    #[test]
+    fn test_bincount_minlength_and_weights_combined() {
+        let x = Array::from_vec(vec![1, 2, 3]);
+        let weights = Array::from_vec(vec![0.5, 1.0, 1.5]);
+        let counts: Array<f64> =
+            bincount(&x, Some(&weights), Some(8)).expect("operation should succeed");
+        assert_eq!(counts.shape(), vec![8]);
+        assert_eq!(
+            counts.to_vec(),
+            vec![0.0, 0.5, 1.0, 1.5, 0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    #[test]
+    fn test_bincount_empty_no_minlength_is_empty() {
+        let empty: Array<i32> = Array::from_vec(vec![]);
+        let counts: Array<i32> =
+            bincount(&empty, None::<&Array<i32>>, None).expect("operation should succeed");
+        assert_eq!(counts.shape(), vec![0]);
+        assert_eq!(counts.to_vec(), Vec::<i32>::new());
+    }
+
     #[test]
     fn test_digitize() {
         // Basic digitize with increasing bins
@@ -1032,14 +1104,19 @@ mod tests {
         let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
 
-        // Test boundary values
+        // Test boundary values: every sample sits exactly on a bin edge, so
+        // this is the case that actually distinguishes `right=false` from
+        // `right=true` (interior, non-edge samples give the same answer
+        // either way). Pinned against `numpy.digitize` 2.4.2:
+        // `np.digitize([0,1,2.5,4,10], [0,1,2.5,4,10], right=False)`
+        // == `[1, 2, 3, 4, 5]`, and with `right=True` == `[0, 1, 2, 3, 4]`.
         let x = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
         let indices = digitize(&x, &bins, false).expect("operation should succeed");
-        assert_eq!(indices.to_vec(), vec![0, 1, 2, 3, 4]);
+        assert_eq!(indices.to_vec(), vec![1, 2, 3, 4, 5]);
 
         // Test with right=true
         let indices = digitize(&x, &bins, true).expect("operation should succeed");
-        assert_eq!(indices.to_vec(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(indices.to_vec(), vec![0, 1, 2, 3, 4]);
 
         // Test values outside bounds
         let x = Array::from_vec(vec![-1.0, 15.0]);
@@ -1058,6 +1135,23 @@ mod tests {
         let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.shape(), vec![2, 2]);
         assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
+    }
+
+    /// Decreasing-bins edge-value case, mirroring `test_digitize`'s
+    /// increasing-bins boundary check above but for the reversed-bins
+    /// branch. Pinned against `numpy.digitize` 2.4.2:
+    /// `np.digitize([0,1,2.5,4,10], [10,4,2.5,1,0], right=False)`
+    /// == `[4, 3, 2, 1, 0]`, and with `right=True` == `[5, 4, 3, 2, 1]`.
+    #[test]
+    fn test_digitize_decreasing_bins_edge_values() {
+        let bins_dec = Array::from_vec(vec![10.0, 4.0, 2.5, 1.0, 0.0]);
+        let x = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
+
+        let right_false = digitize(&x, &bins_dec, false).expect("operation should succeed");
+        assert_eq!(right_false.to_vec(), vec![4, 3, 2, 1, 0]);
+
+        let right_true = digitize(&x, &bins_dec, true).expect("operation should succeed");
+        assert_eq!(right_true.to_vec(), vec![5, 4, 3, 2, 1]);
     }
 
     #[test]

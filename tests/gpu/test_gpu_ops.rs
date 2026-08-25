@@ -1,7 +1,11 @@
 //! Tests for GPU operations
 
 use numrs2::array::Array;
-use numrs2::gpu::{new_context, ops, GpuArray};
+// `ops` is a private module inside `numrs2::gpu` -- its functions (`add`,
+// `subtract`, `exp`, `transpose`, `sum_f32`, ...) are re-exported at the
+// `gpu` root via `pub use ops::*`, not reachable as `gpu::ops::*`. Glob-import
+// the root instead of naming the (inaccessible) module.
+use numrs2::gpu::*;
 
 #[tokio::test]
 async fn test_add() {
@@ -10,12 +14,12 @@ async fn test_add() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
     let b = Array::from_vec(vec![5.0f32, 6.0, 7.0, 8.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
-    let c_gpu = ops::add(&a_gpu, &b_gpu).expect("Failed to add");
+    let c_gpu = add(&a_gpu, &b_gpu).expect("Failed to add");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
 
     assert_eq!(c.shape(), &[4]);
@@ -32,12 +36,12 @@ async fn test_subtract() {
     let a = Array::from_vec(vec![10.0f32, 8.0, 6.0, 4.0]).reshape(&[4]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
-    let c_gpu = ops::subtract(&a_gpu, &b_gpu).expect("Failed to subtract");
+    let c_gpu = subtract(&a_gpu, &b_gpu).expect("Failed to subtract");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
 
     assert_eq!(c.shape(), &[4]);
@@ -54,12 +58,12 @@ async fn test_multiply() {
     let a = Array::from_vec(vec![2.0f32, 3.0, 4.0, 5.0]).reshape(&[4]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
-    let c_gpu = ops::multiply(&a_gpu, &b_gpu).expect("Failed to multiply");
+    let c_gpu = multiply(&a_gpu, &b_gpu).expect("Failed to multiply");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
 
     assert_eq!(c.shape(), &[4]);
@@ -76,12 +80,12 @@ async fn test_divide() {
     let a = Array::from_vec(vec![10.0f32, 20.0, 30.0, 40.0]).reshape(&[4]);
     let b = Array::from_vec(vec![2.0f32, 4.0, 5.0, 8.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
-    let c_gpu = ops::divide(&a_gpu, &b_gpu).expect("Failed to divide");
+    let c_gpu = divide(&a_gpu, &b_gpu).expect("Failed to divide");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
 
     assert_eq!(c.shape(), &[4]);
@@ -96,8 +100,8 @@ async fn test_gpu_array_creation() {
     let context = new_context().expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
     assert_eq!(a_gpu.shape(), &[2, 3]);
     assert_eq!(a_gpu.size(), 6);
@@ -142,13 +146,13 @@ async fn test_incompatible_shapes() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0]).reshape(&[3]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
     // Operations on arrays with different sizes should fail
-    let result = ops::add(&a_gpu, &b_gpu);
+    let result = add(&a_gpu, &b_gpu);
     assert!(result.is_err());
 }
 
@@ -160,12 +164,12 @@ async fn test_multidimensional_arrays() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
     let b = Array::from_vec(vec![5.0f32, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
-    let c_gpu = ops::add(&a_gpu, &b_gpu).expect("Failed to add");
+    let c_gpu = add(&a_gpu, &b_gpu).expect("Failed to add");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
 
     assert_eq!(c.shape(), &[2, 2]);
@@ -187,12 +191,12 @@ async fn test_large_array() {
     let a = Array::from_vec(data_a.clone()).reshape(&[size]);
     let b = Array::from_vec(data_b.clone()).reshape(&[size]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
-    let c_gpu = ops::add(&a_gpu, &b_gpu).expect("Failed to add");
+    let c_gpu = add(&a_gpu, &b_gpu).expect("Failed to add");
     let c = c_gpu.to_array().expect("Failed to convert to CPU array");
 
     assert_eq!(c.shape(), &[size]);
@@ -210,26 +214,26 @@ async fn test_unary_operations() {
     let context = new_context().expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
     // Test exp
-    let exp_result = ops::exp(&a_gpu).expect("Failed to compute exp");
+    let exp_result = exp(&a_gpu).expect("Failed to compute exp");
     let exp_cpu = exp_result.to_array().expect("Failed to convert to CPU");
     assert!((exp_cpu.get(&[0]).expect("Invalid index") - 1.0f32.exp()).abs() < 1e-5);
 
     // Test sqrt
-    let sqrt_result = ops::sqrt(&a_gpu).expect("Failed to compute sqrt");
+    let sqrt_result = sqrt(&a_gpu).expect("Failed to compute sqrt");
     let sqrt_cpu = sqrt_result.to_array().expect("Failed to convert to CPU");
     assert!((sqrt_cpu.get(&[0]).expect("Invalid index") - 1.0f32.sqrt()).abs() < 1e-5);
 
     // Test sin
-    let sin_result = ops::sin(&a_gpu).expect("Failed to compute sin");
+    let sin_result = sin(&a_gpu).expect("Failed to compute sin");
     let sin_cpu = sin_result.to_array().expect("Failed to convert to CPU");
     assert!((sin_cpu.get(&[0]).expect("Invalid index") - 1.0f32.sin()).abs() < 1e-5);
 
     // Test cos
-    let cos_result = ops::cos(&a_gpu).expect("Failed to compute cos");
+    let cos_result = cos(&a_gpu).expect("Failed to compute cos");
     let cos_cpu = cos_result.to_array().expect("Failed to convert to CPU");
     assert!((cos_cpu.get(&[0]).expect("Invalid index") - 1.0f32.cos()).abs() < 1e-5);
 }
@@ -240,26 +244,26 @@ async fn test_reduction_operations() {
 
     let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
     let a = Array::from_vec(data.clone()).reshape(&[5]);
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
     // Test sum
-    let sum = ops::sum_f32(&a_gpu).expect("Failed to compute sum");
+    let sum = sum_f32(&a_gpu).expect("Failed to compute sum");
     let expected_sum: f32 = data.iter().sum();
     assert!((sum - expected_sum).abs() < 1e-5);
 
     // Test mean
-    let mean = ops::mean_f32(&a_gpu).expect("Failed to compute mean");
+    let mean = mean_f32(&a_gpu).expect("Failed to compute mean");
     let expected_mean = expected_sum / data.len() as f32;
     assert!((mean - expected_mean).abs() < 1e-5);
 
     // Test max
-    let max_val = ops::max_f32(&a_gpu).expect("Failed to compute max");
+    let max_val = max_f32(&a_gpu).expect("Failed to compute max");
     let expected_max = data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     assert!((max_val - expected_max).abs() < 1e-5);
 
     // Test min
-    let min_val = ops::min_f32(&a_gpu).expect("Failed to compute min");
+    let min_val = min_f32(&a_gpu).expect("Failed to compute min");
     let expected_min = data.iter().cloned().fold(f32::INFINITY, f32::min);
     assert!((min_val - expected_min).abs() < 1e-5);
 }
@@ -269,10 +273,10 @@ async fn test_copy_operation() {
     let context = new_context().expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
-    let b_gpu = ops::copy_with_format(&a_gpu).expect("Failed to copy array");
+    let b_gpu = copy_with_format(&a_gpu).expect("Failed to copy array");
     let b = b_gpu.to_array().expect("Failed to convert to CPU");
 
     assert_eq!(a.shape(), b.shape());
@@ -288,18 +292,27 @@ async fn test_transpose_operation() {
     let context = new_context().expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
-    let b_gpu = ops::transpose(&a_gpu).expect("Failed to transpose array");
+    let b_gpu = transpose(&a_gpu).expect("Failed to transpose array");
     assert_eq!(b_gpu.shape(), &[3, 2]);
 
     let b = b_gpu.to_array().expect("Failed to convert to CPU");
 
     // Check a few values
-    assert!((b.get(&[0, 0]).expect("Invalid index") - a.get(&[0, 0]).expect("Invalid index")).abs() < 1e-5);
-    assert!((b.get(&[0, 1]).expect("Invalid index") - a.get(&[1, 0]).expect("Invalid index")).abs() < 1e-5);
-    assert!((b.get(&[1, 0]).expect("Invalid index") - a.get(&[0, 1]).expect("Invalid index")).abs() < 1e-5);
+    assert!(
+        (b.get(&[0, 0]).expect("Invalid index") - a.get(&[0, 0]).expect("Invalid index")).abs()
+            < 1e-5
+    );
+    assert!(
+        (b.get(&[0, 1]).expect("Invalid index") - a.get(&[1, 0]).expect("Invalid index")).abs()
+            < 1e-5
+    );
+    assert!(
+        (b.get(&[1, 0]).expect("Invalid index") - a.get(&[0, 1]).expect("Invalid index")).abs()
+            < 1e-5
+    );
 }
 
 #[tokio::test]
@@ -313,13 +326,13 @@ async fn test_broadcast_shapes_compatible() {
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
     let b = Array::from_vec(vec![5.0f32, 6.0, 7.0, 8.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
     // For now, broadcast operations with same shape should fall back to regular ops
-    let c_gpu = ops::broadcast_add(&a_gpu, &b_gpu).expect("Failed to broadcast add");
+    let c_gpu = broadcast_add(&a_gpu, &b_gpu).expect("Failed to broadcast add");
     let c = c_gpu.to_array().expect("Failed to convert to CPU");
 
     assert_eq!(c.shape(), &[4]);
@@ -332,12 +345,12 @@ async fn test_pow_operation() {
     let a = Array::from_vec(vec![2.0f32, 3.0, 4.0, 5.0]).reshape(&[4]);
     let b = Array::from_vec(vec![2.0f32, 2.0, 2.0, 2.0]).reshape(&[4]);
 
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
-    let b_gpu = GpuArray::from_array_with_context(&b, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
+    let b_gpu =
+        GpuArray::from_array_with_context(&b, context.clone()).expect("Failed to create GPU array");
 
-    let c_gpu = ops::pow(&a_gpu, &b_gpu).expect("Failed to compute pow");
+    let c_gpu = pow(&a_gpu, &b_gpu).expect("Failed to compute pow");
     let c = c_gpu.to_array().expect("Failed to convert to CPU");
 
     assert_eq!(c.shape(), &[4]);
@@ -352,17 +365,17 @@ async fn test_abs_and_neg_operations() {
     let context = new_context().expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![-1.0f32, 2.0, -3.0, 4.0]).reshape(&[4]);
-    let a_gpu = GpuArray::from_array_with_context(&a, context.clone())
-        .expect("Failed to create GPU array");
+    let a_gpu =
+        GpuArray::from_array_with_context(&a, context.clone()).expect("Failed to create GPU array");
 
     // Test abs
-    let abs_result = ops::abs(&a_gpu).expect("Failed to compute abs");
+    let abs_result = abs(&a_gpu).expect("Failed to compute abs");
     let abs_cpu = abs_result.to_array().expect("Failed to convert to CPU");
     assert!((abs_cpu.get(&[0]).expect("Invalid index") - 1.0).abs() < 1e-5);
     assert!((abs_cpu.get(&[2]).expect("Invalid index") - 3.0).abs() < 1e-5);
 
     // Test neg
-    let neg_result = ops::neg(&a_gpu).expect("Failed to compute neg");
+    let neg_result = neg(&a_gpu).expect("Failed to compute neg");
     let neg_cpu = neg_result.to_array().expect("Failed to convert to CPU");
     assert!((neg_cpu.get(&[0]).expect("Invalid index") - 1.0).abs() < 1e-5);
     assert!((neg_cpu.get(&[1]).expect("Invalid index") + 2.0).abs() < 1e-5);

@@ -447,7 +447,7 @@ impl NeonEnhancedOps {
         let data_exp = exp.to_vec();
         let len = data_base.len().min(data_exp.len());
         let result: Vec<f64> = (0..len).map(|i| data_base[i].powf(data_exp[i])).collect();
-        Array::from_vec_shape(result, &base.shape())?
+        Array::from_vec_shape(result, &base.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     pub fn vectorized_cbrt_f64(input: &Array<f64>) -> Array<f64> {
@@ -479,6 +479,6 @@ impl NeonEnhancedOps {
         let data_y = y.to_vec();
         let len = data_x.len().min(data_y.len());
         let result: Vec<f64> = (0..len).map(|i| data_x[i].hypot(data_y[i])).collect();
-        Array::from_vec_shape(result, &x.shape())?
+        Array::from_vec_shape(result, &x.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }

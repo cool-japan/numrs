@@ -421,7 +421,7 @@ impl NeonEnhancedOps {
         let data_x = x.to_vec();
         let len = data_y.len().min(data_x.len());
         let result: Vec<f64> = (0..len).map(|i| data_y[i].atan2(data_x[i])).collect();
-        Array::from_vec_shape(result, &y.shape())?
+        Array::from_vec_shape(result, &y.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     pub fn vectorized_sinh_f64(input: &Array<f64>) -> Array<f64> {

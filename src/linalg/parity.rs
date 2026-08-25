@@ -99,11 +99,11 @@ where
 
     // Adjacent-dimension compatibility, checked up front so the chain-order
     // DP below never has to.
-    for i in 0..mats.len() - 1 {
-        if mats[i].shape()[1] != mats[i + 1].shape()[0] {
+    for pair in mats.windows(2) {
+        if pair[0].shape()[1] != pair[1].shape()[0] {
             return Err(NumRs2Error::ShapeMismatch {
-                expected: vec![mats[i].shape()[1]],
-                actual: vec![mats[i + 1].shape()[0]],
+                expected: vec![pair[0].shape()[1]],
+                actual: vec![pair[1].shape()[0]],
             });
         }
     }
@@ -288,6 +288,19 @@ where
     let a_reordered: Cow<'_, Array<T>> = match axes {
         None => Cow::Borrowed(a),
         Some(axes_to_move) => {
+            // Every entry must be a distinct, in-bounds axis of `a`: with a
+            // duplicate (or more entries than `a` has axes -- which forces
+            // at least one duplicate by pigeonhole once every entry is
+            // separately in-bounds), `k = axes_to_move.len()` could exceed
+            // `an`, underflowing the `an - k` below (a `usize` subtraction,
+            // panicking in debug and wrapping to a huge, equally invalid
+            // value in release) before `moveaxis` is ever reached -- and
+            // even when `k <= an` happens to hold, a duplicate still feeds
+            // `moveaxis` a non-permutation `source` list, which is not a
+            // case it is specified to handle either. Reject all of that
+            // here with a normal `Err` instead of letting either failure
+            // mode reach the caller as a panic.
+            let mut seen = vec![false; an];
             for &ax in axes_to_move {
                 if ax >= an {
                     return Err(NumRs2Error::DimensionMismatch(format!(
@@ -295,6 +308,13 @@ where
                         ax, an
                     )));
                 }
+                if seen[ax] {
+                    return Err(NumRs2Error::InvalidOperation(format!(
+                        "tensorsolve: axis {} repeated in axes {:?}",
+                        ax, axes_to_move
+                    )));
+                }
+                seen[ax] = true;
             }
             let k = axes_to_move.len();
             let destination: Vec<usize> = (an - k..an).collect();

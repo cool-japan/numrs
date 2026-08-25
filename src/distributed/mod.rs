@@ -65,8 +65,10 @@
 //! // Perform collective operation
 //! let sum = allreduce(dist_array.local_data(), ReduceOp::Sum, &world).await?;
 //!
-//! // Distributed matrix multiplication
-//! let result = distributed_matmul(&dist_array, &dist_array).await?;
+//! // For distributed matrix operations (matmul, QR, SVD, solve, Cholesky)
+//! // see [`linalg`], which operates on [`linalg::DistributedMatrix`] — a
+//! // 2-D, row/column-aware partition — rather than the flat
+//! // [`DistributedArray`] used above.
 //!
 //! // Finalize
 //! finalize(world).await?;
@@ -91,16 +93,20 @@
 //! - [`process`]: Process management and communicators
 
 pub mod array;
+pub mod bootstrap;
 pub mod collective;
 pub mod comm;
 pub mod communication;
+pub mod compression;
 pub mod coordinator;
 pub mod data_parallel;
 pub mod linalg;
 pub mod model_parallel;
+pub mod net;
 pub mod optimization;
 pub mod optimizers;
 pub mod process;
+pub mod testing;
 
 /// Re-exports for convenient use
 pub mod prelude {
@@ -110,8 +116,10 @@ pub mod prelude {
     };
     pub use super::comm::{CommunicationChannel, ConnectionManager, Message};
     pub use super::communication::{
-        compress_tensor, decompress_tensor, AsyncCommunicator, CompressionStrategy,
-        MessagePriority, PipelinedCommunicator, TensorMessage,
+        AsyncCommunicator, MessagePriority, PipelinedCommunicator, TensorMessage,
+    };
+    pub use super::compression::{
+        compress_tensor, decompress_tensor, CompressionStrategy, QuantizedTensor,
     };
     pub use super::coordinator::{
         Checkpoint, DistributedBarrier, ParameterServer, RingAllReduce, TreeAllReduce,
@@ -120,9 +128,14 @@ pub mod prelude {
         AsyncDataParallel, DistributedDataLoader, GradientAggregation, ShardingStrategy,
         SyncDataParallel,
     };
-    pub use super::linalg::{
-        distributed_dot, distributed_matmul, distributed_matvec, distributed_qr, distributed_solve,
+    pub use super::linalg::decomp::{
+        distributed_lstsq, distributed_qr, distributed_solve, distributed_solve_spd,
         distributed_svd,
+    };
+    pub use super::linalg::matrix::{matmul, matvec};
+    pub use super::linalg::{
+        block_cholesky, distributed_dot, distributed_norm, DistFloat, DistTransport,
+        DistributedMatrix, EndpointTransport, Layout, LocalFabric, LocalTransport,
     };
     pub use super::model_parallel::{
         ActivationCheckpointer, Microbatch, PartitionStrategy, PipelineParallel, PipelineStage,
@@ -133,4 +146,5 @@ pub mod prelude {
     };
     pub use super::optimizers::{DistributedAdam, DistributedSGD};
     pub use super::process::{finalize, init, Communicator, ProcessGroup, WorldCommunicator};
+    pub use super::testing::{ClusterNode, LocalCluster, RankContext};
 }

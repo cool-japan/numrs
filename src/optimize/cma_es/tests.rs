@@ -138,10 +138,19 @@ fn test_cma_es_rosenbrock_2d() {
 #[test]
 fn test_cma_es_rastrigin_with_restart() {
     let x0 = vec![3.0, -2.0];
+    // `.with_seed(...)` is load-bearing: without it, `RngSource::create(None)`
+    // falls back to `thread_rng()` (see `cma_es::types::RngSource`), and
+    // Rastrigin is multimodal enough that different sampling paths across the
+    // restarts can land in a worse basin, making `result.fun < 5.0` a
+    // genuine per-run coin flip. This seed was checked to land comfortably
+    // under the threshold (well under 5.0, not marginal), and the restart
+    // path derives per-restart seeds deterministically from this base seed
+    // (see `cma_es::algorithm`), so the whole run is reproducible.
     let config = CMAESConfig::new(2)
         .with_sigma0(2.0)
         .with_max_iter(1000)
-        .with_restarts(5);
+        .with_restarts(5)
+        .with_seed(20260825);
 
     let result = cma_es(rastrigin, &x0, config).expect("CMA-ES IPOP should succeed on Rastrigin");
 
@@ -314,7 +323,15 @@ fn test_cma_es_shifted_sphere() {
 #[test]
 fn test_cma_es_ackley() {
     let x0 = vec![2.0, -2.0];
-    let config = CMAESConfig::new(2).with_sigma0(2.0).with_max_iter(3000);
+    // See the seed comment on `test_cma_es_rastrigin_with_restart`: without
+    // `.with_seed(...)`, sampling falls back to `thread_rng()`, and Ackley's
+    // many shallow local minima make convergence to `result.fun < 1.0`
+    // sensitive to the sample path. Checked to land comfortably under the
+    // threshold with this seed.
+    let config = CMAESConfig::new(2)
+        .with_sigma0(2.0)
+        .with_max_iter(3000)
+        .with_seed(20260825);
 
     let result = cma_es(ackley, &x0, config).expect("CMA-ES should succeed on Ackley");
 

@@ -5,105 +5,267 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - 2026-08-18
+## [0.4.1] - 2026-08-25
+
+This release is a production-hardening pass across the whole crate: a shared compute-dispatch
+layer, copy-on-write arrays, a real (not fabricated) distributed transport, a large batch of
+NumPy-parity additions, and a long list of correctness fixes found while building all of the
+above. Every entry below was checked against the working tree while writing this section; where
+a specific number could not be re-derived from a file checked into the repository, that is noted
+rather than restated as fact.
 
 ### Added
-- `Array::as_slice()` / `Array::as_slice_mut()` — zero-copy contiguous-slice access; avoids heap
-  allocation on the common C-contiguous layout (falls back to `to_vec()` for non-contiguous arrays)
-- `Array::as_cow_1d()` (crate-internal) — zero-copy `CowArray<T, Ix1>` view for SIMD hot-paths in
-  `simd.rs`, `ufuncs.rs`, and `linalg.rs`
-- `patches/alloca/` — pure-Rust drop-in for the `alloca 0.4.0` crate (C VLA-based original causes
-  linker errors on aarch64-apple-darwin with criterion 0.8.2); wired via `[patch.crates-io]`
-- `bench/allocation_hotpath_benchmark.rs` — criterion benchmarks for `map`, `zip_with`, `sum`,
-  `ufuncs::hypot`, and `simd_add` hot-paths (measures the zero-copy refactor impact)
-- `[[example]] visualization` — visualization example is now fully activated with a proper
-  `required-features = ["visualization"]` entry in Cargo.toml
-- `QuantumCircuit::controlled_u` / `controlled_u_gate<T>` — generic multi-control gate accepting
-  any 2^k × 2^k unitary; emits block-diagonal diag(I, U) of size 2^(k+m) with unitarity check
-- `QuantumCircuit::multiply_square_gates`, `embed_gate_in_space`, `fuse_adjacent_gates` — general
-  n×n gate fusion with kron-embedding onto the union of qubit supports
-- `ArrayView::iter()` restored with correct `ArrayViewIterator<'_, T>` lifetime annotation;
-  five new unit tests cover round-trip iteration
+
+**Compute dispatch & fusion**
+- `kernels` module (`src/kernels/`): crate-private, dtype-dispatched compute kernels shared by the
+  hot paths that used to each hand-roll their own SIMD/parallel thresholds — `elementwise`
+  (unary/binary dispatch), `gemm` (2D matmul dispatch table), `reduce` (sum/mean/var/min/max with
+  deterministic accumulation order), `cast` (sound `TypeId`-guarded reinterpretation), `borrow`
+  (contiguous-vs-owned operand bridging). Exercised by `bench/{matmul,elementwise,reduction}_dispatch_benchmark.rs`.
+- Expression fusion: `IntoExpr::expr()` (`src/expr/owned.rs`) builds a lazy `ExprNode` from an
+  `Array`/scalar/expression tree; `.eval()` (`src/expr/fused_eval.rs`) walks it in one fused pass
+  instead of materializing every intermediate. Honest about scope: eager syntax (`&a + &b`) does
+  not fuse on its own — fusion only happens through the explicit `.expr()...eval()` builder. A
+  compile-time `fused!` macro is deferred to 0.6.0 (see `src/expr/owned.rs`'s module doc).
+
+**NumPy-parity additions**
+- ufunc machinery (`src/ufunc_ops.rs`): `reduce`, `accumulate`, `outer`, `reduceat`, and `.at()`
+  (in-place scatter, `np.add.at`-style) for the binary ufunc objects, plus `where=` variants.
+- `fftn`/`ifftn`/`rfftn`/`irfftn` (`src/fft/numpy_parity.rs`) with NumPy's exact `s=`/`axes=`/
+  `norm=` parameter conventions, implemented as a correctness wrapper over `scirs2_fft` (see
+  Fixed and Known Upstream Issues below).
+- `pad`: 6 new modes plus `reflect_type="odd"` for `"reflect"`/`"symmetric"`
+  (`src/array_ops/manipulation/pad.rs`).
+- `quantile`/`percentile`: the 9 NumPy >= 1.22 Hyndman & Fan methods (`inverted_cdf`,
+  `averaged_inverted_cdf`, `closest_observation`, `interpolated_inverted_cdf`, `hazen`, `weibull`,
+  `linear` [default], `median_unbiased`, `normal_unbiased`), alongside the 4 pre-existing legacy
+  methods (`lower`/`higher`/`nearest`/`midpoint`) (`src/stats/quantile.rs`).
+- `histogramdd`, plus `density=` normalization for `histogram`/`histogram2d`/`histogramdd`
+  (`src/stats/histogram.rs`).
+- `multi_dot`, `tensorsolve`, `tensorinv`, and `norm` ord `-2` / `"nuc"` (`src/linalg/parity.rs`).
+- Masked-array completion (`src/masked/`): `std`/`var`/`prod`/`median`/`ptp`/`any`/`all`/
+  `argmin`/`argmax`/`sort`/`cumsum`/`dot`/`concatenate`, plus `Sub`/`Div`/comparison ops and
+  `axis=` support throughout. `argmin`/`argmax` deliberately return `Err` on a fully-masked lane
+  instead of `numpy.ma`'s degenerate (and silently ambiguous) index `0` — see NUMPY_MIGRATION.md.
+- Polynomial class family (`src/new_modules/polynomial/classes/`): `Chebyshev`, `Legendre`,
+  `Hermite`, `HermiteE`, `Laguerre` (alongside the pre-existing `Power`/`Series` classes).
+- Random: `SeedSequence` + `Generator::spawn` (independent child streams), `Philox4x64BitGenerator`,
+  `SFC64BitGenerator`, and `Generator::permuted` (`src/random/{generator,seed_sequence,sfc64}.rs`).
+
+**Distributed**
+- `Endpoint` point-to-point transport (`src/distributed/net/`): real TCP links, a fixed 56-byte
+  `FrameHeader` per message, LZ4 payload compression via `oxiarc-lz4`.
+- 8 collective operations plus `v`-variants and `reduce_scatter` (`src/distributed/collective.rs`):
+  `reduce`, `allreduce` (+ `allreduce_with`), `reduce_scatter`, `broadcast`, `gather`/`gatherv`,
+  `allgather`/`allgatherv`, `scatter`/`scatterv`, `allscatter`, `barrier`.
+- `TSQR` (Tall-Skinny QR, `src/distributed/linalg/tsqr.rs`): binary-tree, communication-avoiding
+  QR for row-block-distributed matrices, keeping every tree factor so `Q` is applied without ever
+  being formed; used by `decomp::distributed_qr`/`distributed_svd`/`distributed_solve`. Requires
+  every rank's row block to be at least as tall as the matrix is wide (`m_i >= n`); returns
+  `UnsupportedShape` rather than approximating otherwise (the wide case needs CAQR, not yet
+  implemented — see TODO.md).
+- Block-cyclic-column Cholesky (`src/distributed/linalg/cholesky.rs`) plus a distributed
+  forward/back-substitution solve.
+- `LocalCluster` test harness (`src/distributed/testing.rs`): drives `world_size` copies of an
+  async closure over real loopback TCP, for correctness- and deadlock-testing without a
+  multi-process launcher.
+
+**GPU / Python / WASM**
+- GPU: `norm_l1`, N-D transpose/broadcast/slicing, and `Conv2D` (`src/gpu/{linalg,ops,batching,conv}.rs`).
+- Python: wheel builds via `maturin` (`pyproject.toml`); N-D neural-network bindings and
+  `random`/`fft` bindings (`src/python/{nn,random,fft}.rs`).
+- WASM: `dlmalloc` as the global allocator behind the `wasm` feature, gated to the `wasm32` target
+  family (`src/wasm/utils.rs`, `Cargo.toml`).
+
+**Carried over from the previous 0.4.1 pass**
+- `Array::as_slice()`/`as_slice_mut()`: zero-copy contiguous-slice access (falls back to
+  `to_vec()` off the fast path); `Array::as_cow_1d()` (crate-internal): zero-copy
+  `CowArray<T, Ix1>` view for SIMD hot paths.
+- `patches/alloca/`: pure-Rust drop-in for the `alloca` crate, unblocking criterion on
+  aarch64-apple-darwin.
+- `QuantumCircuit::controlled_u`/`controlled_u_gate<T>` (generic multi-control gate for any
+  2^k x 2^k unitary) and `multiply_square_gates`/`embed_gate_in_space`/`fuse_adjacent_gates`
+  (general n x n gate fusion).
+- `ArrayView::iter()` restored with a correctly-annotated `ArrayViewIterator<'_, T>` lifetime.
 
 ### Changed
-- `scirs2-core`, `scirs2-stats`, `scirs2-linalg`, `scirs2-ndimage`, `scirs2-spatial`,
-  `scirs2-special`, `scirs2-fft` updated from 0.5.0 → 0.6.5; these workspace dependencies now use
-  `{ workspace = true }` (workspace policy compliance; versions still pinned at workspace root)
-- `oxiarc-archive` and `oxiarc-lz4` updated from 0.3.2 → 0.4.1
-- `oxicode` updated from 0.2.4 → 0.2.6
-- `wgpu` updated 29.0.3 → 30.0.0 (upstream `BufferSlice::get_mapped_range()` now returns
-  `Result` instead of panicking internally; `RequestAdapterOptions` gained `apply_limit_buckets`);
-  `pyo3` 0.28 → 0.29; `wasm-bindgen` 0.2.125 → 0.2.126, `wasm-bindgen-futures` 0.4.75 → 0.4.76,
-  `js-sys` / `web-sys` 0.3.102 → 0.3.103, `wasm-bindgen-test` 0.3.75 → 0.3.76;
-  `memmap2` 0.9.10 → 0.9.11
-- Random-number generation migrated from `scirs2_stats::distributions` to `scirs2_core::random`
-  (`Rng::sample` / `Rng::random_range`); `NonCentralChiSquared::sample`, `NonCentralF::sample`,
-  `VonMises::sample`, `Maxwell::sample`, `Wald::sample` (`numrs2::random::advanced_distributions`)
-  now take an explicit `&mut StdRng` parameter instead of drawing from an internal `thread_rng()`
-  call, improving reproducibility from a seeded generator — **breaking** for direct callers of
-  these `.sample()` methods; the crate-level `noncentral_chisquare()` / `vonmises()` / `maxwell()`
-  / `wald()` functions keep their existing public signatures
-- `bench/bench_distributions.rs`: `f_dist` and `multivariate_normal_cholesky` benchmarks
-  re-enabled; removed stale TODO stubs
-- `bench/stats_benchmarks.rs`: `bench_statistical_moments` (skewness, kurtosis) and
-  `bench_random_sampling` benchmarks re-enabled; fixed `shuffle`/`choice` import path
-- `examples/visualization.rs`: stub `main` replaced with full implementation; updated
-  `.sample(&mut rng)` → `rng.sample(...)` for modern `rand_distr` API
+
+- **`Array<T>` is now `Arc`-backed copy-on-write.** `Clone` is O(1) (an `Arc` bump instead of a
+  deep copy); the first mutation after a clone unshares via the crate's single `Arc::make_mut`
+  call site (`src/array/core.rs`, CI-guarded by `scripts/ci-local.sh` to stay exactly one
+  `make_mut` + one `Arc::try_unwrap`, both in that file); `Array::is_unique()` exposes the sharing
+  state. **Disclosure:** `Array<T>` now requires `T: Send + Sync` to remain `Send`/`Sync` itself
+  (an `Arc<T>` transitively needs it), which can newly constrain generic call sites.
+- **Matmul backend**: the default `f32`/`f64` dispatch tier now goes through
+  `scirs2_core::ndarray::linalg::general_mat_mul` (the pure-Rust `matrixmultiply` crate) instead
+  of `scirs2-core`'s `simd_matrix_multiply`, parallelizing above a FLOPs threshold via an
+  `M`-only row split (`src/kernels/gemm.rs`). Measured up to 18.82x faster than the pre-existing
+  loop at `512^3` and 12.70x at `256^3` in that module's own before/after table, with no
+  regressed shape.
+- **`lapack` is now a default feature** (`default = ["matrix_decomp", "scirs", "lapack"]`,
+  `Cargo.toml`): `det`/`inv`/`svd`/`eig`/`qr`/`cholesky` and the rest of core linalg are now
+  reachable on a plain `cargo add numrs2` — previously they compiled out unless a consumer opted
+  in explicitly.
+- Banned-crate policy is enforced by `deny.toml` (`cargo deny check bans`), with documented, dated
+  exceptions (2026-08-19) for the pure-Rust transitive codecs (`flate2`/`brotli`/`snap`/`lz4_flex`)
+  that ship only inside the optional `parquet`/`matlab`/`visualization` feature graphs.
+- `ReduceOp::And`/`Or` (`src/distributed/collective.rs`) now return an explicit error on float
+  types instead of a silent, meaningless fallback; use the new `ReduceOp::reduce_bitwise` for
+  integer bitwise AND/OR.
+- `scirs2-core`/`-stats`/`-linalg`/`-ndimage`/`-spatial`/`-special`/`-fft`: 0.5.0 → 0.6.5, now via
+  `{ workspace = true }`.
+- `oxiarc-archive`/`oxiarc-lz4` 0.3.2 → 0.4.1; `oxicode` 0.2.4 → 0.2.6; `wgpu` 29.0.3 → 30.0.0;
+  `pyo3` 0.28 → 0.29; `wasm-bindgen` 0.2.125 → 0.2.126 (`wasm-bindgen-futures` 0.4.75 → 0.4.76,
+  `js-sys`/`web-sys` 0.3.102 → 0.3.103, `wasm-bindgen-test` 0.3.75 → 0.3.76); `memmap2` 0.9.10 →
+  0.9.11.
+- Random-number generation migrated from `scirs2_stats::distributions` to `scirs2_core::random`.
+  **Breaking** for direct callers of `NonCentralChiSquared::sample`/`NonCentralF::sample`/
+  `VonMises::sample`/`Maxwell::sample`/`Wald::sample` (`numrs2::random::advanced_distributions`),
+  which now take an explicit `&mut StdRng` instead of drawing from an internal `thread_rng()`; the
+  crate-level `noncentral_chisquare()`/`vonmises()`/`maxwell()`/`wald()` functions keep their
+  existing signatures.
+- `bench/bench_distributions.rs` (`f_dist`, `multivariate_normal_cholesky`) and
+  `bench/stats_benchmarks.rs` (`bench_statistical_moments`, `bench_random_sampling`) benchmarks
+  re-enabled; `examples/visualization.rs`'s stub `main` replaced with a full implementation.
 
 ### Fixed
-- **erfinv / erfcinv precision** (`src/new_modules/special/error_functions.rs`): replaced
-  previous approximation with Winitzki 2008 initial guess + 8 Halley iterations; absolute error
-  reduced to < 1e-9 (previously ~1e-5)
-- **Bessel Y_n** (`src/new_modules/special/bessel.rs`): rewrote `bessel_y_scalar` with DLMF
-  10.8.1 series for small x and upward recurrence `Y_{n+1} = (2n/x)Y_n − Y_{n-1}`; previous
-  code divided by `sin(nπ) = 0` for integer orders, returning NaN
-- **Bessel K_n** (`src/new_modules/special/bessel.rs`): rewrote `bessel_k_scalar` with DLMF
-  10.31.1/10.31.2 series + upward recurrence; previous code had a dead `8·0 = 0` branch for K₀
-  and an inaccurate K₁ formula; both now achieve < 1e-8 absolute error
-- **Incomplete gamma tightened** (`src/new_modules/special/gamma.rs`): re-verified
-  series + Lentz CF implementation; tightened test assertions from ±0.1 to ~1e-9
-- **Elliptic integrals tightened** (`src/new_modules/special/elliptic.rs`): lowered AGM ε
-  toward machine epsilon; tightened test assertions from 10% to ~1e-10 abs-diff
-- **irfft / irfft2 Hermitian reconstruction** (`src/new_modules/fft.rs`): fixed `mirror_start`
-  (even n: start at bin 2, odd n: start at bin 1) so `irfft(rfft(x)) ≈ x` holds for all signal
-  lengths; replaced silent `NumCast::unwrap_or(zero)` twiddle conversions with proper casts
-- **`split` axis=1** (`src/lib.rs`, `src/array_ops/splitting.rs`): re-enabled previously-disabled
-  integration test; verified `ndarray::Axis` slicing works for all axes
-- **Numerical-stability test assertions** (`tests/test_special_reference.rs`): replaced four
-  stale TODO-gated range checks with tight abs-diff assertions against scipy-verified reference
-  values (erf, erfc, gamma, bessel_k)
-- **Schur reconstruction** (`tests/test_linalg_reference.rs`): re-enabled A = Q·T·Qᵀ assertion
-  at TOLERANCE = 1e-8 (was silently assigned to `_`)
-- **Criterion / alloca linker error on Apple Silicon**: `patches/alloca/` pure-Rust replacement
-  eliminates C VLA anonymous-symbol incompatibility with aarch64 rustc; all criterion benchmarks
-  now build and run on Apple M-series hardware
-- **Gamma distribution scale parameter** (`src/random/legacy.rs`, `src/random/state.rs`,
-  `src/random/generator.rs`): removed the `1/scale` double-inversion workaround for a since-fixed
-  upstream `scirs2_core::Gamma` scale bug; gamma sampling now passes `scale` directly to
-  `Gamma::new`
-- **RNG seeding reproducibility**: `Generator::random()` now seeds a per-call RNG from the bit
-  generator stream instead of drawing directly from a `Uniform` distribution, so output is
-  reproducible from the global seed; re-enabled 8 previously-`#[ignore]`d seeding tests across
-  `src/random/distributions.rs` (`test_set_seed`) and `tests/test_complex_seed_scenario.rs`,
-  `tests/test_global_vs_direct_vonmises.rs`, `tests/test_random_advanced_distributions.rs` (×2),
-  `tests/test_random_properties.rs`, `tests/test_random_state.rs`,
-  `tests/test_vonmises_randomness_consumption.rs`, `tests/test_vonmises_seed_issue.rs`
-- **GPU buffer-mapping error handling** (`src/gpu/array.rs`, `src/gpu/ops.rs`,
-  `src/gpu/context.rs`): replaced `.expect()` panics on `wgpu` device-poll/buffer-mapping failures
-  with proper `Result` / `NumRs2Error::RuntimeError` propagation, required by the `wgpu` 30.0.0
-  API surface (`get_mapped_range()` is now fallible) and consistent with the no-`unwrap()`-in-
-  production policy
-- **Flaky global-RNG test races**: 11 test files (`src/random/distributions.rs`,
-  `advanced_distributions.rs`, `distributions_enhanced.rs`; `tests/test_random_advanced.rs`,
-  `test_distribution_reference.rs`, `test_random_advanced_distributions.rs`,
-  `test_random_statistical.rs`, `test_random_reference.rs`, `test_random_properties.rs`,
-  `test_scirs_integration.rs`, `test_scirs_reference.rs`) had multiple `#[test]` functions calling
-  `set_seed()` and sampling the shared `GLOBAL_RANDOM_STATE` with no `#[serial]` isolation, so
-  parallel test execution could let one test's reseed corrupt another's in-flight deterministic
-  sequence (observed: `test_uniform_sum_to_approximate_normal` intermittently failing a
-  goodness-of-fit assertion under `cargo nextest run`, passing reliably in isolation); added
-  `#[serial]` (existing `serial_test` dev-dependency, precedented in `src/error_handling.rs`) to
-  every affected test function
+
+**Correctness — array/linalg core**
+- `tile()`: N-D output shape and data ordering (`src/array_ops/tiling.rs`).
+- `moveaxis`: permutation now correct for arbitrary axis pairs (`src/array_ops/axis_ops.rs`).
+- `as_strided`: general N-D case, not just the low-dimensional special cases (`src/stride_tricks.rs`).
+- `Array::to_vec()`: logical (not physical) element order for permuted / Fortran-layout arrays
+  (`src/array/core.rs`).
+- `gemm`/`gemv`: transpose-flag combinations (`trans_a`/`trans_b`) now all dispatch to the correct
+  shape/stride arithmetic (`src/blas.rs`).
+- `einsum`: no longer panics on a HashMap miss for an operand referencing an unmapped index
+  (`src/linalg/tensor_ops.rs`).
+- `solve_lyapunov`: now correct for non-symmetric `A` (`src/new_modules/control/stability.rs`).
+- `lstsq`: no longer errors on every non-square input — full SVD (over-determined) vs. thin SVD
+  (under-determined) is now selected correctly (`src/new_modules/matrix_decomp/condition.rs`).
+
+**Correctness — statistics & reductions**
+- `Statistics::var`/`std` (`src/stats/basic.rs`) and `ufuncs::var`/`std` (`src/ufuncs.rs`): both
+  silently flipped from population to sample variance (`n` vs. `n-1`) at length 64 (an upstream
+  SIMD-path artifact). Now population semantics everywhere, matching NumPy's default.
+  **Disclosure: this changes the numeric value returned by `var`/`std` on arrays of length >= 64**
+  relative to the previous (buggy) behavior.
+- `min`/`max`: `scirs2_core::simd_ops::simd_min_element`/`simd_max_element` return a wrong
+  *finite* value for some NaN placements — not merely an old NaN-convention difference, a live
+  upstream bug, pinned as a tripwire in `src/stats/basic.rs`. `kernels::reduce`'s `min`/`max` no
+  longer call them; NaN now propagates the NumPy way everywhere, including `optimized_ops` and
+  `nn::simd_ops`.
+- `min_along_axis`/`max_along_axis` (`src/stats/basic.rs`): panicked on every axis reduction;
+  fixed.
+- `maximum`/`minimum` (`src/ufuncs.rs`): NaN-propagation asymmetry between the two functions
+  removed — both now propagate NaN symmetrically.
+
+**Correctness — special functions, distributions, dates, I/O**
+- `student_t_cdf`: corrected via the regularized incomplete beta function
+  (`src/random/distributions_enhanced.rs`).
+- Sobol sequences: dimensions above 8 now use real Joe-Kuo direction numbers (search criterion 6)
+  up to dimension 40, verified bit-for-bit against unscrambled `scipy.stats.qmc.Sobol` for the
+  pinned dimensions (`src/random/distributions_enhanced.rs`).
+- `busday`/business-day roll conventions corrected (`src/types/datetime/`).
+- NetCDF I/O now writes/reads real NetCDF-3 (`src/io/netcdf.rs`).
+- `CustomDType` serialization and `StructuredArray::from_arrays` fixed (`src/types/custom.rs`,
+  `src/types/structured.rs`).
+- VAR log-likelihood (`src/new_modules/timeseries/var.rs`): a failed inversion of the
+  residual-covariance matrix Sigma now propagates as an error instead of silently reporting a
+  wrong log-likelihood/AIC/BIC.
+- Wavelet SURE threshold (`src/new_modules/wavelets/mra.rs`): corrected risk formula for soft
+  thresholding.
+
+**FFT**
+- Worked around two confirmed `scirs2_fft::fftn` normalization bugs (`"backward"` not scaling by
+  `1/N`; `"ortho"`/`"forward"` not restricting the scaling basis to the requested `axes`) in
+  `src/fft/numpy_parity.rs`'s own `fftn`; `rfftn` inherits the fix by construction, and
+  `ifftn`/`irfftn` were already correct upstream. See Known Upstream Issues below.
+- The existing "FHT" test exercised a Hankel transform, not a Hartley transform, despite its
+  name; a real Discrete Hartley Transform (`dht`/`idht`, aliased `hartley_fht`) now exists and is
+  what the corrected test checks (`src/fft/mod.rs`).
+
+**Soundness**
+- Ad hoc, per-call-site raw-pointer type-punning (e.g. `stats/basic.rs`'s
+  `x as *const T as *const f64`, `array/operations_optimized.rs`'s bare `mem::transmute_copy`) is
+  now centralized behind one audited module, `kernels::cast`, whose every function proves
+  soundness via `TypeId::of::<T>() == TypeId::of::<f64|f32>()` before reinterpreting (documented
+  in that module's own Soundness section). `io::npy_npz` and `types::structured` keep their
+  pre-existing `type_name`/`TypeId`-based dispatch by deliberate design (their generic call sites
+  lack the `T: 'static` bound `TypeId` needs) but gained explicit size-check-before-transmute
+  guards of their own.
+- `src/array/core.rs`, `src/views.rs`, and `src/arrays/*.rs` contain no `unsafe` blocks at all;
+  the raw-pointer type-punning that remains in the crate is confined to `kernels::cast`,
+  `io::npy_npz`, and `types::structured` (all three audited as above).
+
+**Distributed**
+- Collective operations (`broadcast`/`reduce`/`allreduce`/`gather`/`allgather`/`scatter`/
+  `allscatter`/`barrier` and the `v`/`reduce_scatter` variants) previously fabricated their
+  results — they returned the caller's own local data with no network transport at all. All of
+  them are now real, running over the new `Endpoint` TCP transport (`src/distributed/collective.rs`,
+  `src/distributed/net/`). **Scope note:** this is about the collectives, not the older
+  `DistributedArray`-based `linalg::distributed_qr`/`svd`/`solve`/`matmul`/`matvec`, which
+  permanently return `NotImplemented` by design in favor of the real `DistributedMatrix` +
+  `DistTransport` versions of the same names re-exported from `distributed::prelude` (see
+  `src/distributed/linalg/mod.rs`'s module doc).
+- A bidirectional communication deadlock is eliminated by construction: `CommunicationChannel`
+  used to hold one `Arc<Mutex<TcpStream>>` across every `.await`, so two ranks sending to each
+  other simultaneously could each block waiting for the other's read to finish; the channel now
+  uses `TcpStream::into_split` read/write halves so send and receive never contend on the same
+  lock (`src/distributed/comm.rs`, regression-tested by
+  `simultaneous_bidirectional_send_does_not_deadlock`).
+
+**Carried over from the previous 0.4.1 pass**
+- erfinv/erfcinv precision (Winitzki 2008 initial guess + 8 Halley iterations; error now < 1e-9).
+- Bessel Y_n/K_n (DLMF series + upward recurrence, replacing formulas that divided by zero or used
+  a dead branch for integer orders).
+- Incomplete gamma and elliptic integrals: test tolerances tightened to ~1e-9/1e-10 against the
+  already-correct series/AGM implementations.
+- irfft/irfft2 Hermitian reconstruction (`mirror_start` off-by-one for even/odd `n`).
+- `split` axis=1 re-enabled.
+- Schur reconstruction assertion (`A = Q*T*Q^T`) re-enabled at 1e-8.
+- Criterion/alloca linker failure on Apple Silicon, fixed by `patches/alloca/`.
+- Gamma-distribution scale-parameter double-inversion workaround removed (upstream fixed).
+- RNG seeding reproducibility: `Generator::random()` now seeds a per-call RNG from the
+  bit-generator stream; 8 previously-`#[ignore]`d seeding tests re-enabled.
+- GPU buffer-mapping errors now propagate as `Result` instead of `.expect()`-panicking (required
+  by `wgpu` 30's fallible `get_mapped_range()`).
+- 11 test files' RNG-race flakiness fixed by adding `#[serial]` around shared-global-state tests.
+
+### Performance
+
+Figures are release-mode measurements taken from the tables already checked into the modules that
+own them (see BENCHMARKING.md for the min-over-alternating-A/B methodology); each row names its
+source, and figures that could not be re-derived from a checked-in table say so instead of
+restating an unverified multiplier as fact.
+
+| Change | Measurement | Source |
+|---|---|---|
+| Matmul dispatch (`general_mat_mul`, row-split) | 2.51x @ 8^3 up to 18.82x @ 512^3 vs. the pre-existing loop; no regressed shape | `src/kernels/gemm.rs` module doc table |
+| `sum`/`mean`/`var`/`min`/`max` kernel dispatch | 4.15x–6.97x at n=1,000,000 across three independent runs | `src/kernels/reduce.rs` module doc tables |
+| `Some(axis)` stride hoist (`math::aggregation::sum`) | regression-tested at 64x4096 (`sum_axis_matches_naive_larger_2d`) | `src/math/aggregation.rs`; the wave's own report cites a much larger multiplier at this size, not re-derived here |
+| COW mutation guard (`Arc::make_mut` uniqueness check) | a few ns of fixed absolute cost per `&mut` entry point on an already-unique array; bulk acquisition (`array_mut()`/`as_slice_mut()` once per call, not per element) keeps relative overhead under the bench's own <5% target | `bench/cow_mutation_guard.rs` module doc + `report_mutation_guard` |
+| Bulk-acquisition hot loops (`matrix_decomp::{lu, pivoted_cholesky, qr::householder_qr}`) | ~2–5x faster at n=128/256 after converting a per-element `set()` loop to one bulk `array_mut()` | `bench/cow_mutation_guard.rs` module doc |
+| Expression fusion (`.expr()...eval()` vs. eager) | 1.00x–1.20x @ n=1,000 up to 1.45x–1.69x @ n=1,000,000 | `src/expr/fused_eval.rs` module doc table |
+| `Array::from_vec_shape` adoption (e.g. `Array::full`) | reported by the implementing wave; not independently re-benchmarked for this changelog | — |
+
+### Known Upstream Issues
+
+Documented in-tree with repro/tripwire tests so an upstream fix becomes visible when it lands:
+
+- **`scirs2_core::simd_ops::SimdUnifiedOps::{simd_variance, simd_std}`** hardcode sample (n-1)
+  variance and are unsuitable for NumPy (population) semantics. Never called from this crate's own
+  reduction path; see the module docs in `src/stats/basic.rs` and `src/kernels/reduce.rs`.
+- **`simd_min_element`/`simd_max_element`** return a wrong finite value for certain NaN
+  placements — a live bug, not a NaN-convention difference. Tripwire test:
+  `simd_max_element_upstream_wrong_value_is_a_live_bug_not_just_new_nan_convention` in
+  `src/stats/basic.rs`, which calls the upstream function directly and pins the currently-wrong
+  value.
+- **`scirs2_fft::fftn`** has two confirmed normalization bugs (see Fixed, above); documented and
+  worked around in `src/fft/numpy_parity.rs`.
+- **`scirs2-core`'s `simd_matrix_multiply`** has a ~4x performance cliff whenever
+  `k % 128 != 0`; documented in `src/kernels/gemm.rs` and `bench/matmul_dispatch_benchmark.rs`,
+  and is part of why the default matmul tier no longer routes through it.
 
 ## [0.4.0] - 2026-06-05
 

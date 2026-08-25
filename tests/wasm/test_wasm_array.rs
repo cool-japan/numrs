@@ -5,11 +5,14 @@
 
 #![cfg(target_arch = "wasm32")]
 
+// `wasm_bindgen_test_configure!(run_in_browser)` must appear exactly once per
+// test binary (see `tests/wasm_integration.rs`, which wires this file in),
+// not once per module -- so it does not appear here.
 use wasm_bindgen_test::*;
 
-wasm_bindgen_test_configure!(run_in_browser);
-
 // Import WASM bindings
+use numrs2::wasm::linalg::matmul;
+use numrs2::wasm::stats::std_dev;
 use numrs2::wasm::WasmArray;
 
 #[wasm_bindgen_test]
@@ -259,7 +262,7 @@ fn test_std() {
     let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
     let arr = WasmArray::from_vec(&data, &[5]).expect("Failed to create array");
 
-    let std = arr.std();
+    let std = std_dev(&arr);
     // Standard deviation should be around 1.414
     assert!((std - 1.414).abs() < 0.01);
 }
@@ -274,7 +277,7 @@ fn test_matmul() {
     let b = WasmArray::from_vec(&vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[3, 2])
         .expect("Failed to create array");
 
-    let c = a.matmul(&b).expect("Failed to multiply matrices");
+    let c = matmul(&a, &b).expect("Failed to multiply matrices");
 
     assert_eq!(c.shape(), vec![2, 2]);
 
@@ -293,14 +296,16 @@ fn test_matmul_incompatible() {
     let b = WasmArray::ones(&[2, 3]);
 
     // Should fail: 2x3 @ 2x3 is invalid
-    let result = a.matmul(&b);
+    let result = matmul(&a, &b);
     assert!(result.is_err());
 }
 
 #[wasm_bindgen_test]
 fn test_clone() {
     let arr = WasmArray::full(&[2, 3], 5.0);
-    let cloned = arr.clone_array();
+    // `WasmArray` derives `Clone` (an O(1) Arc-bump, not a deep copy); there
+    // is no separate `clone_array()` method.
+    let cloned = arr.clone();
 
     assert_eq!(arr.shape(), cloned.shape());
     assert_eq!(arr.to_vec(), cloned.to_vec());

@@ -1058,6 +1058,27 @@ mod test_histogram_bin_edges {
     }
 
     #[test]
+    fn test_histogram_bin_edges_auto_range_nan_is_rejected() {
+        // np.histogram_bin_edges([1.0, nan, 3.0], bins=3) raises
+        // "autodetected range of [nan, nan] is not finite".
+        let data = Array::from_vec(vec![1.0, f64::NAN, 3.0]);
+        let result = histogram_bin_edges(&data, BinSpec::Count(3), None);
+        assert!(
+            result.is_err(),
+            "NaN in data with auto-range should error, not panic"
+        );
+    }
+
+    #[test]
+    fn test_histogram_bin_edges_explicit_nan_range_bound_is_rejected() {
+        // np.histogram_bin_edges([1,2,3], bins=3, range=(nan, 5.0)) raises
+        // "supplied range of [nan, 5.0] is not finite".
+        let data = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let result = histogram_bin_edges(&data, BinSpec::Count(3), Some((f64::NAN, 5.0)));
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_histogram_bin_edges_uniform_spacing() {
         let data = Array::from_vec(vec![0.0, 10.0]);
         let edges = histogram_bin_edges(&data, BinSpec::Count(10), None).unwrap();

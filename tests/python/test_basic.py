@@ -146,7 +146,7 @@ def test_dot_product():
 def test_to_numpy():
     """Test conversion to NumPy"""
     nr_arr = nr.array([1.0, 2.0, 3.0, 4.0])
-    np_arr = nr_arr.to_numpy(None)
+    np_arr = nr_arr.to_numpy()
 
     assert isinstance(np_arr, np.ndarray)
     assert list(np_arr) == [1.0, 2.0, 3.0, 4.0]

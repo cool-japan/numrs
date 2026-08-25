@@ -1,155 +1,141 @@
 //! Comprehensive Distributed Computing Example for NumRS2
 //!
-//! This example demonstrates advanced distributed computing patterns including:
-//! - Distributed array operations (scatter, gather, allreduce)
-//! - Collective communications
-//! - Distributed linear algebra
-//! - Error handling and fault tolerance patterns
+//! Demonstrates the full breadth of the `distributed` feature:
+//! - Distributed array operations (scatter, gather, allreduce, broadcast)
+//! - Collective communication
+//! - Real distributed linear algebra: [`DistributedMatrix`] + `matmul`,
+//!   `distributed_qr` and `distributed_solve_spd` (Cholesky)
+//! - Error handling patterns
 //!
-//! # Running the Example
+//! # Running
 //!
-//! To run this example with multiple processes, set environment variables:
-//!
-//! Terminal 1 (Process 0 - Master):
 //! ```bash
-//! NUMRS2_RANK=0 NUMRS2_SIZE=4 NUMRS2_MASTER_ADDR=127.0.0.1:5000 cargo run --example distributed_computing --features distributed
+//! cargo run --example distributed_computing --features distributed
 //! ```
 //!
-//! Terminal 2 (Process 1):
-//! ```bash
-//! NUMRS2_RANK=1 NUMRS2_SIZE=4 NUMRS2_MASTER_ADDR=127.0.0.1:5000 cargo run --example distributed_computing --features distributed
-//! ```
-//!
-//! Terminal 3 (Process 2):
-//! ```bash
-//! NUMRS2_RANK=2 NUMRS2_SIZE=4 NUMRS2_MASTER_ADDR=127.0.0.1:5000 cargo run --example distributed_computing --features distributed
-//! ```
-//!
-//! Terminal 4 (Process 3):
-//! ```bash
-//! NUMRS2_RANK=3 NUMRS2_SIZE=4 NUMRS2_MASTER_ADDR=127.0.0.1:5000 cargo run --example distributed_computing --features distributed
-//! ```
+//! That single command runs 4 ranks in *one* process over [`LocalCluster`] —
+//! real loopback TCP, framing and all, just without the multi-terminal dance
+//! a real cluster needs. For an actual multi-host run, use
+//! [`numrs2::distributed::process::init`] instead (`NUMRS2_RANK`/
+//! `NUMRS2_SIZE`/`NUMRS2_MASTER_ADDR`) — see `distributed_basics.rs`'s header
+//! for the exact multi-terminal invocation.
 
+#[cfg(feature = "distributed")]
+use numrs2::distributed::net::NetError;
 #[cfg(feature = "distributed")]
 use numrs2::distributed::prelude::*;
 #[cfg(feature = "distributed")]
-use numrs2::prelude::*;
+use scirs2_core::ndarray::Array2;
+#[cfg(feature = "distributed")]
+use std::sync::Arc;
+
+#[cfg(feature = "distributed")]
+const WORLD_SIZE: u32 = 4;
 
 #[cfg(feature = "distributed")]
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("NumRS2 Distributed Computing - Comprehensive Example");
     println!("===================================================\n");
+    println!("Running {WORLD_SIZE} ranks in one process via LocalCluster (real loopback TCP).\n");
 
-    // Initialize distributed environment
-    println!("Initializing distributed environment...");
-    let world = init().await?;
+    let per_rank_logs = LocalCluster::run_connected(WORLD_SIZE, |node: ClusterNode| async move {
+        run_rank(node)
+            .await
+            .map_err(|e| NetError::Io(e.to_string()))
+    })
+    .await?;
 
-    let rank = world.rank();
-    let size = world.size();
-
-    println!("✓ Process {} of {} initialized successfully", rank, size);
-    println!("  Hostname: {}", world.process_info().hostname);
-    println!("  Address: {}\n", world.process_info().addr);
-
-    // Example 1: Distributed Array Creation and Basic Operations
-    example1_distributed_arrays(&world).await?;
-
-    // Example 2: Scatter and Gather Operations
-    example2_scatter_gather(&world).await?;
-
-    // Example 3: Allreduce Operations
-    example3_allreduce(&world).await?;
-
-    // Example 4: Broadcast Operations
-    example4_broadcast(&world).await?;
-
-    // Example 5: Distributed Matrix Operations
-    example5_distributed_linalg(&world).await?;
-
-    // Example 6: Error Handling Patterns
-    example6_error_handling(&world).await?;
-
-    // Finalize
-    barrier(&world).await?;
-    if world.is_root() {
-        println!("\n✓ All examples completed successfully!");
-        println!("Finalizing distributed environment...");
+    for log in per_rank_logs {
+        for line in log {
+            println!("{line}");
+        }
     }
 
-    finalize(world).await?;
-
-    if rank == 0 {
-        println!("✓ Distributed environment finalized successfully");
-    }
-
+    println!("\n✓ All examples completed successfully!");
     Ok(())
+}
+
+#[cfg(feature = "distributed")]
+async fn run_rank(
+    node: ClusterNode,
+) -> std::result::Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut log = Vec::new();
+
+    // `world` (a `Communicator`) drives examples 1-4 and 6, over the real
+    // collectives in `distributed::collective`; `transport` (an
+    // `EndpointTransport` wrapping a clone of the same endpoint — cloning is
+    // cheap, it shares one link set) drives example 5's `DistributedMatrix`
+    // algorithms, which are written against the more general `DistTransport`
+    // trait rather than against `Communicator` directly. The two never
+    // collide on the wire: a `Communicator`'s collectives always run under
+    // context 0, while every `DistTransport` algorithm allocates its own
+    // context starting at 1 (see `distributed::linalg`'s module docs).
+    let transport = EndpointTransport::new(node.endpoint.clone());
+    let world = Communicator::from_endpoint(Arc::new(node.endpoint))?;
+
+    example1_distributed_arrays(&world, &mut log).await?;
+    example2_scatter_gather(&world, &mut log).await?;
+    example3_allreduce(&world, &mut log).await?;
+    example4_broadcast(&world, &mut log).await?;
+    example5_distributed_linalg(&transport, &mut log).await?;
+    example6_error_handling(&world, &mut log).await?;
+
+    Ok(log)
 }
 
 #[cfg(feature = "distributed")]
 async fn example1_distributed_arrays(
     world: &Communicator,
+    log: &mut Vec<String>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     if world.is_root() {
-        println!("\n=== Example 1: Distributed Array Creation ===");
+        log.push("=== Example 1: Distributed Array Creation ===".to_string());
     }
     barrier(world).await?;
 
     let rank = world.rank();
     let size = world.size();
 
-    // Each process creates local data
     let local_size = 10;
     let local_data: Vec<f64> = (0..local_size)
         .map(|i| (rank * local_size + i) as f64)
         .collect();
 
-    println!(
-        "[Rank {}] Created local data: [{:.1}, {:.1}, ..., {:.1}]",
-        rank,
+    log.push(format!(
+        "[rank {rank}] local data: [{:.1}, {:.1}, ..., {:.1}]",
         local_data[0],
         local_data[1],
         local_data[local_size - 1]
-    );
+    ));
 
-    // Create distributed array
     let global_size = size * local_size;
-    let dist_array = DistributedArray::from_local(
-        local_data.clone(),
-        DistributionStrategy::Block,
-        global_size,
-        world,
-    )?;
+    let dist_array =
+        DistributedArray::from_local(local_data, DistributionStrategy::Block, global_size, world)?;
 
-    println!(
-        "[Rank {}] Distributed array: global_size={}, local_size={}",
-        rank,
+    log.push(format!(
+        "[rank {rank}] distributed array: global_size={}, local_size={}",
         dist_array.global_size(),
         dist_array.local_size()
-    );
+    ));
 
     barrier(world).await?;
-
-    if world.is_root() {
-        println!("✓ Example 1 completed\n");
-    }
-
     Ok(())
 }
 
 #[cfg(feature = "distributed")]
 async fn example2_scatter_gather(
     world: &Communicator,
+    log: &mut Vec<String>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     if world.is_root() {
-        println!("=== Example 2: Scatter and Gather Operations ===");
+        log.push("=== Example 2: Scatter and Gather Operations ===".to_string());
     }
     barrier(world).await?;
 
     let rank = world.rank();
     let size = world.size();
 
-    // Root process prepares data to scatter
     let scatter_data = if world.is_root() {
         let mut data = Vec::new();
         for i in 0..size {
@@ -157,168 +143,167 @@ async fn example2_scatter_gather(
                 data.push((i * 100 + j) as f64);
             }
         }
-        println!("[Rank 0] Prepared {} elements to scatter", data.len());
+        log.push(format!(
+            "[rank 0] prepared {} elements to scatter",
+            data.len()
+        ));
         data
     } else {
         vec![]
     };
 
-    // Scatter data from root to all processes
     let local_chunk = scatter(&scatter_data, 0, world).await?;
-
-    println!("[Rank {}] Received scattered data: {:?}", rank, local_chunk);
+    log.push(format!(
+        "[rank {rank}] received scattered data: {local_chunk:?}"
+    ));
 
     barrier(world).await?;
 
-    // Each process modifies its local data
     let modified_chunk: Vec<f64> = local_chunk.iter().map(|x| x * 2.0).collect();
-
-    println!("[Rank {}] Modified local data: {:?}", rank, modified_chunk);
-
-    // Gather all modified data back to root
     let gathered_data = gather(&modified_chunk, 0, world).await?;
 
     if world.is_root() {
-        println!(
-            "[Rank 0] Gathered {} elements from all processes",
-            gathered_data.len()
-        );
-        println!(
-            "[Rank 0] First 10 elements: {:?}",
-            &gathered_data[..10.min(gathered_data.len())]
-        );
+        log.push(format!(
+            "[rank 0] gathered {} elements: {:?}",
+            gathered_data.len(),
+            gathered_data
+        ));
     }
 
     barrier(world).await?;
-
-    if world.is_root() {
-        println!("✓ Example 2 completed\n");
-    }
-
     Ok(())
 }
 
 #[cfg(feature = "distributed")]
 async fn example3_allreduce(
     world: &Communicator,
+    log: &mut Vec<String>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     if world.is_root() {
-        println!("=== Example 3: Allreduce Operations ===");
+        log.push("=== Example 3: Allreduce Operations ===".to_string());
     }
     barrier(world).await?;
 
     let rank = world.rank();
-
-    // Each process has local data
     let local_data = vec![(rank + 1) as f64; 5];
-    println!("[Rank {}] Local data: {:?}", rank, local_data);
 
-    // Sum reduction across all processes
     let sum_result = allreduce(&local_data, ReduceOp::Sum, world).await?;
-    println!("[Rank {}] Sum result: {:?}", rank, sum_result);
-
-    // Max reduction across all processes
     let max_result = allreduce(&local_data, ReduceOp::Max, world).await?;
-    println!("[Rank {}] Max result: {:?}", rank, max_result);
-
-    // Min reduction across all processes
     let min_result = allreduce(&local_data, ReduceOp::Min, world).await?;
-    println!("[Rank {}] Min result: {:?}", rank, min_result);
+
+    log.push(format!(
+        "[rank {rank}] local={local_data:?} -> sum={sum_result:?}, max={max_result:?}, min={min_result:?}"
+    ));
 
     barrier(world).await?;
-
-    if world.is_root() {
-        println!("✓ Example 3 completed\n");
-    }
-
     Ok(())
 }
 
 #[cfg(feature = "distributed")]
 async fn example4_broadcast(
     world: &Communicator,
+    log: &mut Vec<String>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     if world.is_root() {
-        println!("=== Example 4: Broadcast Operations ===");
+        log.push("=== Example 4: Broadcast Operations ===".to_string());
     }
     barrier(world).await?;
 
     let rank = world.rank();
-
-    // Root process prepares data to broadcast
     let mut broadcast_data = if world.is_root() {
-        let data = vec![2.5, 2.71, 1.41, 1.73, 2.23];
-        println!("[Rank 0] Broadcasting data: {:?}", data);
-        data
+        vec![2.5, 2.71, 1.41, 1.73, 2.23]
     } else {
         vec![0.0; 5]
     };
 
-    // Broadcast from root to all processes
     broadcast(&mut broadcast_data, 0, world).await?;
-
-    println!(
-        "[Rank {}] Received broadcast data: {:?}",
-        rank, broadcast_data
-    );
+    log.push(format!(
+        "[rank {rank}] received broadcast: {broadcast_data:?}"
+    ));
 
     barrier(world).await?;
-
-    if world.is_root() {
-        println!("✓ Example 4 completed\n");
-    }
-
     Ok(())
 }
 
+/// Real distributed linear algebra over [`DistributedMatrix`] — the
+/// working surface `distributed_qr`/`distributed_svd`/`distributed_solve`/
+/// `block_cholesky` actually live on (the `DistributedArray`-surface
+/// functions of the same names in [`numrs2::distributed::linalg`] are
+/// permanently `NotImplemented` shims naming this replacement — see that
+/// module's docs).
 #[cfg(feature = "distributed")]
 async fn example5_distributed_linalg(
-    world: &Communicator,
+    transport: &EndpointTransport,
+    log: &mut Vec<String>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    if world.is_root() {
-        println!("=== Example 5: Distributed Linear Algebra ===");
+    let rank = transport.rank();
+    let world_size = transport.world_size();
+    if rank == 0 {
+        log.push("=== Example 5: Distributed Linear Algebra (DistributedMatrix) ===".to_string());
     }
-    barrier(world).await?;
 
-    let rank = world.rank();
-    let size = world.size();
+    // --- matmul: every rank's row-block of A, times a replicated 2*I ---
+    let rows = world_size as usize * 4;
+    let cols = 4;
+    let a_global = Array2::from_shape_fn((rows, cols), |(i, j)| (i + 2 * j + 1) as f64);
+    let two_eye = Array2::from_shape_fn((cols, cols), |(i, j)| if i == j { 2.0 } else { 0.0 });
 
-    // Each process creates part of a distributed matrix
-    let rows_per_proc = 4;
-    let cols = 8;
-    let local_matrix: Vec<f64> = (0..rows_per_proc * cols)
-        .map(|i| (rank * rows_per_proc * cols + i) as f64 * 0.1)
-        .collect();
+    let a = DistributedMatrix::from_global(Layout::RowBlock, &a_global.view(), rank, world_size)?;
+    let b = DistributedMatrix::from_global(Layout::RowBlock, &two_eye.view(), rank, world_size)?;
+    let c = matmul(&a, &b, transport).await?;
+    let matmul_ok = c
+        .local_view()
+        .iter()
+        .zip(a.local_view().iter())
+        .all(|(actual, original)| (actual - 2.0 * original).abs() < 1e-9);
+    log.push(format!(
+        "[rank {rank}] matmul: A * (2I) == 2A ? {matmul_ok}"
+    ));
 
-    println!(
-        "[Rank {}] Created local matrix chunk: {}x{}",
-        rank, rows_per_proc, cols
-    );
+    // --- distributed_qr: factor A = QR, reconstruct at root, check the residual ---
+    let (q, r) = distributed_qr(&a, transport).await?;
+    if let Some(full_q) = q.gather_to_root(transport, 0).await? {
+        let reconstructed = full_q.dot(&r);
+        let residual = (&reconstructed - &a_global)
+            .iter()
+            .map(|v| v * v)
+            .sum::<f64>()
+            .sqrt();
+        log.push(format!(
+            "[rank {rank}] distributed_qr: ||A - QR|| = {residual:.3e}"
+        ));
+    }
 
-    // Compute local statistics
-    let local_sum: f64 = local_matrix.iter().sum();
-    let local_mean = local_sum / local_matrix.len() as f64;
-
-    println!(
-        "[Rank {}] Local statistics: sum={:.2}, mean={:.4}",
-        rank, local_sum, local_mean
-    );
-
-    // Compute global statistics using allreduce
-    let global_sum_vec = allreduce(&[local_sum], ReduceOp::Sum, world).await?;
-    let global_sum = global_sum_vec[0];
-    let total_elements = (size * rows_per_proc * cols) as f64;
-    let global_mean = global_sum / total_elements;
-
-    println!(
-        "[Rank {}] Global statistics: sum={:.2}, mean={:.4}",
-        rank, global_sum, global_mean
-    );
-
-    barrier(world).await?;
-
-    if world.is_root() {
-        println!("✓ Example 5 completed\n");
+    // --- distributed_solve_spd (Cholesky): a fixed tridiagonal SPD system ---
+    let n = 4usize;
+    let spd = Array2::from_shape_fn((n, n), |(i, j)| {
+        if i == j {
+            4.0
+        } else if i.abs_diff(j) == 1 {
+            1.0
+        } else {
+            0.0
+        }
+    });
+    let rhs = vec![1.0_f64, 2.0, 3.0, 4.0];
+    let spd_dist = DistributedMatrix::from_global(
+        Layout::ColBlockCyclic { panel_width: 1 },
+        &spd.view(),
+        rank,
+        world_size,
+    )?;
+    let x = distributed_solve_spd(&spd_dist, &rhs, transport).await?;
+    if rank == 0 {
+        let residual = (0..n)
+            .map(|i| {
+                let ax_i: f64 = (0..n).map(|j| spd[[i, j]] * x[j]).sum();
+                (ax_i - rhs[i]).powi(2)
+            })
+            .sum::<f64>()
+            .sqrt();
+        log.push(format!(
+            "[rank {rank}] distributed_solve_spd: x={x:?}, ||Ax - b|| = {residual:.3e}"
+        ));
     }
 
     Ok(())
@@ -327,34 +312,27 @@ async fn example5_distributed_linalg(
 #[cfg(feature = "distributed")]
 async fn example6_error_handling(
     world: &Communicator,
+    log: &mut Vec<String>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     if world.is_root() {
-        println!("=== Example 6: Error Handling Patterns ===");
+        log.push("=== Example 6: Error Handling Patterns ===".to_string());
     }
     barrier(world).await?;
 
     let rank = world.rank();
-
-    // Example of safe operation with error handling
     let safe_data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 
     match allreduce(&safe_data, ReduceOp::Sum, world).await {
-        Ok(result) => {
-            println!("[Rank {}] Safe allreduce succeeded: {:?}", rank, result);
-        }
+        Ok(result) => log.push(format!(
+            "[rank {rank}] safe allreduce succeeded: {result:?}"
+        )),
         Err(e) => {
-            println!("[Rank {}] Error in allreduce: {:?}", rank, e);
+            log.push(format!("[rank {rank}] error in allreduce: {e:?}"));
             return Err(e.into());
         }
     }
 
     barrier(world).await?;
-
-    if world.is_root() {
-        println!("✓ Example 6 completed\n");
-        println!("All error handling patterns executed successfully");
-    }
-
     Ok(())
 }
 

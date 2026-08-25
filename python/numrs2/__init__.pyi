@@ -57,8 +57,8 @@ class Array:
         """Convert to Python list"""
         ...
 
-    def to_numpy(self, py: Any) -> NDArray[np.float64]:
-        """Convert to NumPy array"""
+    def to_numpy(self) -> NDArray[np.float64]:
+        """Convert to a NumPy array (copies once; see src/python/array.rs)"""
         ...
 
     def copy(self) -> "Array":
@@ -196,7 +196,9 @@ class stats:
     @staticmethod
     def var(a: Array, axis: Optional[int] = None, ddof: Optional[int] = None) -> float: ...
     @staticmethod
-    def corrcoef(x: Array, y: Optional[Array] = None) -> Array: ...
+    def corrcoef(
+        x: Array, y: Optional[Array] = None, rowvar: Optional[bool] = None
+    ) -> Union[float, Array]: ...
     @staticmethod
     def cov(m: Array, rowvar: Optional[bool] = True) -> Array: ...
     @staticmethod
@@ -210,10 +212,86 @@ class stats:
 class random:
     """Random number generation"""
 
+    class Generator:
+        """NumPy-style random number generator (`numpy.random.Generator`)."""
+
+        def __init__(self, seed: Optional[int] = None) -> None: ...
+        def seed(self, seed: int) -> None: ...
+        def uniform(
+            self, low: float = 0.0, high: float = 1.0, size: Optional[Sequence[int]] = None
+        ) -> Union[float, Array]: ...
+        def normal(
+            self, loc: float = 0.0, scale: float = 1.0, size: Optional[Sequence[int]] = None
+        ) -> Union[float, Array]: ...
+        def standard_normal(self, size: Optional[Sequence[int]] = None) -> Union[float, Array]: ...
+        def random(self, size: Optional[Sequence[int]] = None) -> Union[float, Array]: ...
+        def integers(
+            self, low: int, high: Optional[int] = None, size: Optional[Sequence[int]] = None
+        ) -> Union[float, Array]: ...
+        def permutation(self, x: Union[int, Array]) -> Array: ...
+        def shuffle(self, x: Array) -> None: ...
+
+    @staticmethod
+    def default_rng(seed: Optional[int] = None) -> "random.Generator": ...
     @staticmethod
     def randn(size: Sequence[int]) -> Array: ...
     @staticmethod
     def rand(size: Sequence[int]) -> Array: ...
+
+# FFT submodule
+class fft:
+    """Fast Fourier Transform operations"""
+
+    @staticmethod
+    def fft(
+        x: Array, n: Optional[int] = None, axis: Optional[int] = None, norm: Optional[str] = None
+    ) -> NDArray[np.complex128]: ...
+    @staticmethod
+    def ifft(
+        x: NDArray[np.complex128],
+        n: Optional[int] = None,
+        axis: Optional[int] = None,
+        norm: Optional[str] = None,
+    ) -> NDArray[np.complex128]: ...
+    @staticmethod
+    def rfft(
+        x: Array, n: Optional[int] = None, axis: Optional[int] = None, norm: Optional[str] = None
+    ) -> NDArray[np.complex128]: ...
+    @staticmethod
+    def irfft(
+        x: NDArray[np.complex128],
+        n: Optional[int] = None,
+        axis: Optional[int] = None,
+        norm: Optional[str] = None,
+    ) -> Array: ...
+    @staticmethod
+    def fftn(
+        x: Array,
+        s: Optional[Sequence[int]] = None,
+        axes: Optional[Sequence[int]] = None,
+        norm: Optional[str] = None,
+    ) -> NDArray[np.complex128]: ...
+    @staticmethod
+    def ifftn(
+        x: NDArray[np.complex128],
+        s: Optional[Sequence[int]] = None,
+        axes: Optional[Sequence[int]] = None,
+        norm: Optional[str] = None,
+    ) -> NDArray[np.complex128]: ...
+    @staticmethod
+    def rfftn(
+        x: Array,
+        s: Optional[Sequence[int]] = None,
+        axes: Optional[Sequence[int]] = None,
+        norm: Optional[str] = None,
+    ) -> NDArray[np.complex128]: ...
+    @staticmethod
+    def irfftn(
+        x: NDArray[np.complex128],
+        s: Optional[Sequence[int]] = None,
+        axes: Optional[Sequence[int]] = None,
+        norm: Optional[str] = None,
+    ) -> Array: ...
 
 # Optimization submodule
 class optimize:

@@ -161,11 +161,13 @@ pub(crate) fn to_power<T: Float>(c: &[T]) -> Vec<T> {
         }
         c1 = add_coefs(&tmp, &mx);
     }
-    let mut mx = mulx_power(&c1);
-    for v in mx.iter_mut() {
-        *v = *v * two;
-    }
-    add_coefs(&c0, &mx)
+    // NOTE: unlike every step inside the loop above, numpy's `cheb2poly`
+    // does NOT scale this final term by 2 (`return polyadd(c0,
+    // polymulx(c1))`, not `polymulx(c1) * 2`) -- Chebyshev is the one family
+    // here where the loop's per-step scaling and the final combination
+    // differ (Hermite's `herm2poly` scales both; Legendre/HermiteE/Laguerre
+    // scale neither).
+    add_coefs(&c0, &mulx_power(&c1))
 }
 
 pub(crate) fn from_power<T: Float>(p: &[T]) -> Vec<T> {
@@ -291,6 +293,30 @@ mod tests {
         assert_relative_eq!(d.coef()[0], 14.0, epsilon = 1e-10);
         assert_relative_eq!(d.coef()[1], 12.0, epsilon = 1e-10);
         assert_relative_eq!(d.coef()[2], 24.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn deriv_second_order_matches_numpy_chebder_m2_example() {
+        // numpy: C.chebder((1,2,3,4), 2) == [12, 96]
+        let p = Chebyshev::<f64>::from_coef(vec![1.0, 2.0, 3.0, 4.0]);
+        let d = p.deriv(2);
+        let expected = [12.0, 96.0];
+        assert_eq!(d.coef().len(), expected.len());
+        for (got, want) in d.coef().iter().zip(expected.iter()) {
+            assert_relative_eq!(got, want, epsilon = 1e-9);
+        }
+    }
+
+    #[test]
+    fn integ_with_nonzero_constant_matches_numpy_chebint_example() {
+        // numpy: C.chebint((1,2,3,4), m=1, k=[5]) == [4, -0.5, -0.5, 0.5, 0.5]
+        let p = Chebyshev::<f64>::from_coef(vec![1.0, 2.0, 3.0, 4.0]);
+        let integral = p.integ(1, &[5.0]);
+        let expected = [4.0, -0.5, -0.5, 0.5, 0.5];
+        assert_eq!(integral.coef().len(), expected.len());
+        for (got, want) in integral.coef().iter().zip(expected.iter()) {
+            assert_relative_eq!(got, want, epsilon = 1e-9);
+        }
     }
 
     #[test]

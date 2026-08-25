@@ -693,6 +693,7 @@ mod perf_verification {
     /// Min-of-N, alternating A/B timing (see `lu::perf_verification` for the
     /// rationale on interleaving under shared-machine load).
     #[test]
+    #[ignore = "wall-clock perf assertion — run with --run-ignored, load-sensitive"]
     fn bench_pivoted_cholesky_cow_vs_precow() {
         // See `lu::perf_verification` (matrix_decomp::lu module) for why
         // debug builds use a much smaller size than release.

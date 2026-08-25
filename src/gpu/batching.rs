@@ -33,6 +33,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::gpu::array::GpuArray;
 use crate::gpu::context::GpuContextRef;
+use crate::gpu::conv::Conv2dParams;
 use crate::gpu::memory::TransferOptimizer;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -225,6 +226,8 @@ struct OwnedQueuedOperation<T: bytemuck::Pod + bytemuck::Zeroable> {
     input_a: Arc<GpuArray<T>>,
     /// Second input array - stored in Arc to own the data
     input_b: Option<Arc<GpuArray<T>>>,
+    /// Convolution geometry, present only for [`OperationType::Conv2D`]
+    conv_params: Option<Conv2dParams>,
     /// Time when operation was queued
     queued_at: Instant,
     /// Priority (higher = execute sooner)
@@ -298,12 +301,44 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> BatchQueue<T> {
         self.queue_operation(OperationType::Divide, a, Some(b), 0)
     }
 
+    /// Queues a 2-D convolution
+    ///
+    /// `input` is an NCHW tensor and `weights` is
+    /// `[out_channels, in_channels, kernel_h, kernel_w]`; see
+    /// [`crate::gpu::conv::conv2d`].
+    pub fn queue_conv2d(
+        &mut self,
+        input: Arc<GpuArray<T>>,
+        weights: Arc<GpuArray<T>>,
+        params: Conv2dParams,
+    ) -> Result<()> {
+        self.queue_operation_with_params(
+            OperationType::Conv2D,
+            input,
+            Some(weights),
+            Some(params),
+            0,
+        )
+    }
+
     /// Queues an operation with specified priority
     fn queue_operation(
         &mut self,
         op_type: OperationType,
         input_a: Arc<GpuArray<T>>,
         input_b: Option<Arc<GpuArray<T>>>,
+        priority: i32,
+    ) -> Result<()> {
+        self.queue_operation_with_params(op_type, input_a, input_b, None, priority)
+    }
+
+    /// Queues an operation, carrying the extra parameters some kinds need
+    fn queue_operation_with_params(
+        &mut self,
+        op_type: OperationType,
+        input_a: Arc<GpuArray<T>>,
+        input_b: Option<Arc<GpuArray<T>>>,
+        conv_params: Option<Conv2dParams>,
         priority: i32,
     ) -> Result<()> {
         let mut state = self
@@ -320,6 +355,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> BatchQueue<T> {
             op_type,
             input_a,
             input_b,
+            conv_params,
             queued_at: Instant::now(),
             priority,
             cost,
@@ -492,9 +528,18 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> BatchQueue<T> {
                 OperationType::Log => crate::gpu::ops::log(&op.input_a)?,
                 OperationType::Sqrt => crate::gpu::ops::sqrt(&op.input_a)?,
                 OperationType::Conv2D => {
-                    return Err(NumRs2Error::NotImplemented(
-                        "Conv2D batching not yet implemented".to_string(),
-                    ))
+                    let weights = op.input_b.as_ref().ok_or_else(|| {
+                        NumRs2Error::InvalidOperation(
+                            "Conv2D requires an input tensor and a weight tensor".to_string(),
+                        )
+                    })?;
+                    let params = op.conv_params.ok_or_else(|| {
+                        NumRs2Error::InvalidOperation(
+                            "Conv2D requires convolution parameters; queue it with queue_conv2d"
+                                .to_string(),
+                        )
+                    })?;
+                    crate::gpu::conv::conv2d(&op.input_a, weights, &params)?
                 }
             };
 

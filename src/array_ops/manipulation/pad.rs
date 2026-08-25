@@ -18,10 +18,10 @@
 //!
 //! ## Supported modes
 //!
-//! * `"constant"` - pad with `constant_values` (default 0)
+//! * `"constant"` - pad with `constant_values` (default `(0, 0)`)
 //! * `"edge"` - pad with the edge values of the array
-//! * `"linear_ramp"` - linear ramp between `constant_values` (reused as the
-//!   ramp's end value, default 0) and the array edge
+//! * `"linear_ramp"` - linear ramp between `end_values` (default `(0, 0)`)
+//!   and the array edge
 //! * `"maximum"`, `"mean"`, `"median"`, `"minimum"` - pad with a statistic
 //!   computed over the *entire* axis (NumPy's `stat_length=None` default;
 //!   this implementation does not support NumPy's partial `stat_length`)
@@ -32,16 +32,13 @@
 //!   shape and the copied original data are guaranteed)
 //!
 //! `"reflect"` and `"symmetric"` default to NumPy's `reflect_type="even"`
-//! (an unaltered mirror). The `reflect_type="odd"` variant (the extended
-//! part is `2 * edge - mirrored_value`) is available via the `"reflect_odd"`
-//! and `"symmetric_odd"` mode strings, since this function's signature has
-//! no separate `reflect_type` parameter.
+//! (an unaltered mirror); pass `reflect_type = Some("odd")` for the odd
+//! variant (the extended part is `2 * edge - mirrored_value`).
 //!
-//! `constant_values` is a single scalar applied to both sides of every axis
-//! (used as the fill value for `"constant"`, and reused as the ramp end
-//! value for `"linear_ramp"`); NumPy's per-axis, per-side tuples are not
-//! supported, matching this function's pre-existing `constant_values`
-//! simplification.
+//! `constant_values` and `end_values` are each a single `(before, after)`
+//! pair applied to every axis, rather than NumPy's full per-axis tuples --
+//! the common case (including NumPy's own asymmetric `end_values=(5, -4)`
+//! example) is supported; distinct values per *axis* are not.
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
@@ -57,9 +54,7 @@ const VALID_MODES: &[&str] = &[
     "median",
     "minimum",
     "reflect",
-    "reflect_odd",
     "symmetric",
-    "symmetric_odd",
     "wrap",
     "empty",
 ];
@@ -72,11 +67,16 @@ const VALID_MODES: &[&str] = &[
 /// * `pad_width` - Number of values padded to the edges of each axis.
 ///   For each axis, provide (before, after) padding sizes.
 /// * `mode` - Padding mode; see the [module documentation](self) for the
-///   full list, including the `"reflect_odd"` / `"symmetric_odd"` spelling
-///   used to select NumPy's `reflect_type="odd"`.
-/// * `constant_values` - Used by `"constant"` (the fill value, default 0)
-///   and `"linear_ramp"` (the ramp end value, default 0). Ignored by all
-///   other modes.
+///   full list of the 11 modes `numpy.pad` supports.
+/// * `constant_values` - Used by `"constant"`: `(before, after)` fill
+///   values applied to every axis (default `(0, 0)`). Ignored by all other
+///   modes.
+/// * `end_values` - Used by `"linear_ramp"`: the `(before, after)` values
+///   the ramp extends to, applied to every axis (default `(0, 0)`,
+///   matching NumPy's `end_values=0` default). Ignored by all other modes.
+/// * `reflect_type` - Used by `"reflect"` and `"symmetric"`: `"even"`
+///   (default, an unaltered mirror) or `"odd"` (the extended part is
+///   `2 * edge - mirrored_value`). Ignored by all other modes.
 ///
 /// # Returns
 ///
@@ -89,19 +89,24 @@ const VALID_MODES: &[&str] = &[
 ///
 /// // Pad 1D array with constant value
 /// let a = Array::from_vec(vec![1, 2, 3]);
-/// let result = pad(&a, &[(2, 3)], "constant", Some(0)).expect("operation should succeed");
+/// let result =
+///     pad(&a, &[(2, 3)], "constant", Some((0, 0)), None, None).expect("operation should succeed");
 /// assert_eq!(result.to_vec(), vec![0, 0, 1, 2, 3, 0, 0, 0]);
 ///
 /// // Pad 2D array with edge values
 /// let b = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
-/// let result = pad(&b, &[(1, 1), (2, 2)], "edge", None).expect("operation should succeed");
+/// let result =
+///     pad(&b, &[(1, 1), (2, 2)], "edge", None, None, None).expect("operation should succeed");
 /// assert_eq!(result.shape(), vec![4, 6]);
 /// ```
+#[allow(clippy::too_many_arguments)]
 pub fn pad<T>(
     array: &Array<T>,
     pad_width: &[(usize, usize)],
     mode: &str,
-    constant_values: Option<T>,
+    constant_values: Option<(T, T)>,
+    end_values: Option<(T, T)>,
+    reflect_type: Option<&str>,
 ) -> Result<Array<T>>
 where
     T: Clone
@@ -123,17 +128,40 @@ where
         )));
     }
 
-    let (base_mode, reflect_odd) = match mode {
-        "reflect_odd" => ("reflect", true),
-        "symmetric_odd" => ("symmetric", true),
-        other => (other, false),
-    };
     if !VALID_MODES.contains(&mode) {
         return Err(NumRs2Error::InvalidOperation(format!(
             "Unknown pad mode: {}. Must be one of: {}",
             mode,
             VALID_MODES.join(", ")
         )));
+    }
+    // Only validate `reflect_type` when it is actually consulted below, so
+    // an irrelevant (default `None`, or leftover) value never rejects an
+    // otherwise-valid call using a different mode.
+    let reflect_odd = if mode == "reflect" || mode == "symmetric" {
+        match reflect_type {
+            None | Some("even") => false,
+            Some("odd") => true,
+            Some(other) => {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Unknown reflect_type: {}. Must be 'even' or 'odd'",
+                    other
+                )));
+            }
+        }
+    } else {
+        false
+    };
+    if mode != "constant" && mode != "empty" {
+        for (axis, &dim) in shape.iter().enumerate() {
+            let (before, after) = pad_width[axis];
+            if dim == 0 && (before > 0 || after > 0) {
+                return Err(NumRs2Error::InvalidOperation(format!(
+                    "Cannot extend empty axis {} using mode '{}'; only 'constant' and 'empty' support empty axes",
+                    axis, mode
+                )));
+            }
+        }
     }
 
     let mut new_shape = Vec::with_capacity(shape.len());
@@ -144,12 +172,7 @@ where
     let new_strides = row_major_strides(&new_shape);
     let total_size: usize = new_shape.iter().product();
 
-    let fill_value = if base_mode == "constant" {
-        constant_values.clone().unwrap_or_else(T::zero)
-    } else {
-        T::zero()
-    };
-    let mut result_data = vec![fill_value; total_size];
+    let mut result_data = vec![T::zero(); total_size];
 
     // Copy original data into the center region.
     let old_strides = row_major_strides(&shape);
@@ -164,12 +187,23 @@ where
         result_data[new_flat] = value;
     }
 
-    match base_mode {
-        "constant" | "empty" => {
-            // Already fully handled: `result_data` is either filled with
-            // the constant value (with original data copied over it) or,
-            // for "empty", left at the arbitrary initial fill -- NumPy also
-            // leaves this region's content unspecified.
+    match mode {
+        "constant" => {
+            let (before_val, after_val) = constant_values.unwrap_or_else(|| (T::zero(), T::zero()));
+            pad_constant(
+                &mut result_data,
+                &shape,
+                pad_width,
+                &new_shape,
+                &new_strides,
+                before_val,
+                after_val,
+            );
+        }
+        "empty" => {
+            // `result_data` already holds the copied original data; the
+            // padded region is left at its arbitrary initial fill -- NumPy
+            // also leaves this region's content unspecified.
         }
         "edge" => pad_edge(
             &mut result_data,
@@ -179,14 +213,15 @@ where
             &new_strides,
         ),
         "linear_ramp" => {
-            let end_value = constant_values.unwrap_or_else(T::zero);
+            let (before_end, after_end) = end_values.unwrap_or_else(|| (T::zero(), T::zero()));
             pad_linear_ramp(
                 &mut result_data,
                 &shape,
                 pad_width,
                 &new_shape,
                 &new_strides,
-                end_value,
+                before_end,
+                after_end,
             );
         }
         "maximum" | "mean" | "median" | "minimum" => pad_stat(
@@ -195,7 +230,7 @@ where
             pad_width,
             &new_shape,
             &new_strides,
-            base_mode,
+            mode,
         ),
         "reflect" | "symmetric" => pad_reflect_or_symmetric(
             &mut result_data,
@@ -203,7 +238,7 @@ where
             pad_width,
             &new_shape,
             &new_strides,
-            base_mode == "symmetric",
+            mode == "symmetric",
             reflect_odd,
         ),
         "wrap" => pad_wrap(
@@ -263,6 +298,41 @@ fn for_each_lane(shape: &[usize], axis: usize, mut f: impl FnMut(&mut [usize])) 
     }
 }
 
+/// Fill the padding region on each axis with a fixed `(before_val,
+/// after_val)` pair. Unlike the other modes, the fill value never depends
+/// on data, so -- while NumPy's own `mode="constant"` still runs through
+/// the same per-axis cascade for consistency -- the result is identical
+/// whether or not earlier axes' padding is considered "valid" yet.
+fn pad_constant<T: Clone>(
+    data: &mut [T],
+    shape: &[usize],
+    pad_width: &[(usize, usize)],
+    new_shape: &[usize],
+    new_strides: &[usize],
+    before_val: T,
+    after_val: T,
+) {
+    for axis in 0..shape.len() {
+        let (before, after) = pad_width[axis];
+        if before == 0 && after == 0 {
+            continue;
+        }
+        let orig_len = shape[axis];
+        for_each_lane(new_shape, axis, |idx| {
+            for k in 0..before {
+                idx[axis] = k;
+                let f = flat_from_index(idx, new_strides);
+                data[f] = before_val.clone();
+            }
+            for k in 0..after {
+                idx[axis] = before + orig_len + k;
+                let f = flat_from_index(idx, new_strides);
+                data[f] = after_val.clone();
+            }
+        });
+    }
+}
+
 fn pad_edge<T: Clone>(
     data: &mut [T],
     shape: &[usize],
@@ -303,7 +373,8 @@ fn pad_linear_ramp<T>(
     pad_width: &[(usize, usize)],
     new_shape: &[usize],
     new_strides: &[usize],
-    end_value: T,
+    before_end: T,
+    after_end: T,
 ) where
     T: Clone
         + Zero
@@ -330,25 +401,25 @@ fn pad_linear_ramp<T>(
             // and the point closest to the data (index width-1) is
             // `edge - step`, never `edge` itself.
             if before > 0 {
-                let step = (edge_before - end_value.clone())
+                let step = (edge_before - before_end.clone())
                     / T::from(before).expect("pad width should be representable");
                 for j in 0..before {
                     idx[axis] = j;
-                    let val = end_value.clone()
+                    let val = before_end.clone()
                         + step.clone() * T::from(j).expect("index should be representable");
                     let f = flat_from_index(idx, new_strides);
                     data[f] = val;
                 }
             }
             if after > 0 {
-                let step = (edge_after - end_value.clone())
+                let step = (edge_after - after_end.clone())
                     / T::from(after).expect("pad width should be representable");
                 // The raw ramp (end_value -> edge, endpoint excluded) is
                 // reversed so the point closest to the data comes first.
                 for k in 0..after {
                     let reversed_i = after - 1 - k;
                     idx[axis] = before + orig_len + k;
-                    let val = end_value.clone()
+                    let val = after_end.clone()
                         + step.clone()
                             * T::from(reversed_i).expect("index should be representable");
                     let f = flat_from_index(idx, new_strides);
@@ -402,6 +473,29 @@ fn compute_stat<T>(lane_vals: &[T], stat_mode: &str) -> T
 where
     T: Clone + Zero + PartialOrd + Add<Output = T> + Div<Output = T> + NumCast,
 {
+    // NumPy propagates `NaN` uniformly across every stat mode: if *any*
+    // value in the lane is `NaN`, the computed statistic is `NaN`,
+    // regardless of its position (verified against `numpy.pad(...,
+    // mode=...)` for `"maximum"`/`"minimum"`/`"mean"`/`"median"`).
+    // `"mean"` already gets this for free below (`NaN` propagates through
+    // `+`/`/` automatically); a plain `<`/`>` comparison against `NaN` is
+    // always `false`, though, so `"maximum"`/`"minimum"`'s fold -- and
+    // `"median"`'s `partial_cmp().unwrap_or(Equal)` sort -- would
+    // otherwise silently *drop* it instead (confirmed by direct testing:
+    // `"median"`'s sort only accidentally surfaces `NaN` as the result for
+    // roughly half of all position/length combinations, and
+    // `"maximum"`/`"minimum"` only when `NaN` happens to be the first
+    // element of the lane). Detected via `v.partial_cmp(v).is_none()`
+    // (`NaN` is unordered even with itself under IEEE 754, so this is
+    // `true` only for `NaN`; every other `PartialOrd` value -- including
+    // every integer `T` this generic `pad` also supports -- always
+    // compares `Some(Equal)` against itself) rather than a `Float` bound,
+    // which would break `pad`'s integer-array support for every mode, not
+    // just the stat ones.
+    if lane_vals.iter().any(|v| v.partial_cmp(v).is_none()) {
+        return T::from(f64::NAN)
+            .expect("NaN should be representable in T whenever T-typed data already contains one");
+    }
     match stat_mode {
         "maximum" => lane_vals
             .iter()
@@ -450,7 +544,7 @@ fn reflect_old_length(valid_extent: usize, axis_size: usize, include_edge: bool)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn pad_reflect_or_symmetric<T: Clone>(
+fn pad_reflect_or_symmetric<T>(
     data: &mut [T],
     shape: &[usize],
     pad_width: &[(usize, usize)],
@@ -459,7 +553,7 @@ fn pad_reflect_or_symmetric<T: Clone>(
     include_edge: bool,
     odd: bool,
 ) where
-    T: Add<Output = T> + Sub<Output = T>,
+    T: Clone + Add<Output = T> + Sub<Output = T>,
 {
     for axis in 0..shape.len() {
         let (before, after) = pad_width[axis];

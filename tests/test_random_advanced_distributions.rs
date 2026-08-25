@@ -442,18 +442,12 @@ fn test_triangular_distribution_properties() {
 
     set_seed(12345);
 
-    // Use a match to handle potential errors
-    let samples = match random::triangular(min, mode, max, &[SAMPLE_SIZE]) {
-        Ok(s) => s,
-        Err(e) => {
-            println!(
-                "Warning: Triangular distribution test skipped due to: {:?}",
-                e
-            );
-            // Return early if there's an error
-            return;
-        }
-    };
+    // `low=0.0 <= mode=2.0 <= max=10.0` are valid triangular parameters, so
+    // this must succeed -- previously a match on `Err` silently `return`ed,
+    // which made the test pass vacuously if `triangular()` ever started
+    // erroring instead of catching the regression.
+    let samples = random::triangular(min, mode, max, &[SAMPLE_SIZE])
+        .expect("triangular() should succeed for valid low <= mode <= high parameters");
 
     // Calculate statistics
     let sample_mean = calculate_mean(&samples);

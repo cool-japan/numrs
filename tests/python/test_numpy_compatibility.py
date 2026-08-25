@@ -41,7 +41,7 @@ def test_create_from_numpy_2d():
 def test_convert_to_numpy():
     """Test converting NumRS2 array to NumPy"""
     nr_arr = nr.array([1.0, 2.0, 3.0, 4.0, 5.0])
-    np_arr = nr_arr.to_numpy(None)
+    np_arr = nr_arr.to_numpy()
 
     assert isinstance(np_arr, np.ndarray)
     assert len(np_arr) == nr_arr.size
@@ -51,7 +51,7 @@ def test_numpy_roundtrip():
     """Test NumPy roundtrip conversion"""
     original = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
     nr_arr = nr.array(original)
-    back_to_numpy = nr_arr.to_numpy(None)
+    back_to_numpy = nr_arr.to_numpy()
 
     assert np.allclose(original, back_to_numpy)
 

@@ -340,17 +340,99 @@ mod scirs_tests {
 
     #[test]
     #[serial]
-    #[ignore = "Flaky test - noncentral F has high variance, needs larger sample size or better implementation"]
     fn test_noncentral_f_against_reference() {
+        // Was `#[ignore]`d as "Flaky test - noncentral F has high variance,
+        // needs larger sample size or better implementation". It was
+        // already seeded (`random::set_seed` below, unchanged), so the
+        // flakiness was never about non-determinism -- it was that
+        // `assert_stats_close`'s tolerances (calibrated for low-variance
+        // distributions) were far too tight for THIS specific distribution.
+        //
+        // noncentral F(dfnum=2, dfden=5, nonc=1) has:
+        //   mean = dfden*(dfnum+nonc) / (dfnum*(dfden-2)) = 5*3/(2*3) = 2.5
+        //   var  = 2*(dfden/dfnum)^2 * [(dfnum+nonc)^2 + (dfnum+2*nonc)*(dfden-2)]
+        //          / [(dfden-2)^2*(dfden-4)]
+        //        = 2*6.25*(9+12)/9 ~= 29.17  (std ~= 5.4)
+        // (the variance formula collapses to the standard central-F variance
+        // at nonc=0, which is how it was checked). With BOTH this run and
+        // the fixed reference draw independently sampling that distribution
+        // at similar N, the combined standard error on the *mean* is
+        // sqrt(2) * 5.4/sqrt(N) ~= 0.076 at N=10,000 -- so the previous
+        // `EPSILON` (0.1) absolute tolerance on the mean was under 1.5
+        // combined-sigma, i.e. a real coin flip, nothing to do with sample
+        // size or "a better implementation".
+        //
+        // dfden=5 additionally means `E[X^4]` does not exist (the F
+        // distribution's k-th moment needs dfden > 2k), so the sample
+        // *variance*'s own sampling distribution is heavy-tailed with no
+        // finite-CLT-variance guarantee, and extreme order statistics
+        // (min/max of thousands of draws) are correspondingly unstable --
+        // no fixed tolerance makes those a reproducible cross-implementation
+        // check. So, unlike every other distribution in this file, this
+        // test does not route through the shared `assert_stats_close`
+        // (min/max included): it compares mean and median, both of which
+        // *do* have well-behaved finite-variance sampling distributions
+        // here, against tolerances sized off the derivation above, plus a
+        // wide sanity band on variance, and does not compare min/max.
         let ref_data = load_reference_data();
 
         random::set_seed(12345);
 
-        let samples = noncentral_f(2.0, 5.0, 1.0, &[SAMPLE_SIZE]).unwrap();
+        // Raised from the shared `SAMPLE_SIZE` (10,000, used by every other
+        // test in this file and matched to the reference JSON's own N) to a
+        // *local* N: mean/median tolerance only needs to hold for this one
+        // test, and raising this test's own N shrinks its contribution to
+        // the combined standard error above (the fixed reference draw's own
+        // noise floor cannot be reduced this way, which is exactly why the
+        // tolerance below is generous rather than tight).
+        const N: usize = 30_000;
+        let samples = noncentral_f(2.0, 5.0, 1.0, &[N]).unwrap();
         let samples_vec = samples.to_vec();
         let rs_stats = calculate_basic_stats(&samples_vec);
 
-        assert_stats_close(&rs_stats, &ref_data["noncentral_f"], "Noncentral F");
+        let ref_stats = &ref_data["noncentral_f"];
+        let ref_mean = ref_stats["mean"].as_f64().expect("mean should be a number");
+        let ref_median = ref_stats["median"]
+            .as_f64()
+            .expect("median should be a number");
+        let ref_variance = ref_stats["variance"]
+            .as_f64()
+            .expect("variance should be a number");
+
+        // ~0.5 is comfortably wide relative to the ~0.076 combined standard
+        // error derived above (>6 combined-sigma), while still catching a
+        // grossly wrong mean (e.g. a sign error or swapped parameters).
+        const MEAN_TOLERANCE: f64 = 0.5;
+        assert!(
+            (rs_stats["mean"] - ref_mean).abs() < MEAN_TOLERANCE,
+            "Noncentral F mean: NumRS2 = {}, NumPy = {}, diff = {}",
+            rs_stats["mean"],
+            ref_mean,
+            (rs_stats["mean"] - ref_mean).abs()
+        );
+
+        const MEDIAN_TOLERANCE: f64 = 0.5;
+        assert!(
+            (rs_stats["median"] - ref_median).abs() < MEDIAN_TOLERANCE,
+            "Noncentral F median: NumRS2 = {}, NumPy = {}, diff = {}",
+            rs_stats["median"],
+            ref_median,
+            (rs_stats["median"] - ref_median).abs()
+        );
+
+        // Wide sanity band only (order-of-magnitude), not a precision check
+        // -- see the `E[X^4]` note above for why the sample variance itself
+        // cannot be pinned tightly here.
+        let variance_low = ref_variance * 0.25;
+        let variance_high = ref_variance * 4.0;
+        assert!(
+            rs_stats["variance"] > variance_low && rs_stats["variance"] < variance_high,
+            "Noncentral F variance: NumRS2 = {}, NumPy = {}, expected within [{}, {}]",
+            rs_stats["variance"],
+            ref_variance,
+            variance_low,
+            variance_high
+        );
     }
 
     #[test]

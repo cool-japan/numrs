@@ -244,10 +244,12 @@ fn test_simd_matmul_f32() {
     assert!((c[[1, 1]] - 50.0).abs() < EPSILON_F32);
 }
 
-// Temporarily ignored due to upstream issue in scirs2-core-0.1.5/src/simd/dot.rs:1167
-// TODO: Re-enable when scirs2-core SIMD f64 matmul issue is resolved
+// Was `#[ignore]`d for an upstream issue in scirs2-core-0.1.5's
+// src/simd/dot.rs:1167. Retested this wave (W6-TESTS): the matmul backend
+// moved to `matrixmultiply` this release and scirs2_core has been bumped
+// well past 0.1.5, and this 2x2 case now passes -- see the report for the
+// nextest run this was verified against. Un-ignored.
 #[test]
-#[ignore]
 fn test_simd_matmul_f64() {
     let a = array![[1.0f64, 2.0], [3.0, 4.0]];
     let b = array![[5.0f64, 6.0], [7.0, 8.0]];

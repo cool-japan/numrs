@@ -38,9 +38,14 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
 
     /// Creates a new GPU array from a CPU array with the specified context
     pub fn from_array_with_context(array: &Array<T>, context: GpuContextRef) -> Result<Self> {
+        // `to_vec` walks the CPU array in logical order, so the GPU buffer is
+        // always C-contiguous regardless of the source layout. The strides
+        // recorded here therefore describe the *uploaded* buffer, in elements,
+        // matching `new_with_shape` and `reshape` (and this type's `strides`
+        // documentation) rather than the source array's memory layout.
         let data = array.to_vec();
         let shape = array.shape().to_vec();
-        let strides = array.byte_strides();
+        let strides = crate::gpu::kernel::contiguous_strides(&shape);
         let size = array.size();
         let element_size = std::mem::size_of::<T>();
 
@@ -70,10 +75,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         let buffer_size = (size * element_size) as u64;
 
         // Create strides (row-major layout)
-        let mut strides = vec![1; shape.len()];
-        for i in (0..shape.len() - 1).rev() {
-            strides[i] = strides[i + 1] * shape[i + 1];
-        }
+        let strides = crate::gpu::kernel::contiguous_strides(shape);
 
         // Create an empty buffer
         let buffer = context.create_empty_buffer(
@@ -241,10 +243,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         }
 
         // Calculate new strides (row-major layout)
-        let mut strides = vec![1; new_shape.len()];
-        for i in (0..new_shape.len().saturating_sub(1)).rev() {
-            strides[i] = strides[i + 1] * new_shape[i + 1];
-        }
+        let strides = crate::gpu::kernel::contiguous_strides(new_shape);
 
         Ok(Self {
             context: self.context.clone(),
