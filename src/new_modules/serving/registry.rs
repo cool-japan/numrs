@@ -3,7 +3,6 @@
 //! Multi-model management system with versioning, A/B testing, and hot model reloading.
 
 use super::{Model, Result, ServingError};
-use crate::array::Array;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -74,6 +73,14 @@ impl ModelMetadata {
 
 /// Model version entry
 struct ModelVersion {
+    /// Registry is currently metadata-only: `get()` below is a permanent
+    /// stub (lock-lifetime issues prevent handing out a reference without
+    /// wrapping storage in `Arc<RwLock<_>>>`, which hasn't been done) and the
+    /// "invoke methods" its error message points to don't exist yet, so
+    /// nothing ever reads this field back out. Kept (not deleted) because
+    /// removing it would change `register()`'s behavior: the boxed model
+    /// would be dropped immediately instead of retained.
+    #[allow(dead_code)]
     model: Box<dyn Model>,
     metadata: ModelMetadata,
 }
@@ -230,14 +237,17 @@ impl ModelRegistry {
                 message: "Failed to acquire models read lock".to_string(),
             })?;
 
-        let versions = models
+        // Not yet consulted below -- see `ModelVersion::model`'s doc comment;
+        // `get()` returns its stub error unconditionally instead of using
+        // these to validate the requested name/version actually exists.
+        let _versions = models
             .get(name)
             .ok_or_else(|| ServingError::ModelNotFound {
                 model_name: name.to_string(),
                 version: version.map(String::from),
             })?;
 
-        let version_str = if let Some(v) = version {
+        let _version_str = if let Some(v) = version {
             v.to_string()
         } else {
             let default_versions =
@@ -504,18 +514,21 @@ impl Default for ModelRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::array::Array;
 
     // Mock model for testing
     struct MockModel {
         name: String,
-        version: String,
     }
 
     impl MockModel {
-        fn new(name: &str, version: &str) -> Self {
+        // `version` is accepted for call-site readability (tests name their
+        // mocks "v1.0"/"v2.0" to match the version string passed separately
+        // to `registry.register`) but the `Model` trait never asks a model
+        // for its own version, so it isn't stored.
+        fn new(name: &str, _version: &str) -> Self {
             Self {
                 name: name.to_string(),
-                version: version.to_string(),
             }
         }
     }

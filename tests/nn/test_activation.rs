@@ -1,6 +1,6 @@
 /// Tests for activation functions
 use numrs2::nn::activation::*;
-use scirs2_core::ndarray::{array, Array1, Array2};
+use scirs2_core::ndarray::{array, Array1};
 
 const EPSILON: f64 = 1e-6;
 

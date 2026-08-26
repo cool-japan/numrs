@@ -13,8 +13,13 @@
 //! - std_f64: Standard deviation
 //! - mean_f64: Mean
 
-use super::{EnhancedSimdOps, AVX2_F32_LANES, AVX2_F64_LANES};
+use super::EnhancedSimdOps;
+// See `arithmetic.rs` for why these are gated the same as the intrinsics.
+#[cfg(target_arch = "x86_64")]
+use super::{AVX2_F32_LANES, AVX2_F64_LANES};
+#[cfg(target_arch = "x86_64")]
 use crate::array::Array;
+#[cfg(target_arch = "x86_64")]
 use crate::error::Result;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;

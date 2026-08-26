@@ -73,16 +73,25 @@ impl ThreadLocalState {
         }
     }
 
+    /// Take a cached block back out of the per-thread cache.
+    ///
+    /// Matching is *exact* on both size and alignment, not "big enough".
+    /// A cached block carries the layout it will eventually be freed with,
+    /// and handing a 128-byte block out for a 64-byte request means the next
+    /// `deallocate` re-caches that same pointer as a 64-byte block -- so the
+    /// final `dealloc` would name a layout that never matched the real
+    /// allocation, which is undefined behaviour. Exact matching keeps every
+    /// `CachedBlock::layout` equal to the layout its pointer was actually
+    /// allocated with, which is what makes the `Drop` impls below sound.
+    /// Requests that differ only in alignment below the base allocator's
+    /// preference simply miss the cache; that costs a fresh allocation, and
+    /// nothing more.
     fn try_allocate_from_cache(&mut self, layout: Layout) -> Option<NonNull<u8>> {
-        // Find a cached block that fits
-        for (i, block) in self.cached_blocks.iter().enumerate() {
-            if block.layout.size() >= layout.size() && block.layout.align() >= layout.align() {
-                let ptr = block.ptr;
-                self.cached_blocks.remove(i);
-                return Some(ptr);
-            }
-        }
-        None
+        let index = self
+            .cached_blocks
+            .iter()
+            .position(|block| block.layout == layout)?;
+        Some(self.cached_blocks.remove(index).ptr)
     }
 
     fn cache_block(&mut self, ptr: NonNull<u8>, layout: Layout) {
@@ -118,6 +127,41 @@ impl ThreadLocalState {
 
     fn should_gc(&self, gc_interval: Duration) -> bool {
         self.last_gc.elapsed() > gc_interval
+    }
+}
+
+impl Drop for ThreadLocalState {
+    /// Return every still-cached block to the base allocator.
+    ///
+    /// `cached_blocks` holds raw allocations that the cache deliberately did
+    /// *not* free when the owner deallocated them, so that a later request of
+    /// the same layout could reuse them. Nothing else owns those pointers:
+    /// once this state goes away -- with the owning [`ParallelAllocator`], or
+    /// at thread exit for the `LOCAL_ALLOCATOR` thread-local -- the addresses
+    /// are gone and the memory is unreachable. Without this impl every block
+    /// left warm in a cache at teardown is a genuine leak, which is what Miri
+    /// reported for all nine `parallel_allocator` tests.
+    ///
+    /// Frees through `self.allocator`, the state's own allocator handle, and
+    /// not through some outer allocator. That is required, not stylistic: in
+    /// `ParallelAllocator` the `base_allocator` field is declared *before*
+    /// `thread_allocators`, so it is already dropped by the time the map
+    /// releases the last `Arc` to a state and this impl runs. It is also the
+    /// only correct handle for the `LOCAL_ALLOCATOR` thread-local, whose
+    /// blocks come from `state.allocator` in the first place.
+    fn drop(&mut self) {
+        for block in self.cached_blocks.drain(..) {
+            // SAFETY: `block.ptr` came from `self.allocator` (the cache is
+            // only ever filled by `cache_block`, whose callers just received
+            // the pointer from this same allocator), `block.layout` is the
+            // exact layout it was allocated with -- `try_allocate_from_cache`
+            // matches layouts exactly, so a cached layout can never drift
+            // away from its allocation -- and draining the vector means no
+            // other copy of the pointer survives to be freed twice.
+            unsafe {
+                let _ = self.allocator.deallocate(block.ptr, block.layout);
+            }
+        }
     }
 }
 
@@ -218,6 +262,13 @@ where
     }
 
     /// Try to allocate from global pool
+    ///
+    /// Matches layouts exactly, for the same reason
+    /// [`ThreadLocalState::try_allocate_from_cache`] does: a pooled block is
+    /// eventually freed with the layout recorded alongside it, so handing an
+    /// oversized block to a smaller request would let that recorded layout
+    /// shrink below the real allocation and turn the eventual `dealloc` into
+    /// undefined behaviour.
     fn try_allocate_from_global_pool(&self, layout: Layout) -> Option<NonNull<u8>> {
         if !self.config.enable_thread_local_cache {
             return None;
@@ -228,14 +279,8 @@ where
             .lock()
             .expect("lock should not be poisoned");
 
-        for (i, block) in pool.iter().enumerate() {
-            if block.layout.size() >= layout.size() && block.layout.align() >= layout.align() {
-                let ptr = block.ptr;
-                pool.remove(i);
-                return Some(ptr);
-            }
-        }
-        None
+        let index = pool.iter().position(|block| block.layout == layout)?;
+        Some(pool.remove(index).ptr)
     }
 
     /// Return block to global pool
@@ -351,20 +396,53 @@ where
         total
     }
 
+    /// Give every block in `blocks` back to the base allocator, keeping any
+    /// block whose deallocation failed and reporting the first failure
+    /// through `first_error`.
+    ///
+    /// Deliberately not `for block in blocks.drain(..) { ...? }`. Returning
+    /// early out of a `Drain` loop still *completes* the drain when the
+    /// iterator is dropped, so every block the loop had not reached yet would
+    /// be removed from the vector and never freed -- and unreachable
+    /// afterwards, because the `CachedBlock` records the teardown `Drop`
+    /// impls would have used are gone with it. `retain` drops a record only
+    /// once its memory is genuinely back with the allocator, so a failure
+    /// leaves the remaining blocks cached and still owned.
+    fn release_blocks(&self, blocks: &mut Vec<CachedBlock>, first_error: &mut Option<NumRs2Error>) {
+        blocks.retain(|block| {
+            // SAFETY: every cached block was handed to the cache straight
+            // from this allocator's `allocate`, paired with the layout it was
+            // allocated under; layout matching in `try_allocate_from_cache`
+            // and `try_allocate_from_global_pool` is exact, so a cached
+            // layout can never drift away from its allocation. A block is
+            // removed from the vector only on success, so no pointer is
+            // offered for freeing twice.
+            match unsafe { self.base_allocator.deallocate(block.ptr, block.layout) } {
+                Ok(()) => false,
+                Err(err) => {
+                    if first_error.is_none() {
+                        *first_error = Some(err);
+                    }
+                    true
+                }
+            }
+        });
+    }
+
     /// Force cleanup of all cached memory
     pub fn force_cleanup(&self) -> Result<()> {
-        // Clean thread-local caches
-        let allocators = self
-            .thread_allocators
-            .lock()
-            .expect("lock should not be poisoned");
+        let mut first_error: Option<NumRs2Error> = None;
 
-        for state in allocators.values() {
-            if let Ok(mut local_state) = state.try_lock() {
-                for block in local_state.cached_blocks.drain(..) {
-                    unsafe {
-                        self.base_allocator.deallocate(block.ptr, block.layout)?;
-                    }
+        // Clean thread-local caches
+        {
+            let allocators = self
+                .thread_allocators
+                .lock()
+                .expect("lock should not be poisoned");
+
+            for state in allocators.values() {
+                if let Ok(mut local_state) = state.try_lock() {
+                    self.release_blocks(&mut local_state.cached_blocks, &mut first_error);
                 }
             }
         }
@@ -375,14 +453,63 @@ where
                 .global_pool
                 .lock()
                 .expect("lock should not be poisoned");
-            for block in pool.drain(..) {
-                unsafe {
-                    self.base_allocator.deallocate(block.ptr, block.layout)?;
-                }
-            }
+            self.release_blocks(&mut pool, &mut first_error);
         }
 
-        Ok(())
+        match first_error {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
+    }
+}
+
+impl<A> Drop for ParallelAllocator<A>
+where
+    A: MemoryAllocator<Error = NumRs2Error> + Send + Sync + Clone,
+{
+    /// Return the shared pool's still-cached blocks to the base allocator.
+    ///
+    /// Like the per-thread caches, `global_pool` holds raw allocations that
+    /// `return_to_global_pool` deliberately kept alive for reuse; dropping
+    /// the `Vec` frees the `CachedBlock` records but not the memory they
+    /// point at. The per-thread caches need no handling here: dropping
+    /// `thread_allocators` drops the last `Arc` to each `ThreadLocalState`,
+    /// and that type's own `Drop` frees its blocks through its own clone of
+    /// the base allocator.
+    ///
+    /// Using `self.base_allocator` is safe here specifically because
+    /// `Drop::drop` runs before *any* field is dropped; the per-thread states
+    /// cannot rely on it (see `ThreadLocalState`'s own `Drop`) because they
+    /// are released later, after `base_allocator` is gone.
+    ///
+    /// A block that fails to deallocate is dropped from the pool and leaks
+    /// exactly itself -- there is no `?` here, so one failure cannot strand
+    /// the blocks behind it, which is the hazard
+    /// `ParallelAllocator::release_blocks` exists to avoid on the
+    /// `force_cleanup` path.
+    ///
+    /// The bounds are written to match the struct declaration exactly, as
+    /// `Drop` impls must (no `'static`, unlike the inherent impls below).
+    fn drop(&mut self) {
+        let Ok(mut pool) = self.global_pool.lock() else {
+            // A poisoned pool lock means some thread panicked mid-update and
+            // the `Vec` may not describe the live blocks any more. Freeing
+            // from it could double-free, which is far worse than leaking, so
+            // leave the memory alone.
+            return;
+        };
+
+        for block in pool.drain(..) {
+            // SAFETY: every block in the pool was placed there by
+            // `return_to_global_pool` with the pointer and layout it had just
+            // received from `self.base_allocator`, and layout matching in
+            // `try_allocate_from_global_pool` is exact, so `block.layout` is
+            // still the allocation's true layout. Draining consumes each
+            // record, so no surviving copy can free the same pointer again.
+            unsafe {
+                let _ = self.base_allocator.deallocate(block.ptr, block.layout);
+            }
+        }
     }
 }
 

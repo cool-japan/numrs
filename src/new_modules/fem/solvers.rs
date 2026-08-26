@@ -9,9 +9,7 @@ use super::boundary::{
     apply_boundary_conditions, validate_boundary_conditions, BoundaryCondition,
     BoundaryConditionSet, DirichletBc,
 };
-use super::elements::{
-    compute_jacobian, matrix_inverse, ElementType, GaussQuadrature, ShapeFunction,
-};
+use super::elements::{compute_jacobian, matrix_inverse, ElementType, ShapeFunction};
 use super::mesh::Mesh;
 use super::{FemError, FemResult, PlaneStress2D};
 

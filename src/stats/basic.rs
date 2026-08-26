@@ -27,9 +27,9 @@ pub trait Statistics<T> {
     fn percentile(&self, q: T) -> T;
 }
 
-/// `mean`/`var`/`std`/`min`/`max` dispatch through [`crate::kernels::reduce`] (via
-/// [`crate::kernels::borrow::operand`] for a zero-copy-when-possible slice, and
-/// [`crate::kernels::cast`] to reinterpret it as `&[f64]`/`&[f32]` when `T` concretely is
+/// `mean`/`var`/`std`/`min`/`max` dispatch through `crate::kernels::reduce` (via
+/// `crate::kernels::borrow::operand` for a zero-copy-when-possible slice, and
+/// `crate::kernels::cast` to reinterpret it as `&[f64]`/`&[f32]` when `T` concretely is
 /// one of those) for any array length, replacing the old scheme where only `T == f64` and
 /// only `len() >= 64` got a SIMD fast path (`len() < 64`, and every `f32` array regardless
 /// of length, silently fell back to a plain sequential/parallel fold). Any other `T` keeps
@@ -46,13 +46,13 @@ pub trait Statistics<T> {
 /// *sample* variance/stddev (divisor `n - 1`) -- silently wrong for any f64 array of at
 /// least 64 elements, and simply undetected by the `n == 10` regression test above since
 /// `10 < 64` never reached that branch. Fixed here by building variance as
-/// `sum_sq_dev / n` -- via the fused [`reduce::var_f64`]/[`reduce::var_f32`] kernels, which
-/// take `ddof` explicitly -- per [`reduce`]'s own module docs ("never use them"):
+/// `sum_sq_dev / n` -- via the fused `reduce::var_f64`/`reduce::var_f32` kernels, which
+/// take `ddof` explicitly -- per `reduce`'s own module docs ("never use them"):
 /// `simd_variance`/`simd_std` must not be called from here or anywhere else in this crate.
 ///
 /// # `min`/`max`: `NaN` propagates, matching NumPy
 ///
-/// [`reduce::min_f64`]/[`reduce::max_f64`] (and the `f32` twins) implement NumPy's
+/// `reduce::min_f64`/`reduce::max_f64` (and the `f32` twins) implement NumPy's
 /// `np.min`/`np.max` rule: **any `NaN` anywhere in the array makes the result `NaN`**,
 /// whatever the dtype, length or `NaN` position. The generic-`T` tail below implements the
 /// same rule, so this trait has exactly one `min`/`max` `NaN` convention -- as does the rest
@@ -64,7 +64,7 @@ pub trait Statistics<T> {
 /// `simd_max_element` wrapper's placement- and length-dependent behavior. The latter was not
 /// merely an unusual convention -- it was found to return a **wrong, finite value** (the true
 /// maximum silently dropped, neither the extremum nor `NaN`) for some `NaN` placements, which
-/// is why `kernels::reduce` no longer calls it at all. See [`reduce`]'s module docs for the
+/// is why `kernels::reduce` no longer calls it at all. See `reduce`'s module docs for the
 /// full finding and `simd_max_element_upstream_wrong_value_is_a_live_bug_not_just_new_nan_convention`
 /// below, which calls the upstream function directly and pins the bad value as a tripwire for
 /// an upstream fix. That test watches `scirs2-core`, not this crate; nothing in `numrs2`

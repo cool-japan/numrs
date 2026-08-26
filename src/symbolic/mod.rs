@@ -89,7 +89,3 @@ pub use linalg::{
     SymbolicMatrix,
 };
 pub use simplify::{expand, simplify};
-
-// Re-export commonly used types
-use crate::error::{NumRs2Error, Result};
-use std::collections::HashMap;

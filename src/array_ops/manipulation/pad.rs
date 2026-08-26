@@ -66,7 +66,7 @@ const VALID_MODES: &[&str] = &[
 /// * `array` - Array to be padded
 /// * `pad_width` - Number of values padded to the edges of each axis.
 ///   For each axis, provide (before, after) padding sizes.
-/// * `mode` - Padding mode; see the [module documentation](self) for the
+/// * `mode` - Padding mode; see the module documentation for the
 ///   full list of the 11 modes `numpy.pad` supports.
 /// * `constant_values` - Used by `"constant"`: `(before, after)` fill
 ///   values applied to every axis (default `(0, 0)`). Ignored by all other

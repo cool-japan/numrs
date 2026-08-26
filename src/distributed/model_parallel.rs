@@ -62,7 +62,6 @@ use super::communication::CommunicationError;
 use super::coordinator::CoordinatorError;
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -226,7 +225,7 @@ impl<T: Clone> Microbatch<T> {
 /// activations regardless of what order other microbatches for the same
 /// stage-pair arrive in, rather than being limited to strict FIFO receipt
 /// (the "irecv-style" point-to-point the task calls for). See
-/// [`pipeline_tag`] for the exact bit layout, and [`super::optimization`]'s
+/// `pipeline_tag` for the exact bit layout, and [`super::optimization`]'s
 /// module docs for the crate-wide convention keeping every tag range in this
 /// file disjoint from collectives (`0x1..0xA`), the latency/bandwidth probes
 /// (`0xD`/`0xE`), and [`super::communication::AsyncCommunicator`]'s
@@ -270,7 +269,7 @@ fn decode_tensor(bytes: &[u8]) -> Result<Vec<f32>, ModelParallelError> {
 /// [`Self::send_forward`]/[`Self::recv_forward`]/[`Self::send_backward`]/
 /// [`Self::recv_backward`] are real point-to-point transfers over
 /// `communicator`'s shared [`super::net::endpoint::Endpoint`], each under a
-/// tag computed by [`pipeline_tag`] that is unique to its
+/// tag computed by `pipeline_tag` that is unique to its
 /// `(direction, originating stage, microbatch_id)` — see that function's
 /// docs. `recv_forward`/`recv_backward` wait on
 /// [`super::net::endpoint::Endpoint::recv_bytes`] for the exact microbatch
@@ -294,6 +293,12 @@ pub struct PipelineParallel {
     num_microbatches: usize,
 
     /// Pipeline schedule
+    // Always `PipelineSchedule::GPipe` today (see `new`) and never read back:
+    // `send_forward`/`recv_forward`/etc. don't branch on it, so both this
+    // field and `PipelineSchedule::OneFOneB` document an intended future
+    // scheduling knob rather than dead leftovers. Real 1F1B interleaving is
+    // a scheduling-behavior change, out of scope for a lint-only pass.
+    #[allow(dead_code)]
     schedule: PipelineSchedule,
 }
 
@@ -303,6 +308,10 @@ enum PipelineSchedule {
     GPipe,
 
     /// PipeDream: interleaved 1F1B (one forward, one backward)
+    // Never constructed: `PipelineParallel::new` always picks `GPipe` (see
+    // the `schedule` field's own comment). Kept named and documented as the
+    // scheduling mode a real 1F1B implementation would select.
+    #[allow(dead_code)]
     OneFOneB,
 }
 
@@ -382,7 +391,7 @@ impl PipelineParallel {
     }
 
     /// Receive forward activations from previous stage: waits for
-    /// specifically `microbatch_id`'s activations (see [`pipeline_tag`]),
+    /// specifically `microbatch_id`'s activations (see `pipeline_tag`),
     /// not merely the next message to arrive from that stage.
     pub async fn recv_forward(&self, microbatch_id: usize) -> Result<Vec<f32>, ModelParallelError> {
         if let Some(prev_stage) = self.stage.prev_stage {
@@ -432,7 +441,7 @@ impl PipelineParallel {
     }
 
     /// Receive backward gradients from next stage: waits for specifically
-    /// `microbatch_id`'s gradients (see [`pipeline_tag`]), not merely the
+    /// `microbatch_id`'s gradients (see `pipeline_tag`), not merely the
     /// next message to arrive from that stage.
     pub async fn recv_backward(
         &self,

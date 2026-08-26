@@ -28,7 +28,7 @@
 //! - [`unwrap`] - Unwrap phase angles by changing deltas to 2pi complements
 
 use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
 use num_traits::{Float, NumCast, One, Zero};
 use scirs2_core::Complex;
 use std::ops::Add;
@@ -735,66 +735,4 @@ pub fn unwrap<T: Float + Clone>(phase_array: &Array<T>) -> Array<T> {
     }
 
     Array::from_vec(result)
-}
-
-/// Return coordinate matrices from coordinate vectors (internal helper)
-///
-/// This function is similar to mgrid but takes owned references.
-#[allow(dead_code)]
-fn mgrid_owned<T: Clone + NumCast + Zero>(ranges: &[Array<T>]) -> Result<Vec<Array<T>>> {
-    if ranges.is_empty() {
-        return Ok(vec![]);
-    }
-
-    // Calculate the output shape
-    let mut shape = Vec::with_capacity(ranges.len());
-    for range in ranges {
-        shape.push(range.size());
-    }
-
-    // Create the output arrays
-    let mut output = Vec::with_capacity(ranges.len());
-    for _ in 0..ranges.len() {
-        output.push(Array::zeros(&shape));
-    }
-
-    // Fill the output arrays
-    // This is a simplified implementation, a more efficient one would use
-    // broadcasting and reshaping operations
-    let total_size: usize = shape.iter().product();
-
-    for i in 0..total_size {
-        let mut indices = Vec::with_capacity(shape.len());
-        let mut temp = i;
-
-        for j in (1..shape.len()).rev() {
-            let prod: usize = shape[j..].iter().product();
-            indices.insert(0, temp / prod);
-            temp %= prod;
-        }
-        indices.insert(0, temp);
-
-        for dim in 0..ranges.len() {
-            // Get the flat index for the current output array
-            let mut flat_idx = 0;
-            let mut stride = 1;
-
-            for j in (0..shape.len()).rev() {
-                flat_idx += indices[j] * stride;
-                stride *= shape[j];
-            }
-
-            // Set the value from the corresponding range
-            let range_val = ranges[dim].to_vec()[indices[dim]].clone();
-            let output_array = &mut output[dim];
-            let mut_data = output_array.array_mut();
-
-            // This is a simplification; in a real implementation we'd use
-            // ndarray's mutable indexing
-            let flat_data = mut_data.as_slice_mut().expect("array should be contiguous");
-            flat_data[flat_idx] = range_val;
-        }
-    }
-
-    Ok(output)
 }

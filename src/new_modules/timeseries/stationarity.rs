@@ -70,15 +70,6 @@ impl TrendType {
             TrendType::ConstantTrend => 2,
         }
     }
-
-    /// String code for this trend type.
-    fn code(&self) -> &'static str {
-        match self {
-            TrendType::None => "nc",
-            TrendType::Constant => "c",
-            TrendType::ConstantTrend => "ct",
-        }
-    }
 }
 
 /// Lag selection method for ADF test.
@@ -344,7 +335,6 @@ fn adf_regression(
     lags: usize,
     trend: TrendType,
 ) -> Result<OlsResult> {
-    let n = data.len();
     let n_obs = diff.len() - lags; // effective sample size
 
     if n_obs < 3 {
@@ -867,7 +857,6 @@ pub fn phillips_perron_test(
         })?;
 
     let mxx_rho = xtx_inv[[rho_idx, rho_idx]]; // diagonal element for rho
-    let sum_y2: f64 = (0..n_obs).map(|i| data[i] * data[i]).sum();
 
     // DF t-statistic
     let t_rho = (rho_hat - 1.0) / se_rho;
@@ -1166,7 +1155,7 @@ pub fn integration_order(
 mod tests {
     use super::*;
     use scirs2_core::ndarray::Array1;
-    use scirs2_core::random::{Rng, SeedableRng, StdRng};
+    use scirs2_core::random::{SeedableRng, StdRng};
     use std::str::FromStr;
 
     /// Generate a white noise series (stationary).

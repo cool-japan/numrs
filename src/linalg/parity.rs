@@ -37,9 +37,9 @@ use std::fmt::Debug;
 /// use numrs2::prelude::*;
 /// use numrs2::linalg::multi_dot;
 ///
-/// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let b = Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
-/// let c = Array::from_vec(vec![1.0, 0.0, 0.0, 1.0]).reshape(&[2, 2]);
+/// let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
+/// let b = Array::<f64>::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]);
+/// let c = Array::<f64>::from_vec(vec![1.0, 0.0, 0.0, 1.0]).reshape(&[2, 2]);
 /// let result = multi_dot(&[&a, &b, &c]).expect("multi_dot should succeed");
 /// let expected = a.matmul(&b).expect("matmul").matmul(&c).expect("matmul");
 /// assert_eq!(result.shape(), expected.shape());
@@ -53,7 +53,7 @@ use std::fmt::Debug;
 /// }
 ///
 /// // A 1-D first argument is a row vector, squeezed back out of the result.
-/// let v = Array::from_vec(vec![1.0, 1.0]);
+/// let v = Array::<f64>::from_vec(vec![1.0, 1.0]);
 /// let r = multi_dot(&[&v, &a, &b]).expect("multi_dot should succeed");
 /// assert_eq!(r.shape(), vec![2]);
 /// ```
@@ -251,8 +251,8 @@ where
 ///
 /// // For a plain 2-D square `a` and a 1-D `b`, this degenerates to an
 /// // ordinary linear solve.
-/// let a = Array::from_vec(vec![2.0, 0.0, 0.0, 4.0]).reshape(&[2, 2]);
-/// let b = Array::from_vec(vec![4.0, 8.0]);
+/// let a = Array::<f64>::from_vec(vec![2.0, 0.0, 0.0, 4.0]).reshape(&[2, 2]);
+/// let b = Array::<f64>::from_vec(vec![4.0, 8.0]);
 /// let x = tensorsolve(&a, &b, None).expect("tensorsolve should succeed");
 /// assert_eq!(x.shape(), vec![2]);
 /// assert!((x.get(&[0]).expect("valid") - 2.0).abs() < 1e-10);
@@ -364,7 +364,7 @@ where
 ///
 /// // For a plain 2-D square matrix, `ind = 1` degenerates to the ordinary
 /// // matrix inverse.
-/// let a = Array::from_vec(vec![4.0, 0.0, 0.0, 2.0]).reshape(&[2, 2]);
+/// let a = Array::<f64>::from_vec(vec![4.0, 0.0, 0.0, 2.0]).reshape(&[2, 2]);
 /// let a_inv = tensorinv(&a, 1).expect("tensorinv should succeed");
 /// assert_eq!(a_inv.shape(), vec![2, 2]);
 /// assert!((a_inv.get(&[0, 0]).expect("valid") - 0.25).abs() < 1e-10);

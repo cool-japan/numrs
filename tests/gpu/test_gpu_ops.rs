@@ -9,7 +9,9 @@ use numrs2::gpu::*;
 
 #[tokio::test]
 async fn test_add() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
     let b = Array::from_vec(vec![5.0f32, 6.0, 7.0, 8.0]).reshape(&[4]);
@@ -31,7 +33,9 @@ async fn test_add() {
 
 #[tokio::test]
 async fn test_subtract() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![10.0f32, 8.0, 6.0, 4.0]).reshape(&[4]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
@@ -53,7 +57,9 @@ async fn test_subtract() {
 
 #[tokio::test]
 async fn test_multiply() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![2.0f32, 3.0, 4.0, 5.0]).reshape(&[4]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
@@ -75,7 +81,9 @@ async fn test_multiply() {
 
 #[tokio::test]
 async fn test_divide() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![10.0f32, 20.0, 30.0, 40.0]).reshape(&[4]);
     let b = Array::from_vec(vec![2.0f32, 4.0, 5.0, 8.0]).reshape(&[4]);
@@ -97,7 +105,9 @@ async fn test_divide() {
 
 #[tokio::test]
 async fn test_gpu_array_creation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
     let a_gpu =
@@ -109,7 +119,9 @@ async fn test_gpu_array_creation() {
 
 #[tokio::test]
 async fn test_gpu_array_round_trip() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let original = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
 
@@ -130,7 +142,9 @@ async fn test_gpu_array_round_trip() {
 
 #[tokio::test]
 async fn test_gpu_array_new_with_shape() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let gpu_array = GpuArray::<f32>::new_with_shape(&[3, 4], context)
         .expect("Failed to create GPU array with shape");
@@ -141,7 +155,9 @@ async fn test_gpu_array_new_with_shape() {
 
 #[tokio::test]
 async fn test_incompatible_shapes() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0]).reshape(&[3]);
     let b = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
@@ -158,7 +174,9 @@ async fn test_incompatible_shapes() {
 
 #[tokio::test]
 async fn test_multidimensional_arrays() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create 2D arrays
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
@@ -181,7 +199,9 @@ async fn test_multidimensional_arrays() {
 
 #[tokio::test]
 async fn test_large_array() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create a larger array to test GPU performance benefits
     let size = 1000;
@@ -211,7 +231,9 @@ async fn test_large_array() {
 
 #[tokio::test]
 async fn test_unary_operations() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
     let a_gpu =
@@ -240,7 +262,9 @@ async fn test_unary_operations() {
 
 #[tokio::test]
 async fn test_reduction_operations() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
     let a = Array::from_vec(data.clone()).reshape(&[5]);
@@ -270,7 +294,9 @@ async fn test_reduction_operations() {
 
 #[tokio::test]
 async fn test_copy_operation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
     let a_gpu =
@@ -289,7 +315,9 @@ async fn test_copy_operation() {
 
 #[tokio::test]
 async fn test_transpose_operation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
     let a_gpu =
@@ -320,7 +348,9 @@ async fn test_broadcast_shapes_compatible() {
     // Test broadcasting shape calculation
     // This is implicitly tested by broadcast_add, but we test the logic here
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Same shapes - should work
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
@@ -340,7 +370,9 @@ async fn test_broadcast_shapes_compatible() {
 
 #[tokio::test]
 async fn test_pow_operation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![2.0f32, 3.0, 4.0, 5.0]).reshape(&[4]);
     let b = Array::from_vec(vec![2.0f32, 2.0, 2.0, 2.0]).reshape(&[4]);
@@ -362,7 +394,9 @@ async fn test_pow_operation() {
 
 #[tokio::test]
 async fn test_abs_and_neg_operations() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     let a = Array::from_vec(vec![-1.0f32, 2.0, -3.0, 4.0]).reshape(&[4]);
     let a_gpu =
@@ -379,4 +413,54 @@ async fn test_abs_and_neg_operations() {
     let neg_cpu = neg_result.to_array().expect("Failed to convert to CPU");
     assert!((neg_cpu.get(&[0]).expect("Invalid index") - 1.0).abs() < 1e-5);
     assert!((neg_cpu.get(&[1]).expect("Invalid index") + 2.0).abs() < 1e-5);
+}
+
+// ---------------------------------------------------------------------------
+// Coverage for the two branches of `new_context()`'s runtime-nesting guard
+// that no other test in this suite exercises: every other test here calls
+// `new_context_async()` (current-thread) or runs outside any Tokio runtime
+// entirely (the `test_batching.rs` `#[test]` functions), so the sync
+// `new_context()` itself - both its refusal on a current-thread runtime and
+// its `block_in_place` delegation on a multi-thread one - was otherwise
+// never actually executed by the suite. See `RuntimeAccess` in
+// `src/gpu/context.rs`.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn sync_new_context_refuses_current_thread_runtime() {
+    // `#[tokio::test]` defaults to the current-thread flavor, so calling the
+    // synchronous `new_context()` here must not panic by nesting a second
+    // runtime inside this one; it must return a clear, actionable error
+    // instead. This is deterministic and adapter-independent: the guard
+    // inside `new_context()` returns before any adapter is even requested.
+    // `GpuContextRef` (`Arc<GpuContext>`) isn't `Debug`, so `Result::expect_err`
+    // (which would need to format the `Ok` value on failure) doesn't apply
+    // here; `Result::err()` discards it without requiring `Debug` at all.
+    let err = new_context()
+        .err()
+        .expect("new_context() must refuse to nest a runtime on a current-thread executor");
+    let message = err.to_string();
+    assert!(
+        message.contains("new_context_async"),
+        "error message should point callers at the async constructor, got: {}",
+        message
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sync_new_context_works_on_multi_thread_runtime() {
+    // On a multi-thread runtime, `new_context()` is safe to call because it
+    // routes through `tokio::task::block_in_place` instead of nesting a
+    // second runtime (contrast with
+    // `sync_new_context_refuses_current_thread_runtime`, where no such
+    // delegation is possible). Exercise it end to end - context creation
+    // plus a synchronous `to_array()` round trip - rather than just checking
+    // that a context was returned.
+    let context =
+        new_context().expect("block_in_place delegation should create a GPU context here");
+
+    let a = Array::from_vec(vec![1.0f32, 2.0, 3.0]).reshape(&[3]);
+    let a_gpu = GpuArray::from_array_with_context(&a, context).expect("Failed to create GPU array");
+    let round_tripped = a_gpu.to_array().expect("Failed to convert to CPU array");
+    assert_eq!(round_tripped.to_vec(), vec![1.0f32, 2.0, 3.0]);
 }

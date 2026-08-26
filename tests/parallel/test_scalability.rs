@@ -62,7 +62,7 @@ fn measure_throughput(num_threads: usize) {
 
 #[test]
 fn test_parallel_array_scalability() {
-    let sizes = vec![1000, 10000, 100000];
+    let sizes = [1000, 10000, 100000];
 
     for size in sizes {
         let data: Vec<f64> = (0..size).map(|x| x as f64).collect();
@@ -98,7 +98,7 @@ fn test_parallel_array_scalability() {
 
 #[test]
 fn test_parallel_sort_scalability() {
-    let sizes = vec![1000, 10000];
+    let sizes = [1000, 10000];
 
     for size in sizes {
         let mut data: Vec<i32> = (0..size).rev().collect(); // Reverse sorted

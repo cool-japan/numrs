@@ -7,7 +7,7 @@
 
 use super::Array;
 use crate::error::{NumRs2Error, Result};
-use scirs2_core::ndarray::{ArrayView2, Axis, Dimension, IxDyn};
+use scirs2_core::ndarray::{ArrayView2, Axis, IxDyn};
 use std::cmp;
 
 impl<T: Clone> Array<T> {
@@ -663,6 +663,10 @@ impl<T: Clone> Array<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only `old_modulo_broadcast_to_f64`'s `idx.slice()` below needs this
+    // trait in scope; the non-test build has no caller, hence file-scope
+    // (not `mod tests`-scope) would be an unused import there.
+    use scirs2_core::ndarray::Dimension;
 
     // -----------------------------------------------------------------
     // into_reshape

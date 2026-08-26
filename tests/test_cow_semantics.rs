@@ -20,7 +20,6 @@
 use numrs2::array::Array;
 use numrs2::array_ops::creation::{may_share_memory, shares_memory};
 use numrs2::masked::MaskedArray;
-use numrs2::prelude::*;
 
 fn base() -> Array<f64> {
     Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])

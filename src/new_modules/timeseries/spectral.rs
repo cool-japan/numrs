@@ -1225,7 +1225,7 @@ mod tests {
         // Constant signal (all DC)
         let n = 64;
         let signal = Array1::from_vec(vec![3.0; n]);
-        let (freqs, psd) =
+        let (_freqs, psd) =
             periodogram_windowed(&signal.view(), Some(1.0), Some(WindowType::Rectangular))
                 .expect("DC periodogram should succeed");
 

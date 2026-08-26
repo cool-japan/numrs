@@ -687,8 +687,16 @@ fn fuse_fma_rewrite_preserves_values_bitwise() -> Result<()> {
     Ok(())
 }
 
-/// The headline example from the module docs, at sizes that cross the chunk
-/// boundary, against the exact eager spelling users write today.
+/// The headline example from the module docs, at a spread of sizes --
+/// 999/1024/4096 were meaningful under an earlier "interpret the tree in
+/// 1024-element blocks" design's chunk boundary. That design was removed in
+/// favor of today's two-tier engine (a fixed set of specialized fused
+/// shapes evaluated via whole-array `zip` loops, falling back to
+/// `eval_eager` otherwise -- see `varied_size_sweep_matches_eager` above and
+/// `expr::fused_eval`'s module docs), so there is no longer a boundary at
+/// those sizes to cross. The spread (including `n=1` and a large
+/// `n=100_000`) remains a reasonable general size sweep for the canonical
+/// `a + b * c` chain against the exact eager spelling users write today.
 #[test]
 fn canonical_chain_matches_eager_at_scale() -> Result<()> {
     for n in [1usize, 999, 1024, 4096, 100_000] {
@@ -842,51 +850,11 @@ fn strict_bitwise_sweep_covers_nan_results_too() -> Result<()> {
     Ok(())
 }
 
-/// `f64` twin of [`eager_ref_f32`]: evaluate a tree with the public eager
-/// operators only.
-fn eager_ref_f64(node: &ExprNode<f64>) -> Array<f64> {
-    match node {
-        ExprNode::Leaf(a) => a.clone(),
-        ExprNode::Binary(op, l, r) => {
-            let (lv, rv) = (eager_ref_f64(l), eager_ref_f64(r));
-            match op {
-                BinOp::Add => &lv + &rv,
-                BinOp::Sub => &lv - &rv,
-                BinOp::Mul => &lv * &rv,
-                BinOp::Div => &lv / &rv,
-            }
-        }
-        ExprNode::ScalarRhs(op, e, k) => {
-            let v = eager_ref_f64(e);
-            match op {
-                BinOp::Add => &v + *k,
-                BinOp::Sub => &v - *k,
-                BinOp::Mul => &v * *k,
-                BinOp::Div => &v / *k,
-            }
-        }
-        ExprNode::ScalarLhs(op, k, e) => {
-            let (v, k) = (eager_ref_f64(e), *k);
-            match op {
-                BinOp::Add => v.map(|x| k + x),
-                BinOp::Sub => v.map(|x| k - x),
-                BinOp::Mul => v.map(|x| k * x),
-                BinOp::Div => v.map(|x| k / x),
-            }
-        }
-        ExprNode::Unary(op, e) => {
-            let v = eager_ref_f64(e);
-            match op {
-                UnaryOp::Neg => -&v,
-                UnaryOp::Abs => v.map(f64::abs),
-                UnaryOp::Sqrt => v.map(f64::sqrt),
-                UnaryOp::Exp => v.map(f64::exp),
-                UnaryOp::Ln => v.map(f64::ln),
-            }
-        }
-        ExprNode::Fma(a, b, c) => {
-            let (av, bv, cv) = (eager_ref_f64(a), eager_ref_f64(b), eager_ref_f64(c));
-            &(&av * &bv) + &cv
-        }
-    }
-}
+// Note: there is no `eager_ref_f64` twin of `eager_ref_f32` above. For f32,
+// a fresh eager reference has to be recomputed by walking the tree *after*
+// the f64 -> f32 cast (see `to_f32`'s note near its call site), since the
+// cast happens on the tree, not on a precomputed value. For f64, `build`
+// above already returns that precomputed eager value directly as its second
+// tuple element -- a separate recursive walker would just recompute exactly
+// what `build` already produced, so an `eager_ref_f64` was dead code (an
+// unused-function warning) and has been removed rather than kept unused.

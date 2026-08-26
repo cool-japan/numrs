@@ -22,8 +22,7 @@
 //! - Ts: Sample time
 //! - e(t) or e\[k\]: Error signal
 
-use super::{ControlError, ControlResult, SystemType, TransferFunction};
-use scirs2_core::ndarray::Array1;
+use super::{ControlError, ControlResult, TransferFunction};
 
 /// PID controller tuning method
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

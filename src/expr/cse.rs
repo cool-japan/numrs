@@ -662,7 +662,7 @@ impl<T: Clone> OptimizedExprNode<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::shared::{SharedArrayExpr, SharedBinaryExpr, SharedScalarExpr};
+    use crate::expr::shared::{SharedArrayExpr, SharedBinaryExpr};
 
     #[test]
     fn test_expr_id_uniqueness() {

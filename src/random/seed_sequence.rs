@@ -109,8 +109,8 @@ fn mix_words(x: u32, y: u32) -> u32 {
 ///
 /// `SeedSequence` mixes a small seed into a well-distributed pool of
 /// entropy, from which arbitrarily many further pseudo-random `u32`/`u64`
-/// "state words" can be drawn via [`generate_state_u32`](Self::generate_state_u32)
-/// / [`generate_state_u64`](Self::generate_state_u64) — exactly what a bit
+/// "state words" can be drawn via [`generate_state_u32`](Self::generate_state_u32)(Self::generate_state_u32)
+/// / [`generate_state_u64`](Self::generate_state_u64)(Self::generate_state_u64) — exactly what a bit
 /// generator needs to initialize its internal state without any visible
 /// structure inherited from a small human-chosen seed (e.g. `0`, `1`, `42`).
 ///
@@ -122,8 +122,8 @@ fn mix_words(x: u32, y: u32) -> u32 {
 /// # Compatibility guarantee
 ///
 /// For a given `u64` (or `&[u64]`) entropy input, [`SeedSequence::new`] /
-/// [`SeedSequence::from_u64_sequence`] and [`generate_state_u32`]/
-/// [`generate_state_u64`]/[`spawn`] reproduce NumPy's
+/// [`SeedSequence::from_u64_sequence`] and [`generate_state_u32`](Self::generate_state_u32)/
+/// [`generate_state_u64`](Self::generate_state_u64)/[`spawn`] reproduce NumPy's
 /// `numpy.random.SeedSequence(entropy)` bit-for-bit (verified against NumPy
 /// 2.4.2 in this module's tests, including the full `u64` range, sequence
 /// entropy, and multi-level `spawn`/`spawn.spawn` nesting).
@@ -255,13 +255,13 @@ impl SeedSequence {
 
     /// Draw `n_words` further-hashed `u32` state words from the pool.
     ///
-    /// A `BitGenerator` should call this (or [`generate_state_u64`]) in its
+    /// A `BitGenerator` should call this (or [`generate_state_u64`](Self::generate_state_u64)) in its
     /// constructor with whatever `n_words` its internal state needs.
     /// Successive words keep advancing an internal hash constant while
     /// cycling through the pool, so this is deterministic given the pool
     /// but not simply "the pool repeated".
     ///
-    /// [`generate_state_u64`]: Self::generate_state_u64
+    /// [`generate_state_u64`](Self::generate_state_u64): Self::generate_state_u64
     pub fn generate_state_u32(&self, n_words: usize) -> Vec<u32> {
         let mut hm = HashMix::new(INIT_B, MULT_B);
         let pool_len = self.pool.len();
@@ -277,7 +277,7 @@ impl SeedSequence {
     ///
     /// Equivalent to `generate_state(n_words, dtype=np.uint64)` in NumPy:
     /// internally draws `2 * n_words` `u32` words (a *continuation* of the
-    /// same hash stream as [`generate_state_u32`], not two independent
+    /// same hash stream as [`generate_state_u32`](Self::generate_state_u32), not two independent
     /// draws) and pairs them up little-endian (`word[2i] | word[2i+1] << 32`).
     pub fn generate_state_u64(&self, n_words: usize) -> Vec<u64> {
         let words = self.generate_state_u32(n_words * 2);

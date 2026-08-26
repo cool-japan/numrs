@@ -40,7 +40,7 @@ fn generator_from_seed(seed: Option<u64>) -> Random<StdRng> {
 
 /// NumPy-style random number generator (`numpy.random.Generator`).
 ///
-/// Create one directly (`Generator(seed=42)`) or via [`default_rng`]; both
+/// Create one directly (`Generator(seed=42)`) or via `default_rng`; both
 /// are equivalent. Every sampling method takes an optional `size`: `None`
 /// (the default) returns a Python `float`, matching NumPy's own scalar
 /// collapse, while a shape sequence returns an `Array` of that shape.

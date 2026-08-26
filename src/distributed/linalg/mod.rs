@@ -24,9 +24,8 @@
 //!
 //! # Two surfaces, one set of algorithms
 //!
-//! The names [`distributed_qr`], [`distributed_svd`], [`distributed_solve`],
-//! [`distributed_matmul`] and [`distributed_matvec`] appear twice, and the
-//! difference is the *operand type*:
+//! [`distributed_matmul`] and [`distributed_matvec`] each appear twice, and
+//! the difference is the *operand type*:
 //!
 //! - the versions in this module take a [`DistributedArray`] — a flat 1-D
 //!   partition with no column extent, so it cannot express a distributed
@@ -34,14 +33,18 @@
 //!   fabricate a numeric result, these permanently return
 //!   `Err(`[`DistributedLinalgError::NotImplemented`]`)` naming their
 //!   replacement;
-//! - the versions in [`decomp`] and [`matrix`] take a [`DistributedMatrix`]
-//!   and an explicit [`DistTransport`]. Those are the working
-//!   implementations, and are what [`super::prelude`] re-exports under
-//!   these same four names plus [`block_cholesky`] — so `use
-//!   numrs2::distributed::prelude::*;` reaches the working [`DistributedMatrix`]
-//!   versions, not the [`DistributedArray`] stubs above. Reach the stubs
-//!   explicitly as `linalg::distributed_qr` and friends if a call site is
-//!   still migrating off the old signature.
+//! - [`matrix::matmul`] and [`matrix::matvec`] take a [`DistributedMatrix`]
+//!   and an explicit [`DistTransport`], and are the working implementations.
+//!
+//! `distributed_qr`, `distributed_svd` and `distributed_solve` used to have
+//! a matching pair of legacy [`DistributedArray`]-surface stubs here too,
+//! permanently returning `Err(`[`DistributedLinalgError::NotImplemented`]`)`.
+//! Those stubs were removed: sharing a bare name with [`decomp::distributed_qr`],
+//! [`decomp::distributed_svd`] and [`decomp::distributed_solve`] made them a
+//! silent trap for any direct-path caller (`linalg::distributed_qr(...)`)
+//! that expected the working algorithm. Call the [`decomp`] versions
+//! directly instead — [`super::prelude`] already re-exports them under
+//! these same names, alongside [`block_cholesky`].
 //!
 //! [`distributed_dot`] and [`distributed_norm`] are real over the
 //! [`DistributedArray`] surface, routing through the real,
@@ -69,7 +72,7 @@
 //! this module are written against the more general [`DistTransport`]
 //! instead, so one implementation runs unchanged over a real
 //! [`super::net::Endpoint`] (via [`EndpointTransport`]) *or* an in-process
-//! [`LocalFabric`] (via [`LocalTransport`]) with no [`Communicator`] or
+//! [`LocalFabric`] (via [`LocalTransport`]) with no [`super::process::Communicator`] or
 //! [`super::process::ProcessGroup`] involved at all — useful for
 //! multi-threaded single-process numeric work that has no reason to spin up
 //! the process/rendezvous machinery. [`bcast_bytes`], [`gather_bytes`],
@@ -142,10 +145,9 @@ pub use cholesky::block_cholesky;
 pub use matrix::{DistFloat, DistributedMatrix, Layout};
 pub use tsqr::{tsqr, TsqrFactorization, TsqrLevel};
 
-use super::array::{DistributedArray, DistributedArrayError, DistributionStrategy};
+use super::array::{DistributedArray, DistributedArrayError};
 use super::collective::{allreduce, CollectiveError, ReduceOp};
 use super::net::{Endpoint, NetError, SendOpts};
-use super::process::Communicator;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
@@ -897,65 +899,6 @@ where
 {
     Err(DistributedLinalgError::NotImplemented(
         "distributed_matmul over DistributedArray; use matrix::matmul with a DistributedMatrix"
-            .to_string(),
-    ))
-}
-
-/// Distributed SVD over the legacy [`DistributedArray`] surface.
-///
-/// `A = U * diag(s) * V^T`. The working implementation lives at
-/// [`decomp::distributed_svd`] (TSQR, then a root-side SVD of the small `R`,
-/// then `U = Q U_R` through the stored tree); see [`distributed_matvec`] for
-/// why this legacy signature cannot express it.
-pub async fn distributed_svd<T>(
-    _a: &DistributedArray<T>,
-) -> Result<(DistributedArray<T>, Vec<T>, DistributedArray<T>), DistributedLinalgError>
-where
-    T: Serialize + for<'de> Deserialize<'de> + Clone + Send + 'static,
-{
-    Err(DistributedLinalgError::NotImplemented(
-        "distributed_svd over DistributedArray; use decomp::distributed_svd with a \
-         DistributedMatrix"
-            .to_string(),
-    ))
-}
-
-/// Distributed QR decomposition over the legacy [`DistributedArray`] surface.
-///
-/// `A = Q * R`. The working implementation lives at
-/// [`decomp::distributed_qr`] (a [`tsqr::tsqr`] factorization with `Q`
-/// materialized through the stored tree); see [`distributed_matvec`] for why
-/// this legacy signature cannot express it.
-pub async fn distributed_qr<T>(
-    _a: &DistributedArray<T>,
-) -> Result<(DistributedArray<T>, DistributedArray<T>), DistributedLinalgError>
-where
-    T: Serialize + for<'de> Deserialize<'de> + Clone + Send + 'static,
-{
-    Err(DistributedLinalgError::NotImplemented(
-        "distributed_qr over DistributedArray; use decomp::distributed_qr with a DistributedMatrix"
-            .to_string(),
-    ))
-}
-
-/// Distributed linear system solve over the legacy [`DistributedArray`]
-/// surface.
-///
-/// Solves `A x = b`. The working implementations live at
-/// [`decomp::distributed_solve`] (TSQR least squares, for tall `A`) and
-/// [`decomp::distributed_solve_spd`] (Cholesky, for symmetric positive
-/// definite `A`); see [`distributed_matvec`] for why this legacy signature
-/// cannot express either.
-pub async fn distributed_solve<T>(
-    _a: &DistributedArray<T>,
-    _b: &DistributedArray<T>,
-) -> Result<DistributedArray<T>, DistributedLinalgError>
-where
-    T: Serialize + for<'de> Deserialize<'de> + Clone + Send + 'static,
-{
-    Err(DistributedLinalgError::NotImplemented(
-        "distributed_solve over DistributedArray; use decomp::distributed_solve (least squares) \
-         or decomp::distributed_solve_spd (Cholesky) with a DistributedMatrix"
             .to_string(),
     ))
 }

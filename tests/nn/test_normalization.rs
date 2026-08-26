@@ -1,6 +1,6 @@
 /// Tests for normalization operations
 use numrs2::nn::normalization::*;
-use scirs2_core::ndarray::{array, Array1, Array2};
+use scirs2_core::ndarray::array;
 
 const EPSILON: f64 = 1e-5;
 

@@ -43,13 +43,17 @@ pub enum PrefetchStrategy {
 
 /// Access pattern information for optimization
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct AccessPattern {
     /// Recent access indices
     recent_accesses: Vec<Vec<usize>>,
     /// Access frequency counter
+    // Incremented in `track_access` (dead — see its own comment) but never
+    // read back even there; no code inspects per-index frequency.
+    #[allow(dead_code)]
     access_count: HashMap<Vec<usize>, u64>,
     /// Last access time
+    // Set in `track_access` (dead) but never read back.
+    #[allow(dead_code)]
     last_access: SystemTime,
     /// Detected pattern type
     pattern_type: AccessPatternType,
@@ -57,7 +61,6 @@ struct AccessPattern {
 
 /// Types of detected access patterns
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[allow(dead_code)]
 pub enum AccessPatternType {
     Unknown,
     Sequential,
@@ -94,6 +97,9 @@ pub struct MmapArray<T: Copy> {
     /// Data offset in the file (after metadata)
     data_offset: usize,
     /// Page size for optimal I/O
+    // Set from `get_page_size()` in `new()` but never read back: nothing
+    // currently rounds I/O sizes through `align_to_page` (also unused, see
+    // its own comment) using this value.
     #[allow(dead_code)]
     page_size: usize,
     /// Phantom data for type T
@@ -183,7 +189,6 @@ impl Default for AccessPattern {
     }
 }
 
-#[allow(dead_code)]
 impl<T: Copy> MmapArray<T> {
     /// Create a new memory-mapped array
     ///
@@ -502,6 +507,16 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Track access patterns for optimization
+    // Nothing calls this (or the 7 methods below it that only it or each
+    // other reach): `get`/`set` never call `track_access`, so
+    // `AccessPattern` never advances past its `Unknown`/empty defaults and
+    // `access_stats()` (which IS used) can only ever report that default.
+    // This is real, working logic for the "access pattern detection" and
+    // prefetch/layout optimization this struct's own doc comment already
+    // advertises — just never wired into `get`/`set`/`to_array`/
+    // `from_array`. Wiring it in touches the array's read/write hot path
+    // and is out of scope for a lint-only pass.
+    #[allow(dead_code)]
     fn track_access(&self, indices: &[usize]) {
         if let Ok(mut pattern) = self.access_pattern.lock() {
             // Update access pattern
@@ -522,6 +537,8 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Detect the type of access pattern
+    // See `track_access`: only reachable from there, which nothing calls.
+    #[allow(dead_code)]
     fn detect_access_pattern(&self, accesses: &[Vec<usize>]) -> AccessPatternType {
         if accesses.len() < 3 {
             return AccessPatternType::Unknown;
@@ -566,6 +583,9 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Apply prefetching based on detected access pattern
+    // See `track_access`: never called (`get`/`set` don't call it either),
+    // and would always see `pattern_type == Unknown` even if it were.
+    #[allow(dead_code)]
     fn prefetch_if_needed(&self, indices: &[usize]) -> Result<()> {
         if self.config.prefetch == PrefetchStrategy::None {
             return Ok(());
@@ -591,6 +611,8 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Prefetch data for sequential access pattern
+    // See `track_access`: only reachable from `prefetch_if_needed`, dead.
+    #[allow(dead_code)]
     fn prefetch_sequential(&self, indices: &[usize]) -> Result<()> {
         const PREFETCH_SIZE: usize = 8; // Prefetch 8 elements ahead
 
@@ -615,6 +637,8 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Prefetch data for strided access pattern
+    // See `track_access`: only reachable from `prefetch_if_needed`, dead.
+    #[allow(dead_code)]
     fn prefetch_strided(&self, _indices: &[usize]) -> Result<()> {
         // Implementation for strided prefetching
         // (Simplified for brevity)
@@ -622,6 +646,9 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Optimize the memory layout of the data
+    // See `track_access`: nothing calls this either (`LayoutStrategy`
+    // adaptive re-layout is implemented but never triggered).
+    #[allow(dead_code)]
     fn optimize_layout(&mut self) -> Result<()> {
         if self.config.layout_strategy == LayoutStrategy::RowMajor {
             return Ok(()); // Already in optimal layout
@@ -641,6 +668,10 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Get all data as a flat vector
+    // Only called from the dead `optimize_layout` (see `track_access`);
+    // `to_array`/`from_array` read/write via their own inline loops
+    // (recomputing the metadata offset) instead of this cached-offset pair.
+    #[allow(dead_code)]
     fn get_all_data(&self) -> Result<Vec<T>> {
         let mut data = Vec::with_capacity(self.size);
 
@@ -660,6 +691,8 @@ impl<T: Copy> MmapArray<T> {
     }
 
     /// Set all data from a flat vector
+    // See `get_all_data`: only reachable from the dead `optimize_layout`.
+    #[allow(dead_code)]
     fn set_all_data(&mut self, data: &[T]) -> Result<()> {
         if data.len() != self.size {
             return Err(NumRs2Error::InvalidOperation(format!(
@@ -764,12 +797,17 @@ fn get_page_size() -> usize {
 }
 
 /// Align size to page boundary
+// Never called: nothing rounds an I/O size through this yet (see
+// `MmapArray::page_size`'s own comment).
 #[allow(dead_code)]
 fn align_to_page(size: usize, page_size: usize) -> usize {
     (size + page_size - 1) & !(page_size - 1)
 }
 
 /// Apply memory advice for optimization
+// Never called, and its own body is already an explicit no-op stub (see
+// the comments below) for a platform-specific `madvise()` call that was
+// never implemented; both are future work, not this pass's scope.
 #[allow(dead_code)]
 fn apply_memory_advice(_mmap: &mut MmapMut, _config: &MmapConfig) {
     // Memory advice is platform-specific and not always available

@@ -156,9 +156,7 @@ where
         // Compute gradient of Lagrangian
         let grad_l = compute_lagrangian_gradient(
             &grad_f_val,
-            eq_constraints,
             grad_eq,
-            ineq_constraints,
             grad_ineq,
             &x,
             &lambda_eq,
@@ -224,9 +222,7 @@ where
 
         let grad_l_new = compute_lagrangian_gradient(
             &grad_f_new,
-            eq_constraints,
             grad_eq,
-            ineq_constraints,
             grad_ineq,
             &x_new,
             &lambda_eq_new,
@@ -265,9 +261,7 @@ where
 /// Compute gradient of Lagrangian
 fn compute_lagrangian_gradient<T: Float>(
     grad_f: &[T],
-    eq_constraints: &[&ConstraintFn<T>],
     grad_eq: &[&ConstraintGradFn<T>],
-    ineq_constraints: &[&ConstraintFn<T>],
     grad_ineq: &[&ConstraintGradFn<T>],
     x: &[T],
     lambda_eq: &[T],
@@ -539,9 +533,8 @@ where
 {
     let mut alpha = T::one();
 
-    // Merit function: φ(x) = f(x) + μ * (Σ|h_i(x)| + Σmax(0, g_i(x)))
-    let merit_fn = |x_eval: &[T]| -> T {
-        let f_eval = f(x_eval);
+    // Constraint-violation penalty: μ * (Σ|h_i(x)| + Σmax(0, g_i(x)))
+    let penalty = |x_eval: &[T]| -> T {
         let eq_penalty: T = eq_constraints.iter().map(|c| c(x_eval).abs()).sum();
         let ineq_penalty: T = ineq_constraints
             .iter()
@@ -554,10 +547,13 @@ where
                 }
             })
             .sum();
-        f_eval + mu * (eq_penalty + ineq_penalty)
+        mu * (eq_penalty + ineq_penalty)
     };
 
-    let merit_0 = merit_fn(x);
+    // Merit function at the current point: φ(x) = f(x) + penalty(x). The
+    // caller already evaluated f(x) as `f_val`, so reuse it here instead
+    // of paying for a second, redundant objective-function call.
+    let merit_0 = f_val + penalty(x);
 
     for _ in 0..20 {
         let x_new: Vec<T> = x
@@ -565,7 +561,7 @@ where
             .zip(p.iter())
             .map(|(&xi, &pi)| xi + alpha * pi)
             .collect();
-        let merit_new = merit_fn(&x_new);
+        let merit_new = f(&x_new) + penalty(&x_new);
 
         // Armijo condition for merit function
         if merit_new < merit_0 || alpha < alpha_min {

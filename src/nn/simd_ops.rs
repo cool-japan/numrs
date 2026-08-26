@@ -28,12 +28,10 @@
 //! ```
 
 use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis};
-use scirs2_core::numeric::Float;
 use scirs2_core::simd_ops::{PlatformCapabilities, SimdUnifiedOps};
 
 use super::NnResult;
 use crate::error::NumRs2Error;
-use crate::simd::SimdOps;
 
 /// Detect platform SIMD capabilities
 pub fn detect_simd_capabilities() -> PlatformCapabilities {
@@ -462,7 +460,7 @@ pub fn simd_norm_f32(x: &ArrayView1<f32>) -> f32 {
 /// value** (neither the true minimum nor `NaN`) for some `NaN`
 /// placements -- see `crate::kernels::reduce`'s module docs for the
 /// reproduction. Instead this calls
-/// [`crate::kernels::reduce::min_f32`], the same deterministic
+/// `crate::kernels::reduce::min_f32`, the same deterministic
 /// comparison-fold kernel backing `stats::basic` and
 /// `Array::min_optimized`.
 pub fn simd_min_f32(x: &ArrayView1<f32>) -> f32 {
@@ -617,7 +615,7 @@ mod tests {
 
     #[test]
     fn test_simd_capabilities() {
-        let caps = detect_simd_capabilities();
+        let _caps = detect_simd_capabilities();
         println!("{}", get_simd_info());
 
         // Just verify the function runs without panic

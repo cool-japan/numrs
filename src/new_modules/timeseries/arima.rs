@@ -515,7 +515,7 @@ impl Arima {
     /// Refine parameters using Maximum Likelihood Estimation.
     fn estimate_mle(
         &self,
-        data: &ArrayView1<f64>,
+        _data: &ArrayView1<f64>,
         init_params: &ArimaParams,
     ) -> Result<ArimaParams> {
         // For now, return CSS estimates

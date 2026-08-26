@@ -35,7 +35,7 @@ pub struct PerformanceMetrics {
     pub last_updated: Instant,
     /// Running mean of allocation sizes, tracked incrementally via Welford's
     /// online algorithm. Used together with `allocation_size_m2` by
-    /// [`PerformanceTuner::has_consistent_allocation_sizes`] to judge, from
+    /// `PerformanceTuner::has_consistent_allocation_sizes` to judge, from
     /// real recorded telemetry, whether allocation sizes are consistent
     /// enough to benefit from pool allocation -- rather than assuming so
     /// unconditionally.
@@ -689,8 +689,6 @@ where
 mod tests {
     use super::*;
     use crate::memory_alloc::enhanced_traits::NumericalArrayAllocator;
-    #[allow(unused_imports)]
-    use std::thread;
     use std::time::Duration;
 
     #[test]

@@ -54,17 +54,29 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // f32
     let data_f32 = Array::from_vec(vec![1.5_f32, 2.5, 3.5]);
     let arrow_f32 = to_arrow(&data_f32)?;
-    println!("f32: {:?} -> Arrow -> NumRS", data_f32.to_vec());
+    println!(
+        "f32: {:?} -> Arrow ({} elements) -> NumRS",
+        data_f32.to_vec(),
+        arrow_f32.len()
+    );
 
     // i32
     let data_i32 = Array::from_vec(vec![10_i32, 20, 30, 40]);
     let arrow_i32 = to_arrow(&data_i32)?;
-    println!("i32: {:?} -> Arrow -> NumRS", data_i32.to_vec());
+    println!(
+        "i32: {:?} -> Arrow ({} elements) -> NumRS",
+        data_i32.to_vec(),
+        arrow_i32.len()
+    );
 
     // u64
     let data_u64 = Array::from_vec(vec![100_u64, 200, 300]);
     let arrow_u64 = to_arrow(&data_u64)?;
-    println!("u64: {:?} -> Arrow -> NumRS\n", data_u64.to_vec());
+    println!(
+        "u64: {:?} -> Arrow ({} elements) -> NumRS\n",
+        data_u64.to_vec(),
+        arrow_u64.len()
+    );
 
     // Example 4: Feather Format - Write
     println!("4. Writing to Feather Format");
@@ -119,7 +131,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     // Create schema
     use arrow::datatypes::{DataType, Field, Schema};
-    use std::sync::Arc;
     let schema = Schema::new(vec![Field::new("data", DataType::Float64, false)]);
 
     let mut stream_writer = IpcStreamWriter::new(writer, &schema)?;

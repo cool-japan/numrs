@@ -174,19 +174,42 @@ step_clippy() {
 # ---------------------------------------------------------------------------
 step_test() {
   banner "4) test  (cargo nextest, falls back to cargo test)"
+
+  # `--all-features` unconditionally turns on `python`, which builds pyo3
+  # with its `extension-module` feature. `extension-module` deliberately
+  # skips linking against libpython -- the hosting Python interpreter is
+  # expected to supply those symbols itself at dlopen time -- so a normal
+  # test binary that links the whole workspace can NEVER finish linking
+  # while it is on; this is a link-time failure, not a flaky test, and no
+  # amount of retrying fixes it. `cargo check` (below) stops before
+  # codegen/linking, so it is unaffected and is how `python` gets verified
+  # here. Actually exercising the extension module requires a real
+  # `maturin develop`/`maturin build` (which sets up the link configuration
+  # pyo3 needs) followed by running the Python side, e.g. `tests/
+  # python_smoke.py` -- see pyproject.toml's `[tool.maturin]` and
+  # README.md's Python section. That full maturin build is out of scope for
+  # this cargo-only script.
+  #
+  # So: every OTHER feature is enabled explicitly (never `--all-features`)
+  # for the actual test run, and `python` gets its own check-only step.
+  local non_python_features="matrix_decomp,validation,unstable,fast,scirs,gpu,lapack,arrow,parquet,netcdf,matlab,messagepack,bson,io-all,wasm,distributed,visualization,ci-safe"
+
   if command -v cargo-nextest >/dev/null 2>&1; then
     run_cmd_step "test: nextest run --workspace (default features)" \
       cargo nextest run --workspace
-    run_cmd_step "test: nextest run --workspace --all-features" \
-      cargo nextest run --workspace --all-features
+    run_cmd_step "test: nextest run --workspace --features <all except python>" \
+      cargo nextest run --workspace --features "$non_python_features"
   else
     warn "cargo-nextest not found on PATH -- falling back to 'cargo test' (install: cargo install cargo-nextest --locked)"
     record_result "test: cargo-nextest" SKIP "not installed; falling back to cargo test"
     run_cmd_step "test: cargo test --workspace (default features) [nextest fallback]" \
       cargo test --workspace
-    run_cmd_step "test: cargo test --workspace --all-features [nextest fallback]" \
-      cargo test --workspace --all-features
+    run_cmd_step "test: cargo test --workspace --features <all except python> [nextest fallback]" \
+      cargo test --workspace --features "$non_python_features"
   fi
+
+  run_cmd_step "test: cargo check --features python (extension-module cannot link a test binary -- see comment above; real python testing goes through maturin)" \
+    cargo check --features python
 }
 
 # ---------------------------------------------------------------------------

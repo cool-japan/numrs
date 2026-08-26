@@ -118,7 +118,6 @@ pub use mutual_information::{
 };
 
 use crate::error::NumRs2Error;
-use std::fmt;
 use thiserror::Error;
 
 /// Information Theory specific error types
@@ -199,8 +198,6 @@ pub(crate) fn validate_distribution(
 pub(crate) fn normalize_distribution(
     probs: &scirs2_core::ndarray::Array1<f64>,
 ) -> InfoTheoryResult<scirs2_core::ndarray::Array1<f64>> {
-    use scirs2_core::ndarray::Array1;
-
     let sum: f64 = probs.iter().sum();
 
     if sum <= 0.0 || !sum.is_finite() {

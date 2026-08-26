@@ -5,8 +5,7 @@
 
 use super::format::{FormatResult, NumRS2Model};
 use crate::error::NumRs2Error;
-use oxicode::{decode_from_slice, encode_to_vec};
-use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::ndarray::Array2;
 use serde_json;
 use std::fs::File;
 use std::io::{BufReader, Read};

@@ -18,7 +18,6 @@
 #![allow(clippy::type_complexity)]
 
 use numrs2::optimize::*;
-use numrs2::prelude::*;
 use std::time::Instant;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {

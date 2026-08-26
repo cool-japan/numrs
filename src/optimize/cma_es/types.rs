@@ -1,6 +1,6 @@
 //! CMA-ES result types and auxiliary types.
 
-use scirs2_core::random::{thread_rng, Distribution, Normal, Rng};
+use scirs2_core::random::{thread_rng, Distribution, Normal};
 use scirs2_core::rngs::SmallRng;
 use scirs2_core::SeedableRng;
 

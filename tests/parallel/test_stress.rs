@@ -1,6 +1,6 @@
 //! Stress tests with high contention
 
-use numrs2::parallel::{ThreadPool, ThreadPoolConfig, WorkStealingPool, task};
+use numrs2::parallel::{task, ThreadPool, ThreadPoolConfig, WorkStealingPool};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -22,6 +22,8 @@ fn test_high_task_count() {
 
     pool.wait().expect("Failed to wait for tasks");
     assert_eq!(counter.load(Ordering::SeqCst), 1000);
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -47,6 +49,8 @@ fn test_high_contention_shared_state() {
 
     pool.wait().expect("Failed to wait for tasks");
     assert_eq!(shared_counter.load(Ordering::SeqCst), 5000);
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -64,8 +68,12 @@ fn test_rapid_task_submission() {
         .expect("Failed to submit task");
     }
 
-    pool.wait().expect("Failed to wait for tasks");
-    assert_eq!(counter.load(Ordering::SeqCst), 200);
+    // Closures sleep, so `pool.wait()` can return with the last one per
+    // worker still mid-sleep (see `wait_for_count`'s doc comment); poll the
+    // real side effect instead of asserting immediately after `wait()`.
+    super::wait_for_count(&counter, 200, Duration::from_secs(2));
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -94,8 +102,11 @@ fn test_mixed_task_durations() {
         .expect("Failed to submit task");
     }
 
-    pool.wait().expect("Failed to wait for tasks");
-    assert_eq!(counter.load(Ordering::SeqCst), 50);
+    // Closures sleep, so `pool.wait()` can return with the last one per
+    // worker still mid-sleep; poll the real side effect instead.
+    super::wait_for_count(&counter, 50, Duration::from_secs(2));
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -116,6 +127,8 @@ fn test_thread_pool_under_memory_pressure() {
 
     pool.wait().expect("Failed to wait for tasks");
     assert_eq!(counter.load(Ordering::SeqCst), 100);
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -131,10 +144,15 @@ fn test_work_stealing_pool_stress() {
         pool.submit(task).expect("Failed to submit task");
     }
 
-    // Wait for completion
-    thread::sleep(Duration::from_secs(2));
+    // Wait for completion. `WorkStealingPool` has no blocking `wait()`
+    // (unlike `ThreadPool`), so poll its public accessors for a full drain
+    // instead of gambling on a single fixed sleep.
+    super::wait_for_drain(&pool, Duration::from_secs(10));
 
     assert_eq!(counter.load(Ordering::SeqCst), 500);
+
+    pool.shutdown()
+        .expect("Failed to shut down work-stealing pool");
 }
 
 #[test]
@@ -167,6 +185,16 @@ fn test_concurrent_pool_operations() {
 
     pool.wait().expect("Failed to wait for tasks");
     assert_eq!(counter.load(Ordering::SeqCst), 100);
+
+    // All 4 spawned threads have already been joined above, so `pool` is the
+    // sole remaining `Arc` owner here; unwrap it to get a real `join`-backed
+    // shutdown instead of just letting the `Arc` (and its worker threads)
+    // leak past the end of the test.
+    Arc::try_unwrap(pool)
+        .ok()
+        .expect("pool should have a single owner after all clones are dropped")
+        .shutdown()
+        .expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -187,4 +215,6 @@ fn test_queue_overflow_handling() {
     }
 
     pool.wait().expect("Failed to wait for tasks");
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }

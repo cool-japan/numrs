@@ -247,10 +247,15 @@ fn test_covariance() {
     let y =
         WasmArray::from_vec(&vec![2.0, 4.0, 6.0, 8.0, 10.0], &[5]).expect("Failed to create array");
 
-    let cov = covariance(&x, Some(y)).expect("Covariance failed");
+    // `covariance(x, Some(y))` for two 1-D inputs always returns the full
+    // 2x2 covariance matrix (see `stats::correlation::cov`'s doc comment:
+    // "Estimate covariance matrix of variables"), never a bare scalar --
+    // element [0,1] (== [1,0], symmetric) is the x-y cross-covariance.
+    let cov_matrix = covariance(&x, Some(y)).expect("Covariance failed");
+    let cov_xy = cov_matrix.get(&[0, 1]).expect("Failed to get cov[0,1]");
 
     // Perfect positive correlation should give cov = 4.0
-    assert!((cov - 4.0).abs() < TOLERANCE);
+    assert!((cov_xy - 4.0).abs() < TOLERANCE);
 }
 
 #[wasm_bindgen_test]
@@ -259,10 +264,13 @@ fn test_covariance_independent() {
 
     let y = WasmArray::from_vec(&vec![1.0, -1.0, 1.0, -1.0], &[4]).expect("Failed to create array");
 
-    let cov = covariance(&x, Some(y)).expect("Covariance failed");
+    // See the comment in `test_covariance` on why this is a matrix element,
+    // not the return value directly.
+    let cov_matrix = covariance(&x, Some(y)).expect("Covariance failed");
+    let cov_xy = cov_matrix.get(&[0, 1]).expect("Failed to get cov[0,1]");
 
     // Should be close to 0 for independent variables
-    assert!(cov.abs() < 0.1);
+    assert!(cov_xy.abs() < 0.1);
 }
 
 #[wasm_bindgen_test]
@@ -282,10 +290,15 @@ fn test_correlation() {
     let y =
         WasmArray::from_vec(&vec![2.0, 4.0, 6.0, 8.0, 10.0], &[5]).expect("Failed to create array");
 
-    let corr = correlation(&x, Some(y)).expect("Correlation failed");
+    // Like `covariance`, `correlation(x, Some(y))` for two 1-D inputs
+    // returns the full 2x2 correlation matrix, not a bare scalar -- the
+    // diagonal is always 1.0 (self-correlation), so [0,1] (== [1,0]) is the
+    // actual x-y correlation coefficient.
+    let corr_matrix = correlation(&x, Some(y)).expect("Correlation failed");
+    let corr_xy = corr_matrix.get(&[0, 1]).expect("Failed to get corr[0,1]");
 
     // Perfect positive correlation should give corr = 1.0
-    assert!((corr - 1.0).abs() < TOLERANCE);
+    assert!((corr_xy - 1.0).abs() < TOLERANCE);
 }
 
 #[wasm_bindgen_test]
@@ -296,10 +309,13 @@ fn test_correlation_negative() {
     let y =
         WasmArray::from_vec(&vec![10.0, 8.0, 6.0, 4.0, 2.0], &[5]).expect("Failed to create array");
 
-    let corr = correlation(&x, Some(y)).expect("Correlation failed");
+    // See the comment in `test_correlation` on why this is a matrix
+    // element, not the return value directly.
+    let corr_matrix = correlation(&x, Some(y)).expect("Correlation failed");
+    let corr_xy = corr_matrix.get(&[0, 1]).expect("Failed to get corr[0,1]");
 
     // Perfect negative correlation should give corr = -1.0
-    assert!((corr - (-1.0)).abs() < TOLERANCE);
+    assert!((corr_xy - (-1.0)).abs() < TOLERANCE);
 }
 
 #[wasm_bindgen_test]
@@ -313,19 +329,30 @@ fn test_correlation_incompatible() {
 
 #[wasm_bindgen_test]
 fn test_corrcoef_matrix() {
-    // Create data matrix: 100 samples, 3 features. Deterministic rather than
-    // `WasmArray::random` (no such constructor exists on `WasmArray`): three
-    // differently-shaped, non-constant columns so the correlation matrix is
-    // well-defined (non-zero variance) without being degenerate (perfectly
-    // co-linear) in every entry.
-    let mut raw = Vec::with_capacity(100 * 3);
-    for i in 0..100 {
-        let x = i as f64;
-        raw.push(x);
-        raw.push(x * 0.7 + (i % 7) as f64);
-        raw.push((x * 1.3).sin() * 10.0);
+    // `correlation(x, None)` forwards to `stats::correlation::corrcoef`,
+    // whose `rowvar` parameter defaults to `true` when passed `None` (see
+    // `cov`'s doc comment: "each row represents a variable, each column an
+    // observation") -- so the *rows*, not columns, are the 3 features here.
+    // Layout is 3 rows x 100 columns, row-major flat: 100 values for
+    // feature 0, then 100 for feature 1, then 100 for feature 2.
+    //
+    // Three differently-shaped, non-constant features (deterministic rather
+    // than `WasmArray::random`, which has no such constructor on
+    // `WasmArray`) so the correlation matrix is well-defined (non-zero
+    // variance) without being degenerate (perfectly co-linear) in every
+    // entry.
+    let n = 100;
+    let mut raw = Vec::with_capacity(3 * n);
+    for i in 0..n {
+        raw.push(i as f64); // feature 0
     }
-    let data = WasmArray::from_vec(&raw, &[100, 3]).expect("Failed to create array");
+    for i in 0..n {
+        raw.push(i as f64 * 0.7 + (i % 7) as f64); // feature 1
+    }
+    for i in 0..n {
+        raw.push((i as f64 * 1.3).sin() * 10.0); // feature 2
+    }
+    let data = WasmArray::from_vec(&raw, &[3, n]).expect("Failed to create array");
 
     // The "correlation matrix" mode of `correlation` (the single free
     // function this module exposes -- there is no separate

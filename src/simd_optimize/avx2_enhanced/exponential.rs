@@ -11,7 +11,11 @@
 //! - expm1_f64: exp(x)-1 for small x
 //! - cbrt_f64: Cube root
 
-use super::{EnhancedSimdOps, AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
+use super::EnhancedSimdOps;
+// See `arithmetic.rs` for why these are gated the same as the intrinsics.
+#[cfg(target_arch = "x86_64")]
+use super::{AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
+#[cfg(target_arch = "x86_64")]
 use crate::array::Array;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;

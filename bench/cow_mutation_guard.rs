@@ -62,7 +62,6 @@
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput};
 use numrs2::array::Array;
-use numrs2::prelude::*;
 use scirs2_core::ndarray::{Array as NdArray, IxDyn};
 use std::hint::black_box;
 use std::time::{Duration, Instant};

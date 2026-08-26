@@ -30,19 +30,19 @@ unstable = []
 fast = []  # Minimal feature set for fast compilation during development
 scirs = []  # MANDATORY: Always enabled by default per SCIRS2 POLICY - DO NOT DISABLE
 # SciRS2 integration is mandatory - this feature exists only for backward compatibility
-gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
+gpu = ["dep:wgpu", "dep:bytemuck", "dep:tokio"]
 lapack = []  # Enable LAPACK-dependent linear algebra operations (through scirs2-linalg which uses OxiBLAS)
 python = ["dep:pyo3", "dep:scirs2-numpy"]  # Python bindings via PyO3
-arrow = ["dep:arrow", "dep:arrow-array", "dep:arrow-buffer", "dep:arrow-cast", "dep:arrow-schema"]  # Apache Arrow integration
+arrow = ["dep:arrow", "dep:arrow-array", "dep:arrow-schema"]  # Apache Arrow integration
 parquet = ["dep:parquet"]  # Apache Parquet format support (pure Rust)
 netcdf = ["dep:netcdf3"]  # NetCDF-3 format support (pure Rust)
-matlab = ["dep:matfile"]  # MATLAB .mat file I/O (pure Rust)
+matlab = []  # MATLAB .mat file I/O — self-contained simplified format, no external crate (see src/io/matlab.rs)
 messagepack = ["dep:rmp-serde"]  # MessagePack serialization (pure Rust)
 bson = ["dep:bson"]  # BSON format support (pure Rust)
 io-all = ["arrow", "parquet", "netcdf", "matlab", "messagepack", "bson"]  # Enable all I/O formats
-wasm = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:dlmalloc"]  # WebAssembly support
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:dlmalloc"]  # WebAssembly support
 distributed = ["dep:tokio", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread", "tokio/macros", "tokio/time", "dep:oxiarc-lz4"]  # Distributed computing support (Pure Rust, no MPI)
-visualization = ["dep:plotters", "dep:plotters-backend", "dep:plotters-svg", "dep:resvg", "dep:usvg", "dep:tiny-skia", "dep:rgb", "dep:oxifont-bundled"]  # Advanced visualization tools (pure Rust)
+visualization = ["dep:plotters", "dep:oxifont-bundled"]  # Advanced visualization tools (pure Rust)
 ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without external dependencies
 
 [dependencies]
@@ -63,7 +63,6 @@ scirs2-fft = { workspace = true }
 # ALLOWED DEPENDENCIES (Non-conflicting)
 # ===================================================================
 num-traits = "0.2.19"  # Numeric traits for generic math (compatible with SciRS2)
-paste = "1.0.15"       # For macro development
 thiserror = "2.0.18"   # Error handling
 lazy_static = "1.5.0"  # For static initialization patterns
 
@@ -103,7 +102,6 @@ chrono = { version = "0.4.45", default-features = false, features = ["std", "clo
 # Optional GPU acceleration dependencies
 wgpu = { version = "30.0.0", optional = true }
 bytemuck = { version = "1.25.0", features = ["derive"], optional = true }
-futures-intrusive = { version = "0.5.0", optional = true }
 tokio = { version = "1.52.3", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
 
 # Optional Python bindings dependencies
@@ -113,20 +111,16 @@ scirs2-numpy = { workspace = true, optional = true }
 # Optional Apache Arrow dependencies (via SciRS2 workspace)
 arrow = { workspace = true, optional = true }
 arrow-array = { workspace = true, optional = true }
-arrow-buffer = { workspace = true, optional = true }
-arrow-cast = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 
 # Optional I/O format dependencies (Pure Rust - COOLJAPAN Policy)
 parquet = { workspace = true, optional = true, default-features = false, features = ["arrow", "snap", "brotli", "flate2-zlib-rs", "lz4", "base64", "simdutf8"] }  # Apache Parquet, no zstd-sys (C) — COOLJAPAN Pure Rust Policy
 netcdf3 = { version = "0.6.1", optional = true }  # NetCDF-3 (pure Rust)
-matfile = { version = "0.5.0", optional = true, features = ["ndarray"] }  # MATLAB .mat files (pure Rust)
 rmp-serde = { version = "1.3.1", optional = true }  # MessagePack (pure Rust)
 bson = { version = "3.1.0", optional = true, features = ["serde"] }  # BSON (pure Rust)
 
 # Optional WebAssembly dependencies (Pure Rust - COOLJAPAN Policy)
 wasm-bindgen = { version = "0.2.126", optional = true, features = ["serde-serialize"] }  # WebAssembly bindings
-wasm-bindgen-futures = { version = "0.4.76", optional = true }  # Async/await support for WASM
 js-sys = { version = "0.3.103", optional = true }  # JavaScript standard library bindings
 web-sys = { version = "0.3.103", optional = true, features = ["console", "Window", "Performance"] }  # Web API bindings
 console_error_panic_hook = { version = "0.1.7", optional = true }  # Better panic messages in WASM
@@ -141,12 +135,6 @@ dlmalloc = { version = "0.2", features = ["global"], optional = true }  # Mainta
 # "bitmap_encoder" is required (not optional): without it, BitMapBackend's
 # present() is a silent no-op and PNG files are never written to disk.
 plotters = { version = "0.3.7", optional = true, default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "all_series", "all_elements", "ab_glyph"] }  # High-performance plotting library (pure Rust font backend)
-plotters-backend = { version = "0.3.7", optional = true }  # Plotters backend API
-plotters-svg = { version = "0.3.7", optional = true }  # SVG backend for plotters
-resvg = { version = "0.48.1", optional = true }  # SVG rendering library
-usvg = { version = "0.48.1", optional = true }  # SVG simplification library
-tiny-skia = { version = "0.12.0", optional = true }  # Tiny Skia subset for rendering
-rgb = { version = "0.8.53", optional = true }  # RGB color types
 oxifont-bundled = { version = "0.2.2", optional = true, default-features = false, features = ["bundled-noto"] }  # Pure-Rust bundled Noto Sans (SIL OFL-1.1), COOLJAPAN oxifont ecosystem — supplies the "sans-serif" face plotters' ab_glyph backend needs (see src/viz/mod.rs::ensure_fonts_registered)
 
 # Note: polars dependency has been removed to improve build speed
@@ -495,9 +483,26 @@ required-features = ["distributed"]
 name = "gpu_integration"
 required-features = ["gpu"]
 
-# ===================================================================
-# PATCH: Use local oxiarc workspace (crates.io version missing progress/cancel modules)
-# ===================================================================
+# tests/io_integration.rs wires the previously-orphaned tests/io/{test_bson,
+# test_matlab,test_messagepack,test_netcdf}.rs (never `mod`-included by any
+# harness, so never compiled since 0.2.0) into an actual cargo test target.
+# required-features lists the four format features directly (rather than the
+# broader `io-all`, which also drags in `arrow`/`parquet`) so `cargo nextest
+# run --features bson,matlab,messagepack,netcdf` builds exactly this target;
+# `--features io-all` is a superset and also satisfies it.
+[[test]]
+name = "io_integration"
+required-features = ["bson", "matlab", "messagepack", "netcdf"]
+
+# tests/parallel_integration.rs wires the previously-orphaned tests/parallel/
+# (mod.rs + 12 test files, never `mod`-included by any harness, so never
+# compiled since 0.2.0) into an actual cargo test target. numrs2::parallel is
+# always compiled (not feature-gated), so this target needs no
+# required-features -- it builds and runs under default features like any
+# other tests/*.rs integration test.
+[[test]]
+name = "parallel_integration"
+
 [patch.crates-io]
 # Pure-Rust replacement for alloca (criterion dep) — no C/VLA, no linker errors on aarch64-apple-darwin
 # NOTE (2026-08-19 manifest audit): re-verified this is still required. criterion
@@ -527,8 +532,6 @@ scirs2-numpy = { version = "0.6.5" }
 # Apache Arrow ecosystem (from SciRS2 workspace)
 arrow = "59.0.0"
 arrow-array = "59.0.0"
-arrow-buffer = "59.0.0"
-arrow-cast = "59.0.0"
 arrow-schema = "59.0.0"
 parquet = { version = "59.0.0", default-features = false }  # Apache Parquet, no zstd-sys (C) — COOLJAPAN Pure Rust Policy
 

@@ -415,6 +415,12 @@ struct PipelineStage {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PipelineStatus {
     Pending,
+    // Reserved for a future in-flight state between `Pending` and
+    // `Completed`; no code transitions a stage into it yet (today a stage
+    // is only ever `Pending` until something removes it), so it is never
+    // constructed. Kept as a documented part of the intended state machine
+    // rather than deleted.
+    #[allow(dead_code)]
     InProgress,
     Completed,
 }

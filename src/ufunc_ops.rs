@@ -51,7 +51,7 @@
 //! NumPy's `np.add.reduce(a)` (no axis, or a full-flatten reduce without
 //! `keepdims`) returns a genuine 0-d array (`shape == ()`, a bare scalar
 //! wrapped in an ndarray). This crate has no 0-d array representation in
-//! active use, and [`crate::math::aggregation`]'s `sum`/`max`/`min` already
+//! active use, and `crate::math::aggregation`'s `sum`/`max`/`min` already
 //! established the convention this module follows instead: a full,
 //! non-`keepdims` reduction returns shape `[1]` (a length-1 1-D array), via
 //! plain `Array::from_vec(vec![value])`. This is a deliberate, precedented
@@ -85,7 +85,7 @@
 //!
 //! [`ufunc_reduce`]'s **full** reduction (`axis: None`) for `Add`/`Multiply`
 //! on `T` that is concretely `f64`/`f32` routes through
-//! [`crate::kernels::reduce`]'s `sum_f64`/`sum_f32`/`prod_f64`/`prod_f32`
+//! `crate::kernels::reduce`'s `sum_f64`/`sum_f32`/`prod_f64`/`prod_f32`
 //! (themselves SIMD-below/parallel-above-`PARALLEL_MIN_LEN`, per that
 //! module's docs) instead of a scalar fold. Every other combination --
 //! `Some(axis)` reductions, `Maximum`/`Minimum` at any axis, any other `T`,
@@ -94,7 +94,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::kernels::{borrow::operand, cast, reduce};
-use num_traits::{Float, ToPrimitive};
+use num_traits::Float;
 
 // =============================================================================
 // UfuncOp
@@ -221,7 +221,7 @@ fn unravel_index(mut flat: usize, shape: &[usize]) -> Vec<usize> {
 /// Fold `op` over `lane`, seeded by `initial` if given, else by the lane's
 /// own first element -- the shared core of every "reduce one 1-D lane"
 /// operation in this module ([`ufunc_reduce`]'s per-axis lanes,
-/// [`reduceat_along_axis`]'s per-segment lanes).
+/// `reduceat_along_axis`'s per-segment lanes).
 ///
 /// - `initial = Some(v)`: folds `v` with *every* element of `lane` (even if
 ///   `lane` is empty, in which case the result is `v` unchanged) -- matches
@@ -686,7 +686,7 @@ fn reduceat_along_axis<T: Float + Clone>(
 
 /// `op.reduceat(a, indices, axis=axis)`: NumPy's `np.add.reduceat`/
 /// `np.multiply.reduceat`/etc., generalized over [`UfuncOp`]. See
-/// [`reduceat_along_axis`] for the exact segment rule (including the
+/// `reduceat_along_axis` for the exact segment rule (including the
 /// `indices[i] >= indices[i + 1]` single-element special case), and the
 /// module docs for the `axis: None` (flatten first) convention.
 ///

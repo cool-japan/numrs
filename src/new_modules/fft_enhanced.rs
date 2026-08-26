@@ -818,8 +818,6 @@ fn ten_log10<T: Float>(x: T) -> T {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    #[allow(unused_imports)]
-    use scirs2_core::Complex64;
 
     #[test]
     fn test_fft_any_size_power_of_two() {

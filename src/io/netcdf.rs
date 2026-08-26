@@ -290,7 +290,7 @@ macro_rules! impl_netcdf_native {
                     ))
                 })?;
 
-                Ok(Array::from_vec_shape(data, &shape)?)
+                Array::from_vec_shape(data, &shape)
             }
         }
     };

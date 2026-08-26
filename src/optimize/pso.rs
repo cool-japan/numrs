@@ -33,7 +33,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::optimize::OptimizeResult;
 use num_traits::Float;
-use scirs2_core::random::{thread_rng, Distribution, Rng, RngExt, Uniform};
+use scirs2_core::random::{thread_rng, Distribution, Rng, Uniform};
 
 /// Inertia weight strategy
 #[derive(Debug, Clone, Copy, PartialEq)]

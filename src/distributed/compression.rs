@@ -29,7 +29,7 @@
 use super::communication::CommunicationError;
 use num_traits::Float;
 use oxicode::{Decode, Encode};
-use scirs2_core::random::{Rng, SeedableRng, StdRng};
+use scirs2_core::random::{SeedableRng, StdRng};
 use std::cmp::Ordering;
 
 /// Compression strategy for bandwidth optimization.

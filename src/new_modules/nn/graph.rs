@@ -162,7 +162,7 @@
 //! - Lee et al. (2019): Self-Attention Graph Pooling (ICML)
 
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{s, Array, Array1, Array2, ArrayView1, ArrayView2, Axis};
+use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis};
 use scirs2_core::numeric::Float;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::collections::HashMap;
@@ -1575,6 +1575,7 @@ mod tests {
         assert_eq!(neighbors.len(), 2);
         assert!(neighbors.contains(&1));
         assert!(neighbors.contains(&2));
+        assert_eq!(weights.len(), neighbors.len());
     }
 
     #[test]

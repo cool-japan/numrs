@@ -55,7 +55,7 @@ pub struct WorkloadMetrics {
     /// no portable way to read hardware cache-miss counters (that requires
     /// OS-specific unsafe APIs, e.g. Linux `perf_event_open`), so
     /// [`LoadBalancer::current_metrics`] fills this with a fixed constant
-    /// (see [`LoadBalancer::ESTIMATED_CACHE_MISS_RATE`]) rather than
+    /// (see `LoadBalancer::ESTIMATED_CACHE_MISS_RATE`) rather than
     /// observed data. Treat it as a rough default, not real telemetry, and
     /// do not rely on it for precise cache analysis.
     pub cache_miss_rate: f64,
@@ -115,6 +115,9 @@ impl WorkloadMetrics {
 /// Worker state for load balancing
 #[derive(Debug)]
 struct WorkerState {
+    // Set at construction but never read back: workers are already
+    // addressed by their position in `LoadBalancer::workers`, so nothing
+    // needs this identifier today. Kept for diagnostics/logging.
     #[allow(dead_code)]
     id: usize,
     queue_length: usize,
@@ -159,6 +162,8 @@ impl WorkerState {
         }
     }
 
+    // No caller: `throughput()` feeds into reported metrics but this
+    // derived "throughput per unit CPU" figure isn't surfaced anywhere yet.
     #[allow(dead_code)]
     fn efficiency(&self) -> f64 {
         if self.cpu_utilization == 0.0 {
@@ -182,9 +187,14 @@ impl WorkerState {
 pub struct LoadBalancer {
     strategy: RwLock<BalancingStrategy>,
     workers: Arc<RwLock<Vec<WorkerState>>>,
+    // Initialized empty and never pushed to: nothing snapshots
+    // `current_metrics()` into it. `LoadBalancingAdvisor` keeps its own,
+    // separately-populated history instead of consuming this one.
     #[allow(dead_code)]
     metrics_history: Mutex<VecDeque<WorkloadMetrics>>,
     next_worker: Mutex<usize>, // For round-robin
+    // Only read by `should_rebalance`, which nothing calls (see its own
+    // comment) — auto-rebalancing is implemented but never triggered.
     #[allow(dead_code)]
     rebalance_threshold: f64,
     adaptation_window: Duration,
@@ -476,6 +486,11 @@ impl LoadBalancer {
         Ok(worker_id)
     }
 
+    // Nothing calls `should_rebalance`/`rebalance_workload` — automatic
+    // rebalancing based on `calculate_load_imbalance` (used, and kept
+    // active) is implemented but never triggered on a schedule or from
+    // `submit`/`current_metrics`. Wiring in a rebalance trigger is a
+    // scheduling-behavior change, out of scope for a lint-only pass.
     #[allow(dead_code)]
     fn should_rebalance(&self) -> Result<bool> {
         let workers = self.workers.read().expect("lock should not be poisoned");
@@ -499,6 +514,8 @@ impl LoadBalancer {
         }
     }
 
+    // See `should_rebalance`: only reachable from there, which nothing
+    // calls.
     #[allow(dead_code)]
     fn rebalance_workload(&self) -> Result<()> {
         // This would trigger work migration between workers
@@ -552,6 +569,10 @@ impl LoadBalancer {
 /// Load balancing recommendation system
 pub struct LoadBalancingAdvisor {
     metrics_history: VecDeque<WorkloadMetrics>,
+    // Set at construction but never read: the analysis methods below window
+    // `metrics_history` by a fixed entry count (e.g. `.take(10)`) rather
+    // than by elapsed time. Kept for a time-based windowing policy this
+    // field implies but that isn't wired in.
     #[allow(dead_code)]
     analysis_window: Duration,
 }

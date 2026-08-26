@@ -194,7 +194,7 @@ macro_rules! impl_mat_io {
                     .to_vec()
                 };
 
-                Ok(Array::from_vec_shape(data, &shape)?)
+                Array::from_vec_shape(data, &shape)
             }
         }
     };

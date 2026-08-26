@@ -493,13 +493,101 @@ impl GpuContext {
     }
 }
 
-/// Creates a new context with an async runtime
-pub fn new_context() -> Result<GpuContextRef> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| NumRs2Error::RuntimeError(format!("Failed to create async runtime: {}", e)))?;
+/// How the current thread relates to a Tokio runtime, as seen by
+/// [`new_context`] and other synchronous entry points that need to drive an
+/// `async fn` to completion without risking a nested-runtime panic.
+///
+/// Tokio forbids starting a runtime (or calling
+/// [`Runtime::block_on`](tokio::runtime::Runtime::block_on)) on a thread that
+/// is already being driven by one - doing so panics with "Cannot start a
+/// runtime from within a runtime" instead of deadlocking, which is exactly
+/// the failure this type exists to route around: every caller of
+/// [`runtime_access`] matches on the three cases below instead of
+/// unconditionally building a private runtime.
+pub(crate) enum RuntimeAccess {
+    /// No Tokio runtime is driving this thread. It is safe to build a
+    /// private one and block on it directly.
+    None,
+    /// A multi-thread Tokio runtime is driving this thread. Blocking here
+    /// directly would still stall that runtime's worker, but
+    /// [`tokio::task::block_in_place`] hands this worker's other tasks off
+    /// to the remaining workers first, so blocking through the returned
+    /// [`Handle`](tokio::runtime::Handle) is safe.
+    MultiThread(tokio::runtime::Handle),
+    /// A current-thread Tokio runtime is driving this thread (the default
+    /// flavor for `#[tokio::test]`). There is no other worker to hand
+    /// blocking work off to - `block_in_place` itself panics on this
+    /// flavor - so there is no safe way to block here at all. Callers
+    /// should refuse (or, for `Option`-returning APIs, report "unavailable")
+    /// rather than nest a runtime; async code should drive the future
+    /// directly with `.await` instead of going through a sync entry point.
+    CurrentThread,
+}
 
-    let context = rt.block_on(GpuContext::new())?;
-    Ok(Arc::new(context))
+/// Classifies the current thread's relationship to a Tokio runtime; see
+/// [`RuntimeAccess`] for what each case means and how to act on it.
+pub(crate) fn runtime_access() -> RuntimeAccess {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+            RuntimeAccess::MultiThread(handle)
+        }
+        Ok(_) => RuntimeAccess::CurrentThread,
+        Err(_) => RuntimeAccess::None,
+    }
+}
+
+/// Creates a new context, driving the adapter/device request with a plain
+/// `.await` on the caller's own async executor.
+///
+/// This is the constructor to use from `async` code, including
+/// `#[tokio::test]` bodies (which default to a single-threaded runtime):
+/// unlike [`new_context`], it never builds a runtime of its own, so it
+/// cannot nest one inside the caller's and panic.
+pub async fn new_context_async() -> Result<GpuContextRef> {
+    GpuContext::new().await.map(Arc::new)
+}
+
+/// Creates a new context, blocking the calling thread until it is ready.
+///
+/// This is the constructor for **synchronous, non-async** callers - a plain
+/// `fn main`, a `#[test]`, a benchmark. It has no async executor of its own
+/// to run on, so by default it spins up a small private Tokio runtime and
+/// blocks on it to perform the adapter/device request.
+///
+/// Calling this from code that is already running on a Tokio runtime is
+/// handled rather than left to panic (see `RuntimeAccess`, this module's
+/// internal classification of the three cases):
+///
+/// * on a **multi-thread** runtime the request is round-tripped through
+///   [`tokio::task::block_in_place`], which is safe because that runtime has
+///   other workers to pick up the slack;
+/// * on a **current-thread** runtime - the default `#[tokio::test]` flavor -
+///   blocking is never safe (there are no other workers), so this returns a
+///   clear [`NumRs2Error::RuntimeError`] instructing the caller to use
+///   [`new_context_async`] instead, rather than nesting a runtime and
+///   panicking or silently deadlocking.
+pub fn new_context() -> Result<GpuContextRef> {
+    match runtime_access() {
+        RuntimeAccess::MultiThread(handle) => {
+            tokio::task::block_in_place(|| handle.block_on(GpuContext::new())).map(Arc::new)
+        }
+        RuntimeAccess::CurrentThread => Err(NumRs2Error::RuntimeError(
+            "new_context() was called from within a single-threaded Tokio runtime \
+             (the default #[tokio::test] flavor); it cannot safely block this thread \
+             to wait for the adapter/device request without nesting a second runtime \
+             inside the caller's, which Tokio forbids. Call \
+             `new_context_async().await` instead from async code, or annotate the \
+             test with #[tokio::test(flavor = \"multi_thread\")]."
+                .to_string(),
+        )),
+        RuntimeAccess::None => {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    NumRs2Error::RuntimeError(format!("Failed to create async runtime: {}", e))
+                })?;
+            rt.block_on(GpuContext::new()).map(Arc::new)
+        }
+    }
 }

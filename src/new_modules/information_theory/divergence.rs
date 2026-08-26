@@ -56,9 +56,9 @@
 //!
 //! Different choices of f yield different divergences (KL, Chi-squared, etc.)
 
-use super::{validate_distribution, xlogy, InfoTheoryError, InfoTheoryResult};
+use super::validate_distribution;
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{Array1, ArrayView1};
+use scirs2_core::ndarray::Array1;
 
 /// Compute Kullback-Leibler divergence D_KL(P||Q)
 ///

@@ -197,7 +197,7 @@ impl Link {
     /// Flush queued frames, close the write half, and stop the reader.
     ///
     /// Idempotent, and safe to call on a link whose peer already went away.
-    /// The graceful wait is bounded by [`CLOSE_GRACE`]: a writer blocked on a
+    /// The graceful wait is bounded by `CLOSE_GRACE`: a writer blocked on a
     /// peer that stopped reading is aborted rather than hanging shutdown.
     pub async fn close(&self) -> Result<(), NetError> {
         // Best-effort: if the writer already stopped, there is nothing to

@@ -41,7 +41,7 @@ pub struct ArrayFlags {
 /// The owned buffer lives behind an [`Arc`], which makes [`Clone`] an O(1)
 /// reference-count bump instead of an O(n) deep copy. The buffer is *not*
 /// shared observably: every mutating path in the crate goes through
-/// [`Array::nd_mut`], the single place that calls `Arc::make_mut`, so the
+/// `Array::nd_mut`, the single place that calls `Arc::make_mut`, so the
 /// first mutation of a shared buffer transparently unshares it (one deep
 /// copy) before writing. Callers therefore see exactly the value semantics
 /// they saw when the field was a plain owned `ndarray::Array` -- mutating one
@@ -166,7 +166,7 @@ impl<T: Clone> Array<T> {
 
     /// Get a mutable reference to the underlying ndarray
     ///
-    /// Unshares the buffer first (see [`Array::nd_mut`]): if this array
+    /// Unshares the buffer first (see `Array::nd_mut`): if this array
     /// currently shares storage with a clone, the buffer is deep-copied once
     /// so the write cannot be observed through the other handle.
     pub fn array_mut(&mut self) -> &mut NdArray<T, IxDyn> {
@@ -308,7 +308,7 @@ impl<T: Clone> Array<T> {
     /// Returns `Some(&mut [T])` when the array is stored in standard
     /// (C-contiguous) layout, and `None` otherwise.
     ///
-    /// Unshares the buffer first (see [`Array::nd_mut`]), so writes through
+    /// Unshares the buffer first (see `Array::nd_mut`), so writes through
     /// the returned slice are never visible through a clone of this array.
     pub fn as_slice_mut(&mut self) -> Option<&mut [T]> {
         self.nd_mut().as_slice_mut()

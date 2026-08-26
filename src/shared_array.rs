@@ -51,13 +51,9 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast, One, Zero};
-use scirs2_core::ndarray::{
-    ArcArray, Array as NdArray, ArrayView as NdArrayView, ArrayViewMut as NdArrayViewMut, Axis,
-    Dimension, IxDyn, ShapeBuilder,
-};
+use scirs2_core::ndarray::{ArcArray, Array as NdArray, ArrayView as NdArrayView, IxDyn};
 use std::fmt;
 use std::ops::{Add, Div, Index, Mul, Sub};
-use std::sync::Arc;
 
 /// A reference-counted N-dimensional array.
 ///

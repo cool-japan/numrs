@@ -11,7 +11,14 @@
 //! - reciprocal_f64: Element-wise reciprocal (1/x)
 //! - negative_f64: Element-wise negation
 
-use super::{EnhancedSimdOps, AVX2_F64_LANES, PREFETCH_DISTANCE};
+use super::EnhancedSimdOps;
+// `Array`, the lane-count constants and the x86_64 intrinsics are used
+// exclusively by the `#[cfg(target_arch = "x86_64")]` methods below; gated
+// the same way so non-x86_64 builds (aarch64, wasm32, ...) don't see them
+// as unused.
+#[cfg(target_arch = "x86_64")]
+use super::{AVX2_F64_LANES, PREFETCH_DISTANCE};
+#[cfg(target_arch = "x86_64")]
 use crate::array::Array;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;

@@ -19,7 +19,6 @@
 
 use numrs2::array::Array;
 use numrs2::error::NumRs2Error;
-use numrs2::prelude::*;
 
 // ---------------------------------------------------------------------
 // tril / try_tril

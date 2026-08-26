@@ -13,7 +13,6 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::prelude::*;
-use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::hint::black_box;
 
 /// Benchmark SIMD vs scalar addition

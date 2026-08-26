@@ -4,15 +4,10 @@
 //! for handling datasets that are too large to fit entirely in memory.
 
 use crate::error::{NumRs2Error, Result};
-#[allow(unused_imports)]
-use std::alloc::{alloc, dealloc, Layout};
 use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};
-#[allow(unused_imports)]
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-#[allow(unused_imports)]
-use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
@@ -168,6 +163,10 @@ pub struct SpilledData {
     /// Size of the data in bytes
     size: usize,
     /// Creation timestamp
+    // Set once at construction and never read back: eviction today keys
+    // off `last_accessed` only (see `is_expired`/`touch`). Kept for a
+    // possible future creation-age eviction policy alongside the existing
+    // access-recency one; adding that policy is out of scope here.
     #[allow(dead_code)]
     created_at: SystemTime,
     /// Last access timestamp

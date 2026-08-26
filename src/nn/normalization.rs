@@ -4,9 +4,7 @@
 
 use super::NnResult;
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{
-    Array, Array1, Array2, ArrayView, ArrayView1, ArrayView2, Axis, ScalarOperand,
-};
+use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2, ScalarOperand};
 use scirs2_core::numeric::Float;
 use scirs2_core::random::*;
 use scirs2_core::simd_ops::SimdUnifiedOps;

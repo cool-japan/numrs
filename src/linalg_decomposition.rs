@@ -12,13 +12,9 @@
 //! All functions support both feature-gated (with `matrix_decomp`) and non-feature-gated versions
 //! to maintain compatibility across different build configurations.
 
-#[allow(unused_imports)] // Used conditionally based on features
 use crate::array::Array;
-#[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
-#[allow(unused_imports)] // Used conditionally based on features
 use num_traits::Float;
-#[allow(unused_imports)] // Used conditionally based on features
 use std::fmt::Debug;
 
 /// Compute the rank of a matrix
@@ -159,7 +155,8 @@ pub fn qr<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -241,7 +238,8 @@ pub fn cholesky<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -393,7 +391,8 @@ pub fn eig<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     sort: Option<&str>,
@@ -553,7 +552,8 @@ pub fn svd<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>, Array<T>)> {
@@ -597,7 +597,8 @@ pub fn matrix_rank<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     tol: Option<T>,

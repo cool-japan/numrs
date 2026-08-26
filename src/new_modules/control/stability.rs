@@ -11,7 +11,6 @@
 use super::{ControlError, ControlResult, TransferFunction};
 use scirs2_core::ndarray::{Array1, Array2};
 use scirs2_core::num_complex::Complex64;
-use std::f64::consts::PI;
 
 /// Stability margins (gain margin and phase margin)
 #[derive(Debug, Clone)]

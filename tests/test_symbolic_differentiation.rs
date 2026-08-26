@@ -18,7 +18,6 @@ fn test_diff_variable() {
 
     assert!(matches!(dx, Expr::Constant(1.0)));
 
-    let y = Expr::var("y");
     let dy = differentiate(&x, "y").expect("differentiation failed");
     assert!(matches!(dy, Expr::Constant(0.0)));
 }

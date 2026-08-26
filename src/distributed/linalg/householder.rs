@@ -32,7 +32,7 @@
 
 use super::matrix::DistFloat;
 use super::DistributedLinalgError;
-use scirs2_core::ndarray::{s, Array2, ArrayView2};
+use scirs2_core::ndarray::{Array2, ArrayView2};
 
 /// A thin QR factorization holding its reflectors implicitly.
 ///
@@ -234,7 +234,7 @@ impl<T: DistFloat> HouseholderQr<T> {
 mod tests {
     use super::super::matrix::testutil::{deterministic_matrix, frobenius};
     use super::*;
-    use scirs2_core::ndarray::Array2;
+    use scirs2_core::ndarray::{s, Array2};
 
     /// `R` is unique only up to the sign of each row: fix the convention by
     /// making every diagonal entry positive before comparing two `R`s.

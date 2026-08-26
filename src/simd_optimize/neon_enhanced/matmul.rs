@@ -3,9 +3,16 @@
 //! This module provides optimized matrix multiplication for ARM NEON.
 
 use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
+// Only the aarch64 SIMD implementation raises these errors; the
+// `#[cfg(not(target_arch = "aarch64"))]` fallback below returns `Result`
+// (kept unconditional) but never constructs a `NumRs2Error` directly.
+#[cfg(target_arch = "aarch64")]
+use crate::error::NumRs2Error;
 
-use super::core::{NeonEnhancedOps, NEON_F32_LANES};
+use super::core::NeonEnhancedOps;
+#[cfg(target_arch = "aarch64")]
+use super::core::NEON_F32_LANES;
 
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;

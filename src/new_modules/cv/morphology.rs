@@ -26,8 +26,7 @@
 //! All implementations use `crate::array::Array` for data and follow
 //! the pure Rust requirement.
 
-use super::{BorderMode, ColorSpace, CvError, Image};
-use crate::array::Array;
+use super::{ColorSpace, CvError, Image};
 use crate::error::NumRs2Error;
 
 /// Shape of a structuring element.

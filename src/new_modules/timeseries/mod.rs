@@ -46,7 +46,7 @@
 //! ```
 
 use crate::error::{NumRs2Error, Result};
-use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2};
+use scirs2_core::ndarray::{Array1, Array2, ArrayView1};
 
 // Submodules
 pub mod arima;
@@ -706,7 +706,7 @@ pub fn adf_test(data: &ArrayView1<f64>, lags: usize, trend: &str) -> Result<(f64
 }
 
 /// Approximate p-value for ADF test using MacKinnon (1994) critical values.
-fn adf_p_value(stat: f64, n: usize, trend: &str) -> f64 {
+fn adf_p_value(stat: f64, _n: usize, trend: &str) -> f64 {
     // Critical values at different significance levels (approximate)
     let critical_values = match trend {
         "nc" => vec![-2.58, -1.95, -1.62], // 1%, 5%, 10%
@@ -992,7 +992,7 @@ mod tests {
     fn test_acf_white_noise() {
         // White noise should have ACF near 0 for all lags > 0
         // Use actual random-like values instead of alternating pattern
-        use scirs2_core::random::{thread_rng, Rng};
+        use scirs2_core::random::thread_rng;
 
         let mut rng = thread_rng();
         let data: Vec<f64> = (0..50).map(|_| rng.gen_range(-1.0..1.0)).collect();

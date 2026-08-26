@@ -183,14 +183,7 @@ where
             };
 
             // Mutation
-            let mutant = mutate(
-                &population,
-                i,
-                &config.strategy,
-                f_mutation,
-                bounds,
-                &mut rng,
-            )?;
+            let mutant = mutate(&population, i, &config.strategy, f_mutation, &mut rng)?;
 
             // Crossover
             let trial = crossover(&target.vector, &mutant, &config.crossover, cr, &mut rng)?;
@@ -333,12 +326,16 @@ where
 }
 
 /// Perform mutation operation
+///
+/// Bounds are intentionally not enforced here: the mutant produced by this
+/// function is an intermediate vector that still goes through `crossover`,
+/// and only the resulting trial vector is clamped, via `enforce_bounds`, at
+/// the call site below.
 fn mutate<T: Float>(
     population: &[Individual<T>],
     current_idx: usize,
     strategy: &MutationStrategy,
     f_mutation: T,
-    bounds: &[(T, T)],
     rng: &mut impl Rng,
 ) -> Result<Vec<T>> {
     let n = population.len();

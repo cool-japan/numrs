@@ -10,8 +10,9 @@
 //! ownership, "MANY agents run concurrently on this tree: NEVER touch
 //! files outside your ownership list") calls `masked.mean()`,
 //! `.sum()`, `.min()`, `.max()` with **zero** arguments and treats the
-//! result as `Option<T>` (`assert_eq!(masked.mean().unwrap(), 3.0)`, wired
-//! into `assert!(all_masked.mean().is_none())`). Adding required
+//! result as `Option<T>` (it calls `unwrap` directly on `masked.mean()`
+//! and asserts the result equals `3.0`, alongside
+//! `assert!(all_masked.mean().is_none())`). Adding required
 //! parameters to those exact methods would not compile against that file.
 //! Adding new `_axis`-suffixed methods alongside the untouched originals
 //! is the only change that is both non-breaking and satisfies the task's
@@ -32,7 +33,7 @@
 use super::MaskedArray;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, NumCast, One, Zero};
+use num_traits::{Float, Zero};
 use std::ops::{Add, Div};
 
 // ---------------------------------------------------------------------
@@ -61,7 +62,7 @@ pub(super) fn normalize_axis(ax: isize, ndim: usize) -> Result<usize> {
 /// `o * axis_size * inner + i + k * inner` for `k` in `0..axis_size`; the
 /// corresponding *collapsed* (axis removed) output element sits at flat
 /// index `o * inner + i`. Every axis-walking function in this module
-/// (this file's [`reduce_lanes`] and `search.rs`'s `argmin`/`argmax`/
+/// (this file's `reduce_lanes` and `search.rs`'s `argmin`/`argmax`/
 /// `cumsum`/`sort`) is built on this one formula, walked over
 /// [`crate::kernels::borrow::operand`] -- which normalizes both `data`
 /// and `mask` to their *logical*, current-shape C order first -- so this
@@ -309,7 +310,7 @@ impl<T: Clone + Add<Output = T> + Div<Output = T> + Zero + From<f64> + Into<f64>
 /// `T: Float` supplies everything these need generically (`Zero`, `One`,
 /// `PartialOrd`, `Copy`, `NumCast`, the four arithmetic ops, `sqrt`,
 /// `is_nan`) -- but *not* `Default` (unlike `Zero::zero()`, `Float` has no
-/// blanket `Default` impl), which [`reduce_lanes`]'s `U: Default` bound
+/// blanket `Default` impl), which `reduce_lanes`'s `U: Default` bound
 /// needs to fill a masked output slot. Hence the explicit `+ Default`
 /// here; both `f32` and `f64` satisfy it trivially (`0.0`).
 impl<T: Float + Default> MaskedArray<T> {
@@ -699,7 +700,7 @@ mod tests {
     /// A genuinely 3-D case (shape `[2, 3, 4]`, reducing the *middle* axis)
     /// with a scattered mask, pinned against `numpy.ma`. Every other test
     /// in this file uses `ndim <= 2`, where `outer` or `inner` in
-    /// [`reduce_lanes`] is trivially `1`; this is the only test that
+    /// `reduce_lanes` is trivially `1`; this is the only test that
     /// exercises both being `> 1` simultaneously (`outer = 2`,
     /// `inner = 4`), which is what actually confirms the flat-index
     /// formula `o * axis_size * inner + i + k * inner` in

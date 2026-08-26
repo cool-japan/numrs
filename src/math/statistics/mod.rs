@@ -36,7 +36,7 @@
 use crate::array::Array;
 use crate::error::Result;
 use crate::kernels::{borrow::operand, cast, reduce};
-use num_traits::{Float, NumCast, One, Zero};
+use num_traits::{Float, NumCast, Zero};
 use std::ops::{Add, Div, Mul, Sub};
 
 // Helper functions for SIMD operations

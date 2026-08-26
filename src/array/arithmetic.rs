@@ -260,8 +260,8 @@ where
 /// Remainder operator with automatic broadcasting (element-wise)
 ///
 /// Unlike `Add`/`Sub`/`Mul`/`Div`, there is no `remainder_broadcast`
-/// method on [`Array`] to delegate to -- the [`kernels::borrow::operand`] +
-/// [`kernels::elementwise::binary_serial`] + [`Array::from_vec_shape`]
+/// method on [`Array`] to delegate to -- the `kernels::borrow::operand` +
+/// `kernels::elementwise::binary_serial` + [`Array::from_vec_shape`]
 /// dispatch (identical in shape to `add_broadcast`'s closure body in
 /// `array/operations.rs`) is inlined directly into this operator's
 /// [`Array::broadcast_op`] closure instead.

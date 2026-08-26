@@ -63,7 +63,7 @@ pub use higher_order::{
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, One, Zero};
+use num_traits::Float;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -719,9 +719,6 @@ where
             }
             grad
         };
-
-        // Compute gradient at x
-        let grad = grad_at(&x_vec);
 
         // For each gradient component, compute its derivative (Hessian row)
         for j in 0..n {

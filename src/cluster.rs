@@ -44,7 +44,7 @@
 use crate::array::Array;
 use crate::distance::*;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, One, Zero};
+use num_traits::Float;
 use scirs2_core::random::*;
 use std::fmt::Debug;
 
@@ -450,6 +450,24 @@ pub struct Dendrogram<T> {
 ///
 /// let dendro = hierarchical(&data, LinkageMethod::Average).expect("hierarchical should succeed");
 /// ```
+// KNOWN DEFECT (pre-existing, not introduced by this lint-fix pass): `method`
+// is accepted but never consulted, so all four `LinkageMethod` variants
+// currently produce identical output - no Lance-Williams-style distance
+// update is performed for a merged cluster. Compounding this,
+// `find_min_distance` below only considers pairs of *original* points
+// (`if i < n && j < n`), so once a merge occurs, distances from the new
+// cluster to anything else are never computed; on the final merge(s) this
+// falls through to the function's `T::infinity()`-initialized default,
+// recording a bogus distance in the linkage matrix. `test_hierarchical_clustering`
+// / `test_fcluster` do not catch this because they only assert
+// `linkage.len()` / cluster-count for a 4-point, two-well-separated-pairs
+// dataset where the forced merge order happens to coincide with the
+// correct one. Fixing this properly (generalizing the distance lookup to
+// merged clusters, plus real per-method Lance-Williams updates) is a
+// distinct algorithm change with its own reference-value tests, out of
+// scope for this lint-only pass - flagged for a follow-up task rather than
+// silently renamed away.
+#[allow(unused_variables)]
 pub fn hierarchical<T>(x: &Array<T>, method: LinkageMethod) -> Result<Dendrogram<T>>
 where
     T: Float + Debug,

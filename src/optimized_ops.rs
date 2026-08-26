@@ -113,8 +113,8 @@ pub struct SimdOpsResult {
 /// returns a **wrong, finite value** (neither the true extremum nor
 /// `NaN`) for some `NaN` placements -- see
 /// `crate::kernels::reduce`'s module docs for the reproduction. Instead
-/// this calls [`crate::kernels::reduce::min_f32`]/
-/// [`crate::kernels::reduce::max_f32`], the same deterministic
+/// this calls `crate::kernels::reduce::min_f32`/
+/// `crate::kernels::reduce::max_f32`, the same deterministic
 /// comparison-fold kernels backing `stats::basic` and
 /// `Array::min_optimized`/`max_optimized`.
 pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
@@ -195,7 +195,6 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
 /// Adaptive processing that automatically chooses between scalar, SIMD, or GPU
 pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     let optimizer = AutoOptimizer::new();
-    let caps = PlatformCapabilities::detect();
     let size = data.len();
 
     if optimizer.should_use_gpu(size) {
@@ -203,9 +202,11 @@ pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
         // For now, fall back to SIMD
         adaptive_array_sum_simd(data)
     } else if optimizer.should_use_simd(size) {
-        // On ARM64, prefer NEON if available
+        // On ARM64, prefer NEON if available. `caps` is only meaningful
+        // (and only computed) here: no other target branches on it.
         #[cfg(target_arch = "aarch64")]
         {
+            let caps = PlatformCapabilities::detect();
             if caps.neon_available && data.len() >= 4 {
                 // Convert f64 to f32 for NEON processing if beneficial
                 let f32_data: Vec<f32> = data.iter().map(|&x| x as f32).collect();

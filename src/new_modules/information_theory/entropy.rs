@@ -51,10 +51,9 @@
 //! - α = 2: -log(Σ p(x)^2) (collision entropy)
 //! - α → ∞: -log(max p(x)) (min-entropy)
 
-use super::{validate_distribution, xlogy, InfoTheoryError, InfoTheoryResult};
+use super::{validate_distribution, xlogy};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis};
-use std::f64::consts::E;
+use scirs2_core::ndarray::{Array1, Array2, Axis};
 
 /// Logarithm base for entropy calculations
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -633,7 +632,7 @@ mod tests {
         let dx = 10.0 / (n as f64);
         let h = differential_entropy(&pdf, dx, LogBase::Nats).expect("differential entropy failed");
 
-        let expected = 0.5 * (2.0 * std::f64::consts::PI * E).ln();
+        let expected = 0.5 * (2.0 * std::f64::consts::PI * std::f64::consts::E).ln();
         assert!((h - expected).abs() < 0.1); // Approximate due to discretization
     }
 

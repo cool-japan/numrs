@@ -59,22 +59,9 @@ mod tests;
 use reference_points::*;
 
 use crate::error::{NumRs2Error, Result};
-use lazy_static::lazy_static;
 use num_traits::Float;
 use scirs2_core::random::{thread_rng, Distribution, Rng, RngExt, Uniform};
 use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::sync::Mutex;
-
-/// Type alias for reference point cache
-type ReferencePointCache<T> = Mutex<HashMap<(usize, usize, u8), Vec<ReferencePoint<T>>>>;
-
-// Global cache for reference points to avoid regenerating common configurations
-// Key: (n_objectives, n_divisions, method_id) where method_id: 0=das-dennis, 1=layered, 2=random
-lazy_static! {
-    static ref REFERENCE_POINT_CACHE_F64: ReferencePointCache<f64> = Mutex::new(HashMap::new());
-    static ref REFERENCE_POINT_CACHE_F32: ReferencePointCache<f32> = Mutex::new(HashMap::new());
-}
 
 /// Configuration for NSGA-III
 #[derive(Debug, Clone)]
@@ -663,12 +650,8 @@ fn perpendicular_distance<T: Float + std::iter::Sum>(
         ));
     }
 
-    // Calculate dot product: point . ref_direction
-    let dot_product: T = point
-        .iter()
-        .zip(ref_direction.iter())
-        .map(|(&p, &r)| p * r)
-        .sum();
+    // Calculate the scalar projection coefficient: point . ref_direction
+    let dot_product = scalar_projection(point, ref_direction)?;
 
     // Calculate projection: (point . ref_direction) * ref_direction
     let projection: Vec<T> = ref_direction.iter().map(|&r| dot_product * r).collect();
@@ -708,6 +691,12 @@ fn scalar_projection<T: Float + std::iter::Sum>(point: &[T], ref_direction: &[T]
 }
 
 /// Calculate Euclidean distance between two points
+///
+/// Only exercised by this module's test suite today - the live NSGA-III
+/// path always needs `perpendicular_distance` (distance to a reference
+/// line) rather than a plain point-to-point distance, so this helper is
+/// `cfg(test)`-gated rather than shipped as unreachable production code.
+#[cfg(test)]
 fn euclidean_distance<T: Float + std::iter::Sum>(a: &[T], b: &[T]) -> Result<T> {
     if a.len() != b.len() {
         return Err(NumRs2Error::DimensionMismatch(

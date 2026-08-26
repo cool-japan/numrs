@@ -310,7 +310,7 @@ fn inverse_norm_correction(norm: Option<&str>, n: usize) -> FFTResult<f64> {
 }
 
 /// 1-D FFT with NumPy's exact `fft(a, n=None, axis=-1, norm=None)`
-/// parameters. The plain [`fft`] (re-exported from `scirs2_fft` above)
+/// parameters. The plain [`super::fft()`] (re-exported from `scirs2_fft` above)
 /// keeps its original 2-argument signature (`x`, `n`) unchanged; this adds
 /// the full parameter set as a separate, `_with`-suffixed function rather
 /// than changing `fft`'s arity, matching the calling convention
@@ -335,7 +335,7 @@ where
 
 /// 1-D inverse FFT with NumPy's exact `ifft(a, n=None, axis=-1,
 /// norm=None)` parameters. See [`fft_with`] for why this is a separate
-/// function rather than a change to [`ifft`]'s signature.
+/// function rather than a change to [`super::ifft`]'s signature.
 pub fn ifft_with<T>(
     x: &[T],
     n: Option<usize>,
@@ -355,7 +355,7 @@ where
 
 /// 1-D real-input FFT with NumPy's exact `rfft(a, n=None, axis=-1,
 /// norm=None)` parameters. See [`fft_with`] for why this is a separate
-/// function rather than a change to [`rfft`]'s signature.
+/// function rather than a change to [`super::rfft()`]'s signature.
 pub fn rfft_with<T>(
     x: &[T],
     n: Option<usize>,
@@ -375,7 +375,7 @@ where
 
 /// 1-D inverse real FFT with NumPy's exact `irfft(a, n=None, axis=-1,
 /// norm=None)` parameters. See [`fft_with`] for why this is a separate
-/// function rather than a change to [`irfft`]'s signature.
+/// function rather than a change to [`super::irfft`]'s signature.
 pub fn irfft_with<T>(
     x: &[T],
     n: Option<usize>,

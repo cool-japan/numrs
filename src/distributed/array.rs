@@ -47,7 +47,6 @@ use super::collective::{
     allgather, allreduce, gather, recv_vec, scatter, send_slice, CollectiveError, ReduceOp,
 };
 use super::process::{Communicator, ProcessError};
-use scirs2_core::ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

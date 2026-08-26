@@ -47,7 +47,7 @@ use crate::kernels;
 use num_traits::{Float, NumCast, One, Zero};
 use scirs2_core::ndarray::Axis;
 use scirs2_core::parallel_ops::*;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Mul};
 
 /// Threshold for using parallel processing
 const PARALLEL_THRESHOLD: usize = 10000;
@@ -374,7 +374,7 @@ where
     /// [`Array::zeros`] gives). This is the contract the original
     /// hand-blocked loop implemented (`*c_ij = c_ij.clone() + a_ik * b_kj`)
     /// and is preserved exactly, which is *also* why the product cannot be
-    /// written straight into `output`'s buffer: [`kernels::gemm::gemm_2d`]
+    /// written straight into `output`'s buffer: `kernels::gemm::gemm_2d`
     /// has *overwrite* (`beta = 0`) semantics, so the product is formed in
     /// a temporary and then added in.
     ///

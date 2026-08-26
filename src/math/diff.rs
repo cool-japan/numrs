@@ -8,8 +8,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, NumCast, Zero};
-use scirs2_core::ndarray::Array1;
+use num_traits::{Float, Zero};
 use scirs2_core::simd_ops::SimdUnifiedOps;
 
 // Import helpers from elementwise module

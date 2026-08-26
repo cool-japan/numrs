@@ -49,9 +49,8 @@
 //! - All linear algebra uses `scirs2_linalg`
 //! - All RNG operations use `scirs2_core::random`
 
-use crate::array::Array;
 use crate::new_modules::probabilistic::{validate_probability, ProbabilisticError, Result};
-use scirs2_core::random::{thread_rng, Rng, RngExt};
+use scirs2_core::random::{Rng, RngExt};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -796,6 +795,7 @@ fn matvec_mult(a: &[Vec<f64>], x: &[f64]) -> Result<Vec<f64>> {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+    use scirs2_core::random::thread_rng;
 
     #[test]
     fn test_bayesian_node() {

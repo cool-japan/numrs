@@ -1,6 +1,6 @@
 //! Tests for work-stealing correctness
 
-use numrs2::parallel::{ThreadPool, ThreadPoolConfig, WorkStealingPool, task};
+use numrs2::parallel::{task, ThreadPool, ThreadPoolConfig, WorkStealingPool};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -27,6 +27,8 @@ fn test_work_stealing_basic() {
 
     pool.wait().expect("Failed to wait for tasks");
     assert_eq!(counter.load(Ordering::SeqCst), 100);
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -61,11 +63,16 @@ fn test_work_stealing_imbalanced_load() {
         .expect("Failed to submit task");
     }
 
-    pool.wait().expect("Failed to wait for tasks");
-    assert_eq!(counter.load(Ordering::SeqCst), 15);
+    // Not `pool.wait()` + an immediate assert: `wait()` can return with the
+    // last task per worker still mid-closure (see `wait_for_count`'s doc
+    // comment in `tests/parallel/mod.rs`), and these closures actually
+    // sleep, making that window observable. Poll the real side effect.
+    super::wait_for_count(&counter, 15, Duration::from_secs(2));
 
     let stats = pool.statistics();
     assert_eq!(stats.tasks_submitted, 15);
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -82,10 +89,12 @@ fn test_work_stealing_pool_correctness() {
         pool.submit(task).expect("Failed to submit task");
     }
 
-    // Wait for completion
-    thread::sleep(Duration::from_millis(500));
+    // `WorkStealingPool` has no blocking `wait()`; poll the real side
+    // effect instead of gambling on a fixed sleep.
+    super::wait_for_count(&counter, 50, Duration::from_secs(2));
 
-    assert_eq!(counter.load(Ordering::SeqCst), 50);
+    pool.shutdown()
+        .expect("Failed to shut down work-stealing pool");
 }
 
 #[test]
@@ -107,6 +116,8 @@ fn test_work_stealing_no_data_races() {
 
     let vec = shared_vec.lock().expect("Failed to lock shared vec");
     assert_eq!(vec.len(), 100);
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }
 
 #[test]
@@ -124,5 +135,7 @@ fn test_work_stealing_statistics() {
 
     let stats = pool.statistics();
     assert_eq!(stats.tasks_submitted, 20);
-    assert!(stats.worker_utilization.len() > 0);
+    assert!(!stats.worker_utilization.is_empty());
+
+    pool.shutdown().expect("Failed to shut down thread pool");
 }

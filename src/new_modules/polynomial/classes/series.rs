@@ -1,7 +1,7 @@
 //! [`Series`]: the one generic engine shared by every class in
 //! [`super`] -- `Chebyshev<T>`, `Legendre<T>`, `Hermite<T>`, `HermiteE<T>`,
 //! `Laguerre<T>`, and `Polynomial<T>` are all `Series<T, SomeBasis>` type
-//! aliases (see [`super::define_polynomial_class!`]). Every method here is
+//! aliases (see `super::define_polynomial_class!`). Every method here is
 //! implemented purely in terms of the small [`super::Basis`] trait, so it
 //! never needs to know which concrete family it is operating on.
 
@@ -207,7 +207,7 @@ where
     }
 
     /// `self + other`, in-basis. Errors on a domain/window mismatch (see
-    /// [`Series::check_compatible`]).
+    /// `Series::check_compatible`).
     pub fn add(&self, other: &Self) -> Result<Self> {
         self.check_compatible(other)?;
         Ok(Series::new(
@@ -218,7 +218,7 @@ where
     }
 
     /// `self - other`, in-basis. Errors on a domain/window mismatch (see
-    /// [`Series::check_compatible`]).
+    /// `Series::check_compatible`).
     pub fn sub(&self, other: &Self) -> Result<Self> {
         self.check_compatible(other)?;
         Ok(Series::new(
@@ -229,7 +229,7 @@ where
     }
 
     /// `self * other`. Errors on a domain/window mismatch (see
-    /// [`Series::check_compatible`]).
+    /// `Series::check_compatible`).
     ///
     /// Implemented via a **power-basis roundtrip**: both operands convert to
     /// the power basis ([`Basis::to_power`]), multiply there by reusing

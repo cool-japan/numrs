@@ -25,11 +25,8 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::interop::ndarray_compat::{from_ndarray, to_ndarray};
 use num_traits::{Float, NumAssign, NumCast};
-use scirs2_core::ndarray::{
-    Array1, Array2, ArrayView1, ArrayView2, Ix1, Ix2, IxDyn, ScalarOperand,
-};
+use scirs2_core::ndarray::{Array1, Array2, ScalarOperand};
 use std::fmt::Debug;
 use std::iter::Sum;
 

@@ -20,12 +20,11 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::kernels::borrow::operand;
-use crate::simd::{into_vec_no_copy, SimdOps};
+use crate::simd::into_vec_no_copy;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::marker::PhantomData;
 
-use super::core::{ArrayExpr, BinaryExpr, Expr, ScalarExpr, UnaryExpr};
-use super::enhanced::ReductionExpr;
+use super::core::{ArrayExpr, Expr};
 
 // ---------------------------------------------------------------------------
 // FusedOp trait
@@ -1071,7 +1070,7 @@ impl<'a> FusionBuilder<'a> {
 mod tests {
     use super::*;
     use crate::array::Array;
-    use crate::expr::core::{ArrayExpr, Expr, LazyEval};
+    use crate::expr::core::{ArrayExpr, BinaryExpr, Expr};
     use approx::assert_relative_eq;
 
     // -----------------------------------------------------------------------

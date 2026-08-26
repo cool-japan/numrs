@@ -3,7 +3,7 @@
 use crate::python::array::PyArray;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyAnyMethods, PyDict, PyTuple};
+use pyo3::types::{PyDict, PyTuple};
 use std::cell::RefCell;
 
 /// Minimize a scalar function of one or more variables.

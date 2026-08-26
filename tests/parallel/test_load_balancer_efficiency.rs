@@ -20,8 +20,8 @@ fn test_round_robin_vs_least_loaded_performance() {
     let rr_duration = start.elapsed();
 
     // Least Loaded
-    let ll_balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 4)
-        .expect("Failed to create LL balancer");
+    let ll_balancer =
+        LoadBalancer::new(BalancingStrategy::LeastLoaded, 4).expect("Failed to create LL balancer");
 
     let start = std::time::Instant::now();
     for _ in 0..1000 {
@@ -54,7 +54,7 @@ fn test_weighted_capacity_efficiency() {
         .expect("Failed to update worker 3");
 
     // Select workers and verify it tends to choose less loaded ones
-    let mut selections = vec![0; 4];
+    let mut selections = [0; 4];
     for _ in 0..100 {
         if let Ok(worker) = balancer.select_worker() {
             selections[worker] += 1;
@@ -218,7 +218,7 @@ fn test_optimal_worker_selection() {
         LoadBalancer::new(BalancingStrategy::LeastLoaded, 5).expect("Failed to create balancer");
 
     // Set up workers with different loads
-    let loads = vec![10, 5, 20, 3, 15];
+    let loads = [10, 5, 20, 3, 15];
     for (i, &load) in loads.iter().enumerate() {
         balancer
             .update_worker_metrics(i, load, 0.5, 0.4)
@@ -226,9 +226,7 @@ fn test_optimal_worker_selection() {
     }
 
     // Should select worker 3 (lowest load)
-    let worker = balancer
-        .select_worker()
-        .expect("Failed to select worker");
+    let worker = balancer.select_worker().expect("Failed to select worker");
     assert_eq!(worker, 3);
 }
 
@@ -237,7 +235,7 @@ fn test_worker_selection_fairness() {
     let balancer =
         LoadBalancer::new(BalancingStrategy::RoundRobin, 4).expect("Failed to create balancer");
 
-    let mut selections = vec![0; 4];
+    let mut selections = [0; 4];
 
     // Select 100 workers
     for _ in 0..100 {
@@ -293,9 +291,7 @@ fn test_numa_aware_strategy() {
 
     // Select workers
     for _ in 0..20 {
-        let worker = balancer
-            .select_worker()
-            .expect("Failed to select worker");
+        let worker = balancer.select_worker().expect("Failed to select worker");
         assert!(worker < 4);
     }
 }
@@ -314,9 +310,7 @@ fn test_work_stealing_strategy() {
         .expect("Failed to update worker 1");
 
     // Should prefer less loaded workers
-    let worker = balancer
-        .select_worker()
-        .expect("Failed to select worker");
+    let worker = balancer.select_worker().expect("Failed to select worker");
     assert_ne!(worker, 0);
 }
 
@@ -383,8 +377,11 @@ fn test_advisor_trend_analysis() {
     }
 
     let analysis = advisor.analyze_trends();
-    assert!(analysis.throughput_trend >= 0.0, "Throughput should be improving");
-    assert!(analysis.stability_score >= 0.0 && analysis.stability_score <= 1.0);
+    assert!(
+        analysis.throughput_trend >= 0.0,
+        "Throughput should be improving"
+    );
+    assert!((0.0..=1.0).contains(&analysis.stability_score));
 }
 
 // ============================================================================
@@ -393,7 +390,7 @@ fn test_advisor_trend_analysis() {
 
 #[test]
 fn test_strategy_selection_latency() {
-    let strategies = vec![
+    let strategies = [
         BalancingStrategy::RoundRobin,
         BalancingStrategy::LeastLoaded,
         BalancingStrategy::WeightedCapacity,

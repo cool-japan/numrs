@@ -371,7 +371,6 @@ where
     T: Float + Debug,
 {
     let one = T::one();
-    let zero = T::zero();
     let eps = T::from(1e-15).expect("1e-15 should convert to float type");
 
     // Special cases

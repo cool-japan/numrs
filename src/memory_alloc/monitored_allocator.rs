@@ -478,12 +478,18 @@ mod tests {
 
         // Small allocation should not be monitored
         let small_layout = Layout::from_size_align(64, 16).expect("Layout should succeed");
-        let _ptr = monitored
+        let ptr = monitored
             .allocate(small_layout)
             .expect("allocation should succeed");
 
         let metrics = monitored.get_performance_metrics();
         assert_eq!(metrics.total_allocations, 0);
+
+        unsafe {
+            monitored
+                .deallocate(ptr, small_layout)
+                .expect("deallocation should succeed");
+        }
     }
 
     #[test]
@@ -494,9 +500,19 @@ mod tests {
         // Perform some allocations
         for _ in 0..10 {
             let layout = Layout::from_size_align(1024, 16).expect("Layout should succeed");
-            let _ptr = monitored
+            let ptr = monitored
                 .allocate(layout)
                 .expect("allocation should succeed");
+            // `record_deallocation` never decrements `total_allocations`
+            // (only `total_deallocations`/`current_memory_usage`), so
+            // freeing immediately doesn't affect the "Total allocations:
+            // 10" assertion below -- it just avoids leaking each of these
+            // 10 allocations (Miri-verified).
+            unsafe {
+                monitored
+                    .deallocate(ptr, layout)
+                    .expect("deallocation should succeed");
+            }
         }
 
         let report = monitored.generate_performance_report();
@@ -556,7 +572,7 @@ mod tests {
 
         // Perform allocation
         let layout = Layout::from_size_align(1024, 8).expect("Layout should succeed");
-        let _ptr = monitored
+        let ptr = monitored
             .allocate(layout)
             .expect("allocation should succeed");
 
@@ -568,5 +584,14 @@ mod tests {
 
         let metrics_after = monitored.get_performance_metrics();
         assert_eq!(metrics_after.total_allocations, 0);
+
+        // `reset_metrics` only clears the tracked telemetry, not the real
+        // backing allocation above -- free it explicitly so this test
+        // doesn't leak.
+        unsafe {
+            monitored
+                .deallocate(ptr, layout)
+                .expect("deallocation should succeed");
+        }
     }
 }

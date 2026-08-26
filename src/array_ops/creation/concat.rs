@@ -142,7 +142,7 @@ pub fn c_concatenate<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// ```
 ///
 /// This is the canonical `ix_` implementation (it rejects non-1-D inputs,
-/// matching `numpy.ix_`); [`crate::indexing::take_put::ix_`] (a one-line
+/// matching `numpy.ix_`); [`crate::indexing::ix_`] (a one-line
 /// delegate) forwards here.
 pub fn ix_<T: Clone>(sequences: &[&Array<T>]) -> Result<Vec<Array<T>>> {
     if sequences.is_empty() {

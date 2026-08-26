@@ -149,18 +149,6 @@ fn mat_mul(a: &[f64], m: usize, k: usize, b: &[f64], n: usize) -> Vec<f64> {
     c
 }
 
-/// Multiply (m×k) matrix Aᵀ (i.e., A is stored as k×m, transposed) by (k,) vector b.
-fn mat_t_vec(a: &[f64], k: usize, m: usize, b: &[f64]) -> Vec<f64> {
-    // result[j] = sum_i A[i,j] * b[i]  where A is k×m stored row-major
-    let mut r = vec![0.0_f64; m];
-    for i in 0..k {
-        for j in 0..m {
-            r[j] += a[i * m + j] * b[i];
-        }
-    }
-    r
-}
-
 /// Ordinary Least Squares: solve (XᵀX)β = Xᵀy.
 ///
 /// Returns `(β, residuals, (XᵀX)⁻¹)`.

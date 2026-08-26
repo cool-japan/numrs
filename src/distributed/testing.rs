@@ -26,7 +26,6 @@ use super::net::endpoint::Endpoint;
 use super::net::{EndpointConfig, NetError};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
-use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use thiserror::Error;

@@ -9,7 +9,7 @@
 
 use crate::array::Array;
 use crate::error::Result;
-use num_traits::{Float, NumCast, One, Zero};
+use num_traits::{Float, NumCast};
 use scirs2_core::ndarray::Array1;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 

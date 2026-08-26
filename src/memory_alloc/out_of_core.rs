@@ -3,14 +3,12 @@
 //! This module provides array types that can handle datasets larger than available
 //! memory by automatically managing data spilling to disk and loading chunks on demand.
 
-#[allow(unused_imports)]
-use super::large_scale::{LargeScaleConfig, LargeScaleManager, MemoryTracker};
+use super::large_scale::MemoryTracker;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-#[allow(unused_imports)]
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
@@ -87,7 +85,6 @@ struct DataChunk<T: Copy> {
     metadata: ChunkMetadata,
 }
 
-#[allow(dead_code)]
 impl<T: Copy> DataChunk<T> {
     /// Create a new in-memory chunk
     fn new_in_memory(chunk_index: usize, data: Vec<T>) -> Self {
@@ -107,6 +104,12 @@ impl<T: Copy> DataChunk<T> {
     }
 
     /// Create a new chunk from disk
+    // No call site today: chunks are always created in-memory via `new()`
+    // and only later spilled to `disk_path` by the eviction path. This is
+    // the constructor a future index-file/metadata-reload path (recreating
+    // a chunk descriptor that already knows its data is on disk, without
+    // touching the disk itself) would use.
+    #[allow(dead_code)]
     fn new_from_disk(chunk_index: usize, element_count: usize, disk_path: PathBuf) -> Self {
         Self {
             data: None,
@@ -197,6 +200,10 @@ impl<T: Copy> DataChunk<T> {
     }
 
     /// Get a reference to the data, loading from disk if necessary
+    // Read-only counterpart to `get_data_mut` (which every current call
+    // site uses, even ones that only read); no call site needs a
+    // non-dirtying accessor yet.
+    #[allow(dead_code)]
     fn get_data(&mut self) -> Result<&Vec<T>> {
         if self.data.is_none() {
             self.load_from_disk()?;
@@ -256,6 +263,10 @@ pub struct OutOfCoreArray<T: Copy + Send + Sync + Default + 'static> {
     /// Memory tracker for monitoring usage
     memory_tracker: Arc<MemoryTracker>,
     /// Unique identifier for this array
+    // Generated in `new()` but never read back: spill file paths are keyed
+    // by `storage_path`/chunk index, not by this id. Kept for a future use
+    // (e.g. disambiguating diagnostics/logging across multiple arrays);
+    // out of scope to wire in here.
     #[allow(dead_code)]
     array_id: String,
     /// Phantom data for T

@@ -1026,18 +1026,6 @@ where
 mod array_fft_tests {
     use super::*;
     use approx::assert_relative_eq;
-    use scirs2_core::Complex64;
-
-    // Helper to create Complex<f64> array
-    #[allow(dead_code)]
-    fn complex_array(real: Vec<f64>, imag: Vec<f64>) -> Array<Complex64> {
-        let complexes: Vec<Complex64> = real
-            .iter()
-            .zip(imag.iter())
-            .map(|(&r, &i)| Complex64::new(r, i))
-            .collect();
-        Array::from_vec(complexes)
-    }
 
     #[test]
     fn test_fft_simple() {

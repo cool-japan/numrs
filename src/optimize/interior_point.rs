@@ -125,7 +125,6 @@ where
     HF: Fn(&[T]) -> Vec<Vec<T>>,
 {
     let config = config.unwrap_or_default();
-    let n = x0.len();
 
     if eq_constraints.len() != grad_eq.len() {
         return Err(NumRs2Error::ValueError(
@@ -158,15 +157,21 @@ where
 
     while mu > config.mu_min && total_iter < config.max_iter {
         // Solve barrier problem for current mu
-        for inner_iter in 0..config.max_inner_iter {
+        for _inner_iter in 0..config.max_inner_iter {
             total_iter += 1;
 
-            // Evaluate barrier function and its derivatives
-            let (barrier_val, barrier_grad, barrier_hess) =
+            // Evaluate barrier function and its derivatives. Only the
+            // gradient/Hessian terms feed the Newton step below - this
+            // solver uses a fraction-to-the-boundary feasibility line
+            // search rather than a merit-function decrease check, so the
+            // barrier value itself is not needed here.
+            let (_barrier_val, barrier_grad, barrier_hess) =
                 compute_barrier_terms(&x, ineq_constraints, grad_ineq, mu, &config.barrier)?;
 
-            // Augmented objective: f(x) + barrier(x)
-            let f_val = f(&x);
+            // Evaluated for its `nfev` cost-accounting side effect only -
+            // this solver's feasibility line search (below) does not need
+            // the objective value itself.
+            let _f_val = f(&x);
             nfev += 1;
 
             let grad_f_val = grad_f(&x);

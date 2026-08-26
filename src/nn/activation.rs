@@ -16,9 +16,7 @@
 
 use super::NnResult;
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{
-    s, Array, Array1, Array2, ArrayView, ArrayView1, ArrayView2, Axis, ScalarOperand, Zip,
-};
+use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand};
 use scirs2_core::numeric::Float;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 
@@ -342,7 +340,6 @@ where
     })?;
 
     Ok(x.mapv(|v| {
-        let three = T::from(3.0).unwrap_or(one + one + one);
         let cubic = v.powi(3);
         let inner = coeff * (v + cubic_coeff * cubic);
         half * v * (one + inner.tanh())
@@ -365,7 +362,6 @@ where
     })?;
 
     Ok(x.mapv(|v| {
-        let three = T::from(3.0).unwrap_or(one + one + one);
         let cubic = v.powi(3);
         let inner = coeff * (v + cubic_coeff * cubic);
         half * v * (one + inner.tanh())

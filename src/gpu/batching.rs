@@ -128,22 +128,6 @@ impl OperationType {
     }
 }
 
-/// A queued operation waiting to be executed
-struct QueuedOperation<'a, T: bytemuck::Pod + bytemuck::Zeroable> {
-    /// Type of operation
-    op_type: OperationType,
-    /// First input array (reference stored directly)
-    input_a: &'a GpuArray<T>,
-    /// Second input array (for binary operations, reference stored directly)
-    input_b: Option<&'a GpuArray<T>>,
-    /// Time when operation was queued
-    queued_at: Instant,
-    /// Priority (higher = execute sooner)
-    priority: i32,
-    /// Estimated operation cost
-    cost: f32,
-}
-
 /// Result of a batched operation
 pub struct BatchResult<T: bytemuck::Pod + bytemuck::Zeroable> {
     /// The resulting GPU array
@@ -229,22 +213,43 @@ struct OwnedQueuedOperation<T: bytemuck::Pod + bytemuck::Zeroable> {
     /// Convolution geometry, present only for [`OperationType::Conv2D`]
     conv_params: Option<Conv2dParams>,
     /// Time when operation was queued
+    // Recorded on every push but never read back: `flush()` drains the
+    // queue in FIFO order and doesn't consult age, priority or cost for
+    // scheduling. All three document the adaptive/priority-aware batching
+    // named in this module's doc comment; wiring real priority-based
+    // ordering is a scheduling-behavior change, out of scope here.
+    #[allow(dead_code)]
     queued_at: Instant,
     /// Priority (higher = execute sooner)
+    #[allow(dead_code)]
     priority: i32,
     /// Estimated operation cost
+    #[allow(dead_code)]
     cost: f32,
 }
 
 /// GPU batch queue for automatic operation batching
 pub struct BatchQueue<T: bytemuck::Pod + bytemuck::Zeroable> {
     /// GPU context
+    // `execute_batch` calls `crate::gpu::ops::*` directly on the queued
+    // `GpuArray` operands (which carry their own context), so this stored
+    // copy is never read back. Kept for a future direct-submission path
+    // rather than deleted, since dropping it would also mean threading
+    // context through `new()` only to build `transfer_optimizer`.
+    #[allow(dead_code)]
     context: GpuContextRef,
     /// Configuration
     config: BatchConfig,
     /// Internal state
     state: Arc<Mutex<BatchQueueState<T>>>,
     /// Transfer optimizer for efficient data movement
+    // Constructed with `TransferStrategy::Batched` in `new()` but
+    // `execute_batch`/`flush` never consult it: batched execution goes
+    // straight through `crate::gpu::ops::*`. Documents an intended
+    // integration point (see the module's "Transfer Optimization" doc)
+    // that hasn't been wired in; wiring it in is a behavioral change, out
+    // of scope for a lint-only pass.
+    #[allow(dead_code)]
     transfer_optimizer: Arc<Mutex<TransferOptimizer>>,
 }
 

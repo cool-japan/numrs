@@ -841,7 +841,6 @@ where
         ));
     }
 
-    let (m, n) = (shape[0], shape[1]);
     let q = gram_schmidt(matrix)?;
     let q_t = transpose_2d(&q)?;
     let r = matrix_multiply(&q_t, matrix)?;
@@ -854,10 +853,6 @@ fn update_factor_als<T>(tensor: &Array<T>, factors: &[Array<T>], mode: usize) ->
 where
     T: Float + Clone + Debug + Default + Send + Sync + std::iter::Sum,
 {
-    let shape = tensor.shape();
-    let ndim = shape.len();
-    let rank = factors[0].shape()[1];
-
     // Unfold tensor along mode
     let unfolded = mode_unfold(tensor, mode)?;
 

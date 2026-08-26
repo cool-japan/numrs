@@ -5,7 +5,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, Zero};
+use num_traits::Float;
 
 /// Preconditioner trait for preconditioning iterative solvers
 ///

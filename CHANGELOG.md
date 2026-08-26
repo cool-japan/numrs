@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - 2026-08-25
+## [0.4.1] - 2026-08-26
 
 This release is a production-hardening pass across the whole crate: a shared compute-dispatch
 layer, copy-on-write arrays, a real (not fabricated) distributed transport, a large batch of
@@ -266,6 +266,16 @@ Documented in-tree with repro/tripwire tests so an upstream fix becomes visible 
 - **`scirs2-core`'s `simd_matrix_multiply`** has a ~4x performance cliff whenever
   `k % 128 != 0`; documented in `src/kernels/gemm.rs` and `bench/matmul_dispatch_benchmark.rs`,
   and is part of why the default matmul tier no longer routes through it.
+
+### Test Coverage
+
+- `cargo nextest run --workspace` (default features): **5046 tests run, 5046 passed, 0 failed,
+  17 skipped**.
+- `cargo nextest run --workspace --features matrix_decomp,validation,unstable,fast,scirs,gpu,lapack,arrow,parquet,netcdf,matlab,messagepack,bson,io-all,wasm,distributed,visualization,ci-safe`
+  (every feature except `python` — `pyo3`'s `extension-module` feature structurally cannot link
+  into a `cargo test`/nextest binary; `scripts/ci-local.sh` checks `python` separately via
+  `cargo check --features python` instead): **5635 tests run, 5635 passed, 0 failed, 31 skipped**.
+- `cargo test --doc`: **842 passed, 0 failed, 88 ignored**.
 
 ## [0.4.0] - 2026-06-05
 

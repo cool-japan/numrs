@@ -32,7 +32,7 @@
 //! assert!(result.success);
 //! ```
 
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
 use num_traits::Float;
 
 use super::gradient::wolfe_line_search;

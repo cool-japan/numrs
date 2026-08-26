@@ -160,8 +160,6 @@ impl StlDecomposition {
         weights: &Array1<f64>,
         trend_window: usize,
     ) -> Result<(Array1<f64>, Array1<f64>)> {
-        let n = data.len();
-
         // Step 1: Detrend
         let detrended = data - seasonal;
 

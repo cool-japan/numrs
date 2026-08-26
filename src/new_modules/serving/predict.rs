@@ -4,8 +4,7 @@
 
 use super::{InferenceEngine, PreprocessingPipeline, Result, ServingError};
 use crate::array::Array;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Prediction request
 #[derive(Clone)]

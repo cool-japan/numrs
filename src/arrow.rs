@@ -32,11 +32,8 @@ use crate::array::Array;
 use crate::NumRs2Error;
 use arrow_array::{
     Array as ArrowArray, ArrayRef, BooleanArray, Float32Array, Float64Array, Int16Array,
-    Int32Array, Int64Array, Int8Array, PrimitiveArray, UInt16Array, UInt32Array, UInt64Array,
-    UInt8Array,
+    Int32Array, Int64Array, Int8Array, UInt16Array, UInt32Array, UInt64Array, UInt8Array,
 };
-use arrow_buffer::Buffer;
-use arrow_cast::cast;
 use arrow_schema::{DataType, Field, Schema};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -209,8 +206,7 @@ impl<W: Write> IpcStreamWriter<W> {
         // Create a record batch
         let fields: Vec<_> = arrays
             .iter()
-            .enumerate()
-            .map(|(i, (name, _))| Field::new(*name, T::arrow_dtype(), false))
+            .map(|(name, _)| Field::new(*name, T::arrow_dtype(), false))
             .collect();
 
         let schema = Arc::new(Schema::new(fields));
@@ -445,7 +441,6 @@ pub fn read_feather_all<P: AsRef<Path>, T: ArrowConvertible>(
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    use std::io::Cursor;
     use tempfile::NamedTempFile;
 
     #[test]

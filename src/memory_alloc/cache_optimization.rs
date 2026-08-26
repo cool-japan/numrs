@@ -408,6 +408,10 @@ struct AccessTracker {
 #[derive(Debug, Clone)]
 struct MemoryAccess {
     address: usize,
+    // Recorded on every access but not read back today: cache-line-conflict
+    // analysis (`analyze_access_patterns`) only ever reads `.address`. These
+    // document the richer per-access detail a future analysis (false-sharing
+    // by access size, read/write contention, temporal clustering) would use.
     #[allow(dead_code)]
     size: usize,
     #[allow(dead_code)]
@@ -836,16 +840,33 @@ mod tests {
         let config = CacheConfig::default();
         let allocator = CacheOptimizedAllocator::new(config);
 
-        // Simulate some allocations to generate metrics
+        // Simulate some allocations to generate metrics. Each allocation is
+        // kept alive (rather than freed inside the loop) so every one
+        // contributes its own address to the recorded access pattern that
+        // `analyze_cache_performance` below reasons about; freeing
+        // immediately would let the allocator reuse the same address on
+        // every iteration and collapse the simulated access pattern onto a
+        // single cache line. They are all deallocated afterwards so this
+        // test doesn't leak (Miri-verified).
+        let mut allocations = Vec::with_capacity(100);
         for _ in 0..100 {
             let layout = Layout::from_size_align(64, 8).expect("Layout should succeed");
-            let _ptr = allocator
+            let ptr = allocator
                 .allocate(layout)
                 .expect("allocation should succeed");
+            allocations.push((ptr, layout));
         }
 
         let recommendations = allocator.analyze_cache_performance();
         // Should have some recommendations for a new allocator
         assert!(!recommendations.is_empty());
+
+        for (ptr, layout) in allocations {
+            unsafe {
+                allocator
+                    .deallocate(ptr, layout)
+                    .expect("deallocation should succeed");
+            }
+        }
     }
 }

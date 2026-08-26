@@ -1,13 +1,14 @@
 use crate::array::Array;
-#[allow(unused_imports)] // Used conditionally based on features
+// Every function in this module is `lapack`-gated; without the feature the
+// only item left is the `EigResult` alias, which needs just `Array` and
+// `Complex`. These imports are gated to match their users.
+#[cfg(feature = "lapack")]
 use crate::error::{NumRs2Error, Result};
 #[cfg(feature = "lapack")]
-use num_traits::{Float, NumCast, Zero};
+use num_traits::{Float, Zero};
 #[cfg(feature = "lapack")]
-use scirs2_core::linalg::{
-    eig_ndarray, eig_symmetric, eigvals_ndarray, eigvals_symmetric, Eigenvalue,
-};
-#[allow(unused_imports)] // Used conditionally based on features
+use scirs2_core::linalg::{eig_ndarray, eig_symmetric, eigvals_ndarray, eigvals_symmetric};
+#[cfg(feature = "lapack")]
 use scirs2_core::ndarray::ArrayView2;
 use scirs2_core::Complex;
 #[cfg(feature = "lapack")]

@@ -75,12 +75,11 @@
 //! # }
 //! ```
 
-use super::collective::{self, allreduce, broadcast, reduce, CollectiveError, ReduceOp};
+use super::collective::{allreduce, CollectiveError, ReduceOp};
 use super::communication::CommunicationError;
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
 use oxicode::{Decode, Encode};
-use scirs2_core::ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -133,7 +132,7 @@ impl From<CoordinatorError> for NumRs2Error {
 ///
 /// # Single-process only
 ///
-/// [`Self::parameters`]/[`Self::gradient_buffer`]/[`Self::versions`] are
+/// `Self::parameters`/`Self::gradient_buffer`/`Self::versions` are
 /// plain in-memory maps behind a `tokio::sync` lock — process-local state,
 /// never sent over `communicator`. That makes every method here correct
 /// *within one process* (e.g. several logical workers sharing one

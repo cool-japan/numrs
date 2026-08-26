@@ -11,18 +11,18 @@
 //!
 //! - `mod.rs` (this file) -- the struct itself, construction, shape/mask
 //!   accessors, `get`/`set`, `reshape`/`transpose`, `Display`/`Debug`.
-//! - [`ops`] -- arithmetic operators (`Add`/`Sub`/`Mul`/`Div`, all
+//! - `ops` -- arithmetic operators (`Add`/`Sub`/`Mul`/`Div`, all
 //!   mask-propagating) and the element-wise comparison methods
 //!   (`equal`/`not_equal`/`less_than`/`less_equal`/`greater_than`/
 //!   `greater_equal`, NumPy's `eq`/`ne`/`lt`/`le`/`gt`/`ge`).
-//! - [`reductions`] -- the shared axis-walking engine plus every
+//! - `reductions` -- the shared axis-walking engine plus every
 //!   value-producing reduction: `mean`/`sum`/`min`/`max` (whole-array,
 //!   pre-existing, `Option<T>`) and their `_axis`-suffixed
 //!   `axis`+`keepdims`-aware siblings, plus the brand-new `std`/`var`/
 //!   `prod`/`median`/`ptp`.
-//! - [`bool_ops`] -- `any`/`all`, scoped to `MaskedArray<bool>`.
-//! - [`search`] -- `argmin`/`argmax`/`cumsum`/`sort`.
-//! - [`linalg`] -- `dot`/`concatenate`.
+//! - `bool_ops` -- `any`/`all`, scoped to `MaskedArray<bool>`.
+//! - `search` -- `argmin`/`argmax`/`cumsum`/`sort`.
+//! - `linalg` -- `dot`/`concatenate`.
 
 mod bool_ops;
 mod linalg;

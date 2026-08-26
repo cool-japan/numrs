@@ -12,7 +12,7 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::kernels::{borrow::operand, cast, SIMD_MIN_LEN};
 use num_traits::Float;
-use scirs2_core::ndarray::{Array1, ArrayView1};
+use scirs2_core::ndarray::ArrayView1;
 use scirs2_core::random::prelude::*;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use scirs2_core::Complex;
@@ -242,7 +242,6 @@ pub fn norm<T: Float + Clone + Debug + std::fmt::Display + std::ops::AddAssign +
                 let ndim = y.ndim();
                 if ndim == 1 {
                     let out = y_normalized.array_mut();
-                    #[allow(clippy::needless_range_loop)]
                     for i in 0..y_data.len() {
                         out[[i]] = y_data[i] / max_abs;
                     }
@@ -252,14 +251,12 @@ pub fn norm<T: Float + Clone + Debug + std::fmt::Display + std::ops::AddAssign +
                     if shape[0] == 1 {
                         // Shape (1, n) - row vector
                         let out = y_normalized.array_mut();
-                        #[allow(clippy::needless_range_loop)]
                         for i in 0..y_data.len() {
                             out[[0, i]] = y_data[i] / max_abs;
                         }
                     } else if shape[1] == 1 {
                         // Shape (n, 1) - column vector
                         let out = y_normalized.array_mut();
-                        #[allow(clippy::needless_range_loop)]
                         for i in 0..y_data.len() {
                             out[[i, 0]] = y_data[i] / max_abs;
                         }
@@ -377,7 +374,7 @@ pub fn norm<T: Float + Clone + Debug + std::fmt::Display + std::ops::AddAssign +
 ///
 /// // A diagonal matrix's singular values are the absolute values of its
 /// // diagonal entries, so its nuclear norm is their sum.
-/// let a = Array::from_vec(vec![3.0, 0.0, 0.0, -4.0]).reshape(&[2, 2]);
+/// let a = Array::<f64>::from_vec(vec![3.0, 0.0, 0.0, -4.0]).reshape(&[2, 2]);
 /// let nn = nuclear_norm(&a).expect("nuclear_norm should succeed");
 /// assert!((nn - 7.0).abs() < 1e-8);
 /// ```
@@ -665,6 +662,7 @@ pub fn cross<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
 mod tests {
     use super::*;
     use num_traits::ToPrimitive;
+    use scirs2_core::ndarray::Array1;
 
     /// Manual timing probe (no `[[bench]]` entry available in this
     /// lane's `Cargo.toml`, owned by another lane) for `inner`'s SIMD

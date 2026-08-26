@@ -139,6 +139,9 @@ pub enum TaskResult {
 #[derive(Debug)]
 #[repr(align(64))]
 struct ThreadState {
+    // Set at construction but never read back (derived `Debug` doesn't
+    // count): thread states are already addressed by position in
+    // `ParallelScheduler::thread_states`. Kept for diagnostics/logging.
     #[allow(dead_code)]
     id: usize,
     local_queue: BinaryHeap<ScheduledTask>,
@@ -177,6 +180,11 @@ impl ThreadState {
 pub struct ParallelScheduler {
     config: SchedulerConfig,
     global_queue: Arc<Mutex<BinaryHeap<ScheduledTask>>>,
+    // Populated in `new()` but never joined: `shutdown(&self)` signals the
+    // shutdown flag/condvar and returns without draining these handles
+    // (see the comment in `shutdown` — it can't consume `self.worker_threads`
+    // through `&self`). Restructuring `shutdown` to actually join threads
+    // is an API/behavior change, out of scope for a lint-only pass.
     #[allow(dead_code)]
     worker_threads: Vec<JoinHandle<()>>,
     shutdown_signal: Arc<(Mutex<bool>, Condvar)>,

@@ -27,7 +27,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::kernels::{borrow::operand, elementwise};
-use num_traits::{Float, NumCast, PrimInt, Zero};
+use num_traits::{Float, NumCast, Zero};
 use scirs2_core::Complex;
 
 /// Compute the greatest common divisor of two arrays element-wise
@@ -759,10 +759,6 @@ where
 
     Array::from_vec_shape(result, &x.shape())
 }
-
-// Suppress unused import warning for PrimInt - it may be used in future extensions
-#[allow(unused_imports)]
-use num_traits::PrimInt as _;
 
 #[cfg(test)]
 mod tests {

@@ -3,7 +3,6 @@
 //! This module provides JavaScript-friendly wrappers for NumRS2's core Array type.
 
 use crate::array::Array;
-use crate::error::Result as NumRs2Result;
 use crate::stats::Statistics;
 use wasm_bindgen::prelude::*;
 
@@ -417,6 +416,9 @@ impl WasmArray {
     ///
     /// # Returns
     /// The contained Array<f64>
+    // Consuming counterpart to `inner()` (which is used); no sibling module
+    // needs ownership yet, only a borrow, so this has no call sites today.
+    #[allow(dead_code)]
     pub(crate) fn into_inner(self) -> Array<f64> {
         self.inner
     }

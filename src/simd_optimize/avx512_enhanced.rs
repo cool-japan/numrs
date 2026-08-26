@@ -6,7 +6,13 @@
 //! Note: AVX-512 features are currently unstable in Rust, so this module
 //! provides production-ready implementations using stable AVX2 instructions.
 
+// `Array`/`NumRs2Error`/`Result`, the constants below and the x86_64
+// intrinsics are used exclusively by the `#[cfg(target_arch = "x86_64")]`
+// methods and tests in this file; gated the same way so non-x86_64 builds
+// (aarch64, wasm32, ...) don't see them as unused.
+#[cfg(target_arch = "x86_64")]
 use crate::array::Array;
+#[cfg(target_arch = "x86_64")]
 use crate::error::{NumRs2Error, Result};
 
 // AVX512 operations - currently using stable AVX2 implementations
@@ -14,11 +20,11 @@ use crate::error::{NumRs2Error, Result};
 use std::arch::x86_64::*;
 
 /// AVX2 vectorization constants for production stability
-#[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
 const AVX2_F32_LANES: usize = 8;
-#[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
 const AVX2_F64_LANES: usize = 4;
-#[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
 const AVX2_ALIGNMENT: usize = 32;
 
 /// Advanced AVX2 operations with maximum vectorization

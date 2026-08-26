@@ -86,9 +86,6 @@ pub trait SimdExprEval<T: Clone + Copy>: Expr<T> {
         let size = self.size();
         let mut data = pool.acquire(size);
 
-        // Evaluate in SIMD-friendly chunks
-        const SIMD_WIDTH: usize = 256; // Process 256 elements at a time
-
         for i in 0..size {
             data.push(self.eval_at(i));
         }

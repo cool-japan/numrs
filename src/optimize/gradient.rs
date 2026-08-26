@@ -324,7 +324,6 @@ where
     G: Fn(&[T]) -> Vec<T>,
 {
     let cfg = config.unwrap_or_default();
-    let n = x0.len();
 
     if m == 0 {
         return Err(NumRs2Error::ValueError(

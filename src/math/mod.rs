@@ -42,9 +42,7 @@ mod utilities;
 mod window;
 
 // Re-export helper functions for use by submodules
-pub(crate) use elementwise::{
-    from_nd_array, should_use_simd, to_nd_array_f32, to_nd_array_f64, SIMD_THRESHOLD,
-};
+pub(crate) use elementwise::{from_nd_array, to_nd_array_f32, to_nd_array_f64};
 
 // Re-export everything from submodules
 

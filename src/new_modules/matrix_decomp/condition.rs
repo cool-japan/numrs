@@ -3,7 +3,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::matrix_decomp::svd;
-use num_traits::{Float, Zero};
+use num_traits::Float;
 use std::fmt::Debug;
 
 /// Type alias for complex least squares return type

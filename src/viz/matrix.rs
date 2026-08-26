@@ -229,7 +229,7 @@ impl MatrixPlot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scirs2_core::ndarray::{Array1, Array2};
+    use scirs2_core::ndarray::Array2;
 
     #[test]
     fn test_matrix_plot_creation() {

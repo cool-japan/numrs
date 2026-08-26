@@ -40,6 +40,8 @@ fn test_automatic_task_splitting() {
     std::thread::sleep(Duration::from_millis(300));
 
     assert_eq!(counter.load(Ordering::SeqCst), 100);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -76,6 +78,8 @@ fn test_task_granularity_threshold() {
     std::thread::sleep(Duration::from_millis(500));
 
     assert_eq!(counter.load(Ordering::SeqCst), 10);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 // ============================================================================
@@ -113,6 +117,8 @@ fn test_dynamic_chunk_size_calculation() {
     std::thread::sleep(Duration::from_millis(500));
 
     assert_eq!(counter.load(Ordering::SeqCst), 100);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -156,6 +162,8 @@ fn test_chunk_size_based_on_thread_count() {
             "Failed for {} threads",
             num_threads
         );
+
+        scheduler.shutdown().expect("Failed to shut down scheduler");
     }
 }
 
@@ -195,6 +203,8 @@ fn test_fine_grained_tasks() {
     std::thread::sleep(Duration::from_millis(800));
 
     assert_eq!(counter.load(Ordering::SeqCst), 200);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -230,6 +240,8 @@ fn test_coarse_grained_tasks() {
     std::thread::sleep(Duration::from_millis(800));
 
     assert_eq!(counter.load(Ordering::SeqCst), 10);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 // ============================================================================
@@ -268,6 +280,8 @@ fn test_task_cost_estimation() {
 
     let stats = scheduler.statistics();
     assert!(stats.average_execution_time > Duration::ZERO);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -307,6 +321,8 @@ fn test_cost_based_scheduling_decisions() {
     std::thread::sleep(Duration::from_millis(500));
 
     assert_eq!(counter.load(Ordering::SeqCst), 20);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 // ============================================================================
@@ -348,7 +364,9 @@ fn test_adaptive_scheduling_enabled() {
     assert_eq!(counter.load(Ordering::SeqCst), 50);
 
     let stats = scheduler.statistics();
-    assert!(stats.thread_efficiency.len() > 0);
+    assert!(!stats.thread_efficiency.is_empty());
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -381,6 +399,8 @@ fn test_adaptive_scheduling_disabled() {
     std::thread::sleep(Duration::from_millis(500));
 
     assert_eq!(counter.load(Ordering::SeqCst), 30);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 // ============================================================================
@@ -412,6 +432,8 @@ fn test_throughput_optimized_config() {
     std::thread::sleep(Duration::from_millis(500));
 
     assert_eq!(counter.load(Ordering::SeqCst), 100);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -439,4 +461,6 @@ fn test_latency_optimized_config() {
     std::thread::sleep(Duration::from_millis(500));
 
     assert_eq!(counter.load(Ordering::SeqCst), 50);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }

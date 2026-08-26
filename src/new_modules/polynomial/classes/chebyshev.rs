@@ -365,6 +365,10 @@ mod tests {
         }
     }
 
+    // Both callers are `fit` tests, which are `lapack`-gated (`fit` goes
+    // through the least-squares solver); without the feature this helper has
+    // no callers and would warn as dead code.
+    #[cfg(feature = "lapack")]
     fn numrs2_array(v: &[f64]) -> crate::array::Array<f64> {
         crate::array::Array::from_vec(v.to_vec())
     }

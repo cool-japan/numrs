@@ -173,7 +173,7 @@ impl ProductionBenchmarks {
             group.bench_with_input(
                 BenchmarkId::new("solve_linear_system", size),
                 size,
-                |bench, &size| {
+                |_bench, &size| {
                     // Create a well-conditioned matrix
                     let mut a_data = vec![0.0f32; size * size];
                     for i in 0..size {
@@ -185,10 +185,15 @@ impl ProductionBenchmarks {
                             }
                         }
                     }
-                    let a = Array::from_vec(a_data).reshape(&[size, size]);
-                    let b: Array<f64> = Array::ones(&[size]);
+                    // NOTE: `a` (f32) and `b` (f64) have mismatched element
+                    // types, so the commented-out call below would not
+                    // actually compile as written even if lapack were
+                    // wired back in - flagging alongside the lapack-gating
+                    // note in linear_algebra_benchmark.rs.
+                    let _a = Array::from_vec(a_data).reshape(&[size, size]);
+                    let _b: Array<f64> = Array::ones(&[size]);
 
-                    // bench.iter(|| black_box(numrs2::linalg::solve(&a, &b).unwrap())); // solve requires lapack feature
+                    // _bench.iter(|| black_box(numrs2::linalg::solve(&_a, &_b).unwrap())); // solve requires lapack feature
                 },
             );
         }
@@ -281,7 +286,7 @@ impl ProductionBenchmarks {
         let mut group = c.benchmark_group("broadcasting");
         group.measurement_time(Duration::from_secs(3));
 
-        for size in [100, 500, 1000].iter() {
+        for _size in [100, 500, 1000].iter() {
             // Broadcasting operations commented out - not yet implemented
             // group.bench_with_input(
             //     BenchmarkId::new("matrix_scalar_add", size),

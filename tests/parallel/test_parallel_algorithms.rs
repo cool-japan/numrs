@@ -1,8 +1,6 @@
 //! Comprehensive tests for parallel algorithms
 
 use numrs2::parallel::{ParallelArrayOps, ParallelConfig};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
 
 // ============================================================================
 // Parallel Map Tests
@@ -23,8 +21,8 @@ fn test_parallel_map_basic() {
     ops.parallel_map(&input, &mut output, |x| x * 2)
         .expect("Failed to parallel map");
 
-    for i in 0..1000 {
-        assert_eq!(output[i], input[i] * 2);
+    for (&out, &inp) in output.iter().zip(input.iter()) {
+        assert_eq!(out, inp * 2);
     }
 }
 
@@ -44,8 +42,8 @@ fn test_parallel_map_different_types() {
     ops.parallel_map(&input_f64, &mut output_f64, |x| x * x)
         .expect("Failed to parallel map f64");
 
-    for i in 0..500 {
-        assert!((output_f64[i] - input_f64[i] * input_f64[i]).abs() < 1e-10);
+    for (&out, &inp) in output_f64.iter().zip(input_f64.iter()) {
+        assert!((out - inp * inp).abs() < 1e-10);
     }
 }
 
@@ -268,8 +266,8 @@ fn test_parallel_prefix_sum_large_array() {
     ops.parallel_prefix_sum(&data, &mut result)
         .expect("Failed to compute prefix sum");
 
-    for i in 0..1000 {
-        assert_eq!(result[i], (i + 1) as i32);
+    for (i, &r) in result.iter().enumerate() {
+        assert_eq!(r, (i + 1) as i32);
     }
 }
 
@@ -298,8 +296,8 @@ fn test_parallel_pipeline_multi_stage() {
         .expect("Failed stage 2");
 
     // Verify pipeline result
-    for i in 0..100 {
-        assert_eq!(stage2[i], (i as i32) * 2 + 10);
+    for (i, &s2) in stage2.iter().enumerate() {
+        assert_eq!(s2, (i as i32) * 2 + 10);
     }
 }
 
@@ -348,8 +346,8 @@ fn test_parallel_binary_op_addition() {
     ops.parallel_binary_op(&a, &b, &mut result, |x, y| x + y)
         .expect("Failed binary op");
 
-    for i in 0..1000 {
-        assert!((result[i] - (a[i] + b[i])).abs() < 1e-10);
+    for ((&r, &av), &bv) in result.iter().zip(a.iter()).zip(b.iter()) {
+        assert!((r - (av + bv)).abs() < 1e-10);
     }
 }
 
@@ -369,8 +367,8 @@ fn test_parallel_binary_op_multiplication() {
     ops.parallel_binary_op(&a, &b, &mut result, |x, y| x * y)
         .expect("Failed binary op");
 
-    for i in 0..500 {
-        assert!((result[i] - (a[i] * b[i])).abs() < 1e-6);
+    for ((&r, &av), &bv) in result.iter().zip(a.iter()).zip(b.iter()) {
+        assert!((r - (av * bv)).abs() < 1e-6);
     }
 }
 

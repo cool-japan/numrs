@@ -30,7 +30,7 @@
 //! assert!(result.fun < 1.0); // Should find good solution near global minimum
 //! ```
 
-use super::{compute_norm, OptimizeResult};
+use super::OptimizeResult;
 use crate::error::{NumRs2Error, Result};
 use num_traits::Float;
 use scirs2_core::random::*; // SCIRS2 POLICY: Use scirs2_core for random
@@ -147,7 +147,6 @@ where
     F: Fn(&[T]) -> T,
 {
     let cfg = config.unwrap_or_default();
-    let n = x0.len();
 
     // Initialize
     let mut x_current = x0.to_vec();

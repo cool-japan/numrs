@@ -147,6 +147,12 @@ pub struct GarchResidualAnalysis {
 // =============================================================================
 
 /// Validate that GARCH parameters satisfy positivity and stationarity constraints.
+///
+/// Not currently called from any `fit()` method below (each estimates its own
+/// parameters via constrained optimization without a final validation pass);
+/// exercised directly by this module's own tests, which is real coverage of
+/// the constraint logic even without a production caller.
+#[allow(dead_code)]
 fn validate_garch_params(omega: f64, alpha: &Array1<f64>, beta: &Array1<f64>) -> Result<()> {
     if omega <= 0.0 {
         return Err(NumRs2Error::ValueError(format!(
@@ -998,7 +1004,6 @@ impl Egarch {
             sample_var,
         );
 
-        let max_lag = self.p.max(self.q);
         let e_abs_z = (2.0_f64 / std::f64::consts::PI).sqrt();
 
         // Build extended arrays

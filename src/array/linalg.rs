@@ -16,7 +16,6 @@ use scirs2_core::parallel_ops::*;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::borrow::Cow;
 use std::fmt;
-use std::fmt::Debug;
 use std::ops::{Add, Mul};
 
 /// Batched GEMM over `batch` row-major panels laid out back to back.
@@ -417,7 +416,7 @@ impl<
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub fn cond(&self) -> Result<T>
     where
-        T: Float + Clone + Debug,
+        T: Float + Clone + fmt::Debug,
     {
         crate::new_modules::matrix_decomp::condition_number(self)
     }
@@ -446,7 +445,7 @@ impl<
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub fn rcond(&self) -> Result<T>
     where
-        T: Float + Clone + Debug,
+        T: Float + Clone + fmt::Debug,
     {
         crate::new_modules::matrix_decomp::rcond(self)
     }
@@ -468,7 +467,7 @@ impl<
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub fn is_well_conditioned(&self) -> Result<bool>
     where
-        T: Float + Clone + Debug,
+        T: Float + Clone + fmt::Debug,
     {
         let cond = crate::new_modules::matrix_decomp::condition_number(self)?;
         let threshold = T::from(1e4_f64)
@@ -501,7 +500,7 @@ impl<
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub fn slogdet(&self) -> Result<(i8, T)>
     where
-        T: Float + Clone + Debug,
+        T: Float + Clone + fmt::Debug,
     {
         crate::new_modules::matrix_decomp::slogdet(self)
     }
@@ -521,7 +520,7 @@ impl<
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub fn lstsq(&self, b: &Array<T>, rcond: Option<T>) -> LstsqResult<T>
     where
-        T: Float + Clone + Debug,
+        T: Float + Clone + fmt::Debug,
     {
         crate::new_modules::matrix_decomp::lstsq(self, b, rcond)
     }

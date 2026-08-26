@@ -3,7 +3,6 @@
 //! This module provides high-level wrapper types that make it easy to allocate
 //! cache-aligned data for optimal performance in SIMD and parallel operations.
 
-use super::aligned::{AlignedAllocator, AlignmentConfig};
 use crate::error::{MemoryError, NumRs2Error, Result};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ops::{Deref, DerefMut};

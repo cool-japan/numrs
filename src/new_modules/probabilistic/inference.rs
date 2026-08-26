@@ -55,11 +55,8 @@
 //! - All array operations use `scirs2_core::ndarray` (NEVER direct ndarray)
 //! - Parallel operations use `scirs2_core::parallel_ops` (NEVER direct rayon)
 
-use crate::array::Array;
 use crate::new_modules::probabilistic::{validate_positive, ProbabilisticError, Result};
-use scirs2_core::ndarray::Array1;
-use scirs2_core::random::{thread_rng, Rng, RngExt};
-use std::collections::HashMap;
+use scirs2_core::random::{Rng, RngExt};
 
 // ============================================================================
 // Metropolis-Hastings Sampler
@@ -167,7 +164,6 @@ where
             });
         }
 
-        let dim = initial_state.len();
         let n_samples = n_iterations - burn_in;
         let mut samples = Vec::with_capacity(n_samples);
 
@@ -794,6 +790,7 @@ where
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+    use scirs2_core::random::thread_rng;
 
     #[test]
     fn test_gaussian_proposal() {

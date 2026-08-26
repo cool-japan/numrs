@@ -4,7 +4,7 @@
 //! along with implementations of classic control environments.
 
 use crate::error::{NumRs2Error, Result};
-use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::ndarray::Array1;
 use scirs2_core::random::{Distribution, Rng, Uniform};
 
 /// Result of an environment step
@@ -66,6 +66,10 @@ pub struct CartPoleEnv {
     state: Array1<f64>,
     steps: usize,
     gravity: f64,
+    /// Cart mass: contributes to `total_mass` (computed at construction and
+    /// used throughout the dynamics below); not re-read on its own after
+    /// that, but kept as a named physical parameter of the simulation.
+    #[allow(dead_code)]
     mass_cart: f64,
     mass_pole: f64,
     total_mass: f64,

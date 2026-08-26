@@ -166,7 +166,7 @@ where
         }
 
         // Apply boundary conditions to next step
-        apply_bc_to_next(&mut next, bc_left, bc_right, &current, dx);
+        apply_bc_to_next(&mut next, bc_left, bc_right, dx);
 
         // Store and swap
         current = next.clone();
@@ -212,7 +212,6 @@ fn apply_bc_to_next<T: Float + Debug>(
     next: &mut [T],
     bc_left: BoundaryCondition<T>,
     bc_right: BoundaryCondition<T>,
-    current: &[T],
     dx: T,
 ) {
     let n = next.len();
@@ -264,7 +263,6 @@ where
 
     let r = alpha * dt / (dx * dx);
     let half = T::from(0.5).expect("0.5 is representable as Float");
-    let two = T::from(2.0).expect("2.0 is representable as Float");
     let one = T::one();
 
     // Coefficients for tridiagonal system

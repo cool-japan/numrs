@@ -13,7 +13,7 @@ use super::reductions::{axis_lane_shape, collapsed_shape, normalize_axis};
 use super::MaskedArray;
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, Zero};
+use num_traits::Float;
 
 impl<T: PartialOrd + Clone> MaskedArray<T> {
     /// Position of the minimum unmasked element, honoring an optional
@@ -134,7 +134,7 @@ impl<T: Float> MaskedArray<T> {
     /// additive identity (`0`, i.e. they do not advance the running sum)
     /// and **stay masked at their original position** in the output --
     /// this is a scan, not a reduction, so unlike every function in
-    /// [`super::reductions`], no lane ever collapses or becomes "more
+    /// `super::reductions`, no lane ever collapses or becomes "more
     /// masked" than its input; the output mask is exactly the input mask.
     ///
     /// Pinned against `numpy.ma`:

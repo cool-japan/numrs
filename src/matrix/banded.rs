@@ -305,7 +305,6 @@ where
             let j_start = i.saturating_sub(self.sub_diagonals);
             let j_end = std::cmp::min(i + self.super_diagonals + 1, self.cols);
 
-            #[allow(clippy::needless_range_loop)]
             for j in j_start..j_end {
                 let a_ij = self
                     .get(i, j)

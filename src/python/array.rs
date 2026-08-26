@@ -4,13 +4,10 @@
 
 use crate::array::Array;
 use crate::math;
-use crate::NumRs2Error;
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use scirs2_numpy::{
-    PyArrayDyn, PyArrayMethods, PyReadonlyArrayDyn, PyUntypedArrayMethods, ToPyArray,
-};
+use scirs2_numpy::{PyArrayDyn, PyReadonlyArrayDyn, PyUntypedArrayMethods};
 
 /// Python wrapper for NumRS2 Array
 #[pyclass(name = "Array")]

@@ -131,7 +131,7 @@ pub use scirs2_spatial::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scirs2_core::ndarray::{array, Array2};
+    use scirs2_core::ndarray::array;
 
     #[test]
     fn test_kdtree_nearest_neighbor() {

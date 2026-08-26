@@ -4,7 +4,7 @@
 
 use crate::error::{NumRs2Error, Result};
 use scirs2_core::ndarray::{Array1, Array2, ArrayView1, ArrayView2};
-use scirs2_core::random::{thread_rng, Rng};
+use scirs2_core::random::thread_rng;
 
 /// Kalman filter state.
 #[derive(Debug, Clone)]

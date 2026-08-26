@@ -77,16 +77,14 @@
 //! ```
 
 use super::collective::{allreduce, ReduceOp};
-use super::communication::{CommunicationError, CompressionStrategy};
+use super::communication::CommunicationError;
 use super::coordinator::{CoordinatorError, ParameterServer, RingAllReduce};
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{Array1, Array2};
-use scirs2_core::random::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 /// Errors in data parallel operations
 #[derive(Error, Debug)]
@@ -281,8 +279,23 @@ impl<T: Clone> DistributedDataLoader<T> {
         self.global_size
     }
 
+    /// Rank of this loader's shard within the communicator it was built from
+    pub fn rank(&self) -> usize {
+        self.rank
+    }
+
+    /// Total number of workers this loader's data was sharded across
+    pub fn world_size(&self) -> usize {
+        self.world_size
+    }
+
+    /// Sharding strategy this loader was constructed with
+    pub fn strategy(&self) -> ShardingStrategy {
+        self.strategy
+    }
+
     /// Create iterator over batches
-    pub fn iter(&mut self) -> DataLoaderIterator<T> {
+    pub fn iter(&mut self) -> DataLoaderIterator<'_, T> {
         DataLoaderIterator { loader: self }
     }
 }

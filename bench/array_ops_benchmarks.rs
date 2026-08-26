@@ -13,7 +13,6 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::prelude::*;
-use numrs2::ufuncs::sin;
 use std::hint::black_box;
 
 /// Benchmark element-wise addition

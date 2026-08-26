@@ -1,12 +1,12 @@
 //! GPU integration test harness.
 //!
-//! Wires the previously-orphaned `tests/gpu/{test_gpu_ops,test_gpu_linalg,
-//! test_gpu_memory}.rs` into an actual `cargo test`/`cargo nextest` target.
-//! Those three files existed on disk but were never `mod`-included by any
-//! top-level `tests/*.rs` harness or `[[test]]` entry, so they were never
-//! compiled -- silently dead test code. `tests/gpu/mod.rs` also declares
-//! `test_compute` and `test_batching`, which are intentionally NOT wired
-//! here (out of scope for this pass; see the W6-TESTS report).
+//! Wires every file under `tests/gpu/` into an actual `cargo test`/
+//! `cargo nextest` target. Each of those files existed on disk as ordinary
+//! Rust source but was never `mod`-included by any top-level `tests/*.rs`
+//! harness or `[[test]]` entry, so none of them were ever compiled --
+//! silently dead test code. `tests/gpu/mod.rs`, which used to declare all
+//! five as a `#[cfg(test)]` module tree that nothing included either, has
+//! been deleted now that this file supersedes it.
 //!
 //! Gated by `required-features = ["gpu"]` in `Cargo.toml` (see the
 //! `[[test]]` entry there), so this target is skipped entirely -- not
@@ -21,3 +21,9 @@ mod test_gpu_linalg;
 
 #[path = "gpu/test_gpu_memory.rs"]
 mod test_gpu_memory;
+
+#[path = "gpu/test_compute.rs"]
+mod test_compute;
+
+#[path = "gpu/test_batching.rs"]
+mod test_batching;

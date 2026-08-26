@@ -4,6 +4,10 @@
 // Needed by both the primary (matrix_decomp+lapack) impl block below and the
 // complementary fallback impl block further down; each block only uses a
 // subset depending on which sub-cfg branch is active, so allow unused.
+// (Confirmed empirically during the W6-F2 allow-audit: `cargo check --lib
+// --no-default-features --features scirs,matrix_decomp` -- i.e. lapack off
+// -- flags `ToPrimitive` specifically as unused, while `Array`/`NumRs2Error`/
+// `Result`/`Float`/`Debug` stay used either way.)
 #[allow(unused_imports)]
 use crate::array::Array;
 #[allow(unused_imports)]
@@ -345,7 +349,6 @@ where
 
             // Step 3.1: Apply permutation to b (Pb)
             let mut pb = vec![T::zero(); n];
-            #[allow(clippy::needless_range_loop)]
             for i in 0..n {
                 let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
                 pb[i] = b[p_idx];
@@ -355,7 +358,6 @@ where
             let mut y = vec![T::zero(); n];
             for i in 0..n {
                 let mut sum = pb[i];
-                #[allow(clippy::needless_range_loop)]
                 for k in 0..i {
                     sum -= l.get(&[i, k])? * y[k];
                 }
@@ -366,7 +368,6 @@ where
             let mut x = vec![T::zero(); n];
             for i in (0..n).rev() {
                 let mut sum = y[i];
-                #[allow(clippy::needless_range_loop)]
                 for k in (i + 1)..n {
                     sum -= u.get(&[i, k])? * x[k];
                 }
@@ -374,7 +375,6 @@ where
             }
 
             // Step 3.4: Store the solution in the j-th column of the result
-            #[allow(clippy::needless_range_loop)]
             for i in 0..n {
                 result_arr[[i, j]] = x[i];
             }
@@ -631,7 +631,6 @@ where
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];
-        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
             pb[i] = b.get(&[p_idx])?;
@@ -641,7 +640,6 @@ where
         let mut y = vec![T::zero(); n];
         for i in 0..n {
             let mut sum = pb[i];
-            #[allow(clippy::needless_range_loop)]
             for k in 0..i {
                 sum -= l.get(&[i, k])? * y[k];
             }
@@ -652,7 +650,6 @@ where
         let mut x = vec![T::zero(); n];
         for i in (0..n).rev() {
             let mut sum = y[i];
-            #[allow(clippy::needless_range_loop)]
             for k in (i + 1)..n {
                 sum -= u.get(&[i, k])? * x[k];
             }
@@ -1010,7 +1007,8 @@ where
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     /// Compute the determinant of a matrix using LU decomposition for large matrices
     /// and direct formula for small matrices.
@@ -1570,7 +1568,6 @@ where
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];
-        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
             pb[i] = b.get(&[p_idx])?;
@@ -1580,7 +1577,6 @@ where
         let mut y = vec![T::zero(); n];
         for i in 0..n {
             let mut sum = pb[i];
-            #[allow(clippy::needless_range_loop)]
             for k in 0..i {
                 sum -= l.get(&[i, k])? * y[k];
             }
@@ -1591,7 +1587,6 @@ where
         let mut x = vec![T::zero(); n];
         for i in (0..n).rev() {
             let mut sum = y[i];
-            #[allow(clippy::needless_range_loop)]
             for k in (i + 1)..n {
                 sum -= u.get(&[i, k])? * x[k];
             }

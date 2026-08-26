@@ -1,5 +1,3 @@
-#![allow(clippy::needless_range_loop)]
-
 #[cfg(feature = "lapack")]
 use crate::array::Array;
 #[cfg(feature = "lapack")]

@@ -4,7 +4,7 @@
 //! time series variables.
 
 use crate::error::{NumRs2Error, Result};
-use scirs2_core::ndarray::{s, Array1, Array2, ArrayView2, Axis};
+use scirs2_core::ndarray::{s, Array1, Array2, ArrayView2};
 
 /// VAR model parameters.
 #[derive(Debug, Clone)]
@@ -465,7 +465,7 @@ impl Vecm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scirs2_core::ndarray::{arr2, Array2};
+    use scirs2_core::ndarray::arr2;
 
     #[test]
     fn test_var_creation() {

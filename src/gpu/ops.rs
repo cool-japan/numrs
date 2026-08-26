@@ -629,6 +629,7 @@ pub fn min_f32(a: &GpuArray<f32>) -> Result<f32> {
 pub fn min_f64(a: &GpuArray<f64>) -> Result<f64> {
     reduction_op_f64(a, ReductionOp::Min)
 }
+
 /// Helper function for f32 reduction operations
 ///
 /// The whole reduction runs on the GPU: repeated passes of the workgroup
@@ -947,7 +948,7 @@ pub fn slice<T: bytemuck::Pod + bytemuck::Zeroable>(
 
 /// Extracts a strided slice of a GPU array
 ///
-/// Like [`slice`], but every axis also carries a step, so
+/// Like [`slice()`], but every axis also carries a step, so
 /// `SliceRange::with_step(0, 8, 2)` keeps indices `0, 2, 4, 6` of that axis -
 /// NumPy's `a[0:8:2]`.
 pub fn slice_with_steps<T: bytemuck::Pod + bytemuck::Zeroable>(

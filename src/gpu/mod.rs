@@ -84,7 +84,7 @@
 pub use array::GpuArray;
 #[cfg(feature = "gpu")]
 pub use context::{fallback_adapter_requested, FALLBACK_ENV_VAR};
-pub use context::{new_context, GpuContext, GpuContextRef};
+pub use context::{new_context, new_context_async, GpuContext, GpuContextRef};
 #[cfg(feature = "gpu")]
 pub use conv::{conv2d, im2col, Conv2dParams};
 #[cfg(feature = "gpu")]
@@ -118,8 +118,6 @@ pub mod nd;
 mod ops;
 #[cfg(feature = "gpu")]
 mod reduce;
-#[cfg(feature = "gpu")]
-mod shaders;
 #[cfg(all(test, feature = "gpu"))]
 mod tests;
 #[cfg(feature = "gpu")]

@@ -50,12 +50,16 @@ impl UnifiedSimdDispatcher {
 
     /// Optimized matrix multiplication with automatic SIMD selection
     pub fn optimized_matmul_f32(&self, a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
-        let [m, k] = a.shape()[..] else {
+        // `_m`/`_n` (the output shape) are only read inside the
+        // architecture-gated arms below; on any other target (e.g. wasm32)
+        // only the `_` fallback arm survives and they go unread, hence the
+        // underscore — not a sign they're dead in general.
+        let [_m, k] = a.shape()[..] else {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix A must be 2D".to_string(),
             ));
         };
-        let [k2, n] = b.shape()[..] else {
+        let [k2, _n] = b.shape()[..] else {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix B must be 2D".to_string(),
             ));
@@ -68,29 +72,37 @@ impl UnifiedSimdDispatcher {
             });
         }
 
-        let mut result = Array::zeros(&[m, n]);
-
-        match self.implementation {
+        // Each arm produces its own final value (allocating the zeroed
+        // output buffer only where it's actually mutated in place) rather
+        // than clobbering a pre-declared `result`: on any target where
+        // neither the AVX512, AVX2 nor NEON arm exists (e.g. wasm32), the
+        // `_` fallback would otherwise be the only reachable arm and the
+        // pre-declared zeros would be a dead assignment.
+        let result = match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
             SimdImplementation::AVX512 => {
+                let mut result = Array::zeros(&[_m, _n]);
                 let tile_size = 64; // Optimal for AVX-512
                 Avx2EnhancedOps::avx2_matmul_f32(a, b, &mut result, tile_size)?;
+                result
             }
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => {
+                let mut result = Array::zeros(&[_m, _n]);
                 let block_size = 32; // Optimal for AVX2
                 EnhancedSimdOps::cache_aware_matmul_f32(a, b, &mut result, block_size)?;
+                result
             }
             #[cfg(target_arch = "aarch64")]
             SimdImplementation::NEON => {
+                let mut result = Array::zeros(&[_m, _n]);
                 let block_size = 32; // Optimal for NEON
                 NeonEnhancedOps::neon_matmul_f32(a, b, &mut result, block_size)?;
+                result
             }
-            _ => {
-                // Fallback to standard implementation
-                result = a.matmul(b)?;
-            }
-        }
+            // Fallback to standard implementation
+            _ => a.matmul(b)?,
+        };
 
         Ok(result)
     }

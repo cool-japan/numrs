@@ -6,7 +6,7 @@
 
 NumRS2 is a high-performance numerical computing library for Rust, designed as a Rust-native alternative to NumPy. It provides N-dimensional arrays, linear algebra operations, and comprehensive mathematical functions with a focus on performance, safety, and ease of use.
 
-> **Version 0.4.1** (in development on the `0.4.1` branch) is a production-hardening pass: `Array<T>`
+> **Version 0.4.1** is a production-hardening pass: `Array<T>`
 > is now `Arc`-backed copy-on-write (O(1) clone); a new `kernels` dispatch layer backs matmul,
 > elementwise ops, and reductions (matmul up to ~18.8x faster at `512^3` than the prior loop); the
 > `distributed` feature's collectives and TSQR/Cholesky linear algebra now run over a real TCP
@@ -93,7 +93,7 @@ authoritative list):
 - **wasm**: WebAssembly bindings (`dlmalloc` global allocator on `wasm32` targets)
 - **arrow**: Apache Arrow integration for zero-copy data exchange with Python/Polars/DataFusion
 - **parquet** / **netcdf** / **matlab** / **messagepack** / **bson**: additional pure-Rust I/O formats (or **io-all** for all five at once)
-- **visualization**: Plotters-based 2D/3D/matrix/stats/performance plots (pure Rust, via `resvg`/`tiny-skia`)
+- **visualization**: Plotters-based 2D/3D/matrix/stats/performance plots (pure Rust, via `plotters`'s own bitmap/SVG backends and the `oxifont-bundled` COOLJAPAN font)
 - **ci-safe**: `matrix_decomp` + `validation` only, for CI environments without external dependencies
 
 To enable a feature:

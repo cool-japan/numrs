@@ -5,7 +5,7 @@
 
 use super::array::WasmArray;
 use crate::array::Array;
-use crate::stats::{corrcoef, cov, histogram, percentile, Statistics};
+use crate::stats::{corrcoef, cov, histogram, Statistics};
 use wasm_bindgen::prelude::*;
 
 /// Compute the mean of array elements

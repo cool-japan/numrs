@@ -38,7 +38,7 @@ use crate::gpu::array::GpuArray;
 use crate::gpu::context::GpuContextRef;
 use crate::gpu::linalg;
 use scirs2_core::ndarray::Array2;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Configuration for benchmarks
 #[derive(Debug, Clone)]

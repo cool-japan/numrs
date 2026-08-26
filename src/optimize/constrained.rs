@@ -100,7 +100,6 @@ where
     G: Fn(&[T]) -> Vec<T>,
 {
     let cfg = config.unwrap_or_default();
-    let n = x0.len();
 
     // Check initial point is feasible
     if !constraints.is_feasible(x0) {

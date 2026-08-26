@@ -37,7 +37,6 @@
 
 use crate::error::{NumRs2Error, Result};
 use crate::gpu::array::GpuArray;
-use crate::gpu::context::GpuContextRef;
 use bytemuck::{Pod, Zeroable};
 
 /// Parameters for matrix multiplication

@@ -8,7 +8,11 @@
 //! - asin_f64, acos_f64, atan_f64: Inverse trigonometric functions
 //! - asinh_f64, acosh_f64, atanh_f64: Inverse hyperbolic functions
 
-use super::{EnhancedSimdOps, AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
+use super::EnhancedSimdOps;
+// See `arithmetic.rs` for why these are gated the same as the intrinsics.
+#[cfg(target_arch = "x86_64")]
+use super::{AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
+#[cfg(target_arch = "x86_64")]
 use crate::array::Array;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;

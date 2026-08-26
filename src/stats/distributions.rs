@@ -217,8 +217,10 @@ pub fn beta_ppf<T: Float>(p: T, a: T, b: T) -> Result<T> {
         .to_f64()
         .ok_or_else(|| NumRs2Error::InvalidOperation("Failed to convert b to f64".to_string()))?;
 
-    // Initial guess using method of moments
-    let mean = a_f64 / (a_f64 + b_f64);
+    // Initial guess: a closed-form approximate inversion of the Beta CDF's
+    // tail behavior (small-x power-law near 0, mirrored near 1), which -
+    // unlike a plain method-of-moments guess (the unconditional mean,
+    // independent of `p`) - already accounts for the target quantile `p`.
     let mut x = if p_f64 < 0.5 {
         (p_f64 * (a_f64 + b_f64) / a_f64).powf(1.0 / a_f64)
     } else {

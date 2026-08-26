@@ -46,7 +46,7 @@ fn normalize_axis(axis: isize, ndim: usize) -> PyResult<usize> {
 }
 
 /// Borrow `arr` (which must be exactly 2-D) as an `ArrayView2`.
-fn to_array_view2(arr: &Array<f64>) -> Result<ArrayView2<f64>, String> {
+fn to_array_view2(arr: &Array<f64>) -> Result<ArrayView2<'_, f64>, String> {
     if arr.ndim() != 2 {
         return Err(format!("Expected 2D array, got {}D", arr.ndim()));
     }

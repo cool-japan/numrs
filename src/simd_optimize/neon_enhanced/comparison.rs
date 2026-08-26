@@ -5,7 +5,10 @@
 
 use crate::array::Array;
 
-use super::core::{NeonEnhancedOps, NEON_F64_LANES};
+use super::core::NeonEnhancedOps;
+// See `arithmetic.rs`: only the aarch64 SIMD implementations use this.
+#[cfg(target_arch = "aarch64")]
+use super::core::NEON_F64_LANES;
 
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;

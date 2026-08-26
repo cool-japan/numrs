@@ -20,24 +20,6 @@ fn identity_f64(n: usize) -> Vec<Vec<f64>> {
     m
 }
 
-/// In-place matrix multiply C = A * B  (n×n, f64).
-fn mat_mul_f64(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    let n = a.len();
-    let mut c = vec![vec![0.0_f64; n]; n];
-    for i in 0..n {
-        for k in 0..n {
-            let a_ik = a[i][k];
-            if a_ik == 0.0 {
-                continue;
-            }
-            for j in 0..n {
-                c[i][j] += a_ik * b[k][j];
-            }
-        }
-    }
-    c
-}
-
 /// Reduce A to upper Hessenberg form H = Q^T A Q via Householder reflectors.
 /// Returns (H, Q) where Q accumulates all reflectors.
 fn hessenberg_reduction(a: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
@@ -401,6 +383,12 @@ fn francis_double_shift_step_range(
 /// 1×1 diagonal blocks → real eigenvalue.
 /// 2×2 diagonal blocks → complex-conjugate pair (stored as two consecutive
 ///   entries in the returned Vec; the imaginary parts are ±im).
+///
+/// Test-only: production eigenvalue computation goes through
+/// `new_modules::eigenvalues`'s scirs2-core-backed path instead. This
+/// helper exists purely to check `hessenberg_reduction` + `francis_qr`'s
+/// output against known eigenvalues in this module's own tests.
+#[cfg(test)]
 fn extract_eigenvalues_from_schur(t: &[Vec<f64>]) -> Vec<(f64, f64)> {
     let n = t.len();
     let mut eigenvalues = Vec::with_capacity(n);

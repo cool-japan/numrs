@@ -25,12 +25,15 @@ pub mod trigonometric;
 pub use benchmark::{BenchmarkResult, SimdBenchmark, SimdBenchmarkResults, SimdPerformanceMonitor};
 
 /// Enhanced vectorization constants
+///
+/// Only consumed by the `#[cfg(target_arch = "x86_64")]` methods in this
+/// module's submodules, so they are gated the same way rather than
+/// `#[allow(dead_code)]`-suppressed on other architectures.
+#[cfg(target_arch = "x86_64")]
 pub(crate) const AVX2_F32_LANES: usize = 8;
+#[cfg(target_arch = "x86_64")]
 pub(crate) const AVX2_F64_LANES: usize = 4;
-#[allow(dead_code)]
-pub(crate) const CACHE_LINE_SIZE: usize = 64;
-#[allow(dead_code)]
-pub(crate) const L1_CACHE_SIZE: usize = 32 * 1024;
+#[cfg(target_arch = "x86_64")]
 pub(crate) const PREFETCH_DISTANCE: usize = 512;
 
 /// Advanced vectorized operations with cache optimization
@@ -38,7 +41,11 @@ pub struct EnhancedSimdOps;
 
 #[cfg(test)]
 mod tests {
+    // Every test below is itself `#[cfg(target_arch = "x86_64")]`; gate the
+    // imports the same way so other architectures don't see them as unused.
+    #[cfg(target_arch = "x86_64")]
     use super::*;
+    #[cfg(target_arch = "x86_64")]
     use crate::array::Array;
 
     #[test]

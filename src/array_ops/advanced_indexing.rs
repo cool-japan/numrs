@@ -11,7 +11,7 @@ use num_traits::Zero;
 /// Return selected slices of an array along given axis
 ///
 /// This is the canonical `compress` implementation; [`crate::array_ops::manipulation::compress`]
-/// (a one-line delegate) and [`crate::Array::compress`] (which adapts a
+/// (a one-line delegate) and `compress` (which adapts a
 /// generic, stringify-based condition into `Array<bool>` before delegating)
 /// both forward here.
 ///
@@ -386,7 +386,7 @@ pub fn putmask<T: Clone>(
 /// Take values from array along an axis using indices
 ///
 /// This is the canonical `take_along_axis` implementation;
-/// [`crate::indexing::take_put::take_along_axis`] (a one-line delegate)
+/// [`crate::indexing::take_along_axis`] (a one-line delegate)
 /// forwards here.
 ///
 /// # Arguments

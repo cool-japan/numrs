@@ -10,7 +10,7 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::sparse::{SparseMatrix, SparseMatrixFormat};
-use num_traits::{Float, NumCast, One, Zero};
+use num_traits::{Float, One, Zero};
 use std::fmt::Debug;
 
 /// Enhanced sparse matrix operations with advanced algorithms

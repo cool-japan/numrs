@@ -6,7 +6,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::rl::replay::Experience;
 use crate::new_modules::rl::utils::RLAgent as RLAgentTrait;
-use scirs2_core::ndarray::{Array1, Array2, Array3, Axis};
+use scirs2_core::ndarray::{Array1, Array2, Axis};
 use scirs2_core::random::{Distribution, Rng, Uniform};
 use std::collections::HashMap;
 
@@ -161,6 +161,10 @@ pub struct SARSAAgent {
     q_table: HashMap<Vec<u64>, Array1<f64>>,
     learning_rate: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }
@@ -273,6 +277,10 @@ pub struct DQNAgent {
     target_network: SimpleNetwork,
     learning_rate: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }
@@ -432,6 +440,10 @@ pub struct PolicyGradientAgent {
     policy_network: SimpleNetwork,
     learning_rate: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }
@@ -561,6 +573,10 @@ pub struct ActorCriticAgent {
     actor_lr: f64,
     critic_lr: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }

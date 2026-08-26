@@ -10,7 +10,6 @@
 //! Measurement in quantum mechanics is a projective operation that collapses
 //! the quantum state according to the Born rule: P(outcome) = |⟨outcome|ψ⟩|²
 
-use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::quantum::statevector::StateVector;
 use num_traits::Float;

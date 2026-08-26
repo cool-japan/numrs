@@ -8,9 +8,7 @@ use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use num_traits::{Float, NumCast, ToPrimitive};
 // SCIRS2 POLICY COMPLIANT imports - always use SciRS2
-use scirs2_core::ndarray::distributions::{
-    uniform::SampleUniform, Distribution as NdArrayDistribution,
-};
+use scirs2_core::ndarray::distributions::uniform::SampleUniform;
 use scirs2_core::random::prelude::*;
 use scirs2_core::random::Exp;
 use scirs2_core::Pareto;
@@ -566,8 +564,9 @@ impl RandomState {
         high: T,
         shape: &[usize],
     ) -> Result<Array<T>> {
-        use scirs2_core::random::Rng;
-
+        // `Rng` (for `gen_range` below) is already in scope crate-wide in
+        // this file via the `scirs2_core::random::prelude::*` glob import
+        // above; a redundant local re-import used to live here.
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
 

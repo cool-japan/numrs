@@ -2,11 +2,13 @@
 
 use numrs2::array::Array;
 use numrs2::gpu::linalg;
-use numrs2::gpu::{new_context, GpuArray};
+use numrs2::gpu::{new_context_async, GpuArray};
 
 #[tokio::test]
 async fn test_matmul_basic() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create 2x2 matrices
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
@@ -30,7 +32,9 @@ async fn test_matmul_basic() {
 
 #[tokio::test]
 async fn test_matmul_rectangular() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create 3x2 and 2x4 matrices
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[3, 2]);
@@ -50,7 +54,9 @@ async fn test_matmul_rectangular() {
 
 #[tokio::test]
 async fn test_matmul_incompatible_shapes() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create incompatible matrices (2x3 and 2x3)
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
@@ -68,7 +74,9 @@ async fn test_matmul_incompatible_shapes() {
 
 #[tokio::test]
 async fn test_dot_product() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create two vectors
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[4]);
@@ -87,7 +95,9 @@ async fn test_dot_product() {
 
 #[tokio::test]
 async fn test_dot_incompatible_shapes() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create vectors of different lengths
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0]).reshape(&[3]);
@@ -105,7 +115,9 @@ async fn test_dot_incompatible_shapes() {
 
 #[tokio::test]
 async fn test_norm_l2() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create a vector [3.0, 4.0]
     let a = Array::from_vec(vec![3.0f32, 4.0]).reshape(&[2]);
@@ -121,7 +133,9 @@ async fn test_norm_l2() {
 
 #[tokio::test]
 async fn test_matvec() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create a 2x3 matrix and a 3-element vector
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
@@ -143,7 +157,9 @@ async fn test_matvec() {
 
 #[tokio::test]
 async fn test_vecmat() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create a 2-element vector and a 2x3 matrix
     let x = Array::from_vec(vec![1.0f32, 2.0]).reshape(&[2]);
@@ -166,7 +182,9 @@ async fn test_vecmat() {
 
 #[tokio::test]
 async fn test_matmul_identity() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create a matrix and identity matrix
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
@@ -193,7 +211,9 @@ async fn test_matmul_identity() {
 
 #[tokio::test]
 async fn test_reshape() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
 
     // Create a 1D array
     let a = Array::from_vec(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[6]);

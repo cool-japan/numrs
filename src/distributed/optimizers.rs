@@ -64,14 +64,11 @@
 use super::collective::{allreduce, ReduceOp};
 use super::communication::{
     compress_tensor, decompress_tensor, AsyncCommunicator, CommunicationError, CompressionStrategy,
-    MessagePriority, TensorMessage,
 };
 use super::coordinator::{CoordinatorError, RingAllReduce};
 use super::data_parallel::GradientAggregation;
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::Array1;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -153,6 +150,12 @@ pub struct DistributedSGD {
     communicator: Arc<Communicator>,
 
     /// Async communicator
+    // `step`/`step_named` aggregate gradients via `allreduce`/`ring_reducer`
+    // and never touch this handle; it documents the asynchronous push/pull
+    // path (see the module's "Asynchronous Optimization" pattern) that
+    // hasn't been wired into `DistributedSGD` yet. Wiring it in is a
+    // behavioral change, out of scope for a lint-only pass.
+    #[allow(dead_code)]
     async_comm: AsyncCommunicator,
 
     /// Gradient aggregation strategy
@@ -393,6 +396,9 @@ pub struct DistributedAdam {
     communicator: Arc<Communicator>,
 
     /// Async communicator
+    // Same story as `DistributedSGD::async_comm`: `step`/`step_named` here
+    // aggregate via `allreduce`/`ring_reducer` and never touch this handle.
+    #[allow(dead_code)]
     async_comm: AsyncCommunicator,
 
     /// Gradient aggregation strategy
@@ -519,7 +525,6 @@ impl DistributedAdam {
             .or_insert_with(|| OptimizerState::new(params.len(), true));
 
         state.t += 1;
-        let t = state.t as f32;
 
         // Bias correction
         let bias_correction1 = 1.0 - self.beta1.powi(state.t as i32);

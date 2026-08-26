@@ -6,7 +6,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, NumCast, ToPrimitive};
+use num_traits::{Float, NumCast};
 use scirs2_core::random::prelude::*;
 use scirs2_core::SliceRandomExt;
 use std::fmt::Debug;

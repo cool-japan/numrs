@@ -31,21 +31,9 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use bson::{doc, Bson, Document};
-use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
-
-/// Internal representation of an Array for BSON serialization
-#[derive(Serialize, Deserialize)]
-struct BsonArray<T> {
-    /// Shape of the array
-    shape: Vec<i64>,
-    /// Flattened data
-    data: Vec<T>,
-    /// Data type name for validation
-    dtype: String,
-}
 
 /// Serialize a NumRS2 array to BSON format and write to file
 ///

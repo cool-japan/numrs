@@ -3,13 +3,14 @@
 //! This module contains functions for solving linear systems, computing matrix inverses,
 //! and computing pseudoinverses.
 
-#[allow(unused_imports)] // Used conditionally based on features
 use crate::array::Array;
-#[allow(unused_imports)] // Used conditionally based on features
-use crate::error::{NumRs2Error, Result};
-#[allow(unused_imports)] // Used conditionally based on features
+use crate::error::Result;
+// `NumRs2Error` is used only by `pinv` below, which (unlike `solve`/`inv`)
+// has no `not(all(matrix_decomp, lapack))` fallback variant -- so gate the
+// import to match, rather than blanket-allowing it as unused everywhere else.
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use crate::error::NumRs2Error;
 use num_traits::Float;
-#[allow(unused_imports)] // Used conditionally based on features
 use std::fmt::Debug;
 
 /// Solve a linear system Ax = b
@@ -57,7 +58,8 @@ pub fn solve<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     b: &Array<T>,
@@ -93,7 +95,8 @@ pub fn inv<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -179,7 +182,6 @@ pub fn pinv<
     // 1. Create a diagonal matrix from s_inv
     let mut s_inv_diag = Array::zeros(&[k, k]);
     let out = s_inv_diag.array_mut();
-    #[allow(clippy::needless_range_loop)]
     for i in 0..k {
         out[[i, i]] = s_inv_vec[i];
     }

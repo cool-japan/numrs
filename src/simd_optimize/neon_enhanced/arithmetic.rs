@@ -5,7 +5,12 @@
 
 use crate::array::Array;
 
-use super::core::{NeonEnhancedOps, NEON_F64_LANES};
+use super::core::NeonEnhancedOps;
+// Only the aarch64 SIMD implementations below use this; the
+// `#[cfg(not(target_arch = "aarch64"))]` fallback impl further down does
+// not, so it's gated the same way rather than unused elsewhere.
+#[cfg(target_arch = "aarch64")]
+use super::core::NEON_F64_LANES;
 
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;

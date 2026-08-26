@@ -38,10 +38,12 @@ use crate::array::Array;
 use crate::error::Result;
 use std::ops::Range;
 
-// Re-export all public items
-pub use self::array_methods::*;
-pub use self::core::*;
-pub use self::fancy::*;
+// Re-export all public items.
+//
+// `array_methods`, `core`, and `fancy` contain only `impl Array<T>` blocks
+// (inherent methods, reachable wherever `Array` is already in scope) with
+// no standalone `pub` items -- a `pub use self::x::*` of any of them is an
+// always-empty glob, so they are intentionally not re-exported here.
 pub use self::index_utils::*;
 pub use self::take_put::*;
 

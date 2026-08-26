@@ -262,11 +262,49 @@ impl<T> AlignedBox<T> {
 
     /// Convert into the contained value
     pub fn into_inner(self) -> T {
-        // Read the value
+        // SAFETY: `self.ptr` was initialized by `AlignedBox::new` via
+        // `ptr::write` and is never read again through `self` afterwards
+        // (we `mem::forget(self)` immediately below), so this move-out
+        // does not alias a live reference and cannot be observed twice.
         let value = unsafe { std::ptr::read(self.ptr.as_ptr()) };
 
-        // Prevent the destructor from running
+        // Capture everything needed to free the backing buffer *before*
+        // `self` is forgotten: forgetting suppresses `Drop::drop`
+        // entirely, which is exactly the point (it stops the
+        // `drop_in_place` that would otherwise double-drop the value we
+        // just moved out into `value`), but it also means nothing below
+        // may go through `self` again.
+        let raw_ptr = self.ptr.as_ptr() as *mut u8;
+        // Mirror the layout `AlignedAllocator::allocate_for_type::<T>()`
+        // used to allocate this box (see the matching comment on
+        // `Drop::drop` below): `T`'s natural alignment can exceed the
+        // box's configured alignment, and the freed layout must match the
+        // allocated layout exactly, not just use the configured value.
+        let align = mem::align_of::<T>().max(self.allocator.alignment());
+        let size = mem::size_of::<T>();
+
+        // Prevent `Drop::drop` from running at all: it would
+        // `drop_in_place` the slot we already moved out of above, which
+        // is exactly the leak-vs-double-drop tradeoff this function must
+        // avoid by deallocating the raw memory manually instead.
         std::mem::forget(self);
+
+        // Free the raw memory only. `T` was already moved into `value`
+        // above, so it must NOT be dropped again here -- only the
+        // backing allocation is released.
+        unsafe {
+            // SAFETY: `size`/`align` reconstruct the exact `Layout` that
+            // `allocate_for_type::<T>()` built for this allocation
+            // (`align` is a power of two: `AlignmentConfig::new` asserts
+            // the configured alignment is one, and `align_of::<T>()`
+            // always is, so their `max` is too); `raw_ptr` is the pointer
+            // `alloc`/`alloc_zeroed` returned for exactly that layout and
+            // has not been freed yet. `size` is always > 0 here because
+            // `allocate_for_type` returns `None` for a zero-sized `T`, so
+            // no `AlignedBox<T>` for a ZST can exist to reach this code.
+            let layout = Layout::from_size_align_unchecked(size, align);
+            dealloc(raw_ptr, layout);
+        }
 
         value
     }
@@ -283,11 +321,18 @@ impl<T> Drop for AlignedBox<T> {
             // Drop the contained value
             std::ptr::drop_in_place(self.ptr.as_ptr());
 
-            // Deallocate the memory
-            self.allocator.deallocate(
-                NonNull::new_unchecked(self.ptr.as_ptr() as *mut u8),
-                mem::size_of::<T>(),
-            );
+            // Deallocate the memory. This must mirror the layout that
+            // `AlignedAllocator::allocate_for_type::<T>()` used to
+            // allocate it (`align_of::<T>().max(configured alignment)`),
+            // NOT `AlignedAllocator::deallocate`'s byte-oriented layout
+            // (which uses only the configured alignment): if `T`'s
+            // natural alignment exceeds the box's requested alignment,
+            // those two differ, and freeing with a layout that doesn't
+            // match the allocation is undefined behavior.
+            // `into_inner` (above) mirrors this same computation.
+            let align = mem::align_of::<T>().max(self.allocator.alignment());
+            let layout = Layout::from_size_align_unchecked(mem::size_of::<T>(), align);
+            dealloc(self.ptr.as_ptr() as *mut u8, layout);
         }
     }
 }
@@ -493,6 +538,57 @@ mod tests {
         // Extract the value
         let value = aligned_box.into_inner();
         assert_eq!(value, 84);
+    }
+
+    /// A type whose natural alignment (32) intentionally exceeds the small
+    /// `AlignedBox` alignment requested in the regression test below (8),
+    /// to exercise the `align_of::<T>().max(requested alignment)` layout
+    /// computation that `AlignedBox::new`, `Drop`, and `into_inner` must
+    /// all agree on.
+    #[repr(align(32))]
+    #[derive(Debug, PartialEq, Eq)]
+    struct OverAligned {
+        // Owns heap memory so a double-drop (freeing the same buffer
+        // twice) or a leak (never freeing it) is something Miri can
+        // actually detect, unlike a bare `Copy` integer.
+        tag: String,
+    }
+
+    #[test]
+    fn test_aligned_box_into_inner_no_leak_and_no_double_drop() {
+        // Regression test for the `into_inner` bug fixed above: it used
+        // to `mem::forget(self)` right after reading the value out, which
+        // skipped `Drop::drop` entirely -- including the
+        // `allocator.deallocate(..)` call -- leaking the box's backing
+        // buffer on every single call. Requesting alignment 8 while
+        // `OverAligned`'s natural alignment is 32 also exercises the
+        // alloc/dealloc layout-mismatch fix: `into_inner` (and `Drop`)
+        // must free with `align_of::<OverAligned>().max(8) == 32`, the
+        // same layout `new` allocated with -- not the raw requested `8`,
+        // which would make the freed layout disagree with the allocated
+        // one (undefined behavior, distinct from a leak).
+        //
+        // The leak-freedom half of this test only has teeth under Miri
+        // (`cargo +nightly miri test --lib memory_alloc::aligned`);
+        // under a plain `cargo test` run it is a value-correctness check
+        // only, since the OS reclaims leaked pages at process exit
+        // either way. If someone "fixes" the leak by re-adding
+        // `drop_in_place` before deallocating, Miri instead reports a
+        // double-drop / use-after-free on `OverAligned::tag`'s `String`
+        // buffer.
+        for i in 0..8 {
+            let boxed = AlignedBox::new(
+                OverAligned {
+                    tag: format!("aligned-box-{i}"),
+                },
+                8,
+            )
+            .expect("Allocation should succeed");
+
+            let value = boxed.into_inner();
+            assert_eq!(value.tag, format!("aligned-box-{i}"));
+            // `value` drops normally here, exactly once.
+        }
     }
 
     #[test]

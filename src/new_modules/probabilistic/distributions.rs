@@ -50,12 +50,10 @@
 //!
 //! where ∑_i x_i = 1 and B(α) is the multivariate Beta function.
 
-use crate::array::Array;
 use crate::new_modules::probabilistic::{
     validate_non_negative, validate_positive, ProbabilisticError, Result,
 };
-use scirs2_core::ndarray::Array1;
-use scirs2_core::random::{Distribution, Rng, RngExt};
+use scirs2_core::random::{Rng, RngExt};
 use std::f64::consts::PI;
 
 /// Beta distribution Beta(α, β)

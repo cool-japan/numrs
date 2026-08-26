@@ -274,7 +274,7 @@ impl Plot3D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scirs2_core::ndarray::{Array1, Array2};
+    use scirs2_core::ndarray::Array1;
 
     #[test]
     fn test_plot3d_creation() {

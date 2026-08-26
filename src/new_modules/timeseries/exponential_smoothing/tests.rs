@@ -542,9 +542,7 @@ mod exponential_smoothing_tests {
         assert!(forecast.lower.is_some());
         assert!(forecast.upper.is_some());
 
-        // Damped trend: forecast differences should decrease
-        let diff_early = (forecast.point[1] - forecast.point[0]).abs();
-        let diff_late = (forecast.point[19] - forecast.point[18]).abs();
+        // Damped trend: forecast differences should decrease.
         // Due to seasonality, compare same-season steps
         let diff_season_early = (forecast.point[4] - forecast.point[0]).abs();
         let diff_season_late = (forecast.point[16] - forecast.point[12]).abs();

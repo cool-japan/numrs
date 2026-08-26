@@ -10,7 +10,7 @@
 //! For discrete systems, s is replaced with z.
 
 use super::{ControlError, ControlResult, FrequencyResponse, SystemType};
-use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::ndarray::Array1;
 use scirs2_core::num_complex::Complex64;
 use std::f64::consts::PI;
 
@@ -253,7 +253,6 @@ impl TransferFunction {
         let gh = self.series(feedback_tf)?;
 
         // 1 + G(s)*H(s) or 1 - G(s)*H(s)
-        let one = Array1::from_vec(vec![1.0]);
         let one_tf = TransferFunction::new(vec![1.0], vec![1.0])?;
 
         let denominator_tf = if negative {

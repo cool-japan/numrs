@@ -651,7 +651,10 @@ where
         + Div<Output = T>
         + Neg<Output = T>,
 {
-    let Some((shape, n)) = plan(root) else {
+    // `n` (element count) is validated by `plan` but not needed here: every
+    // leaf already shares `shape` (and so, by construction, the same
+    // length) by the time `fused_specialized` walks their slices.
+    let Some((shape, _n)) = plan(root) else {
         return eval_eager(root);
     };
 

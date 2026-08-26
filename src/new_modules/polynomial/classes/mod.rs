@@ -9,7 +9,7 @@
 //! basis-specific formulas each classical orthogonal family needs (three-term
 //! recurrence evaluation, one derivative/integral step, the companion-matrix
 //! layout, and the change of basis to/from the plain power series). The
-//! [`define_polynomial_class!`] macro wires a family's free functions (in its
+//! `define_polynomial_class!` macro wires a family's free functions (in its
 //! own small module, e.g. [`chebyshev`]) into a `Basis` impl and produces the
 //! public type alias, so `new`/`eval`/`fit`/`roots`/`deriv`/`integ`/`convert`/
 //! `trim`/arithmetic are implemented exactly once (in `series.rs`) and shared
@@ -82,7 +82,7 @@ use std::fmt::Debug;
 ///
 /// All coefficient slices are **ascending order** (`c[0]` is the coefficient
 /// of the degree-0 basis polynomial). Implementations are provided by
-/// [`define_polynomial_class!`], which wires each method to a same-named free
+/// `define_polynomial_class!`, which wires each method to a same-named free
 /// function in that family's own module.
 ///
 /// Requires `Self: Clone + Copy + Debug + Default` (trivial for the
@@ -295,8 +295,6 @@ macro_rules! define_polynomial_class {
             crate::new_modules::polynomial::classes::series::Series<T, $marker>;
     };
 }
-
-pub(crate) use define_polynomial_class;
 
 define_polynomial_class!(
     /// NumPy-parity Chebyshev series: `sum_i coef[i] * T_i(x)`, domain and

@@ -47,9 +47,7 @@ use scirs2_core::bioinformatics::phylo::{
     jukes_cantor_distance as core_jc,
 };
 use scirs2_core::bioinformatics::sequence::gc_content as core_gc_content;
-use scirs2_core::bioinformatics::stats::{
-    codon_usage_table as core_codon_usage, nucleotide_frequencies as core_nuc_freq,
-};
+use scirs2_core::bioinformatics::stats::nucleotide_frequencies as core_nuc_freq;
 
 use crate::error::{NumRs2Error, Result};
 

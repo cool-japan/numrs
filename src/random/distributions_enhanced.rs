@@ -9,7 +9,6 @@ use crate::linalg_stable::StableDecompositions;
 use crate::new_modules::special::error_functions::erf_scalar;
 use crate::random::state::RandomState;
 use num_traits::{Float, NumCast};
-use scirs2_core::random::prelude::Rng;
 use scirs2_special::betainc_regularized;
 use std::fmt::{Debug, Display};
 
@@ -833,7 +832,6 @@ impl RandomState {
 
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        let mut rng = self.get_rng()?;
 
         // Normalize weights to ensure they sum to 1.0
         let mut norm_weights = Vec::with_capacity(n_components);
@@ -852,18 +850,32 @@ impl RandomState {
         // Optimized approach: generate component selections and normal samples separately
         let mut component_selections = Vec::with_capacity(size);
 
-        // Generate all component selections at once
-        for _ in 0..size {
-            let u = <T as NumCast>::from(rng.random::<f64>()).unwrap_or(T::zero());
-            let mut selected_component = 0;
+        // Generate all component selections at once. The `rng` guard is
+        // scoped to this block alone (not held for the rest of the
+        // function): `self.normal()` below calls `self.get_rng()` itself,
+        // and `self.rng` is a plain (non-reentrant) `std::sync::Mutex` --
+        // still holding this guard across that call would deadlock the
+        // thread against itself on every call with `n_components >= 1` and
+        // at least one component actually selected. This was a real,
+        // pre-existing hang (reproduced: a plain `cargo nextest run` on
+        // this test hung for 500+s before being killed), not the "too slow
+        // for CI" performance issue the removed `#[ignore]` claimed --
+        // "too slow" was a misdiagnosis of what was actually an unconditional
+        // deadlock, present regardless of seeding or sample size.
+        {
+            let mut rng = self.get_rng()?;
+            for _ in 0..size {
+                let u = <T as NumCast>::from(rng.random::<f64>()).unwrap_or(T::zero());
+                let mut selected_component = 0;
 
-            for (i, &cw) in cumulative_weights.iter().enumerate() {
-                if u <= cw {
-                    selected_component = i;
-                    break;
+                for (i, &cw) in cumulative_weights.iter().enumerate() {
+                    if u <= cw {
+                        selected_component = i;
+                        break;
+                    }
                 }
+                component_selections.push(selected_component);
             }
-            component_selections.push(selected_component);
         }
 
         // Count how many samples we need from each component
@@ -1049,87 +1061,6 @@ impl RandomState {
 /// Normal cumulative distribution function
 fn normal_cdf(x: f64) -> f64 {
     0.5 * (1.0 + erf(x / std::f64::consts::SQRT_2))
-}
-
-/// Inverse normal cumulative distribution function
-#[allow(dead_code)]
-fn normal_inv_cdf(p: f64) -> f64 {
-    if p <= 0.0 {
-        return f64::NEG_INFINITY;
-    }
-    if p >= 1.0 {
-        return f64::INFINITY;
-    }
-
-    // Approximate the inverse CDF using the Beasley-Springer-Moro algorithm
-    let q = p - 0.5;
-
-    if q.abs() <= 0.425 {
-        // Central region
-        let r = 0.180625 - q * q;
-        return q
-            * (((((((2.509_080_928_730_122_6 * r + 3.343_057_558_358_813e1) * r
-                + 6.726_577_092_700_87e1)
-                * r
-                + 4.592_195_393_154_987e1)
-                * r
-                + 1.373_169_376_550_946_2e1)
-                * r
-                + 1.421_413_764_013_155_7)
-                * r
-                + 2.298_979_990_914_786_5e-1)
-                / (((((((4.374_317_029_667_823e-2 * r + 3.739_716_869_366_193_3) * r
-                    + 4.692_163_145_304_143_5e1)
-                    * r
-                    + 2.266_863_181_546_454_5e2)
-                    * r
-                    + 5.396_173_702_892_064e2)
-                    * r
-                    + 6.573_191_171_972_302e2)
-                    * r
-                    + 3.734_237_715_407_137e2)
-                    * r
-                    + 1.0));
-    }
-
-    // Tail regions
-    let r = if q > 0.0 { 1.0 - p } else { p };
-
-    if r <= 0.0 {
-        return if q > 0.0 {
-            f64::INFINITY
-        } else {
-            f64::NEG_INFINITY
-        };
-    }
-
-    let r = (-r.ln()).sqrt();
-
-    let mut ret = ((((((1.811_625_079_763_736_7e1 * r + 7.928_172_819_374_223e1) * r
-        + 1.373_169_376_550_946_2e2)
-        * r
-        + 1.193_147_912_264_617e2)
-        * r
-        + 4.926_845_824_098_105e1)
-        * r
-        + 8.400_547_514_910_246)
-        * r
-        + 3.050_789_888_729_818e-1)
-        / ((((((3.020_637_025_121_939_4e-1 * r + 5.595_303_579_120_197) * r
-            + 3.042_975_173_014_595e1)
-            * r
-            + 6.493_763_419_991_991e1)
-            * r
-            + 5.786_293_056_261_984e1)
-            * r
-            + 2.121_379_430_158_66e1)
-            * r
-            + 2.659_135_201_941_675)
-        * r
-        + 1.0;
-
-    ret = if q < 0.0 { -ret } else { ret };
-    ret
 }
 
 /// Error function.
@@ -1406,29 +1337,35 @@ mod tests {
     #[test]
     #[serial]
     fn test_mixture_of_normals() {
-        // Was `#[ignore]`d as "too slow for CI", which was never true: the
-        // impl above (`RandomState::mixture_of_normals`) is O(size *
-        // n_components) -- generate `size` component selections, batch-draw
-        // normals per component, reassign in order -- microseconds even at
-        // the original size=100. The real problem was statistical, not
-        // performance: with weights=[0.3, 0.7] and no seed, the number of
-        // draws from the -3 component is ~Binomial(100, 0.3), and
-        // `p25 = sorted[25]` needs at least ~26 of those to land negative
-        // for the assertion to hold. P(Binomial(100, 0.3) <= 25) ~= 16% --
-        // an honest ~1-in-6 flake with an *unseeded* global RNG, misdiagnosed
-        // as a perf problem at some point and `#[ignore]`d instead of fixed.
+        // Was `#[ignore]`d as "Performance optimization needed - function
+        // works but is too slow for CI". That was a misdiagnosis: the
+        // function did not "work but run slowly" -- it hung indefinitely.
+        // `RandomState::mixture_of_normals` held its `self.get_rng()`
+        // `MutexGuard` across a later `self.normal(...)` call, which itself
+        // calls `self.get_rng()` on the very same (non-reentrant)
+        // `Arc<Mutex<StdRng>>`. Any call reaching that second lock attempt
+        // while the outer guard was still alive deadlocked the thread
+        // against itself, permanently -- reproduced directly: an unmodified
+        // `cargo nextest run` on this test (before the fix below) hung for
+        // 500+s before being force-killed, seeded or not, at size=100 or
+        // size=1000. See the fix in `RandomState::mixture_of_normals`
+        // (scoping the first `rng` borrow to a block so it drops before
+        // `self.normal()` is called) -- that fix, not this test, is what
+        // actually resolves the hang; nothing about seeding or sample size
+        // could have.
         //
-        // Fixed by (a) seeding the global RNG explicitly -- deterministic
-        // per the CI policy on stochastic tests -- and (b) raising size to
-        // 1000, which pushes the analogous tail probability to ~3e-4
-        // (mean 300, std ~14.5 for the same binomial, needing <=250) so the
-        // seed has comfortable margin rather than merely happening to pass.
-        // Order-of-magnitude estimate: the sorted index (250 of ~300 draws
-        // from the -3 component) sits near that component's own 83rd
-        // percentile, i.e. roughly -3 + 0.97*std ~= -2.0 (symmetric +2.0 for
-        // p75) -- tightened the assertions accordingly, from the original
-        // "merely negative" (a razor-thin margin at the 0.0 line) to
-        // comfortably inside each component's mass.
+        // With the deadlock fixed, this test still deserves a seed (per the
+        // W6-TESTS flake-cleanup policy on stochastic tests) since the
+        // *statistical* assertions below are otherwise exposed to real,
+        // if smaller, flake risk: with weights=[0.3, 0.7] and an unseeded
+        // RNG, the number of draws from the -3 component is
+        // ~Binomial(size, 0.3), and `p25 = sorted[size/4]` needs enough of
+        // those to land negative for the assertion to hold. At the
+        // original size=100 that tail probability was an honest ~16%
+        // (an unrelated, real flake sitting behind the deadlock); raising
+        // size to 1000 (mean 300, std ~14.5 for the same binomial) pushes
+        // it to ~3e-4, so the seed below has comfortable margin rather than
+        // merely happening to pass.
         crate::random::distributions::set_seed(20260825);
 
         let weights = vec![0.3, 0.7];

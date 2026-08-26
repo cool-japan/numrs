@@ -346,8 +346,8 @@ fn bench_parallel_config_unaligned(c: &mut Criterion) {
         use_parallel: bool,
         min_parallel_size: usize,
         chunk_size: usize,
-        max_threads: Option<usize>,
-        _extra: u32, // Make it similar size
+        _max_threads: Option<usize>, // Unread - kept only for size/layout parity
+        _extra: u32,                 // Make it similar size
     }
 
     let mut group = c.benchmark_group("parallel_config/unaligned");
@@ -356,7 +356,7 @@ fn bench_parallel_config_unaligned(c: &mut Criterion) {
         use_parallel: true,
         min_parallel_size: 1000,
         chunk_size: 250,
-        max_threads: Some(8),
+        _max_threads: Some(8),
         _extra: 0,
     });
 

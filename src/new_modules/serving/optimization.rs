@@ -5,7 +5,7 @@
 use super::{Result, ServingError};
 use crate::array::Array;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 /// Type alias for fused operations
 type FusedOp = Box<dyn Fn(&Array<f64>) -> Result<Array<f64>> + Send + Sync>;

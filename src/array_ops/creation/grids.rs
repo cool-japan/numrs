@@ -43,7 +43,7 @@ use num_traits::Float;
 /// ```
 ///
 /// This is the canonical `meshgrid` implementation (the only one that
-/// supports `sparse` output); [`crate::math::creation::meshgrid`] (a
+/// supports `sparse` output); `crate::math::creation::meshgrid` (a
 /// one-line delegate that always passes `sparse: false`, matching its own
 /// signature which has no `sparse` parameter) forwards here.
 pub fn meshgrid<T: Clone>(xi: &[&Array<T>], indexing: &str, sparse: bool) -> Result<Vec<Array<T>>> {

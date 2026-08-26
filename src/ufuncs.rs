@@ -19,8 +19,8 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use crate::kernels::{borrow::operand, reduce};
-use num_traits::{Float, NumCast};
-use scirs2_core::ndarray::{Array1, ArrayView1, CowArray, Ix1};
+use num_traits::NumCast;
+use scirs2_core::ndarray::{Array1, CowArray, Ix1};
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use std::fmt::{self, Debug};
 
@@ -991,11 +991,11 @@ pub fn sum(a: &Array<f64>) -> f64 {
 
 /// Arithmetic mean of all elements.
 ///
-/// Dispatches unconditionally through [`crate::kernels::reduce::mean_f64`]
+/// Dispatches unconditionally through `crate::kernels::reduce::mean_f64`
 /// (SIMD below `PARALLEL_MIN_LEN`, chunked-parallel `rayon` above -- see
 /// that module's docs), instead of this file's own `SIMD_THRESHOLD`-gated
 /// `simd_mean`/scalar-sum split still used by the rest of this file.
-/// [`var`]/[`std`] below build on this exact same `mean_f64` call, so all
+/// [`var`]/[`std()`] below build on this exact same `mean_f64` call, so all
 /// three reduction functions share one deterministic code path per
 /// `kernels::reduce`'s design.
 ///
@@ -1022,23 +1022,23 @@ pub fn mean(a: &Array<f64>) -> f64 {
 /// computed *population* variance (divisor `n`). So this function
 /// silently switched estimators depending on array length alone, with no
 /// way for a caller to detect the switch from the return type. Fixed by
-/// computing `sum_sq_dev / n` via [`reduce::sum_sq_dev_f64`]
+/// computing `sum_sq_dev / n` via `reduce::sum_sq_dev_f64`
 /// unconditionally (no length branch at all), matching the already-fixed
 /// population convention of `stats::basic::Statistics::var` and
 /// `math::statistics::var(.., ddof=0, ..)`, and per `kernels::reduce`'s
 /// module docs ("`simd_variance`/`simd_std`: never use them") --
 /// `simd_variance` must not be called from anywhere in this crate. This
-/// was, together with `simd_std` in [`std`] below, the last live call
+/// was, together with `simd_std` in [`std()`] below, the last live call
 /// site of either in `src/`.
 ///
 /// # Empty array: `NaN`, matching this function's own pre-fix behavior
 ///
-/// [`reduce::sum_sq_dev_f64`] has no `is_empty` guard, so summing zero
+/// `reduce::sum_sq_dev_f64` has no `is_empty` guard, so summing zero
 /// terms gives `0.0`, and dividing that by `n == 0` below is the
 /// IEEE-754 `0.0 / 0.0`, which is `NaN` -- exactly what this function's
 /// old scalar branch produced for an empty array (`0.0 / 0.0` for the
 /// mean, then `0.0 / 0.0` again for the variance), regardless of
-/// [`reduce::mean_f64`] itself now returning a non-`NaN` `0.0` for an
+/// `reduce::mean_f64` itself now returning a non-`NaN` `0.0` for an
 /// empty slice. Deliberately preserved here even though it differs from
 /// `stats::basic::Statistics::var`'s `0.0`-for-empty convention and from
 /// this file's own [`mean`]'s new `0.0`-for-empty value: this fix's scope

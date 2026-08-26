@@ -291,12 +291,12 @@ where
 {
     /// Calculate the sum of all elements in the array
     ///
-    /// Dispatches through [`crate::kernels::reduce`]'s dtype-tiered
+    /// Dispatches through `crate::kernels::reduce`'s dtype-tiered
     /// kernels (a single SIMD pass below the parallel threshold, a
     /// fixed-chunk `rayon` fold above it -- see that module's docs) for
     /// `f64`/`f32` arrays, reached via the zero-copy
-    /// [`crate::kernels::borrow::operand`] bridge and the sound,
-    /// `TypeId`-guarded reinterpretation in [`crate::kernels::cast`]
+    /// `crate::kernels::borrow::operand` bridge and the sound,
+    /// `TypeId`-guarded reinterpretation in `crate::kernels::cast`
     /// (replacing this method's former ad hoc raw-pointer-cast/
     /// `transmute_copy` duplicate of that same logic). Any other `T`
     /// falls back to a plain sequential fold, unchanged from before.
@@ -335,8 +335,8 @@ impl<T: Clone + Add<Output = T>> Array<T> {
     /// Add arrays with broadcasting
     ///
     /// Escapes `ndarray`'s dynamic-rank (`IxDyn`) iteration in favor of a
-    /// flat-slice zip via [`crate::kernels::borrow::operand`] +
-    /// [`crate::kernels::elementwise::binary_serial`] -- measured up to
+    /// flat-slice zip via `crate::kernels::borrow::operand` +
+    /// `crate::kernels::elementwise::binary_serial` -- measured up to
     /// 3.3x faster than the old `&a.data + &b.data` path at small `n`
     /// (see `perf_probe` below and `kernels::elementwise::binary_dispatch`'s
     /// doc comment for the full table). Deliberately calls `binary_serial`

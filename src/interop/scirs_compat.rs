@@ -7,10 +7,9 @@
 //! This approach ensures compatibility while maintaining functionality.
 
 #![allow(unexpected_cfgs)]
-#![allow(unused_imports)]
 
 use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
 use num_traits::{Float, NumCast};
 use std::fmt::{Debug, Display};
 
@@ -155,6 +154,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only `test_solve_linear_system` asserts approximately, and that test is
+    // itself `lapack`-gated -- so without the feature this import is unused
+    // and would warn.
+    #[cfg(feature = "lapack")]
     use approx::assert_relative_eq;
 
     #[test]

@@ -129,56 +129,61 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
             .queue()
             .submit(std::iter::once(encoder.finish()));
 
-        // Map the staging buffer and read the data
+        // Map the staging buffer and read the data.
+        //
+        // This uses a plain `std::sync::mpsc` channel rather than an async
+        // executor. `wgpu` guarantees that `Device::poll(PollType::
+        // wait_indefinitely())` blocks until every callback registered
+        // before the call - including the `map_async` callback below - has
+        // been invoked, so `rx.recv()` is guaranteed to have a message
+        // waiting by the time `poll` returns: this is genuinely synchronous
+        // work, not asynchronous work wearing `async`/`.await` syntax. An
+        // earlier revision drove it through a private Tokio runtime
+        // (`Runtime::block_on`) instead, which was both unnecessary and
+        // dangerous: calling it from code that was itself already running
+        // on a Tokio runtime - any `#[tokio::test]`, for instance - nested a
+        // second runtime inside the first and panicked ("Cannot start a
+        // runtime from within a runtime"). A plain synchronous channel has
+        // no such hazard and works identically from sync code, from async
+        // code, and under any Tokio runtime flavor.
         let buffer_slice = staging_buffer.slice(..);
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            // The callback has no channel of its own to report a send
+            // failure through; if the receiver was already dropped there
+            // is nothing left to notify.
+            let _ = tx.send(result);
+        });
+
+        self.context
+            .device()
+            .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| {
-                NumRs2Error::RuntimeError(format!("Failed to create async runtime: {}", e))
+                NumRs2Error::RuntimeError(format!(
+                    "GPU device poll failed during buffer mapping: {}",
+                    e
+                ))
             })?;
 
-        // Create a temporary buffer to store the data from the staging buffer
-        let mut data = vec![0; self.size * self.element_size];
+        rx.recv()
+            .map_err(|_| {
+                NumRs2Error::RuntimeError(
+                    "Failed to receive buffer mapping result - channel closed".to_string(),
+                )
+            })?
+            .map_err(|e| {
+                NumRs2Error::RuntimeError(format!("Buffer mapping operation failed: {}", e))
+            })?;
 
-        rt.block_on(async {
-            let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
-            buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-                // The callback has no channel of its own to report a send
-                // failure through; if the receiver was already dropped there
-                // is nothing left to notify.
-                let _ = tx.send(result);
-            });
-
-            self.context
-                .device()
-                .poll(wgpu::PollType::wait_indefinitely())
-                .map_err(|e| {
-                    NumRs2Error::RuntimeError(format!(
-                        "GPU device poll failed during buffer mapping: {}",
-                        e
-                    ))
-                })?;
-
-            rx.receive()
-                .await
-                .ok_or_else(|| {
-                    NumRs2Error::RuntimeError(
-                        "Failed to receive buffer mapping result - channel closed".to_string(),
-                    )
-                })?
-                .map_err(|e| {
-                    NumRs2Error::RuntimeError(format!("Buffer mapping operation failed: {}", e))
-                })?;
-
-            // Copy the data from the staging buffer
+        // Copy the data from the staging buffer. The mapped view must be
+        // dropped before `unmap()` is called below, hence the block scope.
+        let mut data = vec![0u8; self.size * self.element_size];
+        {
             let mapped_data = buffer_slice.get_mapped_range().map_err(|e| {
                 NumRs2Error::RuntimeError(format!("Failed to get mapped buffer range: {}", e))
             })?;
             data.copy_from_slice(&mapped_data);
-
-            Ok::<(), NumRs2Error>(())
-        })?;
+        }
 
         // Unmap the buffer
         staging_buffer.unmap();
