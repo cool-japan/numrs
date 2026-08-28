@@ -22,7 +22,12 @@ pub trait SimdArrayOps {
     fn simd_sum(&self) -> f32;
 
     /// SIMD-optimized exponential function
-    fn simd_exp(&self) -> Array<f32>;
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
+    fn simd_exp(&self) -> Result<Array<f32>>;
 
     /// SIMD-optimized logarithm function
     fn simd_log(&self) -> Array<f32>;
@@ -136,7 +141,7 @@ impl SimdArrayOps for Array<f32> {
         global_dispatcher().optimized_sum_f32(self)
     }
 
-    fn simd_exp(&self) -> Array<f32> {
+    fn simd_exp(&self) -> Result<Array<f32>> {
         global_dispatcher().optimized_exp_f32(self)
     }
 
@@ -253,7 +258,7 @@ mod tests {
         assert_relative_eq!(sqrt_result.to_vec()[3], 4.0, epsilon = 1e-6);
 
         let exp_input = Array::from_vec(vec![0.0, 1.0]);
-        let exp_result = exp_input.simd_exp();
+        let exp_result = exp_input.simd_exp().expect("simd_exp should succeed");
 
         // Debug: print actual values to understand the issue
         let result_vec = exp_result.to_vec();
@@ -266,7 +271,8 @@ mod tests {
             let direct_result =
                 crate::simd_optimize::avx2_enhanced::EnhancedSimdOps::vectorized_exp_f32(
                     &exp_input,
-                );
+                )
+                .expect("vectorized_exp_f32 should succeed");
             let direct_vec = direct_result.to_vec();
             println!("Direct AVX2 result: {:?}", direct_vec);
             assert_relative_eq!(direct_vec[0], 1.0, epsilon = 1e-6);

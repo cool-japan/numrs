@@ -1129,15 +1129,20 @@ mod mean_var_std_min_max_tests {
     /// those, and its own comparison-based kernels return `NaN` here as NumPy does.
     #[test]
     fn min_max_propagate_nan_at_len_64_boundary() {
-        // The exact vector that exposed the upstream wrong-finite-value defect: true
-        // maximum 5.0 at index 0, one NaN at index 10, len 64. `simd_max_element` returned
-        // 1.0 for this; the crate's own kernel returns NaN.
-        let mut data = vec![1.0f64; 64];
-        data[10] = f64::NAN;
-        data[0] = 5.0;
-        let arr = Array::from_vec(data);
-        assert!(arr.min().is_nan());
-        assert!(arr.max().is_nan());
+        // The vector that first exposed the upstream wrong-finite-value defect: true maximum
+        // 5.0 at index 0, one NaN at index 10, len 64. `simd_max_element` returned 1.0 for
+        // this on the 2-lane vector path (SSE2, aarch64 NEON), where index 10 shares lane 0
+        // with the maximum; index 8 is the placement that is lane-aligned at *every* lane
+        // width upstream can pick (2 and 4), so both are checked here. This crate's rule is
+        // placement-independent, so its own kernel returns NaN for either.
+        for &nan_at in &[10usize, 8] {
+            let mut data = vec![1.0f64; 64];
+            data[0] = 5.0;
+            data[nan_at] = f64::NAN;
+            let arr = Array::from_vec(data);
+            assert!(arr.min().is_nan(), "NaN at index {nan_at}");
+            assert!(arr.max().is_nan(), "NaN at index {nan_at}");
+        }
     }
 
     /// Both tiers of the dispatched kernel, through the public trait: the sequential one
@@ -1186,36 +1191,96 @@ mod mean_var_std_min_max_tests {
 
     /// **Live upstream bug, not a NaN-convention change.** Found while wiring
     /// `math::aggregation::max`/`min` onto `kernels::reduce` (withheld as a result -- see that
-    /// module's doc comments): on a 64-element `f64` slice `[5.0, 1.0 (x9), NaN, 1.0 (x53)]`
-    /// (true maximum `5.0` at index 0, a single `NaN` at index 10),
-    /// `scirs2_core::simd_ops::SimdUnifiedOps::simd_max_element` returns `1.0` -- silently
-    /// discarding the real maximum, not `NaN` and not `5.0`. This is called *directly* here,
-    /// with no `numrs2` dispatch code (`kernels::borrow::operand`/`kernels::cast`) in between,
-    /// specifically to rule out a bug in this crate's own plumbing: the defect reproduces with
-    /// zero numrs2 code involved, so it is upstream in `scirs2-core` itself.
+    /// module's doc comments): `scirs2_core::simd_ops::SimdUnifiedOps::simd_max_element` can
+    /// return a *wrong, finite* value -- neither the true maximum nor `NaN` -- for an input
+    /// containing a `NaN`, silently discarding the real maximum.
     ///
-    /// This test intentionally pins the *current, believed-wrong* value (`1.0`) as a tripwire:
-    /// it is expected to start FAILING the moment a `scirs2-core` upgrade fixes the underlying
-    /// kernel, at which point `min_max_nan_behavior_matches_kernels_reduce_at_len_64_boundary`
-    /// above should be un-`#[ignore]`d and `kernels::reduce`'s "NaN handling is pinned, not a
-    /// simple rule" module docs (and `math::aggregation::max`/`min`'s withheld dispatch) revisited.
+    /// The mechanism is **lane poisoning** in upstream's vectorized max reduction. It folds the
+    /// input into a per-lane running maximum with `_mm256_max_pd` (4 `f64` lanes, AVX2),
+    /// `_mm_max_pd` (2 lanes, SSE2) or `vmaxq_f64` (2 lanes, aarch64 NEON), then reduces the
+    /// lanes with `>` comparisons. `MAXPD(a, b)` returns `b` whenever *either* operand is `NaN`,
+    /// so once a lane's accumulator holds `NaN` the **next chunk overwrites it** and the real
+    /// maximum already seen in that lane is gone. (On aarch64 `FMAX` propagates the `NaN` in the
+    /// lane instead, but the horizontal `if low > high { low } else { high }` step then discards
+    /// it in favour of the other lane's value.) Either way the true maximum can vanish.
+    ///
+    /// **Which `NaN` placements trip the defect is therefore a function of the SIMD lane width
+    /// chosen at runtime**: the `NaN` must land in the *same lane* as the maximum. The original
+    /// witness put the `NaN` at index 10, which shares lane 0 with index 0 only at width 2
+    /// (SSE2, aarch64 NEON); on AVX2's width 4 it lands in lane 2 instead, the two never meet,
+    /// and the call returns the correct `5.0` -- correct **by luck, not because the kernel was
+    /// fixed**. The probe below is consequently *lane-aligned* at index 8 (`8 % 2 == 0` and
+    /// `8 % 4 == 0`), so it poisons the maximum's lane at every width this kernel can pick, and
+    /// `len = 64` leaves plenty of chunks after it to overwrite the poisoned lane.
+    ///
+    /// The upstream function is called *directly* here, with no `numrs2` dispatch code
+    /// (`kernels::borrow::operand`/`kernels::cast`) in between, specifically to rule out a bug in
+    /// this crate's own plumbing: the defect reproduces with zero numrs2 code involved, so it is
+    /// upstream in `scirs2-core` itself.
+    ///
+    /// This test intentionally pins the *current, believed-wrong* value (`1.0`) as a tripwire: it
+    /// is expected to start FAILING the moment a `scirs2-core` upgrade fixes the underlying
+    /// kernel, at which point `min_max_propagate_nan_at_len_64_boundary` above and, more
+    /// importantly, `kernels::reduce`'s deliberate "do **not** call
+    /// `simd_min_element`/`simd_max_element`" decision -- plus `math::aggregation::max`/`min`'s
+    /// withheld dispatch -- should be revisited. The placement scan that follows the pinned case
+    /// keeps that tripwire from hanging on one hardcoded index: it asserts the defect *class* is
+    /// still live for *some* placement, whatever lane width this machine ends up using.
     #[test]
     fn simd_max_element_upstream_wrong_value_is_a_live_bug_not_just_new_nan_convention() {
         use scirs2_core::ndarray::ArrayView1;
         use scirs2_core::simd_ops::SimdUnifiedOps;
 
-        let mut data = vec![1.0f64; 64];
-        data[0] = 5.0; // true maximum
-        data[10] = f64::NAN;
+        // 64 elements, true maximum 5.0 at index 0, a single NaN at `nan_at`, straight into
+        // the upstream kernel.
+        let upstream_max_with_nan_at = |nan_at: usize| -> f64 {
+            let mut data = vec![1.0f64; 64];
+            data[0] = 5.0; // true maximum
+            data[nan_at] = f64::NAN;
+            <f64 as SimdUnifiedOps>::simd_max_element(&ArrayView1::from(&data[..]))
+        };
 
-        let direct = <f64 as SimdUnifiedOps>::simd_max_element(&ArrayView1::from(&data[..]));
-        assert_eq!(
-            direct, 1.0,
-            "if this fails because `direct` is now 5.0 (correct) or NaN (conservative), \
-             scirs2-core has changed this kernel's behavior -- see this test's doc comment \
-             for what to do next; do NOT just update this assertion to match a new value \
-             without re-checking whether other NaN placements are still wrong"
-        );
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        {
+            // A vector path is architecturally guaranteed on both of these arches (SSE2 is
+            // x86_64 baseline, NEON is aarch64 baseline), so lane poisoning is reachable.
+            assert_eq!(
+                upstream_max_with_nan_at(8),
+                1.0,
+                "if this fails because the result is now 5.0 (correct) or NaN (conservative), \
+                 scirs2-core has changed this kernel's behavior -- see this test's doc comment \
+                 for what to do next; do NOT just update this assertion to match a new value \
+                 without re-checking whether other NaN placements are still wrong. In \
+                 particular a 5.0 obtained from a placement that is NOT lane-aligned with the \
+                 maximum proves nothing: index 10 returns 5.0 on AVX2's 4 lanes purely because \
+                 it misses the maximum's lane, while still returning a wrong 1.0 on the 2-lane \
+                 SSE2/NEON paths"
+            );
+
+            // ... and the defect *class*, independent of that single hardcoded index: at least
+            // one NaN placement must still yield a wrong finite value. Index 0 is skipped
+            // because writing the NaN there would overwrite the maximum itself.
+            let wrong_placements: Vec<usize> = (1..64)
+                .filter(|&i| {
+                    let got = upstream_max_with_nan_at(i);
+                    !got.is_nan() && got != 5.0
+                })
+                .collect();
+            assert!(
+                !wrong_placements.is_empty(),
+                "no NaN placement in 1..64 made simd_max_element drop the true maximum -- the \
+                 upstream lane-poisoning defect appears to be FIXED; revisit kernels::reduce's \
+                 deliberate refusal to call simd_min_element/simd_max_element (wrong placements \
+                 found: {wrong_placements:?})"
+            );
+        }
+
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            // No vector path here: upstream falls back to a plain `if x > result { result = x }`
+            // loop, which skips NaNs and is correct, so there is no lane to poison.
+            assert_eq!(upstream_max_with_nan_at(8), 5.0);
+        }
     }
 
     #[test]

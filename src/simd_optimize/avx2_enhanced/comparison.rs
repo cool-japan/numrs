@@ -17,6 +17,8 @@ use super::{AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
 #[cfg(target_arch = "x86_64")]
 use crate::array::Array;
 #[cfg(target_arch = "x86_64")]
+use crate::error::{NumRs2Error, Result};
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 impl EnhancedSimdOps {
@@ -26,8 +28,13 @@ impl EnhancedSimdOps {
 
     /// Vectorized abs function for f64
     /// Uses bit manipulation to clear sign bit - extremely fast
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_abs_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_abs_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -35,7 +42,7 @@ impl EnhancedSimdOps {
             Self::avx2_abs_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized absolute value for f64
@@ -67,14 +74,19 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized abs for f32
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_abs_f32(input: &Array<f32>) -> Array<f32> {
+    pub fn vectorized_abs_f32(input: &Array<f32>) -> Result<Array<f32>> {
         let data = input.to_vec();
         let mut result = vec![0.0f32; data.len()];
         unsafe {
             Self::avx2_abs_f32(&data, &mut result);
         }
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized abs for f32
@@ -102,8 +114,13 @@ impl EnhancedSimdOps {
 
     /// Vectorized sign function for f64
     /// Returns -1.0, 0.0, or 1.0 based on sign
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_sign_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_sign_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -111,7 +128,7 @@ impl EnhancedSimdOps {
             Self::avx2_sign_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized sign function for f64
@@ -163,8 +180,17 @@ impl EnhancedSimdOps {
 
     /// Vectorized clip function for f64
     /// Clips values to [min, max] range using hardware min/max
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_clip_f64(input: &Array<f64>, min_val: f64, max_val: f64) -> Array<f64> {
+    pub fn vectorized_clip_f64(
+        input: &Array<f64>,
+        min_val: f64,
+        max_val: f64,
+    ) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -172,7 +198,7 @@ impl EnhancedSimdOps {
             Self::avx2_clip_f64(&data, &mut result, min_val, max_val);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized clip function for f64
@@ -206,14 +232,23 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized clip for f32
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_clip_f32(input: &Array<f32>, min_val: f32, max_val: f32) -> Array<f32> {
+    pub fn vectorized_clip_f32(
+        input: &Array<f32>,
+        min_val: f32,
+        max_val: f32,
+    ) -> Result<Array<f32>> {
         let data = input.to_vec();
         let mut result = vec![0.0f32; data.len()];
         unsafe {
             Self::avx2_clip_f32(&data, min_val, max_val, &mut result);
         }
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized clip for f32
@@ -242,16 +277,28 @@ impl EnhancedSimdOps {
 
     /// Vectorized copysign function for f64
     /// Returns |x| with the sign of y
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if `x` and `y`
+    /// have different shapes.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_copysign_f64(x: &Array<f64>, y: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_copysign_f64(x: &Array<f64>, y: &Array<f64>) -> Result<Array<f64>> {
+        if x.shape() != y.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: x.shape(),
+                actual: y.shape(),
+            });
+        }
+
         let x_data = x.to_vec();
         let y_data = y.to_vec();
-        let len = x_data.len().min(y_data.len());
+        let len = x_data.len();
         let mut result = vec![0.0f64; len];
         unsafe {
-            Self::avx2_copysign_f64(&x_data[..len], &y_data[..len], &mut result);
+            Self::avx2_copysign_f64(&x_data, &y_data, &mut result);
         }
-        Array::from_vec_shape(result, &x.shape())?
+        Array::from_vec_shape(result, &x.shape())
     }
 
     /// AVX2 optimized copysign for f64
@@ -288,16 +335,28 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized element-wise maximum of two f64 arrays
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if `a` and `b`
+    /// have different shapes.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_maximum_f64(a: &Array<f64>, b: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_maximum_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
+        if a.shape() != b.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: a.shape(),
+                actual: b.shape(),
+            });
+        }
+
         let a_data = a.to_vec();
         let b_data = b.to_vec();
-        let len = a_data.len().min(b_data.len());
+        let len = a_data.len();
         let mut result = vec![0.0f64; len];
         unsafe {
-            Self::avx2_maximum_f64(&a_data[..len], &b_data[..len], &mut result);
+            Self::avx2_maximum_f64(&a_data, &b_data, &mut result);
         }
-        Array::from_vec_shape(result, &a.shape())?
+        Array::from_vec_shape(result, &a.shape())
     }
 
     /// AVX2 optimized element-wise maximum
@@ -319,16 +378,28 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized element-wise minimum of two f64 arrays
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if `a` and `b`
+    /// have different shapes.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_minimum_f64(a: &Array<f64>, b: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_minimum_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f64>> {
+        if a.shape() != b.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: a.shape(),
+                actual: b.shape(),
+            });
+        }
+
         let a_data = a.to_vec();
         let b_data = b.to_vec();
-        let len = a_data.len().min(b_data.len());
+        let len = a_data.len();
         let mut result = vec![0.0f64; len];
         unsafe {
-            Self::avx2_minimum_f64(&a_data[..len], &b_data[..len], &mut result);
+            Self::avx2_minimum_f64(&a_data, &b_data, &mut result);
         }
-        Array::from_vec_shape(result, &a.shape())?
+        Array::from_vec_shape(result, &a.shape())
     }
 
     /// AVX2 optimized element-wise minimum
@@ -354,8 +425,13 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized floor function for f64 (round toward -infinity)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_floor_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_floor_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -363,7 +439,7 @@ impl EnhancedSimdOps {
             Self::avx2_floor_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized floor for f64
@@ -393,8 +469,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized ceil function for f64 (round toward +infinity)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_ceil_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_ceil_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -402,7 +483,7 @@ impl EnhancedSimdOps {
             Self::avx2_ceil_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized ceil for f64
@@ -432,8 +513,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized round function for f64 (round to nearest)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_round_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_round_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -441,7 +527,7 @@ impl EnhancedSimdOps {
             Self::avx2_round_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized round for f64
@@ -471,8 +557,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized trunc function for f64 (round toward zero)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_trunc_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_trunc_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -480,7 +571,7 @@ impl EnhancedSimdOps {
             Self::avx2_trunc_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized trunc for f64
@@ -514,8 +605,13 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized degrees function for f64 (radians to degrees)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_degrees_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_degrees_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -523,7 +619,7 @@ impl EnhancedSimdOps {
             Self::avx2_degrees_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized radians to degrees conversion
@@ -556,8 +652,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized radians function for f64 (degrees to radians)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the computed result buffer
+    /// cannot be reshaped to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_radians_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_radians_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -565,7 +666,7 @@ impl EnhancedSimdOps {
             Self::avx2_radians_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized degrees to radians conversion
@@ -602,18 +703,30 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized hypot function for f64 (hypotenuse: sqrt(x^2 + y^2))
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if `x` and `y`
+    /// have different shapes.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_hypot_f64(x: &Array<f64>, y: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_hypot_f64(x: &Array<f64>, y: &Array<f64>) -> Result<Array<f64>> {
+        if x.shape() != y.shape() {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: x.shape(),
+                actual: y.shape(),
+            });
+        }
+
         let x_data = x.to_vec();
         let y_data = y.to_vec();
-        let len = x_data.len().min(y_data.len());
+        let len = x_data.len();
         let mut result = vec![0.0f64; len];
 
         unsafe {
-            Self::avx2_hypot_f64(&x_data[..len], &y_data[..len], &mut result);
+            Self::avx2_hypot_f64(&x_data, &y_data, &mut result);
         }
 
-        Array::from_vec_shape(result, &x.shape())?
+        Array::from_vec_shape(result, &x.shape())
     }
 
     /// AVX2 optimized hypot for f64

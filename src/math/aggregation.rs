@@ -1093,8 +1093,9 @@ mod sum_max_min_tests {
 
         // The vector that exposed the upstream `simd_max_element` wrong-finite-value defect
         // (true maximum 5.0 at index 0, one NaN at index 10, len 64). The old fold returned
-        // 5.0 here and the old kernel returned a wrong 1.0; NumPy returns nan, and so does
-        // this now.
+        // 5.0 here and the old kernel returned a wrong 1.0 -- the latter observed on the
+        // narrower 2-lane vector path, where index 10 shares a lane with the maximum; NumPy
+        // returns nan, and so does this now, for every placement.
         let mut c_data = vec![1.0f64; 64];
         c_data[0] = 5.0;
         c_data[10] = f64::NAN;

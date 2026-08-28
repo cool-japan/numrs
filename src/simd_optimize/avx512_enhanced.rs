@@ -22,8 +22,15 @@ use std::arch::x86_64::*;
 /// AVX2 vectorization constants for production stability
 #[cfg(target_arch = "x86_64")]
 const AVX2_F32_LANES: usize = 8;
+// AVX2 fallback parameters for this module, which implements its AVX-512-era
+// operations with stable AVX2 instructions (see the module docs). Of the three,
+// only `AVX2_F32_LANES` is referenced by the kernels here; this one and
+// `AVX2_ALIGNMENT` are currently unused and kept for reference.
+#[allow(dead_code)]
 #[cfg(target_arch = "x86_64")]
 const AVX2_F64_LANES: usize = 4;
+// Unreferenced AVX2 fallback parameter -- see the note on `AVX2_F64_LANES`.
+#[allow(dead_code)]
 #[cfg(target_arch = "x86_64")]
 const AVX2_ALIGNMENT: usize = 32;
 
@@ -172,7 +179,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Ok(Array::from_vec_shape(result, &a.shape())?)
+        Array::from_vec_shape(result, &a.shape())
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -310,7 +317,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Ok(Array::from_vec_shape(result, &[output_len])?)
+        Array::from_vec_shape(result, &[output_len])
     }
 
     #[cfg(target_arch = "x86_64")]

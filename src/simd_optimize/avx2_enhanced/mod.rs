@@ -52,7 +52,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_exp_f32() {
         let input = Array::from_vec(vec![0.0f32, 1.0, 2.0, -1.0, 0.5, -0.5, 1.5, 2.5]);
-        let result = EnhancedSimdOps::vectorized_exp_f32(&input);
+        let result =
+            EnhancedSimdOps::vectorized_exp_f32(&input).expect("vectorized_exp_f32 failed");
         let result_vec = result.to_vec();
 
         // Check exp values are approximately correct
@@ -73,7 +74,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_exp_f64() {
         let input = Array::from_vec(vec![0.0f64, 1.0, 2.0, -1.0, 0.5, -0.5, 1.5, 2.5]);
-        let result = EnhancedSimdOps::vectorized_exp_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_exp_f64(&input).expect("vectorized_exp_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -171,7 +173,8 @@ mod tests {
             3.0,
             std::f64::consts::PI,
         ]);
-        let result = EnhancedSimdOps::vectorized_sin_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_sin_f64(&input).expect("vectorized_sin_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -249,7 +252,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_sqrt_f32() {
         let input = Array::from_vec(vec![1.0f32, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0]);
-        let result = EnhancedSimdOps::vectorized_sqrt_f32(&input);
+        let result =
+            EnhancedSimdOps::vectorized_sqrt_f32(&input).expect("vectorized_sqrt_f32 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -269,7 +273,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_sqrt_f64() {
         let input = Array::from_vec(vec![1.0f64, 4.0, 9.0, 16.0]);
-        let result = EnhancedSimdOps::vectorized_sqrt_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_sqrt_f64(&input).expect("vectorized_sqrt_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -369,7 +374,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_log2_f32() {
         let input = Array::from_vec(vec![1.0f32, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0]);
-        let result = EnhancedSimdOps::vectorized_log2_f32(&input);
+        let result =
+            EnhancedSimdOps::vectorized_log2_f32(&input).expect("vectorized_log2_f32 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -389,7 +395,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_log2_f64() {
         let input = Array::from_vec(vec![1.0f64, 2.0, 4.0, 8.0]);
-        let result = EnhancedSimdOps::vectorized_log2_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_log2_f64(&input).expect("vectorized_log2_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -449,7 +456,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_sinh_f64() {
         let input = Array::from_vec(vec![0.0f64, 0.5, 1.0, -0.5]);
-        let result = EnhancedSimdOps::vectorized_sinh_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_sinh_f64(&input).expect("vectorized_sinh_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -469,7 +477,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_cosh_f64() {
         let input = Array::from_vec(vec![0.0f64, 0.5, 1.0, -0.5]);
-        let result = EnhancedSimdOps::vectorized_cosh_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_cosh_f64(&input).expect("vectorized_cosh_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -489,7 +498,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_tanh_f64() {
         let input = Array::from_vec(vec![0.0f64, 0.5, 1.0, -0.5]);
-        let result = EnhancedSimdOps::vectorized_tanh_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_tanh_f64(&input).expect("vectorized_tanh_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -509,7 +519,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_asin_f64() {
         let input = Array::from_vec(vec![0.0f64, 0.5, 0.9, -0.5]);
-        let result = EnhancedSimdOps::vectorized_asin_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_asin_f64(&input).expect("vectorized_asin_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -529,7 +540,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_acos_f64() {
         let input = Array::from_vec(vec![0.0f64, 0.5, 0.9, -0.5]);
-        let result = EnhancedSimdOps::vectorized_acos_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_acos_f64(&input).expect("vectorized_acos_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -549,7 +561,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_atan_f64() {
         let input = Array::from_vec(vec![0.0f64, 0.5, 1.0, -0.5]);
-        let result = EnhancedSimdOps::vectorized_atan_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_atan_f64(&input).expect("vectorized_atan_f64 failed");
         let result_vec = result.to_vec();
 
         for i in 0..input.len() {
@@ -569,7 +582,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_abs_f32() {
         let input = Array::from_vec(vec![1.0f32, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0]);
-        let result = EnhancedSimdOps::vectorized_abs_f32(&input);
+        let result =
+            EnhancedSimdOps::vectorized_abs_f32(&input).expect("vectorized_abs_f32 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -588,7 +602,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_abs_f64() {
         let input = Array::from_vec(vec![1.0f64, -2.0, 3.0, -4.0]);
-        let result = EnhancedSimdOps::vectorized_abs_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_abs_f64(&input).expect("vectorized_abs_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f64, 2.0, 3.0, 4.0];
@@ -607,7 +622,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_sign_f64() {
         let input = Array::from_vec(vec![1.0f64, -2.0, 0.0, -0.5]);
-        let result = EnhancedSimdOps::vectorized_sign_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_sign_f64(&input).expect("vectorized_sign_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f64, -1.0, 0.0, -1.0];
@@ -626,7 +642,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_clip_f32() {
         let input = Array::from_vec(vec![-2.0f32, -1.0, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0]);
-        let result = EnhancedSimdOps::vectorized_clip_f32(&input, 0.0, 1.0);
+        let result = EnhancedSimdOps::vectorized_clip_f32(&input, 0.0, 1.0)
+            .expect("vectorized_clip_f32 failed");
         let result_vec = result.to_vec();
 
         let expected = [0.0f32, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0];
@@ -645,7 +662,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_clip_f64() {
         let input = Array::from_vec(vec![-2.0f64, 0.5, 1.5, 3.0]);
-        let result = EnhancedSimdOps::vectorized_clip_f64(&input, 0.0, 1.0);
+        let result = EnhancedSimdOps::vectorized_clip_f64(&input, 0.0, 1.0)
+            .expect("vectorized_clip_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [0.0f64, 0.5, 1.0, 1.0];
@@ -664,7 +682,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_floor_f64() {
         let input = Array::from_vec(vec![1.2f64, 2.8, -1.2, -2.8]);
-        let result = EnhancedSimdOps::vectorized_floor_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_floor_f64(&input).expect("vectorized_floor_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f64, 2.0, -2.0, -3.0];
@@ -683,7 +702,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_ceil_f64() {
         let input = Array::from_vec(vec![1.2f64, 2.8, -1.2, -2.8]);
-        let result = EnhancedSimdOps::vectorized_ceil_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_ceil_f64(&input).expect("vectorized_ceil_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [2.0f64, 3.0, -1.0, -2.0];
@@ -702,7 +722,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_round_f64() {
         let input = Array::from_vec(vec![1.2f64, 2.8, -1.2, -2.8]);
-        let result = EnhancedSimdOps::vectorized_round_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_round_f64(&input).expect("vectorized_round_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f64, 3.0, -1.0, -3.0];
@@ -1055,7 +1076,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_vectorized_cumsum_f64() {
         let input = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
-        let result = EnhancedSimdOps::vectorized_cumsum_f64(&input);
+        let result =
+            EnhancedSimdOps::vectorized_cumsum_f64(&input).expect("vectorized_cumsum_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f64, 3.0, 6.0, 10.0];
@@ -1111,7 +1133,8 @@ mod tests {
     fn test_add_arrays_f64() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]);
-        let result = EnhancedSimdOps::vectorized_add_arrays_f64(&a, &b);
+        let result = EnhancedSimdOps::vectorized_add_arrays_f64(&a, &b)
+            .expect("vectorized_add_arrays_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [6.0f64, 8.0, 10.0, 12.0];
@@ -1131,7 +1154,8 @@ mod tests {
     fn test_sub_arrays_f64() {
         let a = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]);
         let b = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
-        let result = EnhancedSimdOps::vectorized_sub_arrays_f64(&a, &b);
+        let result = EnhancedSimdOps::vectorized_sub_arrays_f64(&a, &b)
+            .expect("vectorized_sub_arrays_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [4.0f64, 4.0, 4.0, 4.0];
@@ -1151,7 +1175,8 @@ mod tests {
     fn test_mul_arrays_f64() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
         let b = Array::from_vec(vec![5.0f64, 6.0, 7.0, 8.0]);
-        let result = EnhancedSimdOps::vectorized_mul_arrays_f64(&a, &b);
+        let result = EnhancedSimdOps::vectorized_mul_arrays_f64(&a, &b)
+            .expect("vectorized_mul_arrays_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [5.0f64, 12.0, 21.0, 32.0];
@@ -1171,7 +1196,8 @@ mod tests {
     fn test_div_arrays_f64() {
         let a = Array::from_vec(vec![10.0f64, 12.0, 21.0, 32.0]);
         let b = Array::from_vec(vec![2.0f64, 3.0, 7.0, 8.0]);
-        let result = EnhancedSimdOps::vectorized_div_arrays_f64(&a, &b);
+        let result = EnhancedSimdOps::vectorized_div_arrays_f64(&a, &b)
+            .expect("vectorized_div_arrays_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [5.0f64, 4.0, 3.0, 4.0];
@@ -1192,7 +1218,8 @@ mod tests {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
         let b = Array::from_vec(vec![2.0f64, 2.0, 2.0, 2.0]);
         let c = Array::from_vec(vec![1.0f64, 1.0, 1.0, 1.0]);
-        let result = EnhancedSimdOps::vectorized_fma_f64(&a, &b, &c);
+        let result =
+            EnhancedSimdOps::vectorized_fma_f64(&a, &b, &c).expect("vectorized_fma_f64 failed");
         let result_vec = result.to_vec();
 
         // a*b + c = [1*2+1, 2*2+1, 3*2+1, 4*2+1] = [3, 5, 7, 9]
@@ -1212,7 +1239,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_scalar_mul_f64() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
-        let result = EnhancedSimdOps::vectorized_scalar_mul_f64(&a, 3.0);
+        let result = EnhancedSimdOps::vectorized_scalar_mul_f64(&a, 3.0)
+            .expect("vectorized_scalar_mul_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [3.0f64, 6.0, 9.0, 12.0];
@@ -1231,7 +1259,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_square_f64() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 3.0, 4.0]);
-        let result = EnhancedSimdOps::vectorized_square_f64(&a);
+        let result =
+            EnhancedSimdOps::vectorized_square_f64(&a).expect("vectorized_square_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f64, 4.0, 9.0, 16.0];
@@ -1250,7 +1279,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_reciprocal_f64() {
         let a = Array::from_vec(vec![1.0f64, 2.0, 4.0, 5.0]);
-        let result = EnhancedSimdOps::vectorized_reciprocal_f64(&a);
+        let result = EnhancedSimdOps::vectorized_reciprocal_f64(&a)
+            .expect("vectorized_reciprocal_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [1.0f64, 0.5, 0.25, 0.2];
@@ -1269,7 +1299,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_negative_f64() {
         let a = Array::from_vec(vec![1.0f64, -2.0, 3.0, -4.0]);
-        let result = EnhancedSimdOps::vectorized_negative_f64(&a);
+        let result =
+            EnhancedSimdOps::vectorized_negative_f64(&a).expect("vectorized_negative_f64 failed");
         let result_vec = result.to_vec();
 
         let expected = [-1.0f64, 2.0, -3.0, 4.0];
@@ -1294,7 +1325,8 @@ mod tests {
         let b = Array::from_vec(vec![1.0f64; size]);
 
         // Test addition
-        let result = EnhancedSimdOps::vectorized_add_arrays_f64(&a, &b);
+        let result = EnhancedSimdOps::vectorized_add_arrays_f64(&a, &b)
+            .expect("vectorized_add_arrays_f64 failed");
         let result_vec = result.to_vec();
         for i in 0..size {
             assert!(

@@ -389,8 +389,11 @@ fn test_simd_min_max_f32_upstream_bug_vector_yields_nan() {
     // Proven `scirs2_core::simd_ops::SimdUnifiedOps::simd_max_element`
     // bug vector: a 64-element f32 slice `[5.0, 1.0 x9, NaN at index 10,
     // 1.0 x53]`. Upstream silently returned `1.0` (dropping the true
-    // max, `5.0`) instead of `NaN`. Both `simd_min_f32` and
-    // `simd_max_f32` must now report `NaN`.
+    // max, `5.0`) instead of `NaN` -- that value was observed on the
+    // narrower vector lane widths, where index 10 shares a lane with the
+    // maximum; which placements trip it depends on the lane width chosen
+    // at runtime (and f32's widths differ from f64's again). Both
+    // `simd_min_f32` and `simd_max_f32` must now report `NaN`.
     use scirs2_core::ndarray::Array1;
 
     let mut data = vec![1.0f32; 64];

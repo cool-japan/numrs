@@ -18,6 +18,8 @@ use super::{AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
 #[cfg(target_arch = "x86_64")]
 use crate::array::Array;
 #[cfg(target_arch = "x86_64")]
+use crate::error::Result;
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 impl EnhancedSimdOps {
@@ -26,8 +28,13 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized exponential function with Taylor series approximation
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_exp_f32(input: &Array<f32>) -> Array<f32> {
+    pub fn vectorized_exp_f32(input: &Array<f32>) -> Result<Array<f32>> {
         let data = input.to_vec();
         let mut result = vec![0.0f32; data.len()];
 
@@ -35,7 +42,7 @@ impl EnhancedSimdOps {
             Self::avx2_exp_f32(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized exponential function
@@ -103,8 +110,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized exponential function for f64 with Taylor series approximation
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_exp_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_exp_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -112,7 +124,7 @@ impl EnhancedSimdOps {
             Self::avx2_exp_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized exponential function for f64
@@ -197,6 +209,11 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized logarithm function
+    // Implemented but not wired to the public wrapper, which currently uses a
+    // scalar fallback. The whole `simd_optimize` module is deprecated in favor
+    // of `scirs2_core::simd_ops::SimdUnifiedOps`, so wiring this up is not
+    // planned. Retained for reference rather than deleted.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_log_f32(input: &[f32], output: &mut [f32]) {
@@ -256,6 +273,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized logarithm function for f64
+    // Unwired AVX2 kernel -- see the note on `avx2_log_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_log_f64(input: &[f64], output: &mut [f64]) {
@@ -353,6 +372,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized log10 using log(x) * log10(e)
+    // Unwired AVX2 kernel -- see the note on `avx2_log_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_log10_f32(input: &[f32], output: &mut [f32]) {
@@ -430,6 +451,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized log10 for f64
+    // Unwired AVX2 kernel -- see the note on `avx2_log_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_log10_f64(input: &[f64], output: &mut [f64]) {
@@ -521,8 +544,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized log2 function (log base 2)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_log2_f32(input: &Array<f32>) -> Array<f32> {
+    pub fn vectorized_log2_f32(input: &Array<f32>) -> Result<Array<f32>> {
         let data = input.to_vec();
         let mut result = vec![0.0f32; data.len()];
 
@@ -530,7 +558,7 @@ impl EnhancedSimdOps {
             Self::avx2_log2_f32(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized log2
@@ -599,8 +627,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized log2 function for f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_log2_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_log2_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -608,7 +641,7 @@ impl EnhancedSimdOps {
             Self::avx2_log2_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized log2 for f64
@@ -707,6 +740,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized power function for f32
+    // Unwired AVX2 kernel -- see the note on `avx2_log_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_pow_f32(input: &[f32], n: f32, output: &mut [f32]) {
@@ -816,6 +851,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized power function for f64
+    // Unwired AVX2 kernel -- see the note on `avx2_log_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_pow_f64(input: &[f64], n: f64, output: &mut [f64]) {
@@ -941,8 +978,13 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized square root function for f32
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_sqrt_f32(input: &Array<f32>) -> Array<f32> {
+    pub fn vectorized_sqrt_f32(input: &Array<f32>) -> Result<Array<f32>> {
         let data = input.to_vec();
         let mut result = vec![0.0f32; data.len()];
 
@@ -950,7 +992,7 @@ impl EnhancedSimdOps {
             Self::avx2_sqrt_f32(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized square root for f32
@@ -979,8 +1021,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized square root function for f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_sqrt_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_sqrt_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -988,7 +1035,7 @@ impl EnhancedSimdOps {
             Self::avx2_sqrt_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized square root for f64
@@ -1021,8 +1068,13 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized log1p for f64 (more accurate for small x)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_log1p_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_log1p_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -1030,7 +1082,7 @@ impl EnhancedSimdOps {
             Self::avx2_log1p_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized log1p for f64
@@ -1110,8 +1162,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized expm1 for f64 (more accurate for small x)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_expm1_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_expm1_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -1119,7 +1176,7 @@ impl EnhancedSimdOps {
             Self::avx2_expm1_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized expm1 for f64
@@ -1199,8 +1256,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized cube root for f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_cbrt_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_cbrt_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -1208,7 +1270,7 @@ impl EnhancedSimdOps {
             Self::avx2_cbrt_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized cube root for f64

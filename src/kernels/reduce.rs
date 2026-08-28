@@ -34,12 +34,19 @@
 //! was found to return a **wrong, finite value** -- neither the true
 //! extremum nor `NaN` -- for some `NaN` placements: on the `scirs2-core`
 //! version in this workspace, a 64-element `f64` slice shaped
-//! `[5.0, 1.0 (x9), NaN, 1.0 (x53)]` (true maximum `5.0` at index 0, one
-//! `NaN` at index 10) makes `simd_max_element` return `1.0`, silently
-//! discarding the real maximum. The defect is position- and
-//! length-dependent (a `NaN` at index 0 or 32 is fine; index 10 or 63 is
-//! not; `len = 63` poisons fully where `len = 64` does not), and it
-//! reproduces with zero `numrs2` code in between -- see
+//! `[5.0, 1.0 (x7), NaN, 1.0 (x55)]` (true maximum `5.0` at index 0, one
+//! `NaN` at index 8) makes `simd_max_element` return `1.0`, silently
+//! discarding the real maximum. The cause is lane poisoning in upstream's
+//! vectorized fold: `MAXPD(a, b)` yields `b` whenever either operand is
+//! `NaN`, so a lane whose accumulator goes `NaN` is simply overwritten by
+//! the next chunk, taking the real maximum with it. **The exact set of bad
+//! placements therefore depends on the SIMD lane width chosen at runtime**
+//! -- the `NaN` has to share a lane with the maximum -- so it is also
+//! length-dependent, and a placement that happens to miss the maximum's
+//! lane returns the correct value by luck rather than by fix. Index 8 is
+//! the witness used above precisely because it is lane-aligned for every
+//! width the kernel can pick (2 for SSE2/aarch64 NEON, 4 for AVX2). The
+//! defect reproduces with zero `numrs2` code in between -- see
 //! `crate::stats::basic`'s
 //! `simd_max_element_upstream_wrong_value_is_a_live_bug_not_just_new_nan_convention`
 //! test, which calls the upstream function directly and pins the bad
@@ -860,10 +867,14 @@ mod tests {
         assert_eq!(max_f64(&[f64::NEG_INFINITY, 1.0]), 1.0);
     }
 
-    /// The exact vector that proved the upstream `simd_max_element` defect:
-    /// 64 elements, true maximum `5.0` at index 0, a single `NaN` at index
-    /// 10. The old kernel returned `1.0` here -- neither the true maximum
-    /// nor `NaN`, a silently wrong *finite* value. It must now be `NaN`.
+    /// The vector that proved the upstream `simd_max_element` defect: 64
+    /// elements, true maximum `5.0` at index 0, a single `NaN` at index 10.
+    /// The old kernel returned `1.0` here -- neither the true maximum nor
+    /// `NaN`, a silently wrong *finite* value -- on the 2-lane vector path
+    /// (SSE2, aarch64 NEON), which is where it was originally measured; on
+    /// a 4-lane AVX2 path index 10 misses the maximum's lane and index 8 is
+    /// the lane-aligned witness instead. These kernels do not vectorize the
+    /// comparison at all, so *every* placement must be `NaN` regardless.
     #[test]
     fn min_max_f64_upstream_wrong_finite_value_vector_is_now_nan() {
         let mut data = vec![1.0f64; 64];
@@ -877,8 +888,9 @@ mod tests {
         );
         assert!(min_f64(&data).is_nan());
 
-        // The same defect was length-dependent: len 63 poisoned fully
-        // where len 64 did not. Both must now be NaN.
+        // The same defect was length-dependent (on the 2-lane path, len 63
+        // poisoned fully where len 64 did not -- the boundary moves with the
+        // lane width). Both must now be NaN.
         let mut short = vec![1.0f64; 63];
         short[0] = 5.0;
         short[10] = f64::NAN;
@@ -886,8 +898,10 @@ mod tests {
         assert!(min_f64(&short).is_nan());
 
         // ... and position-dependent: index 0, 32 and 63 all behaved
-        // differently upstream.
-        for &pos in &[0usize, 32, 63] {
+        // differently upstream on the 2-lane path, and index 8 is the
+        // placement that is lane-aligned with the maximum at every lane
+        // width upstream can pick. All must be NaN here.
+        for &pos in &[0usize, 8, 32, 63] {
             let mut d = vec![1.0f64; 64];
             d[0] = 5.0;
             d[pos] = f64::NAN;

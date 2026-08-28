@@ -15,6 +15,8 @@ use super::{AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
 #[cfg(target_arch = "x86_64")]
 use crate::array::Array;
 #[cfg(target_arch = "x86_64")]
+use crate::error::Result;
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 impl EnhancedSimdOps {
@@ -29,6 +31,11 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized sine function for f32
+    // Implemented but not wired to the public wrapper, which currently uses a
+    // scalar fallback. The whole `simd_optimize` module is deprecated in favor
+    // of `scirs2_core::simd_ops::SimdUnifiedOps`, so wiring this up is not
+    // planned. Retained for reference rather than deleted.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_sin_f32(input: &[f32], output: &mut [f32]) {
@@ -92,8 +99,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized sine function for f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_sin_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_sin_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -101,7 +113,7 @@ impl EnhancedSimdOps {
             Self::avx2_sin_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized sine function for f64
@@ -194,6 +206,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized cosine function for f32
+    // Unwired AVX2 kernel -- see the note on `avx2_sin_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_cos_f32(input: &[f32], output: &mut [f32]) {
@@ -250,6 +264,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized cosine function for f64
+    // Unwired AVX2 kernel -- see the note on `avx2_sin_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_cos_f64(input: &[f64], output: &mut [f64]) {
@@ -324,6 +340,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized tangent using sin/cos ratio for f32
+    // Unwired AVX2 kernel -- see the note on `avx2_sin_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_tan_f32(input: &[f32], output: &mut [f32]) {
@@ -384,6 +402,8 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized tangent for f64 using sin/cos ratio
+    // Unwired AVX2 kernel -- see the note on `avx2_sin_f32` above.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_tan_f64(input: &[f64], output: &mut [f64]) {
@@ -485,8 +505,13 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized hyperbolic sine function for f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_sinh_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_sinh_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -494,7 +519,7 @@ impl EnhancedSimdOps {
             Self::avx2_sinh_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized sinh for f64 using (exp(x) - exp(-x)) / 2
@@ -534,8 +559,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized hyperbolic cosine function for f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_cosh_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_cosh_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -543,7 +573,7 @@ impl EnhancedSimdOps {
             Self::avx2_cosh_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized cosh for f64 using (exp(x) + exp(-x)) / 2
@@ -583,8 +613,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized hyperbolic tangent function for f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_tanh_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_tanh_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -592,7 +627,7 @@ impl EnhancedSimdOps {
             Self::avx2_tanh_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized tanh for f64
@@ -637,8 +672,13 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Vectorized asin function for f64 (arc sine)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_asin_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_asin_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -646,7 +686,7 @@ impl EnhancedSimdOps {
             Self::avx2_asin_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized arc sine for f64
@@ -685,8 +725,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized acos function for f64 (arc cosine)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_acos_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_acos_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -694,7 +739,7 @@ impl EnhancedSimdOps {
             Self::avx2_acos_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized arc cosine for f64
@@ -733,8 +778,13 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized atan function for f64 (arc tangent)
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_atan_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_atan_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -742,7 +792,7 @@ impl EnhancedSimdOps {
             Self::avx2_atan_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized arc tangent for f64
@@ -777,8 +827,13 @@ impl EnhancedSimdOps {
 
     /// Vectorized asinh function for f64 (inverse hyperbolic sine)
     /// asinh(x) = ln(x + sqrt(x^2 + 1))
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_asinh_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_asinh_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -786,7 +841,7 @@ impl EnhancedSimdOps {
             Self::avx2_asinh_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized asinh for f64
@@ -826,8 +881,13 @@ impl EnhancedSimdOps {
 
     /// Vectorized acosh function for f64 (inverse hyperbolic cosine)
     /// acosh(x) = ln(x + sqrt(x^2 - 1)) for x >= 1
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_acosh_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_acosh_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -835,7 +895,7 @@ impl EnhancedSimdOps {
             Self::avx2_acosh_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized acosh for f64
@@ -875,8 +935,13 @@ impl EnhancedSimdOps {
 
     /// Vectorized atanh function for f64 (inverse hyperbolic tangent)
     /// atanh(x) = 0.5 * ln((1+x)/(1-x)) for |x| < 1
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_atanh_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_atanh_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let mut result = vec![0.0f64; data.len()];
 
@@ -884,7 +949,7 @@ impl EnhancedSimdOps {
             Self::avx2_atanh_f64(&data, &mut result);
         }
 
-        Array::from_vec_shape(result, &input.shape())?
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized atanh for f64
