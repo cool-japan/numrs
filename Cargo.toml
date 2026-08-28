@@ -32,7 +32,7 @@ scirs = []  # MANDATORY: Always enabled by default per SCIRS2 POLICY - DO NOT DI
 # SciRS2 integration is mandatory - this feature exists only for backward compatibility
 gpu = ["dep:wgpu", "dep:bytemuck", "dep:tokio"]
 lapack = []  # Enable LAPACK-dependent linear algebra operations (through scirs2-linalg which uses OxiBLAS)
-python = ["dep:pyo3", "dep:scirs2-numpy"]  # Python bindings via PyO3
+python = ["dep:pyo3", "dep:scirs2-numpy", "dep:pyo3-build-config"]  # Python bindings via PyO3
 arrow = ["dep:arrow", "dep:arrow-array", "dep:arrow-schema"]  # Apache Arrow integration
 parquet = ["dep:parquet"]  # Apache Parquet format support (pure Rust)
 netcdf = ["dep:netcdf3"]  # NetCDF-3 format support (pure Rust)
@@ -151,6 +151,14 @@ getrandom = { version = "0.4", default-features = false, features = ["wasm_js"] 
 getrandom_02 = { package = "getrandom", version = "0.2", default-features = false, features = ["js"] }
 # uuid also needs WASM support enabled
 uuid = { version = "1.23", features = ["js"] }  # Enable JS random for WASM
+
+[build-dependencies]
+# Optional: activated only by the `python` feature (see [features] above), so a
+# default build has no build-dependency at all. Used by build.rs to emit the
+# macOS `-undefined dynamic_lookup` cdylib link argument that pyo3's
+# "extension-module" feature requires. Keep this version in lockstep with the
+# `pyo3` dependency above.
+pyo3-build-config = { version = "0.29", optional = true }
 
 [dev-dependencies]
 criterion = "0.8.2"  # Benchmarking library
