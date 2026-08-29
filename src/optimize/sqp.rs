@@ -156,9 +156,7 @@ where
         // Compute gradient of Lagrangian
         let grad_l = compute_lagrangian_gradient(
             &grad_f_val,
-            eq_constraints,
             grad_eq,
-            ineq_constraints,
             grad_ineq,
             &x,
             &lambda_eq,
@@ -224,9 +222,7 @@ where
 
         let grad_l_new = compute_lagrangian_gradient(
             &grad_f_new,
-            eq_constraints,
             grad_eq,
-            ineq_constraints,
             grad_ineq,
             &x_new,
             &lambda_eq_new,
@@ -265,9 +261,7 @@ where
 /// Compute gradient of Lagrangian
 fn compute_lagrangian_gradient<T: Float>(
     grad_f: &[T],
-    eq_constraints: &[&ConstraintFn<T>],
     grad_eq: &[&ConstraintGradFn<T>],
-    ineq_constraints: &[&ConstraintFn<T>],
     grad_ineq: &[&ConstraintGradFn<T>],
     x: &[T],
     lambda_eq: &[T],
@@ -295,7 +289,100 @@ fn compute_lagrangian_gradient<T: Float>(
     Ok(grad_l)
 }
 
-/// Solve QP subproblem (simplified active-set method)
+/// Solve the equality-constrained QP subproblem via the bordered KKT system.
+///
+/// The QP subproblem is
+///
+/// ```text
+///   min_p   0.5 p^T H p + grad_f^T p
+///   s.t.    A_active p + c_active = 0
+/// ```
+///
+/// whose first-order (KKT) conditions form the symmetric saddle-point system
+///
+/// ```text
+///   [ H        A_active^T ] [ p      ]   [ -grad_f   ]
+///   [ A_active     0      ] [ lambda ] = [ -c_active ]
+/// ```
+///
+/// Here `a_rows` holds the rows of `A_active` (the constraint Jacobian, one row per
+/// active constraint, each of length `n`) and `c_vals` holds the constraint residuals
+/// `c_active` evaluated at the current iterate. The returned tuple is `(p, lambda)`
+/// where `lambda` has one entry per active constraint, in the same order as `a_rows`.
+///
+/// The bordered matrix is assembled explicitly and solved with the module-local
+/// [`solve_linear_system`], which computes `M y = -rhs` for the supplied right-hand
+/// side. Passing `rhs = [grad_f; c_active]` therefore yields the desired `[-grad_f; -c_active]`.
+fn solve_kkt_system<T: Float>(
+    hessian: &[Vec<T>],
+    grad_f: &[T],
+    a_rows: &[Vec<T>],
+    c_vals: &[T],
+) -> Result<(Vec<T>, Vec<T>)> {
+    let n = grad_f.len();
+    let m = a_rows.len();
+    let dim = n + m;
+
+    // Assemble the (n + m) x (n + m) bordered KKT matrix.
+    let mut kkt = vec![vec![T::zero(); dim]; dim];
+
+    // Top-left block: H.
+    for i in 0..n {
+        for j in 0..n {
+            kkt[i][j] = hessian[i][j];
+        }
+    }
+
+    // Off-diagonal blocks: A^T (top-right) and A (bottom-left).
+    for (row, a_row) in a_rows.iter().enumerate() {
+        for j in 0..n {
+            // Bottom-left block A.
+            kkt[n + row][j] = a_row[j];
+            // Top-right block A^T.
+            kkt[j][n + row] = a_row[j];
+        }
+    }
+    // Bottom-right block is zero (already initialized).
+
+    // Right-hand side vector b such that solve_linear_system yields M y = -b,
+    // i.e. b = [grad_f; c_active] produces RHS [-grad_f; -c_active].
+    let mut rhs = vec![T::zero(); dim];
+    rhs[..n].copy_from_slice(&grad_f[..n]);
+    for (row, &c) in c_vals.iter().enumerate() {
+        rhs[n + row] = c;
+    }
+
+    let solution = solve_linear_system(&kkt, &rhs)?;
+
+    let p = solution[..n].to_vec();
+    let lambda = solution[n..].to_vec();
+
+    Ok((p, lambda))
+}
+
+/// Solve the QP subproblem of SQP using a primal active-set strategy.
+///
+/// The subproblem minimizes the quadratic model `0.5 p^T H p + grad_f^T p` subject
+/// to the *linearized* constraints at the current point `x`:
+///
+/// * equalities  `c_eq_i + grad_eq_i^T p = 0`  for every equality constraint,
+/// * inequalities `g_i + grad_g_i^T p <= 0`     for every inequality constraint.
+///
+/// Equalities are always part of the working (active) set. The inequality working
+/// set is determined iteratively:
+///
+/// 1. Solve the KKT system with the current working set (equalities plus the active
+///    inequalities), treating active inequalities as equalities `grad_g_i^T p = -g_i`.
+/// 2. Check the inequalities outside the working set; if any linearized constraint is
+///    violated (`g_i + grad_g_i^T p > tol`), add the most-violated one to the set.
+/// 3. Inspect the multipliers of the active inequalities. With the Lagrangian sign
+///    convention `grad_f + Σ lambda_i grad_g_i` (see [`compute_lagrangian_gradient`]),
+///    feasibility of the dual requires `lambda_i >= 0` for `g_i <= 0` constraints; any
+///    active inequality whose multiplier turns negative is removed from the set.
+/// 4. Repeat for a bounded number of iterations until the working set stabilizes.
+///
+/// Returns `(p, lambda_eq, lambda_ineq)` where `lambda_ineq` carries the recovered
+/// multiplier for active inequalities and zero for inactive ones.
 fn solve_qp_subproblem<T: Float>(
     hessian: &[Vec<T>],
     grad_f: &[T],
@@ -306,17 +393,126 @@ fn solve_qp_subproblem<T: Float>(
     x: &[T],
 ) -> Result<(Vec<T>, Vec<T>, Vec<T>)> {
     let n = grad_f.len();
+    let n_eq = eq_constraints.len();
+    let n_ineq = ineq_constraints.len();
 
-    // For simplicity, solve unconstrained QP: min 0.5 * p^T * H * p + g^T * p
-    // This is a simplified version - full SQP would solve constrained QP
-    // solve_linear_system(H, g) returns p = -H^-1 * g, which is the Newton direction we need
-    let p = solve_linear_system(hessian, grad_f)?;
+    // Equality constraint Jacobian rows A_eq and residuals c_eq at x.
+    let eq_jac: Vec<Vec<T>> = grad_eq.iter().map(|g| g(x)).collect();
+    let eq_vals: Vec<T> = eq_constraints.iter().map(|c| c(x)).collect();
 
-    // Estimate Lagrange multipliers (simplified)
-    let lambda_eq = vec![T::zero(); eq_constraints.len()];
-    let lambda_ineq = vec![T::zero(); ineq_constraints.len()];
+    // Inequality constraint Jacobian rows A_ineq and values g at x.
+    let ineq_jac: Vec<Vec<T>> = grad_ineq.iter().map(|g| g(x)).collect();
+    let ineq_vals: Vec<T> = ineq_constraints.iter().map(|c| c(x)).collect();
 
-    Ok((p, lambda_eq, lambda_ineq))
+    // Tolerance used both for linearized-constraint violation and multiplier sign.
+    let tol = T::from(1e-10).ok_or_else(|| {
+        NumRs2Error::ComputationError("Tolerance conversion failed in QP subproblem".to_string())
+    })?;
+
+    // Working set of inequality indices (initially empty: equality-only solution).
+    let mut active: Vec<usize> = Vec::new();
+
+    // Final results, populated by the loop below (deferred initialization avoids
+    // dead-store assignments, in keeping with the no-warnings policy).
+    let mut p: Vec<T>;
+    let mut lambda_eq: Vec<T>;
+    let mut lambda_ineq: Vec<T>;
+
+    // Bound the number of active-set changes; each iteration adds or drops at most
+    // one inequality, so 2 * n_ineq + 1 iterations suffice to stabilize plus a margin.
+    let max_active_set_iter = 2 * n_ineq + 2;
+
+    for _ in 0..max_active_set_iter {
+        // Build the working-set Jacobian: equalities first, then active inequalities.
+        let mut a_rows: Vec<Vec<T>> = Vec::with_capacity(n_eq + active.len());
+        let mut c_vals: Vec<T> = Vec::with_capacity(n_eq + active.len());
+
+        for row in 0..n_eq {
+            a_rows.push(eq_jac[row].clone());
+            c_vals.push(eq_vals[row]);
+        }
+        for &idx in &active {
+            a_rows.push(ineq_jac[idx].clone());
+            // Linearized active inequality treated as equality: grad_g^T p = -g.
+            c_vals.push(ineq_vals[idx]);
+        }
+
+        // Solve the KKT system for the current working set.
+        let (p_curr, lambda) = solve_kkt_system(hessian, grad_f, &a_rows, &c_vals)?;
+        p = p_curr;
+
+        // Split multipliers: first n_eq belong to equalities, the rest to the
+        // active inequalities (in `active` order).
+        lambda_eq = lambda[..n_eq].to_vec();
+        lambda_ineq = vec![T::zero(); n_ineq];
+        for (k, &idx) in active.iter().enumerate() {
+            lambda_ineq[idx] = lambda[n_eq + k];
+        }
+
+        // Dual feasibility check: drop the active inequality with the most negative
+        // multiplier (Lagrangian sign convention requires lambda >= 0 for g <= 0).
+        let mut drop_pos: Option<usize> = None;
+        let mut most_negative = -tol;
+        for (k, &idx) in active.iter().enumerate() {
+            let mult = lambda_ineq[idx];
+            if mult < most_negative {
+                most_negative = mult;
+                drop_pos = Some(k);
+            }
+        }
+        if let Some(k) = drop_pos {
+            active.remove(k);
+            continue;
+        }
+
+        // Primal feasibility check on inactive inequalities: find the most-violated
+        // linearized constraint g_i + grad_g_i^T p > tol and add it to the set.
+        let mut add_idx: Option<usize> = None;
+        let mut worst_violation = tol;
+        for idx in 0..n_ineq {
+            if active.contains(&idx) {
+                continue;
+            }
+            // Linearized constraint value g_i + grad_g_i^T p.
+            let mut lin = ineq_vals[idx];
+            for j in 0..n {
+                lin = lin + ineq_jac[idx][j] * p[j];
+            }
+            if lin > worst_violation {
+                worst_violation = lin;
+                add_idx = Some(idx);
+            }
+        }
+        if let Some(idx) = add_idx {
+            active.push(idx);
+            continue;
+        }
+
+        // No constraint to add and no multiplier to drop: optimal working set found.
+        return Ok((p, lambda_eq, lambda_ineq));
+    }
+
+    // Active-set iteration did not stabilize within the bound; re-solve once with the
+    // final working set so the returned direction and multipliers are mutually
+    // consistent, then return them.
+    let mut a_rows: Vec<Vec<T>> = Vec::with_capacity(n_eq + active.len());
+    let mut c_vals: Vec<T> = Vec::with_capacity(n_eq + active.len());
+    for row in 0..n_eq {
+        a_rows.push(eq_jac[row].clone());
+        c_vals.push(eq_vals[row]);
+    }
+    for &idx in &active {
+        a_rows.push(ineq_jac[idx].clone());
+        c_vals.push(ineq_vals[idx]);
+    }
+    let (p_final, lambda) = solve_kkt_system(hessian, grad_f, &a_rows, &c_vals)?;
+    lambda_eq = lambda[..n_eq].to_vec();
+    lambda_ineq = vec![T::zero(); n_ineq];
+    for (k, &idx) in active.iter().enumerate() {
+        lambda_ineq[idx] = lambda[n_eq + k];
+    }
+
+    Ok((p_final, lambda_eq, lambda_ineq))
 }
 
 /// Line search using merit function
@@ -337,9 +533,8 @@ where
 {
     let mut alpha = T::one();
 
-    // Merit function: φ(x) = f(x) + μ * (Σ|h_i(x)| + Σmax(0, g_i(x)))
-    let merit_fn = |x_eval: &[T]| -> T {
-        let f_eval = f(x_eval);
+    // Constraint-violation penalty: μ * (Σ|h_i(x)| + Σmax(0, g_i(x)))
+    let penalty = |x_eval: &[T]| -> T {
         let eq_penalty: T = eq_constraints.iter().map(|c| c(x_eval).abs()).sum();
         let ineq_penalty: T = ineq_constraints
             .iter()
@@ -352,10 +547,13 @@ where
                 }
             })
             .sum();
-        f_eval + mu * (eq_penalty + ineq_penalty)
+        mu * (eq_penalty + ineq_penalty)
     };
 
-    let merit_0 = merit_fn(x);
+    // Merit function at the current point: φ(x) = f(x) + penalty(x). The
+    // caller already evaluated f(x) as `f_val`, so reuse it here instead
+    // of paying for a second, redundant objective-function call.
+    let merit_0 = f_val + penalty(x);
 
     for _ in 0..20 {
         let x_new: Vec<T> = x
@@ -363,7 +561,7 @@ where
             .zip(p.iter())
             .map(|(&xi, &pi)| xi + alpha * pi)
             .collect();
-        let merit_new = merit_fn(&x_new);
+        let merit_new = f(&x_new) + penalty(&x_new);
 
         // Armijo condition for merit function
         if merit_new < merit_0 || alpha < alpha_min {

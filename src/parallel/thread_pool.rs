@@ -10,9 +10,19 @@
 use crate::error::{NumRs2Error, Result};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+
+/// How long [`ThreadPool::wait`] sleeps between re-tests of the shutdown flag
+/// while it is otherwise blocked on the completion condvar.
+///
+/// This is *not* a polling loop for completion -- every completion signals
+/// the condvar directly (see [`CompletionTracker::record_completed`]), so a
+/// waiter wakes as soon as the count moves. The timeout exists only so a
+/// waiter can notice a pool that has begun shutting down underneath it; see
+/// [`ThreadPool::wait`] for why that re-check is kept.
+const SHUTDOWN_RECHECK_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Thread pool configuration
 #[derive(Debug, Clone)]
@@ -155,6 +165,97 @@ impl WorkerState {
     }
 }
 
+/// Submitted/completed task counts, guarded together so a waiter can compare
+/// them as one consistent observation.
+#[derive(Debug, Default)]
+struct TaskCounts {
+    /// Tasks that have reached a queue. Monotonically increasing, except for
+    /// the rollback of a submission whose enqueue failed outright.
+    submitted: u64,
+    /// Tasks whose closure has returned *or* unwound. Monotonically
+    /// increasing, and never allowed to overtake `submitted`.
+    completed: u64,
+}
+
+/// Real completion accounting behind [`ThreadPool::wait`].
+///
+/// `wait()` used to poll two independently-derived conditions -- the summed
+/// queue lengths (`pending_tasks`) and the per-worker `is_idle` flags -- and
+/// *both* can read "nothing left to do" while a task is genuinely in flight:
+/// `WorkerState::pop_task` removes a task from its deque before the closure
+/// runs, and `is_idle` is only ever cleared on wake-from-park, never on task
+/// pickup. Between a worker popping a task and that worker being observable
+/// as busy, a concurrent `wait()` saw an empty queue and an idle worker and
+/// returned with work still executing.
+///
+/// These two counters replace that inference with a fact: only a real
+/// submission moves `submitted`, only a real completion moves `completed`,
+/// and both live under one mutex, so "everything submitted so far has
+/// finished" is a single observation rather than a race between two.
+#[derive(Debug, Default)]
+struct CompletionTracker {
+    counts: Mutex<TaskCounts>,
+    completion: Condvar,
+}
+
+impl CompletionTracker {
+    /// Lock the counts, taking the values back out of a poisoned lock.
+    ///
+    /// The guarded data is two integers that are only ever incremented while
+    /// the lock is held, and never observed part-way through an update, so a
+    /// panic elsewhere in the pool cannot leave them inconsistent. Refusing
+    /// to read them after an unrelated panic would convert a recoverable
+    /// situation into a permanently blocked `wait()`, which is strictly
+    /// worse than continuing with counters that are still correct.
+    fn lock_counts(&self) -> MutexGuard<'_, TaskCounts> {
+        self.counts
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Count one task as submitted.
+    ///
+    /// Must run *before* the task is pushed onto any queue: a worker that
+    /// picked the task up first could otherwise complete it before the
+    /// submission was counted, letting `completed` overtake `submitted`.
+    fn record_submitted(&self) {
+        self.lock_counts().submitted += 1;
+    }
+
+    /// Undo a [`CompletionTracker::record_submitted`] whose task never
+    /// reached a queue.
+    ///
+    /// Correct *only* on a failed enqueue: in that case the task was never
+    /// visible to any worker, so nothing can ever complete it, and leaving
+    /// the count raised would block every later `wait()` forever.
+    fn undo_submitted(&self) {
+        let mut counts = self.lock_counts();
+        counts.submitted = counts.submitted.saturating_sub(1);
+    }
+
+    /// Count one task as finished and wake every waiter.
+    fn record_completed(&self) {
+        self.lock_counts().completed += 1;
+        self.completion.notify_all();
+    }
+}
+
+/// Counts its task as completed when it drops.
+///
+/// Held *across* the task closure rather than incremented after it, so a
+/// task that panics still counts on the way out. Without this, one panicking
+/// closure would leave `completed` permanently short of `submitted` and
+/// every subsequent [`ThreadPool::wait`] would block forever.
+struct CompletionGuard<'a> {
+    tracker: &'a CompletionTracker,
+}
+
+impl Drop for CompletionGuard<'_> {
+    fn drop(&mut self) {
+        self.tracker.record_completed();
+    }
+}
+
 /// Enhanced thread pool with work-stealing and advanced features
 pub struct ThreadPool {
     config: ThreadPoolConfig,
@@ -165,6 +266,18 @@ pub struct ThreadPool {
     idle_notify: Arc<(Mutex<()>, Condvar)>,
     next_task_id: AtomicUsize,
     stats: Arc<Mutex<ThreadPoolStats>>,
+    /// Submitted/completed accounting that makes [`ThreadPool::wait`] a real
+    /// completion barrier rather than a guess derived from queue lengths and
+    /// idle flags.
+    tracker: Arc<CompletionTracker>,
+    // Every worker clones this handle and pushes each finished task's id
+    // (see `execute_task`), but `ThreadPool` itself never reads it back —
+    // there's no public API to query completed task ids or to submit a
+    // task with `PoolTask::dependencies` (always empty) gated on them.
+    // Documents the dependency-tracking mechanism `PoolTask::dependencies`
+    // implies; wiring both up is a scheduling-behavior change, out of
+    // scope for a lint-only pass.
+    #[allow(dead_code)]
     completed_tasks: Arc<Mutex<Vec<u64>>>,
 }
 
@@ -197,6 +310,7 @@ impl ThreadPool {
         let idle_notify = Arc::new((Mutex::new(()), Condvar::new()));
         let stats = Arc::new(Mutex::new(ThreadPoolStats::default()));
         let completed_tasks = Arc::new(Mutex::new(Vec::new()));
+        let tracker = Arc::new(CompletionTracker::default());
 
         let mut workers = Vec::new();
         let mut threads = Vec::new();
@@ -220,6 +334,7 @@ impl ThreadPool {
             let idle_notify_clone = Arc::clone(&idle_notify);
             let stats_clone = Arc::clone(&stats);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
+            let tracker_clone = Arc::clone(&tracker);
             let config_clone = config.clone();
 
             let handle = thread::spawn(move || {
@@ -236,6 +351,7 @@ impl ThreadPool {
                     idle_notify_clone,
                     stats_clone,
                     completed_tasks_clone,
+                    tracker_clone,
                     config_clone,
                 );
             });
@@ -252,6 +368,7 @@ impl ThreadPool {
             idle_notify,
             next_task_id: AtomicUsize::new(0),
             stats,
+            tracker,
             completed_tasks,
         })
     }
@@ -291,32 +408,17 @@ impl ThreadPool {
             task: Box::new(task),
         };
 
-        // Find least loaded worker
-        let target_worker = self.find_least_loaded_worker();
+        // Count the task before it can be picked up. A worker that popped it
+        // first would otherwise complete a task `submitted` had not yet seen,
+        // letting `completed` overtake `submitted`.
+        self.tracker.record_submitted();
 
-        if let Some(worker_idx) = target_worker {
-            self.workers[worker_idx].push_task(pool_task)?;
-
-            // Wake up worker if idle
-            if self.workers[worker_idx].is_idle() {
-                let (lock, cvar) = &*self.idle_notify;
-                let _guard = lock.lock().map_err(|_| {
-                    NumRs2Error::RuntimeError("Failed to acquire idle notify lock".to_string())
-                })?;
-                cvar.notify_one();
-            }
-        } else {
-            // Fallback to global queue
-            let mut global = self.global_queue.lock().map_err(|_| {
-                NumRs2Error::RuntimeError("Failed to acquire global queue lock".to_string())
-            })?;
-            global.push_back(pool_task);
-
-            let (lock, cvar) = &*self.idle_notify;
-            let _guard = lock.lock().map_err(|_| {
-                NumRs2Error::RuntimeError("Failed to acquire idle notify lock".to_string())
-            })?;
-            cvar.notify_all();
+        if let Err(e) = self.enqueue(pool_task) {
+            // `enqueue` only fails before the task becomes visible to any
+            // worker, so nothing will ever complete it: give the submission
+            // count back, or every later `wait()` would block forever.
+            self.tracker.undo_submitted();
+            return Err(e);
         }
 
         // Update stats
@@ -325,6 +427,45 @@ impl ThreadPool {
         }
 
         Ok(task_id)
+    }
+
+    /// Hand `pool_task` to the least loaded worker, falling back to the
+    /// global queue when the pool has no workers at all.
+    ///
+    /// Every fallible step happens strictly *before* the task becomes visible
+    /// to a worker, so a returned `Err` always means "this task was not
+    /// queued". That is exactly what makes the `undo_submitted` rollback in
+    /// [`ThreadPool::submit_with_priority`] sound: it can never take back a
+    /// submission that some worker is already running.
+    fn enqueue(&self, pool_task: PoolTask) -> Result<()> {
+        if let Some(worker_idx) = self.find_least_loaded_worker() {
+            self.workers[worker_idx].push_task(pool_task)?;
+        } else {
+            let mut global = self.global_queue.lock().map_err(|_| {
+                NumRs2Error::RuntimeError("Failed to acquire global queue lock".to_string())
+            })?;
+            global.push_back(pool_task);
+        }
+
+        self.wake_workers();
+        Ok(())
+    }
+
+    /// Wake every parked worker.
+    ///
+    /// `notify_all`, not `notify_one`: all workers park on this one condvar,
+    /// so `notify_one` may wake a worker other than the one whose deque just
+    /// received the task -- and a lone queued task is not stealable
+    /// (`try_steal_work` requires `queue_len() > 1`), so its owner would then
+    /// sleep out a full `idle_timeout` before running it.
+    ///
+    /// Infallible on purpose. The mutex guards `()`, so no panic can corrupt
+    /// anything behind it, and reporting an error here -- after the task is
+    /// already queued -- would make the caller's rollback wrong.
+    fn wake_workers(&self) {
+        let (lock, cvar) = &*self.idle_notify;
+        let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        cvar.notify_all();
     }
 
     /// Get pool statistics
@@ -349,6 +490,11 @@ impl ThreadPool {
         self.workers.len()
     }
 
+    /// Get the configuration this pool was built with
+    pub fn config(&self) -> ThreadPoolConfig {
+        self.config.clone()
+    }
+
     /// Get number of pending tasks
     pub fn pending_tasks(&self) -> usize {
         let global_count = self.global_queue.lock().map(|q| q.len()).unwrap_or(0);
@@ -358,23 +504,57 @@ impl ThreadPool {
         global_count + worker_count
     }
 
-    /// Wait for all pending tasks to complete
+    /// Wait for all tasks submitted so far to finish executing
+    ///
+    /// "Submitted so far" is snapshotted on entry: tasks another thread
+    /// submits after this call started are deliberately not waited on, which
+    /// is what stops a steady stream of submissions from making this block
+    /// forever.
+    ///
+    /// This is a real completion barrier. It compares the pool's submitted
+    /// and completed counts (see `CompletionTracker`) instead of inferring
+    /// quiescence from queue lengths plus `is_idle` flags, both of which read
+    /// "done" during the window between a worker popping a task and that
+    /// worker becoming observably busy -- the window that let this method
+    /// return with a task still running.
+    ///
+    /// It blocks on a condvar signalled by every completion rather than
+    /// polling. The bounded re-check exists solely so a waiter cannot be
+    /// wedged by a pool that starts shutting down underneath it: shutdown
+    /// abandons whatever is still queued (`worker_main` re-tests the flag
+    /// before every pickup), so those tasks never complete. Today
+    /// [`ThreadPool::shutdown`] consumes the pool and so cannot run while a
+    /// `&self` borrow sits in here, and it signals the same condvar anyway;
+    /// the timeout is insurance against a future `Drop` impl or a `&self`
+    /// shutdown silently turning an untimed wait into a permanent block.
     pub fn wait(&self) -> Result<()> {
-        // Wait until there are no pending tasks AND all workers are idle
-        while self.pending_tasks() > 0 || self.has_active_workers() {
-            thread::sleep(Duration::from_millis(1));
-        }
-        Ok(())
-    }
+        let mut counts = self.tracker.lock_counts();
+        let target = counts.submitted;
 
-    /// Check if any workers are actively executing tasks
-    fn has_active_workers(&self) -> bool {
-        self.workers.iter().any(|w| !w.is_idle())
+        while counts.completed < target {
+            if self.shutdown.load(Ordering::Relaxed) {
+                break;
+            }
+
+            let (guard, _timed_out) = self
+                .tracker
+                .completion
+                .wait_timeout(counts, SHUTDOWN_RECHECK_INTERVAL)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            counts = guard;
+        }
+
+        Ok(())
     }
 
     /// Shutdown the thread pool gracefully
     pub fn shutdown(self) -> Result<()> {
         self.shutdown.store(true, Ordering::Relaxed);
+
+        // Whatever is still queued is abandoned from here on, so its
+        // completion signal will never arrive: release any waiter now
+        // instead of leaving it to time out.
+        self.tracker.completion.notify_all();
 
         // Wake up all workers
         let (lock, cvar) = &*self.idle_notify;
@@ -412,16 +592,15 @@ impl ThreadPool {
         idle_notify: Arc<(Mutex<()>, Condvar)>,
         stats: Arc<Mutex<ThreadPoolStats>>,
         completed_tasks: Arc<Mutex<Vec<u64>>>,
+        tracker: Arc<CompletionTracker>,
         config: ThreadPoolConfig,
     ) {
-        let worker_id = worker.id;
-
         while !shutdown.load(Ordering::Relaxed) {
             let mut task_found = false;
 
             // 1. Try local queue
             if let Ok(Some(task)) = worker.pop_task() {
-                Self::execute_task(task, &worker, &stats, &completed_tasks);
+                Self::execute_task(task, &worker, &stats, &completed_tasks, &tracker);
                 task_found = true;
             }
 
@@ -430,7 +609,7 @@ impl ThreadPool {
                 if let Ok(mut global) = global_queue.try_lock() {
                     if let Some(task) = global.pop_front() {
                         drop(global);
-                        Self::execute_task(task, &worker, &stats, &completed_tasks);
+                        Self::execute_task(task, &worker, &stats, &completed_tasks, &tracker);
                         task_found = true;
                     }
                 }
@@ -439,7 +618,7 @@ impl ThreadPool {
             // 3. Try work stealing
             if !task_found {
                 if let Some(stolen_task) = Self::try_steal_work(&worker, &workers, &config) {
-                    Self::execute_task(stolen_task, &worker, &stats, &completed_tasks);
+                    Self::execute_task(stolen_task, &worker, &stats, &completed_tasks, &tracker);
                     task_found = true;
                 }
             }
@@ -468,7 +647,15 @@ impl ThreadPool {
         worker: &Arc<WorkerState>,
         stats: &Arc<Mutex<ThreadPoolStats>>,
         completed_tasks: &Arc<Mutex<Vec<u64>>>,
+        tracker: &CompletionTracker,
     ) {
+        // Declared first so it drops last: whether the closure below returns
+        // normally or unwinds, this task is counted exactly once, and the
+        // count lands after the bookkeeping that follows the closure. Nothing
+        // between the closure call and this guard's drop can panic, so a
+        // panicking task cannot turn into a double panic here.
+        let _completion = CompletionGuard { tracker };
+
         let start_time = Instant::now();
         let task_id = task.id;
 
@@ -552,6 +739,145 @@ impl Default for ThreadPool {
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicU32;
+    use std::sync::mpsc;
+
+    /// Regression: `wait()` must not return while a task is still running.
+    ///
+    /// The previous implementation polled `pending_tasks() > 0 ||
+    /// has_active_workers()`, two independently-derived conditions.
+    /// `pop_task()` removes a task from its deque *before* the closure runs,
+    /// so `pending_tasks()` reads zero while the task executes; the pool then
+    /// leans on `is_idle` to cover that gap, and `is_idle` is only ever
+    /// cleared on wake-from-park, never on task pickup.
+    ///
+    /// Repeated submit-then-wait against a single warm pool. This is the
+    /// shape the barrier has to hold under, and it asserts inside the loop
+    /// rather than once at the end so an early return in round 7 that later
+    /// rounds "catch up" on still fails. See
+    /// [`test_wait_barrier_on_a_freshly_started_pool`] for the variant that
+    /// reproduces the historical failure.
+    #[test]
+    fn test_wait_is_a_real_completion_barrier() {
+        const ROUNDS: u32 = 200;
+        const TASKS_PER_ROUND: u32 = 8;
+
+        let pool = ThreadPool::with_config(ThreadPoolConfig {
+            num_threads: Some(4),
+            ..Default::default()
+        })
+        .expect("Failed to create thread pool");
+        let counter = Arc::new(AtomicU32::new(0));
+
+        for round in 0..ROUNDS {
+            for _ in 0..TASKS_PER_ROUND {
+                let counter_clone = Arc::clone(&counter);
+                pool.submit(move || {
+                    counter_clone.fetch_add(1, Ordering::SeqCst);
+                })
+                .expect("Failed to submit task");
+            }
+
+            pool.wait().expect("Failed to wait for tasks");
+
+            assert_eq!(
+                counter.load(Ordering::SeqCst),
+                (round + 1) * TASKS_PER_ROUND,
+                "wait() returned in round {round} with tasks still in flight"
+            );
+        }
+    }
+
+    /// Regression: the exact window `test_priority_tasks` used to flake in.
+    ///
+    /// `WorkerState::is_idle` starts out `true` and `worker_main` clears it
+    /// only on wake-from-park, so a worker that picks up a task during its
+    /// very first loop iteration -- before it has ever parked -- runs that
+    /// task while still reporting itself idle. Combined with `pop_task()`
+    /// emptying the deque before the closure runs, the old `wait()` saw an
+    /// empty queue and an all-idle pool and returned with the task not yet
+    /// started. That is why the failure only ever appeared under full-suite
+    /// load (which delays worker startup past the submit) and never in
+    /// isolation.
+    ///
+    /// Reproduced deterministically by submitting into a pool that was just
+    /// constructed, many times over. The closures sleep so "popped but not
+    /// finished" is an observable interval rather than a few hundred
+    /// nanoseconds, and the counter is read *before* `shutdown()` -- joining
+    /// the workers first would let an in-flight straggler finish and hide
+    /// exactly the bug under test.
+    #[test]
+    fn test_wait_barrier_on_a_freshly_started_pool() {
+        const ROUNDS: u32 = 200;
+        const TASKS_PER_ROUND: u32 = 4;
+
+        for round in 0..ROUNDS {
+            let pool = ThreadPool::with_config(ThreadPoolConfig {
+                num_threads: Some(2),
+                ..Default::default()
+            })
+            .expect("Failed to create thread pool");
+            let counter = Arc::new(AtomicU32::new(0));
+
+            for _ in 0..TASKS_PER_ROUND {
+                let counter_clone = Arc::clone(&counter);
+                pool.submit(move || {
+                    thread::sleep(Duration::from_micros(500));
+                    counter_clone.fetch_add(1, Ordering::SeqCst);
+                })
+                .expect("Failed to submit task");
+            }
+
+            pool.wait().expect("Failed to wait for tasks");
+            let completed_at_barrier = counter.load(Ordering::SeqCst);
+
+            // Consumes the pool and joins its workers, so 200 rounds do not
+            // leave 400 detached threads behind.
+            pool.shutdown().expect("Failed to shut down thread pool");
+
+            assert_eq!(
+                completed_at_barrier, TASKS_PER_ROUND,
+                "wait() returned in round {round} with tasks still in flight"
+            );
+        }
+    }
+
+    /// A task that panics must still count as completed.
+    ///
+    /// Completion is recorded by a drop guard held across the closure, so an
+    /// unwinding task is counted on its way out. Without that guard the
+    /// pool's completed count would stay permanently one short of its
+    /// submitted count and *every* later `wait()` would block forever.
+    ///
+    /// `wait()` runs on a helper thread reporting through a channel so the
+    /// missing-guard regression fails on the `recv_timeout` instead of
+    /// hanging the suite. Nothing is submitted after the panic: the
+    /// panicking worker thread is gone, and `find_least_loaded_worker` would
+    /// happily hand a follow-up task to its now-empty deque.
+    #[test]
+    fn test_wait_returns_after_a_panicking_task() {
+        let pool = Arc::new(
+            ThreadPool::with_config(ThreadPoolConfig {
+                num_threads: Some(2),
+                ..Default::default()
+            })
+            .expect("Failed to create thread pool"),
+        );
+
+        pool.submit(|| panic!("intentional panic exercising completion accounting"))
+            .expect("Failed to submit task");
+
+        let waiter_pool = Arc::clone(&pool);
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let result = waiter_pool.wait();
+            let _ = tx.send(result.is_ok());
+        });
+
+        let waited = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("wait() never returned after a panicking task");
+        assert!(waited, "wait() reported an error after a panicking task");
+    }
 
     #[test]
     fn test_thread_pool_creation() {

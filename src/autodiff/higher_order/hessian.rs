@@ -66,7 +66,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(hess_data).reshape(&[n, n]))
+    Array::from_vec_shape(hess_data, &[n, n])
 }
 
 /// Compute Hessian-vector product `H(x) * v` without forming the full Hessian.
@@ -194,5 +194,5 @@ where
         }
     }
 
-    Ok(Array::from_vec(hess_data).reshape(&[n, n]))
+    Array::from_vec_shape(hess_data, &[n, n])
 }

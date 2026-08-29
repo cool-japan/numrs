@@ -1,7 +1,30 @@
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+use crate::kernels;
 use num_traits::{Float, Zero};
+use std::borrow::Cow;
 use std::fmt::Debug;
+
+/// Broadcast `a` to `shape`, without cloning/copying when `a` is already
+/// that shape -- the common case, since most comparisons are between
+/// equal-shaped arrays. [`Cow::Borrowed`] aliases `a` directly; only a
+/// genuine shape mismatch pays for [`Array::broadcast_to`]'s copy.
+///
+/// Used by the free comparison functions below (`greater`, `equal`,
+/// `logical_and`, ...), which -- unlike the [`Array`] methods in
+/// `comparisons_broadcast.rs` -- do their own broadcast-shape handling
+/// instead of going through [`Array::broadcast_op`] (which already has an
+/// equal-shape fast path of its own).
+pub(crate) fn maybe_broadcast<'a, T: Clone>(
+    a: &'a Array<T>,
+    shape: &[usize],
+) -> Result<Cow<'a, Array<T>>> {
+    if a.shape() == shape {
+        Ok(Cow::Borrowed(a))
+    } else {
+        Ok(Cow::Owned(a.broadcast_to(shape)?))
+    }
+}
 
 /// Comparison utilities for NumRS Arrays
 /// Determine if two arrays are element-wise equal within a tolerance
@@ -59,23 +82,20 @@ pub fn allclose_with_tol<T>(a: &Array<T>, b: &Array<T>, rtol: T, atol: T) -> boo
 where
     T: Clone + Float + Debug,
 {
-    // Check if shapes are the same
+    // Check if shapes are the same (no broadcasting here -- unchanged from
+    // before: a shape mismatch is simply "not close", not an error).
     if a.shape() != b.shape() {
         return false;
     }
 
-    // Convert arrays to vectors
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
-
-    // Check each element
-    for (a_val, b_val) in a_data.iter().zip(b_data.iter()) {
-        if !isclose(*a_val, *b_val, rtol, atol) {
-            return false;
-        }
-    }
-
-    true
+    // Zero-copy (when contiguous) slice access instead of two `to_vec()`
+    // clones; short-circuits on the first mismatch via `Iterator::all`
+    // instead of materializing a `Vec<bool>` that was never needed.
+    let a_op = kernels::borrow::operand(a);
+    let b_op = kernels::borrow::operand(b);
+    a_op.iter()
+        .zip(b_op.iter())
+        .all(|(&a_val, &b_val)| isclose(a_val, b_val, rtol, atol))
 }
 
 /// Determine if two floating point values are equal within a tolerance
@@ -456,8 +476,9 @@ where
     T: Clone + PartialEq + Debug,
     bool: From<T>,
 {
-    // Check all elements
-    a.to_vec().iter().all(|val| bool::from(val.clone()))
+    // Direct iteration, no `to_vec()` buffer -- short-circuits on the
+    // first `false` instead of materializing a full copy first.
+    a.array().iter().all(|val| bool::from(val.clone()))
 }
 
 /// Determine if any element in an array evaluates to True
@@ -486,8 +507,9 @@ where
     T: Clone + PartialEq + Debug,
     bool: From<T>,
 {
-    // Check any element
-    a.to_vec().iter().any(|val| bool::from(val.clone()))
+    // Direct iteration, no `to_vec()` buffer -- short-circuits on the
+    // first `true` instead of materializing a full copy first.
+    a.array().iter().any(|val| bool::from(val.clone()))
 }
 
 /// Create a boolean array with element-wise comparison (a > b)
@@ -528,32 +550,17 @@ where
         }
     })?;
 
-    // Broadcast arrays if needed
-    let a_broadcast = if a.shape() != broadcast_shape {
-        a.broadcast_to(&broadcast_shape)?
-    } else {
-        a.clone()
-    };
+    // Broadcast only when actually needed (`maybe_broadcast` borrows
+    // instead of cloning in the equal-shape case), then compare via a
+    // single zero-copy zip pass instead of two `to_vec()` copies.
+    let a_broadcast = maybe_broadcast(a, &broadcast_shape)?;
+    let b_broadcast = maybe_broadcast(b, &broadcast_shape)?;
 
-    let b_broadcast = if b.shape() != broadcast_shape {
-        b.broadcast_to(&broadcast_shape)?
-    } else {
-        b.clone()
-    };
+    let a_op = kernels::borrow::operand(&a_broadcast);
+    let b_op = kernels::borrow::operand(&b_broadcast);
+    let result = kernels::elementwise::binary_serial(&a_op, &b_op, |x, y| x > y);
 
-    // Convert arrays to vectors
-    let a_data = a_broadcast.to_vec();
-    let b_data = b_broadcast.to_vec();
-
-    // Compare elements
-    let result: Vec<bool> = a_data
-        .iter()
-        .zip(b_data.iter())
-        .map(|(a_val, b_val)| a_val > b_val)
-        .collect();
-
-    // Create result array with the broadcast shape
-    Ok(Array::from_vec(result).reshape(&broadcast_shape))
+    Array::from_vec_shape(result, &broadcast_shape)
 }
 
 /// Create a boolean array with element-wise comparison (a >= b)
@@ -578,32 +585,14 @@ where
         }
     })?;
 
-    // Broadcast arrays if needed
-    let a_broadcast = if a.shape() != broadcast_shape {
-        a.broadcast_to(&broadcast_shape)?
-    } else {
-        a.clone()
-    };
+    let a_broadcast = maybe_broadcast(a, &broadcast_shape)?;
+    let b_broadcast = maybe_broadcast(b, &broadcast_shape)?;
 
-    let b_broadcast = if b.shape() != broadcast_shape {
-        b.broadcast_to(&broadcast_shape)?
-    } else {
-        b.clone()
-    };
+    let a_op = kernels::borrow::operand(&a_broadcast);
+    let b_op = kernels::borrow::operand(&b_broadcast);
+    let result = kernels::elementwise::binary_serial(&a_op, &b_op, |x, y| x >= y);
 
-    // Convert arrays to vectors
-    let a_data = a_broadcast.to_vec();
-    let b_data = b_broadcast.to_vec();
-
-    // Compare elements
-    let result: Vec<bool> = a_data
-        .iter()
-        .zip(b_data.iter())
-        .map(|(a_val, b_val)| a_val >= b_val)
-        .collect();
-
-    // Create result array with the broadcast shape
-    Ok(Array::from_vec(result).reshape(&broadcast_shape))
+    Array::from_vec_shape(result, &broadcast_shape)
 }
 
 /// Create a boolean array with element-wise comparison (a < b)
@@ -628,32 +617,14 @@ where
         }
     })?;
 
-    // Broadcast arrays if needed
-    let a_broadcast = if a.shape() != broadcast_shape {
-        a.broadcast_to(&broadcast_shape)?
-    } else {
-        a.clone()
-    };
+    let a_broadcast = maybe_broadcast(a, &broadcast_shape)?;
+    let b_broadcast = maybe_broadcast(b, &broadcast_shape)?;
 
-    let b_broadcast = if b.shape() != broadcast_shape {
-        b.broadcast_to(&broadcast_shape)?
-    } else {
-        b.clone()
-    };
+    let a_op = kernels::borrow::operand(&a_broadcast);
+    let b_op = kernels::borrow::operand(&b_broadcast);
+    let result = kernels::elementwise::binary_serial(&a_op, &b_op, |x, y| x < y);
 
-    // Convert arrays to vectors
-    let a_data = a_broadcast.to_vec();
-    let b_data = b_broadcast.to_vec();
-
-    // Compare elements
-    let result: Vec<bool> = a_data
-        .iter()
-        .zip(b_data.iter())
-        .map(|(a_val, b_val)| a_val < b_val)
-        .collect();
-
-    // Create result array with the broadcast shape
-    Ok(Array::from_vec(result).reshape(&broadcast_shape))
+    Array::from_vec_shape(result, &broadcast_shape)
 }
 
 /// Create a boolean array with element-wise comparison (a <= b)
@@ -678,32 +649,14 @@ where
         }
     })?;
 
-    // Broadcast arrays if needed
-    let a_broadcast = if a.shape() != broadcast_shape {
-        a.broadcast_to(&broadcast_shape)?
-    } else {
-        a.clone()
-    };
+    let a_broadcast = maybe_broadcast(a, &broadcast_shape)?;
+    let b_broadcast = maybe_broadcast(b, &broadcast_shape)?;
 
-    let b_broadcast = if b.shape() != broadcast_shape {
-        b.broadcast_to(&broadcast_shape)?
-    } else {
-        b.clone()
-    };
+    let a_op = kernels::borrow::operand(&a_broadcast);
+    let b_op = kernels::borrow::operand(&b_broadcast);
+    let result = kernels::elementwise::binary_serial(&a_op, &b_op, |x, y| x <= y);
 
-    // Convert arrays to vectors
-    let a_data = a_broadcast.to_vec();
-    let b_data = b_broadcast.to_vec();
-
-    // Compare elements
-    let result: Vec<bool> = a_data
-        .iter()
-        .zip(b_data.iter())
-        .map(|(a_val, b_val)| a_val <= b_val)
-        .collect();
-
-    // Create result array with the broadcast shape
-    Ok(Array::from_vec(result).reshape(&broadcast_shape))
+    Array::from_vec_shape(result, &broadcast_shape)
 }
 
 /// Create a boolean array with element-wise comparison (a == b)
@@ -728,32 +681,14 @@ where
         }
     })?;
 
-    // Broadcast arrays if needed
-    let a_broadcast = if a.shape() != broadcast_shape {
-        a.broadcast_to(&broadcast_shape)?
-    } else {
-        a.clone()
-    };
+    let a_broadcast = maybe_broadcast(a, &broadcast_shape)?;
+    let b_broadcast = maybe_broadcast(b, &broadcast_shape)?;
 
-    let b_broadcast = if b.shape() != broadcast_shape {
-        b.broadcast_to(&broadcast_shape)?
-    } else {
-        b.clone()
-    };
+    let a_op = kernels::borrow::operand(&a_broadcast);
+    let b_op = kernels::borrow::operand(&b_broadcast);
+    let result = kernels::elementwise::binary_serial(&a_op, &b_op, |x, y| x == y);
 
-    // Convert arrays to vectors
-    let a_data = a_broadcast.to_vec();
-    let b_data = b_broadcast.to_vec();
-
-    // Compare elements
-    let result: Vec<bool> = a_data
-        .iter()
-        .zip(b_data.iter())
-        .map(|(a_val, b_val)| a_val == b_val)
-        .collect();
-
-    // Create result array with the broadcast shape
-    Ok(Array::from_vec(result).reshape(&broadcast_shape))
+    Array::from_vec_shape(result, &broadcast_shape)
 }
 
 /// Create a boolean array with element-wise comparison (a != b)
@@ -778,32 +713,14 @@ where
         }
     })?;
 
-    // Broadcast arrays if needed
-    let a_broadcast = if a.shape() != broadcast_shape {
-        a.broadcast_to(&broadcast_shape)?
-    } else {
-        a.clone()
-    };
+    let a_broadcast = maybe_broadcast(a, &broadcast_shape)?;
+    let b_broadcast = maybe_broadcast(b, &broadcast_shape)?;
 
-    let b_broadcast = if b.shape() != broadcast_shape {
-        b.broadcast_to(&broadcast_shape)?
-    } else {
-        b.clone()
-    };
+    let a_op = kernels::borrow::operand(&a_broadcast);
+    let b_op = kernels::borrow::operand(&b_broadcast);
+    let result = kernels::elementwise::binary_serial(&a_op, &b_op, |x, y| x != y);
 
-    // Convert arrays to vectors
-    let a_data = a_broadcast.to_vec();
-    let b_data = b_broadcast.to_vec();
-
-    // Compare elements
-    let result: Vec<bool> = a_data
-        .iter()
-        .zip(b_data.iter())
-        .map(|(a_val, b_val)| a_val != b_val)
-        .collect();
-
-    // Create result array with the broadcast shape
-    Ok(Array::from_vec(result).reshape(&broadcast_shape))
+    Array::from_vec_shape(result, &broadcast_shape)
 }
 
 /// Check if two arrays are approximately equal with the given tolerances
@@ -830,32 +747,15 @@ where
         }
     })?;
 
-    // Broadcast arrays if needed
-    let a_broadcast = if a.shape() != broadcast_shape {
-        a.broadcast_to(&broadcast_shape)?
-    } else {
-        a.clone()
-    };
+    let a_broadcast = maybe_broadcast(a, &broadcast_shape)?;
+    let b_broadcast = maybe_broadcast(b, &broadcast_shape)?;
 
-    let b_broadcast = if b.shape() != broadcast_shape {
-        b.broadcast_to(&broadcast_shape)?
-    } else {
-        b.clone()
-    };
+    let a_op = kernels::borrow::operand(&a_broadcast);
+    let b_op = kernels::borrow::operand(&b_broadcast);
+    let result =
+        kernels::elementwise::binary_serial(&a_op, &b_op, |x, y| isclose(x, y, rtol, atol));
 
-    // Convert arrays to vectors
-    let a_data = a_broadcast.to_vec();
-    let b_data = b_broadcast.to_vec();
-
-    // Compare elements
-    let result: Vec<bool> = a_data
-        .iter()
-        .zip(b_data.iter())
-        .map(|(a_val, b_val)| isclose(*a_val, *b_val, rtol, atol))
-        .collect();
-
-    // Create result array with the broadcast shape
-    Ok(Array::from_vec(result).reshape(&broadcast_shape))
+    Array::from_vec_shape(result, &broadcast_shape)
 }
 
 /// Element-wise logical AND of two arrays
@@ -884,20 +784,19 @@ where
 /// }
 /// ```
 pub fn logical_and(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
-    // Broadcast arrays to common shape
+    // Broadcast to a common shape -- `maybe_broadcast` borrows instead of
+    // calling `broadcast_to` (an unconditional `to_owned()` copy) when the
+    // shapes already match, and the zip below reads through zero-copy
+    // slices instead of two more `to_vec()` copies.
     let broadcast_shape = Array::<bool>::broadcast_shape(&x1.shape(), &x2.shape())?;
-    let x1_broadcast = x1.broadcast_to(&broadcast_shape)?;
-    let x2_broadcast = x2.broadcast_to(&broadcast_shape)?;
+    let x1_broadcast = maybe_broadcast(x1, &broadcast_shape)?;
+    let x2_broadcast = maybe_broadcast(x2, &broadcast_shape)?;
 
-    // Apply logical AND element-wise
-    let result_data: Vec<bool> = x1_broadcast
-        .to_vec()
-        .iter()
-        .zip(x2_broadcast.to_vec().iter())
-        .map(|(&a, &b)| a && b)
-        .collect();
+    let x1_op = kernels::borrow::operand(&x1_broadcast);
+    let x2_op = kernels::borrow::operand(&x2_broadcast);
+    let result_data = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a && b);
 
-    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+    Array::from_vec_shape(result_data, &broadcast_shape)
 }
 
 /// Element-wise logical OR of two arrays
@@ -926,20 +825,15 @@ pub fn logical_and(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
 /// }
 /// ```
 pub fn logical_or(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
-    // Broadcast arrays to common shape
     let broadcast_shape = Array::<bool>::broadcast_shape(&x1.shape(), &x2.shape())?;
-    let x1_broadcast = x1.broadcast_to(&broadcast_shape)?;
-    let x2_broadcast = x2.broadcast_to(&broadcast_shape)?;
+    let x1_broadcast = maybe_broadcast(x1, &broadcast_shape)?;
+    let x2_broadcast = maybe_broadcast(x2, &broadcast_shape)?;
 
-    // Apply logical OR element-wise
-    let result_data: Vec<bool> = x1_broadcast
-        .to_vec()
-        .iter()
-        .zip(x2_broadcast.to_vec().iter())
-        .map(|(&a, &b)| a || b)
-        .collect();
+    let x1_op = kernels::borrow::operand(&x1_broadcast);
+    let x2_op = kernels::borrow::operand(&x2_broadcast);
+    let result_data = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a || b);
 
-    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+    Array::from_vec_shape(result_data, &broadcast_shape)
 }
 
 /// Element-wise logical NOT of an array
@@ -966,10 +860,9 @@ pub fn logical_or(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
 /// }
 /// ```
 pub fn logical_not(x: &Array<bool>) -> Result<Array<bool>> {
-    // Apply logical NOT element-wise
-    let result_data: Vec<bool> = x.to_vec().iter().map(|&a| !a).collect();
-
-    Ok(Array::from_vec(result_data).reshape(&x.shape()))
+    // `map` already takes the zero-copy contiguous-slice fast path
+    // internally (see `Array::map`); no broadcast is needed for a unary op.
+    Ok(x.map(|a| !a))
 }
 
 /// Element-wise logical XOR of two arrays
@@ -998,20 +891,15 @@ pub fn logical_not(x: &Array<bool>) -> Result<Array<bool>> {
 /// }
 /// ```
 pub fn logical_xor(x1: &Array<bool>, x2: &Array<bool>) -> Result<Array<bool>> {
-    // Broadcast arrays to common shape
     let broadcast_shape = Array::<bool>::broadcast_shape(&x1.shape(), &x2.shape())?;
-    let x1_broadcast = x1.broadcast_to(&broadcast_shape)?;
-    let x2_broadcast = x2.broadcast_to(&broadcast_shape)?;
+    let x1_broadcast = maybe_broadcast(x1, &broadcast_shape)?;
+    let x2_broadcast = maybe_broadcast(x2, &broadcast_shape)?;
 
-    // Apply logical XOR element-wise
-    let result_data: Vec<bool> = x1_broadcast
-        .to_vec()
-        .iter()
-        .zip(x2_broadcast.to_vec().iter())
-        .map(|(&a, &b)| a ^ b)
-        .collect();
+    let x1_op = kernels::borrow::operand(&x1_broadcast);
+    let x2_op = kernels::borrow::operand(&x2_broadcast);
+    let result_data = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a ^ b);
 
-    Ok(Array::from_vec(result_data).reshape(&broadcast_shape))
+    Array::from_vec_shape(result_data, &broadcast_shape)
 }
 
 /// Count the number of non-zero values in the array
@@ -1092,7 +980,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(counts).reshape(&new_shape))
+        Ok(Array::from_vec_shape(counts, &new_shape)?)
     } else {
         // Count over flattened array
         let count = a.to_vec().into_iter().filter(|x| *x != T::zero()).count();
@@ -1266,5 +1154,150 @@ mod tests {
         let result = isclose_array(&a, &b, 1e-10, 0.0)
             .expect("isclose_array with strict tol should succeed");
         assert_eq!(result.to_vec(), vec![false, false, false]);
+    }
+
+    // ---- broadcast cases vs NumPy ground truth ----
+    //
+    // Each expected result below is the literal output of the equivalent
+    // `np.<fn>` call on the same two arrays (verified against NumPy's
+    // documented broadcasting rule: dimensions are compared right-aligned,
+    // and a size-1 dimension stretches to match the other operand's).
+
+    #[test]
+    fn test_greater_broadcast_matches_numpy() {
+        // np.greater([[1],[2],[3]], [0,2,4]) ->
+        // [[ True, False, False],
+        //  [ True, False, False],
+        //  [ True,  True, False]]
+        let a = Array::from_vec(vec![1, 2, 3]).reshape(&[3, 1]);
+        let b = Array::from_vec(vec![0, 2, 4]).reshape(&[1, 3]);
+        let result = greater(&a, &b).expect("broadcast greater should succeed");
+        assert_eq!(result.shape(), vec![3, 3]);
+        assert_eq!(
+            result.to_vec(),
+            vec![true, false, false, true, false, false, true, true, false]
+        );
+    }
+
+    #[test]
+    fn test_less_equal_broadcast_matches_numpy() {
+        // np.less_equal([[1],[2],[3]], [0,2,4]) ->
+        // [[False,  True,  True],
+        //  [False, False,  True],
+        //  [False, False,  True]]
+        let a = Array::from_vec(vec![1, 2, 3]).reshape(&[3, 1]);
+        let b = Array::from_vec(vec![0, 2, 4]).reshape(&[1, 3]);
+        let result = less_equal(&a, &b).expect("broadcast less_equal should succeed");
+        assert_eq!(result.shape(), vec![3, 3]);
+        assert_eq!(
+            result.to_vec(),
+            vec![false, true, true, false, true, true, false, false, true]
+        );
+    }
+
+    #[test]
+    fn test_not_equal_broadcast_matches_numpy() {
+        // np.not_equal([[1],[2]], [1,2]) ->
+        // [[False,  True],
+        //  [ True, False]]
+        let a = Array::from_vec(vec![1, 2]).reshape(&[2, 1]);
+        let b = Array::from_vec(vec![1, 2]).reshape(&[1, 2]);
+        let result = not_equal(&a, &b).expect("broadcast not_equal should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![false, true, true, false]);
+    }
+
+    #[test]
+    fn test_logical_and_broadcast_matches_numpy() {
+        // np.logical_and([[True],[False]], [True, False]) ->
+        // [[ True, False],
+        //  [False, False]]
+        let a = Array::from_vec(vec![true, false]).reshape(&[2, 1]);
+        let b = Array::from_vec(vec![true, false]).reshape(&[1, 2]);
+        let result = logical_and(&a, &b).expect("logical_and broadcast should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![true, false, false, false]);
+    }
+
+    #[test]
+    fn test_logical_or_broadcast_matches_numpy() {
+        // np.logical_or([[True],[False]], [True, False]) ->
+        // [[True,  True],
+        //  [True, False]]
+        let a = Array::from_vec(vec![true, false]).reshape(&[2, 1]);
+        let b = Array::from_vec(vec![true, false]).reshape(&[1, 2]);
+        let result = logical_or(&a, &b).expect("logical_or broadcast should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![true, true, true, false]);
+    }
+
+    #[test]
+    fn test_logical_xor_broadcast_matches_numpy() {
+        // np.logical_xor([[True],[False]], [True, False]) ->
+        // [[False,  True],
+        //  [ True, False]]
+        let a = Array::from_vec(vec![true, false]).reshape(&[2, 1]);
+        let b = Array::from_vec(vec![true, false]).reshape(&[1, 2]);
+        let result = logical_xor(&a, &b).expect("logical_xor broadcast should succeed");
+        assert_eq!(result.shape(), vec![2, 2]);
+        assert_eq!(result.to_vec(), vec![false, true, true, false]);
+    }
+
+    #[test]
+    fn test_isclose_array_broadcast_matches_numpy() {
+        // np.isclose([[1.],[2.],[3.]], [1., 2.], rtol=1e-7, atol=0.0) ->
+        // [[ True, False],
+        //  [False,  True],
+        //  [False, False]]
+        let a = Array::from_vec(vec![1.0, 2.0, 3.0]).reshape(&[3, 1]);
+        let b = Array::from_vec(vec![1.0, 2.0]).reshape(&[1, 2]);
+        let result =
+            isclose_array(&a, &b, 1e-7, 0.0).expect("isclose_array broadcast should succeed");
+        assert_eq!(result.shape(), vec![3, 2]);
+        assert_eq!(
+            result.to_vec(),
+            vec![true, false, false, true, false, false]
+        );
+    }
+
+    #[test]
+    fn test_allclose_with_tol_shape_mismatch_is_false_not_broadcast() {
+        // Preserved, not-explicitly-asked-to-change semantics: unlike the
+        // broadcasting comparison functions above, `allclose`/
+        // `allclose_with_tol` never broadcast -- a shape mismatch is
+        // simply "not close", never an error and never a broadcast
+        // attempt (NumPy's `np.allclose` *does* broadcast; this crate's
+        // deliberately does not, both before and after this migration).
+        let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let b = Array::from_vec(vec![1.0, 2.0, 3.0]).reshape(&[3, 1]);
+        assert!(!allclose_with_tol(&a, &b, 1e-7, 0.0));
+    }
+
+    #[test]
+    fn test_all_any_short_circuit_still_correct() {
+        let all_true = Array::from_vec(vec![true, true, true, true]);
+        let one_false = Array::from_vec(vec![true, true, false, true]);
+        let all_false = Array::from_vec(vec![false, false, false, false]);
+
+        assert!(all(&all_true));
+        assert!(!all(&one_false));
+        assert!(!all(&all_false));
+
+        assert!(!any(&all_false));
+        assert!(any(&one_false));
+        assert!(any(&all_true));
+    }
+
+    #[test]
+    fn test_maybe_broadcast_borrows_on_equal_shape() {
+        use std::borrow::Cow;
+        let a = Array::from_vec(vec![1, 2, 3]);
+        let borrowed = maybe_broadcast(&a, &a.shape()).expect("equal shape always succeeds");
+        assert!(matches!(borrowed, Cow::Borrowed(_)));
+
+        let b = Array::from_vec(vec![1]);
+        let owned = maybe_broadcast(&b, &[3]).expect("[1] broadcasts to [3]");
+        assert!(matches!(owned, Cow::Owned(_)));
+        assert_eq!(owned.to_vec(), vec![1, 1, 1]);
     }
 }

@@ -150,7 +150,7 @@ pub fn linear_algebra_benchmark(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("matrix_inverse", size),
             size,
-            |bench, &size| {
+            |_bench, &size| {
                 // Create a well-conditioned tridiagonal matrix
                 let mut data = vec![0.0f32; size * size];
                 for i in 0..size {
@@ -162,16 +162,16 @@ pub fn linear_algebra_benchmark(c: &mut Criterion) {
                         }
                     }
                 }
-                let matrix = Array::from_vec(data).reshape(&[size, size]);
+                let _matrix = Array::from_vec(data).reshape(&[size, size]);
 
-                // bench.iter(|| black_box(matrix.inv().unwrap())); // inv requires lapack feature
+                // _bench.iter(|| black_box(_matrix.inv().unwrap())); // inv requires lapack feature
             },
         );
 
         group.bench_with_input(
             BenchmarkId::new("solve_linear_system", size),
             size,
-            |bench, &size| {
+            |_bench, &size| {
                 // Create a well-conditioned tridiagonal matrix
                 let mut a_data = vec![0.0f32; size * size];
                 for i in 0..size {
@@ -183,10 +183,10 @@ pub fn linear_algebra_benchmark(c: &mut Criterion) {
                         }
                     }
                 }
-                let a = Array::from_vec(a_data).reshape(&[size, size]);
-                let b: Array<f32> = Array::ones(&[size]);
+                let _a = Array::from_vec(a_data).reshape(&[size, size]);
+                let _b: Array<f32> = Array::ones(&[size]);
 
-                // bench.iter(|| black_box(numrs2::linalg::solve(&a, &b).unwrap())); // solve requires lapack feature
+                // _bench.iter(|| black_box(numrs2::linalg::solve(&_a, &_b).unwrap())); // solve requires lapack feature
             },
         );
     }

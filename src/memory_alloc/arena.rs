@@ -47,7 +47,27 @@ struct ArenaChunk {
     layout: Layout,
 }
 
-// Mark ArenaChunk as Send and Sync
+// SAFETY: `ArenaChunk` holds `ptr: NonNull<u8>`, `size: usize`,
+// `offset: usize`, and `layout: Layout`; only `NonNull<u8>` prevents the
+// auto-derived Send/Sync (raw pointers are `!Send`/`!Sync` by default), and
+// the other fields are already `Send + Sync`.
+//
+// Send: `ptr` addresses a raw, uninterpreted byte allocation obtained from
+// the global allocator (`std::alloc::alloc`), not a generic `T` that could
+// itself carry thread-affine state. `ArenaChunk` is not `Clone`/`Copy` and
+// its `Drop` impl (below) deallocates `ptr` exactly once, so ownership --
+// and therefore the right to dereference the memory -- transfers atomically
+// with the `ArenaChunk` value itself; there is no path that aliases the
+// pointer. This is required for `ArenaAllocator` to be usable across
+// threads at all: its `state: Arc<Mutex<UnsafeCell<ArenaState>>>` embeds
+// `Vec<ArenaChunk>`, and `Mutex<U>: Sync` requires `U: Send`.
+//
+// Sync: every read or mutation of an `ArenaChunk` (including the raw
+// pointer arithmetic in `ArenaChunk::allocate` and the `dealloc` call in
+// `Drop::drop`) happens only while `ArenaAllocator::state`'s `Mutex` guard
+// is held (see `allocate_aligned`/`reset` below, which lock before touching
+// the `UnsafeCell`), so concurrent access is externally serialized rather
+// than relying on any interior synchronization of `ArenaChunk` itself.
 unsafe impl Send for ArenaChunk {}
 unsafe impl Sync for ArenaChunk {}
 
@@ -68,18 +88,21 @@ impl ArenaChunk {
 
     /// Try to allocate `size` bytes from this chunk
     fn allocate(&mut self, size: usize, alignment: usize) -> Option<NonNull<u8>> {
-        // Calculate aligned offset
+        // Compute alignment padding using absolute address (not relative offset)
+        // so that the returned pointer satisfies the requested alignment regardless
+        // of the chunk base pointer's own alignment.
+        let base_addr = self.ptr.as_ptr() as usize;
+        let current_addr = base_addr + self.offset;
         let align_mask = alignment - 1;
-        let aligned_offset = (self.offset + align_mask) & !align_mask;
+        let aligned_addr = (current_addr + align_mask) & !align_mask;
+        let aligned_offset = aligned_addr - base_addr;
 
         // Check if we have enough space
         if aligned_offset + size <= self.size {
-            // We have enough space
             let result = unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(aligned_offset)) };
             self.offset = aligned_offset + size;
             Some(result)
         } else {
-            // Not enough space
             None
         }
     }

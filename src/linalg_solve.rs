@@ -3,13 +3,14 @@
 //! This module contains functions for solving linear systems, computing matrix inverses,
 //! and computing pseudoinverses.
 
-#[allow(unused_imports)] // Used conditionally based on features
 use crate::array::Array;
-#[allow(unused_imports)] // Used conditionally based on features
-use crate::error::{NumRs2Error, Result};
-#[allow(unused_imports)] // Used conditionally based on features
+use crate::error::Result;
+// `NumRs2Error` is used only by `pinv` below, which (unlike `solve`/`inv`)
+// has no `not(all(matrix_decomp, lapack))` fallback variant -- so gate the
+// import to match, rather than blanket-allowing it as unused everywhere else.
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+use crate::error::NumRs2Error;
 use num_traits::Float;
-#[allow(unused_imports)] // Used conditionally based on features
 use std::fmt::Debug;
 
 /// Solve a linear system Ax = b
@@ -38,7 +39,8 @@ pub fn solve<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     b: &Array<T>,
@@ -47,15 +49,17 @@ pub fn solve<
 }
 
 /// Solve a linear system Ax = b
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn solve<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     b: &Array<T>,
@@ -73,7 +77,8 @@ pub fn inv<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -81,15 +86,17 @@ pub fn inv<
 }
 
 /// Compute the inverse of a matrix
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn inv<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -121,7 +128,8 @@ pub fn pinv<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     rcond: Option<T>,
@@ -173,9 +181,9 @@ pub fn pinv<
 
     // 1. Create a diagonal matrix from s_inv
     let mut s_inv_diag = Array::zeros(&[k, k]);
-    #[allow(clippy::needless_range_loop)]
+    let out = s_inv_diag.array_mut();
     for i in 0..k {
-        s_inv_diag.set(&[i, i], s_inv_vec[i])?;
+        out[[i, i]] = s_inv_vec[i];
     }
 
     // 2. Compute V * S^+

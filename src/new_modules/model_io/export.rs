@@ -5,8 +5,7 @@
 
 use super::format::{FormatResult, LayerData, NumRS2Model};
 use crate::error::NumRs2Error;
-use oxiarc_archive::zip::ZipCompressionLevel;
-use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -100,8 +99,7 @@ impl ModelExporter {
     /// * `model` - The model to export
     /// * `path` - Output file path
     pub fn export_weights_npz<P: AsRef<Path>>(model: &NumRS2Model, path: P) -> FormatResult<()> {
-        use byteorder::{ByteOrder, LittleEndian};
-        use oxiarc_archive::zip::{ZipCompressionLevel, ZipWriter};
+        use oxiarc_archive::zip::ZipWriter;
 
         let file = File::create(path.as_ref())
             .map_err(|e| NumRs2Error::IOError(format!("Failed to create NPZ file: {}", e)))?;
@@ -403,7 +401,7 @@ pub fn export_architecture<P: AsRef<Path>>(model: &NumRS2Model, path: P) -> Form
 mod tests {
     use super::*;
     use crate::new_modules::model_io::format::{LayerData, ModelMetadata};
-    use scirs2_core::ndarray::Array2;
+    use scirs2_core::ndarray::{Array1, Array2};
     use std::env;
     use std::fs;
 

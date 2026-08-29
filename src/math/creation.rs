@@ -28,7 +28,7 @@
 //! - [`unwrap`] - Unwrap phase angles by changing deltas to 2pi complements
 
 use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
 use num_traits::{Float, NumCast, One, Zero};
 use scirs2_core::Complex;
 use std::ops::Add;
@@ -58,7 +58,7 @@ pub fn zeros<T: Zero + Clone>(shape: &[usize]) -> Array<T> {
     for _ in 0..size {
         vec.push(T::zero());
     }
-    Array::from_vec(vec).reshape(shape)
+    Array::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Create an array filled with ones
@@ -86,7 +86,7 @@ pub fn ones<T: One + Clone>(shape: &[usize]) -> Array<T> {
     for _ in 0..size {
         vec.push(T::one());
     }
-    Array::from_vec(vec).reshape(shape)
+    Array::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Create an array with uninitialized values
@@ -113,7 +113,7 @@ pub fn ones<T: One + Clone>(shape: &[usize]) -> Array<T> {
 pub fn empty<T: Default + Clone>(shape: &[usize]) -> Array<T> {
     let size: usize = shape.iter().product();
     let vec = vec![T::default(); size];
-    Array::from_vec(vec).reshape(shape)
+    Array::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Create evenly spaced values between start and stop (inclusive)
@@ -301,74 +301,15 @@ pub fn logspace<T: Float + Clone + 'static>(
 /// - "ij": Matrix indexing, where i is the first axis (rows) and j is the second axis (columns)
 ///
 /// For n > 2 dimensions, the remaining dimensions follow normal matrix indexing.
+///
+/// Delegates to the canonical
+/// [`crate::array_ops::creation::grids::meshgrid`] (always passing
+/// `sparse: false`, since this signature has no `sparse` parameter of its
+/// own); see that function's docs for full NumPy-compatible semantics,
+/// including its `sparse: true` option that this narrower signature cannot
+/// reach.
 pub fn meshgrid<T: Clone>(arrays: &[&Array<T>], indexing: Option<&str>) -> Result<Vec<Array<T>>> {
-    if arrays.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let indexing_mode = indexing.unwrap_or("xy");
-
-    if indexing_mode != "xy" && indexing_mode != "ij" {
-        return Err(NumRs2Error::InvalidOperation(format!(
-            "Indexing mode '{}' not supported, must be 'xy' or 'ij'",
-            indexing_mode
-        )));
-    }
-
-    let n = arrays.len();
-    let mut shape = vec![0; n];
-
-    // Determine the shape of the output arrays
-    for (i, arr) in arrays.iter().enumerate() {
-        shape[i] = arr.size();
-    }
-
-    // Prepare output arrays
-    let mut output = Vec::with_capacity(n);
-
-    for i in 0..n {
-        // Create a shape with all 1s
-        let mut out_shape = vec![1; n];
-
-        // For each output array, we insert the size of the source array
-        // in the dimension corresponding to the coordinate
-        if indexing_mode == "xy" && n >= 2 && (i == 0 || i == 1) {
-            // Special case for xy indexing: swap the first two dimensions
-            out_shape[0] = if i == 1 { arrays[i].size() } else { 1 };
-            out_shape[1] = if i == 0 { arrays[i].size() } else { 1 };
-        } else {
-            // For ij indexing or dimensions beyond the first two
-            out_shape[i] = arrays[i].size();
-        }
-
-        // Reshape the source array
-        let reshaped = Array::from_vec(arrays[i].to_vec()).reshape(&out_shape);
-
-        // Determine the target broadcast shape
-        let target_shape = if indexing_mode == "xy" && n >= 2 {
-            // For xy indexing, the first two dimensions are swapped
-            let mut broadcast_shape = Vec::with_capacity(n);
-            for j in 0..n {
-                if j == 0 && n >= 1 {
-                    broadcast_shape.push(shape[1]); // y dimension
-                } else if j == 1 && n >= 2 {
-                    broadcast_shape.push(shape[0]); // x dimension
-                } else {
-                    broadcast_shape.push(shape[j]); // other dimensions
-                }
-            }
-            broadcast_shape
-        } else {
-            // For ij indexing, use the shape directly
-            shape.clone()
-        };
-
-        // Broadcast to the target shape
-        let broadcast_result = reshaped.broadcast_to(&target_shape)?;
-        output.push(broadcast_result);
-    }
-
-    Ok(output)
+    crate::array_ops::creation::grids::meshgrid(arrays, indexing.unwrap_or("xy"), false)
 }
 
 /// Legacy function for 2D meshgrid with xy indexing
@@ -565,7 +506,7 @@ pub fn ogrid<T: Clone + NumCast + Zero>(ranges: &[&Array<T>]) -> Result<Vec<Arra
         shape[i] = range.size();
 
         // Reshape the range to this shape
-        let reshaped = Array::from_vec(range.to_vec()).reshape(&shape);
+        let reshaped = Array::from_vec_shape(range.to_vec(), &shape)?;
         output.push(reshaped);
     }
 
@@ -794,66 +735,4 @@ pub fn unwrap<T: Float + Clone>(phase_array: &Array<T>) -> Array<T> {
     }
 
     Array::from_vec(result)
-}
-
-/// Return coordinate matrices from coordinate vectors (internal helper)
-///
-/// This function is similar to mgrid but takes owned references.
-#[allow(dead_code)]
-fn mgrid_owned<T: Clone + NumCast + Zero>(ranges: &[Array<T>]) -> Result<Vec<Array<T>>> {
-    if ranges.is_empty() {
-        return Ok(vec![]);
-    }
-
-    // Calculate the output shape
-    let mut shape = Vec::with_capacity(ranges.len());
-    for range in ranges {
-        shape.push(range.size());
-    }
-
-    // Create the output arrays
-    let mut output = Vec::with_capacity(ranges.len());
-    for _ in 0..ranges.len() {
-        output.push(Array::zeros(&shape));
-    }
-
-    // Fill the output arrays
-    // This is a simplified implementation, a more efficient one would use
-    // broadcasting and reshaping operations
-    let total_size: usize = shape.iter().product();
-
-    for i in 0..total_size {
-        let mut indices = Vec::with_capacity(shape.len());
-        let mut temp = i;
-
-        for j in (1..shape.len()).rev() {
-            let prod: usize = shape[j..].iter().product();
-            indices.insert(0, temp / prod);
-            temp %= prod;
-        }
-        indices.insert(0, temp);
-
-        for dim in 0..ranges.len() {
-            // Get the flat index for the current output array
-            let mut flat_idx = 0;
-            let mut stride = 1;
-
-            for j in (0..shape.len()).rev() {
-                flat_idx += indices[j] * stride;
-                stride *= shape[j];
-            }
-
-            // Set the value from the corresponding range
-            let range_val = ranges[dim].to_vec()[indices[dim]].clone();
-            let output_array = &mut output[dim];
-            let mut_data = output_array.array_mut();
-
-            // This is a simplification; in a real implementation we'd use
-            // ndarray's mutable indexing
-            let flat_data = mut_data.as_slice_mut().expect("array should be contiguous");
-            flat_data[flat_idx] = range_val;
-        }
-    }
-
-    Ok(output)
 }

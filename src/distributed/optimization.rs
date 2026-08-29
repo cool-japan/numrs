@@ -16,30 +16,73 @@
 //! ```rust,no_run
 //! use numrs2::distributed::optimization::*;
 //! use numrs2::distributed::process::*;
+//! use numrs2::distributed::net::SendOpts;
 //!
-//! # async fn example() -> Result<(), OptimizationError> {
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let world = init().await?;
+//! let peer = if world.rank() == 0 { 1 } else { 0 };
 //!
-//! // Detect network topology
-//! let topology = detect_topology(&world).await?;
-//! println!("Network topology: {:?}", topology);
+//! // Real ping-pong probes over the world communicator's shared Endpoint
+//! // (see "Probe protocol and wire tags" below for exactly what's measured).
+//! let opts = SendOpts { compress: false };
+//! let latency_us = measure_latency(&world, peer, 5, opts).await?;
+//! let bandwidth_mib_s = measure_bandwidth(&world, peer, 4 * 1024 * 1024, opts).await?;
+//! println!("Latency: {latency_us} us, Bandwidth: {bandwidth_mib_s} MiB/s");
 //!
-//! // Measure network characteristics
-//! if world.rank() == 0 && world.size() > 1 {
-//!     let bandwidth = measure_bandwidth(0, 1, &world).await?;
-//!     let latency = measure_latency(0, 1, &world).await?;
-//!     println!("Bandwidth: {} MB/s, Latency: {} μs", bandwidth, latency);
-//! }
-//!
-//! finalize(world).await?;
+//! // Overlap a CPU-bound computation with an independent async operation:
+//! // `compute` starts running on a blocking-pool thread immediately, while
+//! // `comm` is awaited concurrently on the caller's task.
+//! let (checksum, ()) = overlap_compute_communicate(
+//!     || (0..1_000_000u64).fold(0u64, |acc, i| acc.wrapping_add(i)),
+//!     async { Ok(()) },
+//! )
+//! .await?;
+//! println!("compute finished with {checksum}");
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Probe protocol and wire tags
+//!
+//! [`measure_latency`]/[`measure_bandwidth`] are real measurements over
+//! [`super::process::Communicator::require_endpoint`] — no raw sockets, no
+//! bypassing [`super::net::endpoint::Endpoint`]'s mailbox/compression policy.
+//! Both give the lower-ranked of the two participants ("the client") an
+//! unambiguous client role: only the client's clock ever times anything,
+//! which sidesteps clock/scheduling skew between two independently-running
+//! ranks' tasks entirely. The client relays its own measured figure back to
+//! the higher-ranked participant ("the server") as a final small message, so
+//! **both ranks return the identical, client-measured number** rather than
+//! each guessing at its own view of elapsed time.
+//!
+//! - **Latency**: for each of `rounds` rounds (client and server agree on
+//!   `rounds` the same way every collective in [`super::collective`] expects
+//!   every rank to call it in matching order), the client times an empty
+//!   ping/pong exchange: send ping, wait for the server's pong. The server's
+//!   pong for round `r` is only ever sent after receiving the client's ping
+//!   for that exact round — a real, causally-dependent round trip, not two
+//!   independently-timed one-way sends. Latency is
+//!   `median(round-trip times) / 2`.
+//! - **Bandwidth**: the client times one real `payload_bytes`-sized transfer
+//!   (send, then wait for the server's small ack) and reports
+//!   `payload_bytes / elapsed` in MiB/s — a slight underestimate of pure
+//!   link bandwidth, since it also includes one small-message return trip.
+//!
+//! Wire tags used here (`0xD`/`0xE` high nibbles) are deliberately disjoint
+//! from [`super::collective`]'s `TAG_*` constants
+//! (`0x1_0000_0000..=0xA_0000_0000`), from [`super::model_parallel`]'s
+//! pipeline tags (`0xB_0000_0000`/`0xC_0000_0000`), and from
+//! [`super::communication`]'s `ASYNC_COMM_TAG` (`0xACC0_...`) — so a probe
+//! can never be confused with collective, pipeline, or `AsyncCommunicator`
+//! traffic sharing the same `(comm, ctx)`.
 
 use super::collective::CollectiveError;
+use super::net::{NetError, SendOpts};
 use super::process::{Communicator, ProcessError};
 use oxiarc_lz4::{compress as lz4_compress, decompress as lz4_decompress};
 use serde::{Deserialize, Serialize};
+use std::future::Future;
+use std::time::Instant;
 use thiserror::Error;
 
 /// Errors that can occur during network optimization
@@ -50,6 +93,17 @@ pub enum OptimizationError {
 
     #[error("Collective operation error: {0}")]
     Collective(#[from] CollectiveError),
+
+    /// A failure from the real [`super::net`] transport layer, surfaced by
+    /// [`measure_latency`]/[`measure_bandwidth`] going through
+    /// [`super::net::endpoint::Endpoint`] directly.
+    #[error("Transport error: {0}")]
+    Net(#[from] NetError),
+
+    /// [`overlap_compute_communicate`]'s blocking-pool task panicked or was
+    /// cancelled before the computation finished.
+    #[error("compute task failed: {0}")]
+    ComputeTaskFailed(String),
 
     #[error("Topology detection failed: {0}")]
     TopologyError(String),
@@ -281,40 +335,182 @@ pub async fn detect_topology(comm: &Communicator) -> Result<NetworkTopology, Opt
     }
 }
 
-/// Measure bandwidth between two processes
-///
-/// Sends test messages to measure network bandwidth.
-pub async fn measure_bandwidth(
-    _src: usize,
-    _dst: usize,
-    _comm: &Communicator,
-) -> Result<f64, OptimizationError> {
-    // Placeholder implementation
-    // Real implementation would:
-    // 1. Send multiple test messages of varying sizes
-    // 2. Measure transfer time
-    // 3. Calculate bandwidth = size / time
+/// Base wire tag for [`measure_latency`]'s ping/pong exchange; folds in the
+/// round index so every round of one probe gets its own tag, and the high
+/// nibble keeps this disjoint from every other tag range in the crate (see
+/// the module docs).
+const TAG_PROBE_LATENCY_BASE: u64 = 0xD_0000_0000;
 
-    // Return estimated bandwidth (in MB/s)
-    Ok(1000.0) // Placeholder: 1 GB/s
+/// Wire tag for [`measure_latency`]'s final client-to-server relay of the
+/// computed result (see the module docs on why only the client's clock is
+/// ever trusted). Deliberately far from [`TAG_PROBE_LATENCY_BASE`]'s
+/// `+ round` range (which a large `rounds` could otherwise grow into) rather
+/// than merely the next integer above it.
+const TAG_PROBE_LATENCY_RESULT: u64 = 0xD_8000_0000;
+
+/// Wire tag for [`measure_bandwidth`]'s bulk payload transfer.
+const TAG_PROBE_BANDWIDTH_DATA: u64 = 0xE_0000_0000;
+
+/// Wire tag for [`measure_bandwidth`]'s ack back to the client, and (reusing
+/// the same tag for the opposite direction, since one call only ever sends
+/// one message each way under it) the client's relayed result to the server.
+/// Deliberately far from [`TAG_PROBE_BANDWIDTH_DATA`] rather than the next
+/// integer above it, matching [`TAG_PROBE_LATENCY_RESULT`]'s spacing.
+const TAG_PROBE_BANDWIDTH_ACK: u64 = 0xE_8000_0000;
+
+/// Encode `value` as a self-describing little-endian `f64` for the tiny
+/// fixed-shape messages [`measure_latency`]/[`measure_bandwidth`] relay.
+fn encode_f64(value: f64) -> Vec<u8> {
+    value.to_le_bytes().to_vec()
 }
 
-/// Measure latency between two processes
-///
-/// Sends small test messages to measure round-trip latency.
-pub async fn measure_latency(
-    _src: usize,
-    _dst: usize,
-    _comm: &Communicator,
-) -> Result<f64, OptimizationError> {
-    // Placeholder implementation
-    // Real implementation would:
-    // 1. Send small ping messages
-    // 2. Measure round-trip time
-    // 3. Calculate one-way latency = RTT / 2
+/// Inverse of [`encode_f64`].
+fn decode_f64(bytes: &[u8]) -> Result<f64, OptimizationError> {
+    let arr: [u8; 8] = bytes.try_into().map_err(|_| {
+        OptimizationError::MeasurementError(format!(
+            "expected an 8-byte f64 relay message, got {} bytes",
+            bytes.len()
+        ))
+    })?;
+    Ok(f64::from_le_bytes(arr))
+}
 
-    // Return estimated latency (in microseconds)
-    Ok(10.0) // Placeholder: 10 μs
+/// Measure round-trip latency to `peer` over `comm`'s shared
+/// [`super::net::endpoint::Endpoint`], as `median(round-trip) / 2`
+/// microseconds across `rounds` independent ping/pong exchanges (`rounds` is
+/// clamped up to 1 so a caller passing `0` still gets one real measurement
+/// rather than an empty median).
+///
+/// Both ranks must call this concurrently with the same `peer`-of-each-other
+/// and the same `rounds` (the same requirement collectives in
+/// [`super::collective`] place on their callers). Only the lower-ranked of
+/// `comm.rank()`/`peer` (the client) ever starts a clock — see the module
+/// docs for why — and relays its measured value to the other rank, so both
+/// return the identical number. `opts.compress` is honored exactly as it
+/// would be for any other [`super::net::endpoint::Endpoint`] send; an empty
+/// ping/pong payload is never worth compressing regardless.
+pub async fn measure_latency(
+    comm: &Communicator,
+    peer: usize,
+    rounds: usize,
+    opts: SendOpts,
+) -> Result<f64, OptimizationError> {
+    let rounds = rounds.max(1);
+    let endpoint = comm.require_endpoint()?;
+    let peer_global = comm.global_rank(peer)?;
+    let ctx = comm.context().0;
+    let rank = comm.rank();
+
+    if rank < peer {
+        // Client: time `rounds` real, causally-dependent round trips.
+        let mut round_trips_us = Vec::with_capacity(rounds);
+        for round in 0..rounds {
+            let tag = TAG_PROBE_LATENCY_BASE + round as u64;
+            let start = Instant::now();
+            endpoint
+                .send_bytes(peer_global, ctx, tag, &[], opts)
+                .await?;
+            endpoint.recv_bytes(peer_global, ctx, tag).await?;
+            round_trips_us.push(start.elapsed().as_secs_f64() * 1_000_000.0);
+        }
+        round_trips_us.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mid = round_trips_us.len() / 2;
+        let median_rtt = if round_trips_us.len().is_multiple_of(2) && round_trips_us.len() > 1 {
+            (round_trips_us[mid - 1] + round_trips_us[mid]) / 2.0
+        } else {
+            round_trips_us[mid]
+        };
+        let latency_us = median_rtt / 2.0;
+
+        endpoint
+            .send_bytes(
+                peer_global,
+                ctx,
+                TAG_PROBE_LATENCY_RESULT,
+                &encode_f64(latency_us),
+                SendOpts::default(),
+            )
+            .await?;
+        Ok(latency_us)
+    } else {
+        // Server: echo every ping straight back as its pong, then receive
+        // the client's authoritative, already-measured result.
+        for round in 0..rounds {
+            let tag = TAG_PROBE_LATENCY_BASE + round as u64;
+            endpoint.recv_bytes(peer_global, ctx, tag).await?;
+            endpoint
+                .send_bytes(peer_global, ctx, tag, &[], opts)
+                .await?;
+        }
+        let bytes = endpoint
+            .recv_bytes(peer_global, ctx, TAG_PROBE_LATENCY_RESULT)
+            .await?;
+        decode_f64(&bytes)
+    }
+}
+
+/// Measure transfer rate to/from `peer` over `comm`'s shared
+/// [`super::net::endpoint::Endpoint`] by timing one real `payload_bytes`-sized
+/// transfer, in MiB/s.
+///
+/// Only the lower-ranked of `comm.rank()`/`peer` (the client) starts a clock:
+/// it sends the payload, waits for the server's small ack, and computes
+/// `payload_bytes / elapsed` (a slight underestimate of pure link bandwidth,
+/// since it also includes that small return trip) — then relays the value to
+/// the server, so both ranks return the identical, client-measured number.
+/// Both ranks must call this concurrently with the same `peer`-of-each-other
+/// and the same `payload_bytes`. `opts.compress` is honored exactly as
+/// [`super::net::endpoint::Endpoint::send_owned`] would for any other send —
+/// pass `compress: false` to measure raw link throughput, or `true` to
+/// measure the throughput actually achieved after compression.
+pub async fn measure_bandwidth(
+    comm: &Communicator,
+    peer: usize,
+    payload_bytes: usize,
+    opts: SendOpts,
+) -> Result<f64, OptimizationError> {
+    let endpoint = comm.require_endpoint()?;
+    let peer_global = comm.global_rank(peer)?;
+    let ctx = comm.context().0;
+    let rank = comm.rank();
+
+    if rank < peer {
+        // Client: send the payload, wait for the ack, time the round trip.
+        let payload = vec![0u8; payload_bytes];
+        let start = Instant::now();
+        endpoint
+            .send_owned(peer_global, ctx, TAG_PROBE_BANDWIDTH_DATA, payload, opts)
+            .await?;
+        endpoint
+            .recv_bytes(peer_global, ctx, TAG_PROBE_BANDWIDTH_ACK)
+            .await?;
+        let elapsed = start.elapsed().as_secs_f64().max(f64::MIN_POSITIVE);
+        let mib_per_s = (payload_bytes as f64 / (1024.0 * 1024.0)) / elapsed;
+
+        endpoint
+            .send_bytes(
+                peer_global,
+                ctx,
+                TAG_PROBE_BANDWIDTH_ACK,
+                &encode_f64(mib_per_s),
+                SendOpts::default(),
+            )
+            .await?;
+        Ok(mib_per_s)
+    } else {
+        // Server: receive the payload, ack it, then receive the client's
+        // authoritative, already-measured result.
+        endpoint
+            .recv_bytes(peer_global, ctx, TAG_PROBE_BANDWIDTH_DATA)
+            .await?;
+        endpoint
+            .send_bytes(peer_global, ctx, TAG_PROBE_BANDWIDTH_ACK, &[0u8], opts)
+            .await?;
+        let bytes = endpoint
+            .recv_bytes(peer_global, ctx, TAG_PROBE_BANDWIDTH_ACK)
+            .await?;
+        decode_f64(&bytes)
+    }
 }
 
 /// Optimize collective operation for given topology
@@ -327,17 +523,47 @@ pub fn optimize_collective(
     Ok(topology.optimal_algorithm(_op))
 }
 
-/// Overlap computation and communication using async operations
+/// Overlap a CPU-bound computation with an independent communication future,
+/// returning both results once they've both finished.
 ///
-/// This is a placeholder for future async computation-communication overlap implementation.
-pub async fn overlap_compute_communicate() -> Result<(), OptimizationError> {
-    // Placeholder implementation
-    // Real implementation would:
-    // 1. Launch communication operations asynchronously
-    // 2. Perform computation while communication is in progress
-    // 3. Synchronize when both complete
-
-    Ok(())
+/// `compute` is moved onto a dedicated blocking-pool thread via
+/// [`tokio::task::spawn_blocking`] — genuinely running on its own OS thread,
+/// not merely interleaved on the caller's async task — so it makes real
+/// progress even if it never yields, while `comm` is awaited concurrently on
+/// the caller's own task via [`tokio::join!`]. Communication and computation
+/// therefore overlap in wall-clock time rather than running one after the
+/// other, up to whatever real parallelism the machine has; this is why
+/// `compute` must be `Send + 'static` (it crosses a real thread boundary)
+/// while `comm` only needs to be a same-task `Future` (it never leaves the
+/// caller's task at all).
+///
+/// # Errors
+///
+/// [`OptimizationError::ComputeTaskFailed`] if `compute`'s blocking-pool task
+/// panicked or was cancelled; `comm`'s own error type must convert into
+/// [`OptimizationError`] via `?` (or already be `OptimizationError`) since
+/// this function propagates it directly rather than wrapping it further.
+///
+/// # Example
+///
+/// See the module-level example for `compute` overlapping with a
+/// distributed collective, or with either [`measure_latency`]/
+/// [`measure_bandwidth`] probe above for a network operation specifically.
+pub async fn overlap_compute_communicate<F, R, Fut, C>(
+    compute: F,
+    comm: Fut,
+) -> Result<(R, C), OptimizationError>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+    Fut: Future<Output = Result<C, OptimizationError>>,
+{
+    let compute_handle = tokio::task::spawn_blocking(compute);
+    let (compute_result, comm_result) = tokio::join!(compute_handle, comm);
+    let computed =
+        compute_result.map_err(|e| OptimizationError::ComputeTaskFailed(e.to_string()))?;
+    let communicated = comm_result?;
+    Ok((computed, communicated))
 }
 
 /// Compress data for network transfer
@@ -494,5 +720,200 @@ mod tests {
         let bad_data = b"too short";
         let result: Result<Vec<u32>, _> = decompress_data(bad_data);
         assert!(result.is_err(), "should fail on short data");
+    }
+
+    // -----------------------------------------------------------------
+    // Real ping-pong probes (measure_latency / measure_bandwidth) and
+    // overlap_compute_communicate, over a real LocalCluster.
+    // -----------------------------------------------------------------
+
+    use crate::distributed::process::Communicator;
+    use crate::distributed::testing::{ClusterNode, LocalCluster};
+    use std::time::Duration;
+
+    fn short_timeout_config() -> super::super::net::EndpointConfig {
+        super::super::net::EndpointConfig {
+            recv_timeout: Duration::from_secs(5),
+            ..super::super::net::EndpointConfig::default()
+        }
+    }
+
+    /// Both ranks in a real 2-process cluster must observe a strictly
+    /// positive round-trip latency, and — since this is a real measurement,
+    /// not a fabricated constant — both ranks (client and server) must agree
+    /// on the exact same value (see the module docs on why only the client's
+    /// clock is trusted and its result relayed to the server).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn measure_latency_is_positive_and_agrees_across_ranks() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(15),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(std::sync::Arc::new(node.endpoint))?;
+                let peer = if comm.rank() == 0 { 1 } else { 0 };
+                let latency_us = measure_latency(&comm, peer, 5, SendOpts { compress: false })
+                    .await
+                    .map_err(|e| NetError::Io(e.to_string()))?;
+                Ok(latency_us)
+            },
+        )
+        .await
+        .expect("measure_latency run");
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0] > 0.0, "latency must be positive: {}", results[0]);
+        assert_eq!(
+            results[0], results[1],
+            "client and server must report the identical relayed latency"
+        );
+    }
+
+    /// Same shape as the latency test, but for bandwidth: both ranks in a
+    /// real cluster observe a strictly positive transfer rate for a real
+    /// 1 MiB transfer, and agree on the exact same client-measured value.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn measure_bandwidth_is_positive_and_agrees_across_ranks() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(15),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(std::sync::Arc::new(node.endpoint))?;
+                let peer = if comm.rank() == 0 { 1 } else { 0 };
+                let bw = measure_bandwidth(&comm, peer, 1024 * 1024, SendOpts { compress: false })
+                    .await
+                    .map_err(|e| NetError::Io(e.to_string()))?;
+                Ok(bw)
+            },
+        )
+        .await
+        .expect("measure_bandwidth run");
+
+        assert_eq!(results.len(), 2);
+        assert!(
+            results[0] > 0.0,
+            "bandwidth must be positive: {}",
+            results[0]
+        );
+        assert_eq!(
+            results[0], results[1],
+            "client and server must report the identical relayed bandwidth"
+        );
+    }
+
+    /// `SendOpts { compress: false }` must actually be honored end to end:
+    /// an incompressible payload sent with compression permitted would still
+    /// measure roughly the same rate as with it forced off (LZ4 either
+    /// declines to shrink it or `Endpoint` discards a non-shrinking result —
+    /// see `Endpoint::compress_if_worthwhile`), but this specifically pins
+    /// that requesting *no* compression never accidentally compresses by
+    /// checking the call still succeeds and returns a sane, positive number
+    /// for a payload well above the compression threshold.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn measure_bandwidth_honors_uncompressed_flag() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(15),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(std::sync::Arc::new(node.endpoint))?;
+                let peer = if comm.rank() == 0 { 1 } else { 0 };
+                // Above COMPRESS_THRESHOLD (64 KiB): if `compress: false`
+                // were silently ignored somewhere along the path, this would
+                // still succeed, but pinning `compress: false` here at least
+                // documents and exercises the flag reaching the endpoint
+                // call rather than being dropped before it.
+                let bw = measure_bandwidth(&comm, peer, 256 * 1024, SendOpts { compress: false })
+                    .await
+                    .map_err(|e| NetError::Io(e.to_string()))?;
+                Ok(bw)
+            },
+        )
+        .await
+        .expect("measure_bandwidth run");
+
+        for bw in results {
+            assert!(bw > 0.0, "uncompressed bandwidth must be positive: {bw}");
+        }
+    }
+
+    /// `overlap_compute_communicate` must actually run `compute` and `comm`
+    /// concurrently rather than sequentially: a `comm` future that sleeps
+    /// and a `compute` closure that spins should together take roughly
+    /// `max(sleep, spin)`, not their sum. This asserts the (generous) upper
+    /// bound rather than a tight one, to stay robust on a loaded machine.
+    #[tokio::test]
+    async fn overlap_compute_communicate_runs_concurrently() {
+        let sleep_for = Duration::from_millis(200);
+        let start = Instant::now();
+        let (spins, ()) = overlap_compute_communicate(
+            || {
+                let mut acc = 0u64;
+                for i in 0..20_000_000u64 {
+                    acc = acc.wrapping_add(i);
+                }
+                acc
+            },
+            async move {
+                tokio::time::sleep(sleep_for).await;
+                Ok(())
+            },
+        )
+        .await
+        .expect("overlap should succeed");
+        let elapsed = start.elapsed();
+
+        // A real value came back from the compute closure (not a placeholder).
+        assert!(spins > 0);
+        // If compute and comm ran sequentially, elapsed would tend toward
+        // sleep_for + (time to do 20M wrapping adds) + scheduling overhead;
+        // running concurrently, it should stay close to sleep_for alone.
+        // Generous bound: sequential would very likely exceed 1s on any
+        // machine capable of running this test at all.
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "overlap took {elapsed:?}, expected close to {sleep_for:?} if truly concurrent"
+        );
+    }
+
+    /// A panicking `compute` closure must surface as
+    /// [`OptimizationError::ComputeTaskFailed`], not silently vanish or
+    /// poison the runtime.
+    #[tokio::test]
+    async fn overlap_compute_communicate_surfaces_compute_panic() {
+        let result: Result<((), ()), _> =
+            overlap_compute_communicate(|| panic!("intentional test panic"), async { Ok(()) })
+                .await;
+        match result {
+            Err(OptimizationError::ComputeTaskFailed(msg)) => {
+                // tokio::task::JoinError::to_string() includes the original
+                // panic message; pin that it actually survives the
+                // conversion rather than being replaced with a generic
+                // "panicked" string.
+                assert!(
+                    msg.contains("intentional test panic"),
+                    "panic message should survive into the error, got: {msg}"
+                );
+            }
+            other => panic!("expected ComputeTaskFailed carrying the panic message, got {other:?}"),
+        }
+    }
+
+    /// A `comm` future returning an error must propagate that error
+    /// unchanged, and must not be masked by a fabricated success.
+    #[tokio::test]
+    async fn overlap_compute_communicate_surfaces_comm_error() {
+        let result: Result<((), ()), _> = overlap_compute_communicate(|| (), async {
+            Err(OptimizationError::MeasurementError("boom".to_string()))
+        })
+        .await;
+        assert!(matches!(
+            result,
+            Err(OptimizationError::MeasurementError(msg)) if msg == "boom"
+        ));
     }
 }

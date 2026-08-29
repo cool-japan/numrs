@@ -14,9 +14,7 @@
 
 use super::{NnResult, ReductionMode};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{
-    Array, Array1, Array2, ArrayView, ArrayView1, ArrayView2, Axis, ScalarOperand, Zip,
-};
+use scirs2_core::ndarray::{ArrayView1, ArrayView2, Axis, Zip};
 use scirs2_core::numeric::Float;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 

@@ -1,5 +1,6 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
+use serial_test::serial;
 
 /// This file contains more advanced property-based tests for the random module,
 /// focusing on:
@@ -85,6 +86,7 @@ fn test_standard_normal_conformance(samples: &Array<f64>) -> bool {
 }
 
 #[test]
+#[serial]
 fn test_normal_to_chi_square_relationship() {
     // A sum of k independent squared standard normal variables
     // follows a chi-square distribution with k degrees of freedom
@@ -128,6 +130,7 @@ fn test_normal_to_chi_square_relationship() {
 }
 
 #[test]
+#[serial]
 fn test_gamma_to_exponential_relationship() {
     // An exponential distribution with rate parameter λ
     // is a special case of gamma distribution with shape=1 and scale=1/λ
@@ -179,6 +182,7 @@ fn test_gamma_to_exponential_relationship() {
 }
 
 #[test]
+#[serial]
 fn test_binomial_to_normal_approximation() {
     // For large n and p not too close to 0 or 1,
     // binomial(n,p) ≈ normal(np, np(1-p))
@@ -237,6 +241,7 @@ fn test_binomial_to_normal_approximation() {
 }
 
 #[test]
+#[serial]
 fn test_studentt_to_normal_relation() {
     // As degrees of freedom increase, t-distribution approaches normal distribution
 
@@ -277,9 +282,20 @@ fn test_studentt_to_normal_relation() {
 }
 
 #[test]
+#[serial]
 fn test_uniform_sum_to_approximate_normal() {
     // By the Central Limit Theorem, sums of uniform random variables
     // approximate a normal distribution
+    //
+    // W6-TESTS flake audit: this was flagged as a candidate flake, but it
+    // is already fully deterministic -- `set_seed` below (load-bearing: do
+    // not remove) drives a single-threaded, mutex-guarded global RNG (see
+    // `random::distributions::RandomState`), `#[serial]` protects it under
+    // a `cargo test` fallback (no per-test process isolation there, unlike
+    // nextest), and the KS-test critical value in
+    // `test_standard_normal_conformance` above is already a generous 99%
+    // confidence bound. See the W6-TESTS report for the 10/10 verification
+    // run; left behaviorally unchanged.
 
     let num_uniforms = 12; // Sum of 12 uniform(0,1) is close to normal(6,1)
 
@@ -336,6 +352,7 @@ fn test_uniform_sum_to_approximate_normal() {
 }
 
 #[test]
+#[serial]
 fn test_random_distribution_edge_cases() {
     // Test edge cases for various distributions
 
@@ -384,6 +401,7 @@ fn test_random_distribution_edge_cases() {
 }
 
 #[test]
+#[serial]
 fn test_distribution_independence() {
     // Test that samples from different distributions are independent
     // by checking for correlation between pairs

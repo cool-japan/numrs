@@ -68,10 +68,11 @@ impl StableDecompositions {
             // Swap columns if needed
             if pivot_col != k {
                 // Swap columns in R
+                let r_arr = r.array_mut();
                 for i in 0..m {
-                    let temp = r.get(&[i, k])?;
-                    r.set(&[i, k], r.get(&[i, pivot_col])?)?;
-                    r.set(&[i, pivot_col], temp)?;
+                    let temp = r_arr[[i, k]];
+                    r_arr[[i, k]] = r_arr[[i, pivot_col]];
+                    r_arr[[i, pivot_col]] = temp;
                 }
 
                 // Update permutation and norms
@@ -83,23 +84,31 @@ impl StableDecompositions {
             let x_k = Self::extract_column_slice(&r, k, k, m)?;
             let (v, beta) = Self::householder_vector(&x_k)?;
 
-            // Apply reflection to R (from column k onwards)
+            // Apply reflection to R (from column k onwards).
+            // `extract_column_slice` takes `&Array<T>`, so each column's
+            // read has to happen before we can hold a `&mut` handle for its
+            // write-back; hoisting `array_mut()` per `j` (rather than
+            // refactoring that shared helper, which QR and SVD both use)
+            // still collapses the write-back from one `Arc::make_mut` per
+            // element down to one per column.
             for j in k..n {
                 let x_j = Self::extract_column_slice(&r, j, k, m)?;
                 let y_j = Self::apply_householder(&x_j, &v, beta)?;
 
+                let r_arr = r.array_mut();
                 for (idx, &val) in y_j.iter().enumerate() {
-                    r.set(&[k + idx, j], val)?;
+                    r_arr[[k + idx, j]] = val;
                 }
             }
 
-            // Apply reflection to Q
+            // Apply reflection to Q (same per-column hoist rationale as R above).
             for j in 0..m {
                 let x_j = Self::extract_column_slice(&q, j, k, m)?;
                 let y_j = Self::apply_householder(&x_j, &v, beta)?;
 
+                let q_arr = q.array_mut();
                 for (idx, &val) in y_j.iter().enumerate() {
-                    q.set(&[k + idx, j], val)?;
+                    q_arr[[k + idx, j]] = val;
                 }
             }
 
@@ -178,35 +187,41 @@ impl StableDecompositions {
         let mut l = Array::zeros(&[n, n]);
         let mut is_positive_definite = true;
 
-        for i in 0..n {
-            // Compute diagonal element
-            let mut sum = T::zero();
-            for k in 0..i {
-                let l_ik = l.get(&[i, k])?;
-                sum = sum + l_ik * l_ik;
-            }
-
-            let a_ii = a.get(&[i, i])?;
-            let l_ii_sq = a_ii - sum;
-
-            if l_ii_sq <= T::zero() {
-                is_positive_definite = false;
-                break;
-            }
-
-            let l_ii = l_ii_sq.sqrt();
-            l.set(&[i, i], l_ii)?;
-
-            // Compute sub-diagonal elements
-            for j in (i + 1)..n {
+        {
+            // Bulk-acquire once: every iteration reads previously-written
+            // entries of `l` and writes the next one via direct calls only,
+            // so a single hoisted handle covers the whole factorization.
+            let l_arr = l.array_mut();
+            'outer: for i in 0..n {
+                // Compute diagonal element
                 let mut sum = T::zero();
                 for k in 0..i {
-                    sum = sum + l.get(&[i, k])? * l.get(&[j, k])?;
+                    let l_ik = l_arr[[i, k]];
+                    sum = sum + l_ik * l_ik;
                 }
 
-                let a_ji = a.get(&[j, i])?;
-                let l_ji = (a_ji - sum) / l_ii;
-                l.set(&[j, i], l_ji)?;
+                let a_ii = a.get(&[i, i])?;
+                let l_ii_sq = a_ii - sum;
+
+                if l_ii_sq <= T::zero() {
+                    is_positive_definite = false;
+                    break 'outer;
+                }
+
+                let l_ii = l_ii_sq.sqrt();
+                l_arr[[i, i]] = l_ii;
+
+                // Compute sub-diagonal elements
+                for j in (i + 1)..n {
+                    let mut sum = T::zero();
+                    for k in 0..i {
+                        sum = sum + l_arr[[i, k]] * l_arr[[j, k]];
+                    }
+
+                    let a_ji = a.get(&[j, i])?;
+                    let l_ji = (a_ji - sum) / l_ii;
+                    l_arr[[j, i]] = l_ji;
+                }
             }
         }
 
@@ -255,13 +270,22 @@ impl StableDecompositions {
         let mut p: Vec<usize> = (0..n).collect();
         let mut a_work = a.clone();
 
+        // Bulk-acquire all three buffers once for the whole factorization:
+        // `a_work` is read and written throughout via direct calls only
+        // (self-referential), while `l` and `d` are write-only from here.
+        // Three independent `&mut` borrows of three distinct `Array`s don't
+        // conflict with each other.
+        let a_arr = a_work.array_mut();
+        let l_arr = l.array_mut();
+        let d_arr = d.array_mut();
+
         for k in 0..n {
             // Find pivot
             let mut max_val = T::zero();
             let mut pivot_idx = k;
 
             for i in k..n {
-                let abs_val = num_traits::Float::abs(a_work.get(&[i, k])?);
+                let abs_val = num_traits::Float::abs(a_arr[[i, k]]);
                 if abs_val > max_val {
                     max_val = abs_val;
                     pivot_idx = i;
@@ -272,21 +296,21 @@ impl StableDecompositions {
             if pivot_idx != k {
                 // Swap in working matrix
                 for j in 0..n {
-                    let temp = a_work.get(&[k, j])?;
-                    a_work.set(&[k, j], a_work.get(&[pivot_idx, j])?)?;
-                    a_work.set(&[pivot_idx, j], temp)?;
+                    let temp = a_arr[[k, j]];
+                    a_arr[[k, j]] = a_arr[[pivot_idx, j]];
+                    a_arr[[pivot_idx, j]] = temp;
 
-                    let temp = a_work.get(&[j, k])?;
-                    a_work.set(&[j, k], a_work.get(&[j, pivot_idx])?)?;
-                    a_work.set(&[j, pivot_idx], temp)?;
+                    let temp = a_arr[[j, k]];
+                    a_arr[[j, k]] = a_arr[[j, pivot_idx]];
+                    a_arr[[j, pivot_idx]] = temp;
                 }
 
                 p.swap(k, pivot_idx);
             }
 
             // Extract diagonal element
-            let d_kk = a_work.get(&[k, k])?;
-            d.set(&[k, k], d_kk)?;
+            let d_kk = a_arr[[k, k]];
+            d_arr[[k, k]] = d_kk;
 
             if d_kk == T::zero() {
                 continue; // Skip singular case
@@ -294,13 +318,13 @@ impl StableDecompositions {
 
             // Update submatrix
             for i in (k + 1)..n {
-                let l_ik = a_work.get(&[i, k])? / d_kk;
-                l.set(&[i, k], l_ik)?;
+                let l_ik = a_arr[[i, k]] / d_kk;
+                l_arr[[i, k]] = l_ik;
 
                 for j in (k + 1)..n {
-                    let old_val = a_work.get(&[i, j])?;
-                    let update = l_ik * a_work.get(&[k, j])?;
-                    a_work.set(&[i, j], old_val - update)?;
+                    let old_val = a_arr[[i, j]];
+                    let update = l_ik * a_arr[[k, j]];
+                    a_arr[[i, j]] = old_val - update;
                 }
             }
         }
@@ -416,7 +440,7 @@ impl StableDecompositions {
         for row in vt_cols {
             vt_data.extend(row);
         }
-        let vt = Array::from_vec(vt_data).reshape(&[n, n]);
+        let vt = Array::from_vec_shape(vt_data, &[n, n])?;
 
         // Compute U = A * V * S^(-1)
         let mut u_data = Vec::with_capacity(m * min_mn);
@@ -433,7 +457,7 @@ impl StableDecompositions {
                 }
             }
         }
-        let u = Array::from_vec(u_data).reshape(&[m, min_mn]);
+        let u = Array::from_vec_shape(u_data, &[m, min_mn])?;
 
         // Estimate condition number and rank
         let s_max = s_sorted[0];
@@ -501,13 +525,22 @@ impl StableDecompositions {
         let mut alpha = Vec::<T>::with_capacity(min_mn);
         let mut beta = Vec::<T>::with_capacity(min_mn);
 
+        // Bulk-acquire all three buffers once for the entire bidiagonalization
+        // sweep: every access below is a direct `.get()`/`.set()` pair (the
+        // Householder helpers operate on plain `Vec<T>`, never on `&Array<T>`),
+        // so nothing here forces re-acquiring the handle per column/row the
+        // way `qr_pivoted`'s shared `extract_column_slice` helper does.
+        let a_arr = a_work.array_mut();
+        let ub_arr = ub.array_mut();
+        let vb_arr = vb.array_mut();
+
         for k in 0..min_mn {
             // --- Left Householder to zero out a_work[k+1..m, k] ---
             {
                 let col_len = m - k;
                 let mut x = Vec::<T>::with_capacity(col_len);
                 for i in k..m {
-                    x.push(a_work.get(&[i, k])?);
+                    x.push(a_arr[[i, k]]);
                 }
 
                 let (v, beta_h) = Self::householder_vector(&x)?;
@@ -516,11 +549,11 @@ impl StableDecompositions {
                 for j in k..n {
                     let mut col_j = Vec::<T>::with_capacity(col_len);
                     for i in k..m {
-                        col_j.push(a_work.get(&[i, j])?);
+                        col_j.push(a_arr[[i, j]]);
                     }
                     let col_j_new = Self::apply_householder(&col_j, &v, beta_h)?;
                     for (offset, &val) in col_j_new.iter().enumerate() {
-                        a_work.set(&[k + offset, j], val)?;
+                        a_arr[[k + offset, j]] = val;
                     }
                 }
 
@@ -531,16 +564,16 @@ impl StableDecompositions {
                 for row in 0..m {
                     let mut row_slice = Vec::<T>::with_capacity(col_len);
                     for col in k..m {
-                        row_slice.push(ub.get(&[row, col])?);
+                        row_slice.push(ub_arr[[row, col]]);
                     }
                     let row_new = Self::apply_householder(&row_slice, &v, beta_h)?;
                     for (offset, &val) in row_new.iter().enumerate() {
-                        ub.set(&[row, k + offset], val)?;
+                        ub_arr[[row, k + offset]] = val;
                     }
                 }
 
                 // Record B[k,k] = a_work[k,k] after left reflection.
-                alpha.push(a_work.get(&[k, k])?);
+                alpha.push(a_arr[[k, k]]);
             }
 
             // --- Right Householder to zero out a_work[k, k+2..n] ---
@@ -548,7 +581,7 @@ impl StableDecompositions {
                 let row_len = n - k - 1;
                 let mut x = Vec::<T>::with_capacity(row_len);
                 for j in (k + 1)..n {
-                    x.push(a_work.get(&[k, j])?);
+                    x.push(a_arr[[k, j]]);
                 }
 
                 let (v, beta_h) = Self::householder_vector(&x)?;
@@ -557,11 +590,11 @@ impl StableDecompositions {
                 for i in k..m {
                     let mut row_slice = Vec::<T>::with_capacity(row_len);
                     for j in (k + 1)..n {
-                        row_slice.push(a_work.get(&[i, j])?);
+                        row_slice.push(a_arr[[i, j]]);
                     }
                     let row_new = Self::apply_householder(&row_slice, &v, beta_h)?;
                     for (offset, &val) in row_new.iter().enumerate() {
-                        a_work.set(&[i, k + 1 + offset], val)?;
+                        a_arr[[i, k + 1 + offset]] = val;
                     }
                 }
 
@@ -569,16 +602,16 @@ impl StableDecompositions {
                 for row in 0..n {
                     let mut row_slice = Vec::<T>::with_capacity(row_len);
                     for col in (k + 1)..n {
-                        row_slice.push(vb.get(&[row, col])?);
+                        row_slice.push(vb_arr[[row, col]]);
                     }
                     let row_new = Self::apply_householder(&row_slice, &v, beta_h)?;
                     for (offset, &val) in row_new.iter().enumerate() {
-                        vb.set(&[row, k + 1 + offset], val)?;
+                        vb_arr[[row, k + 1 + offset]] = val;
                     }
                 }
 
                 // Record B[k, k+1] = a_work[k, k+1] after right reflection.
-                beta.push(a_work.get(&[k, k + 1])?);
+                beta.push(a_arr[[k, k + 1]]);
             } else {
                 beta.push(T::zero());
             }
@@ -596,27 +629,35 @@ impl StableDecompositions {
         //   =>  U = ub · U_B,  V^T = V_B^T · vb^T.
         // -----------------------------------------------------------------------
 
-        // Build the bidiagonal B as an m×n Array.
+        // Build the bidiagonal B as an m×n Array (write-only).
         let mut b_mat = Array::zeros(&[m, n]);
-        for k in 0..min_mn {
-            b_mat.set(&[k, k], alpha[k])?;
-            if k + 1 < n {
-                b_mat.set(&[k, k + 1], beta[k])?;
+        {
+            let b_arr = b_mat.array_mut();
+            for k in 0..min_mn {
+                b_arr[[k, k]] = alpha[k];
+                if k + 1 < n {
+                    b_arr[[k, k + 1]] = beta[k];
+                }
             }
         }
 
         // Compute SVD of B via Jacobi eigendecomposition of BᵀB.
         let b_svd = Self::svd_small_stable(&b_mat)?;
 
-        // full_u = ub · b_svd.u  (m × min_mn)
+        // full_u = ub · b_svd.u  (m × min_mn). Bulk-acquire once: the
+        // construction pass is write-only (reads come from `ub`/`b_svd.u`),
+        // and the Modified-Gram-Schmidt pass right after it is
+        // self-referential direct `.get()`/`.set()` on `full_u` alone, so one
+        // handle covers both passes.
         let mut full_u = Array::zeros(&[m, min_mn]);
+        let fu_arr = full_u.array_mut();
         for i in 0..m {
             for j in 0..min_mn {
                 let mut s = T::zero();
                 for k in 0..m {
                     s = s + ub.get(&[i, k])? * b_svd.u.get(&[k, j])?;
                 }
-                full_u.set(&[i, j], s)?;
+                fu_arr[[i, j]] = s;
             }
         }
         // Re-orthogonalize full_u columns via Modified Gram-Schmidt (MGS).
@@ -626,64 +667,64 @@ impl StableDecompositions {
             // Normalize column j.
             let mut norm_sq = T::zero();
             for i in 0..m {
-                let v = full_u.get(&[i, j])?;
+                let v = fu_arr[[i, j]];
                 norm_sq = norm_sq + v * v;
             }
             let norm = norm_sq.sqrt();
             if norm > eps_orth {
                 for i in 0..m {
-                    let v = full_u.get(&[i, j])?;
-                    full_u.set(&[i, j], v / norm)?;
+                    fu_arr[[i, j]] = fu_arr[[i, j]] / norm;
                 }
             }
             // Subtract projection of column j from subsequent columns.
             for j2 in (j + 1)..min_mn {
                 let mut dot = T::zero();
                 for i in 0..m {
-                    dot = dot + full_u.get(&[i, j])? * full_u.get(&[i, j2])?;
+                    dot = dot + fu_arr[[i, j]] * fu_arr[[i, j2]];
                 }
                 for i in 0..m {
-                    let old = full_u.get(&[i, j2])?;
-                    let proj = full_u.get(&[i, j])?;
-                    full_u.set(&[i, j2], old - dot * proj)?;
+                    let old = fu_arr[[i, j2]];
+                    let proj = fu_arr[[i, j]];
+                    fu_arr[[i, j2]] = old - dot * proj;
                 }
             }
         }
 
-        // full_vt = b_svd.vt · vb^T  (min_mn × n)
+        // full_vt = b_svd.vt · vb^T  (min_mn × n). Same bulk-acquisition
+        // rationale as `full_u` above.
         let mut full_vt = Array::zeros(&[min_mn, n]);
+        let fvt_arr = full_vt.array_mut();
         for i in 0..min_mn {
             for j in 0..n {
                 let mut s = T::zero();
                 for k in 0..n {
                     s = s + b_svd.vt.get(&[i, k])? * vb.get(&[j, k])?;
                 }
-                full_vt.set(&[i, j], s)?;
+                fvt_arr[[i, j]] = s;
             }
         }
         // Re-orthogonalize rows of full_vt via MGS.
         for i in 0..min_mn {
             let mut norm_sq = T::zero();
             for j in 0..n {
-                let v = full_vt.get(&[i, j])?;
+                let v = fvt_arr[[i, j]];
                 norm_sq = norm_sq + v * v;
             }
             let norm = norm_sq.sqrt();
             if norm > eps_orth {
                 for j in 0..n {
-                    let v = full_vt.get(&[i, j])?;
-                    full_vt.set(&[i, j], v / norm)?;
+                    fvt_arr[[i, j]] = fvt_arr[[i, j]] / norm;
                 }
             }
             for i2 in (i + 1)..min_mn {
                 let mut dot = T::zero();
                 for j in 0..n {
-                    dot = dot + full_vt.get(&[i, j])? * full_vt.get(&[i2, j])?;
+                    dot = dot + fvt_arr[[i, j]] * fvt_arr[[i2, j]];
                 }
                 for j in 0..n {
-                    let old = full_vt.get(&[i2, j])?;
-                    let proj = full_vt.get(&[i, j])?;
-                    full_vt.set(&[i2, j], old - dot * proj)?;
+                    let old = fvt_arr[[i2, j]];
+                    let proj = fvt_arr[[i, j]];
+                    fvt_arr[[i2, j]] = old - dot * proj;
                 }
             }
         }
@@ -764,7 +805,7 @@ impl StableDecompositions {
 
         if n == 1 {
             let eigenvalue = a.get(&[0, 0])?;
-            let eigenvector = Array::from_vec(vec![T::one()]).reshape(&[1, 1]);
+            let eigenvector = Array::from_vec_shape(vec![T::one()], &[1, 1])?;
             return Ok((vec![eigenvalue], eigenvector));
         }
 
@@ -1082,12 +1123,17 @@ impl StableDecompositions {
 
         let eigenvalues: Vec<T> = order.iter().map(|&k| d[k]).collect();
 
-        let mut q_sorted = Array::zeros(&[n, n]);
+        // Build the reordered eigenvector matrix as a flat row-major `Vec`
+        // and hand it to `from_vec_shape` in one shot: cheaper than a
+        // `zeros()` allocation followed by n^2 bounds-checked `Array::set`
+        // calls, and avoids the `Arc::make_mut` unshare check entirely.
+        let mut q_data = vec![T::zero(); n * n];
         for (new_col, &old_col) in order.iter().enumerate() {
             for row in 0..n {
-                q_sorted.set(&[row, new_col], v_v[ai!(row, old_col)])?;
+                q_data[row * n + new_col] = v_v[ai!(row, old_col)];
             }
         }
+        let q_sorted = Array::from_vec_shape(q_data, &[n, n])?;
 
         Ok((eigenvalues, q_sorted))
     }
@@ -1249,9 +1295,13 @@ impl StableDecompositions {
         let n = shape[1];
         let mut result = Array::zeros(&[n, m]);
 
+        // `result` is write-only here (every read is from the untouched
+        // input `a`), so one bulk unshare covers the whole O(m*n) pass
+        // instead of paying `Array::set`'s `Arc::make_mut` per element.
+        let out = result.array_mut();
         for i in 0..m {
             for j in 0..n {
-                result.set(&[j, i], a.get(&[i, j])?)?;
+                out[[j, i]] = a.get(&[i, j])?;
             }
         }
 
@@ -1277,15 +1327,17 @@ impl StableDecompositions {
 
         let mut c = Array::zeros(&[m, n]);
 
-        // Simple matrix multiplication for stable decompositions
-        // Uses Array::matmul which handles the multiplication internally
+        // Simple matrix multiplication for stable decompositions.
+        // `c` is write-only (every read is from the immutable `a`/`b`
+        // inputs), so one bulk unshare covers the whole O(m*n*k) pass.
+        let out = c.array_mut();
         for i in 0..m {
             for j in 0..n {
                 let mut sum = T::zero();
                 for l in 0..k {
                     sum = sum + a.get(&[i, l])? * b.get(&[l, j])?;
                 }
-                c.set(&[i, j], sum)?;
+                out[[i, j]] = sum;
             }
         }
 
@@ -1325,445 +1377,5 @@ pub struct SVDStableResult<T: Clone> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use approx::assert_relative_eq;
-
-    #[test]
-    fn test_qr_pivoted() {
-        let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
-
-        let result = StableDecompositions::qr_pivoted(&a).expect("QR pivoted should succeed");
-
-        // Verify dimensions
-        assert_eq!(result.q.shape(), vec![2, 2]);
-        assert_eq!(result.r.shape(), vec![2, 3]);
-        assert_eq!(result.p.shape(), vec![3]);
-
-        // Verify Q is orthogonal (Q^T * Q = I)
-        let qt = StableDecompositions::transpose(&result.q).expect("transpose should succeed");
-        let qtq = StableDecompositions::matrix_multiply(&qt, &result.q)
-            .expect("matrix multiply should succeed");
-
-        for i in 0..2 {
-            for j in 0..2 {
-                let expected = if i == j { 1.0 } else { 0.0 };
-                assert_relative_eq!(
-                    qtq.get(&[i, j]).expect("valid index"),
-                    expected,
-                    epsilon = 1e-10
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_cholesky_stable_positive_definite() {
-        // Create a positive definite matrix
-        let a = Array::from_vec(vec![4.0, 2.0, 2.0, 3.0]).reshape(&[2, 2]);
-
-        let result = StableDecompositions::cholesky_stable(&a).expect("Cholesky should succeed");
-
-        assert!(result.is_positive_definite);
-        assert!(!result.pivoting_used);
-
-        // Verify L * L^T = A
-        let lt = StableDecompositions::transpose(&result.l).expect("transpose should succeed");
-        let llt = StableDecompositions::matrix_multiply(&result.l, &lt)
-            .expect("matrix multiply should succeed");
-
-        for i in 0..2 {
-            for j in 0..2 {
-                assert_relative_eq!(
-                    llt.get(&[i, j]).expect("valid index"),
-                    a.get(&[i, j]).expect("valid index"),
-                    epsilon = 1e-10
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_symmetric_eigendecomposition_2x2() {
-        let a = Array::from_vec(vec![3.0, 1.0, 1.0, 3.0]).reshape(&[2, 2]);
-
-        let (eigenvalues, eigenvectors) = StableDecompositions::symmetric_eigendecomposition(&a)
-            .expect("eigendecomposition should succeed");
-
-        assert_eq!(eigenvalues.len(), 2);
-        assert_eq!(eigenvectors.shape(), vec![2, 2]);
-
-        // For this matrix, eigenvalues should be 4 and 2
-        let mut sorted_eigenvalues = eigenvalues.clone();
-        sorted_eigenvalues.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-
-        assert_relative_eq!(sorted_eigenvalues[0], 4.0, epsilon = 1e-10);
-        assert_relative_eq!(sorted_eigenvalues[1], 2.0, epsilon = 1e-10);
-    }
-
-    #[test]
-    fn test_svd_stable_small() {
-        let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-
-        let result = StableDecompositions::svd_stable(&a).expect("SVD should succeed");
-
-        // Verify dimensions
-        assert_eq!(result.u.shape(), vec![2, 2]);
-        assert_eq!(result.s.shape(), vec![2]);
-        assert_eq!(result.vt.shape(), vec![2, 2]);
-
-        // Verify singular values are non-negative and sorted
-        let s_data = result.s.to_vec();
-        assert!(s_data[0] >= s_data[1]);
-        assert!(s_data[1] >= 0.0);
-    }
-
-    #[test]
-    fn test_householder_vector() {
-        let x = vec![1.0, 2.0, 3.0];
-        let (v, beta) =
-            StableDecompositions::householder_vector(&x).expect("householder should succeed");
-
-        assert_eq!(v.len(), 3);
-        assert!(beta >= 0.0);
-
-        // Verify that applying the Householder reflection gives correct result
-        let result = StableDecompositions::apply_householder(&x, &v, beta)
-            .expect("apply householder should succeed");
-
-        // First component should have the opposite sign and same magnitude as original norm
-        let x_norm = (1.0 + 4.0 + 9.0_f64).sqrt();
-        assert_relative_eq!(result[0].abs(), x_norm, epsilon = 1e-10);
-
-        // Other components should be zero
-        assert_relative_eq!(result[1], 0.0, epsilon = 1e-10);
-        assert_relative_eq!(result[2], 0.0, epsilon = 1e-10);
-    }
-
-    // -------------------------------------------------------------------------
-    // Tests for the new full-size implementations
-    // -------------------------------------------------------------------------
-
-    /// Helper: compute ||A·v - λ·v||₂ for an eigenpair.
-    fn eigenpair_residual(a: &Array<f64>, lambda: f64, v: &[f64]) -> f64 {
-        let n = v.len();
-        let mut res = 0.0_f64;
-        for i in 0..n {
-            let mut av_i = 0.0_f64;
-            for j in 0..n {
-                av_i += a.get(&[i, j]).expect("valid index") * v[j];
-            }
-            let diff = av_i - lambda * v[i];
-            res += diff * diff;
-        }
-        res.sqrt()
-    }
-
-    /// Helper: Frobenius norm ||A||_F.
-    fn frob_norm(a: &Array<f64>, rows: usize, cols: usize) -> f64 {
-        let mut s = 0.0_f64;
-        for i in 0..rows {
-            for j in 0..cols {
-                let v = a.get(&[i, j]).expect("valid index");
-                s += v * v;
-            }
-        }
-        s.sqrt()
-    }
-
-    #[test]
-    fn test_symmetric_eigen_4x4() {
-        // Build a known real symmetric 4×4 matrix:
-        //   A = Lᵀ·L where L is lower triangular, so A is positive definite.
-        // Values chosen so eigenvalues are well-separated.
-        #[rustfmt::skip]
-        let data: Vec<f64> = vec![
-             4.0, 2.0, 1.0, 0.5,
-             2.0, 5.0, 2.0, 1.0,
-             1.0, 2.0, 6.0, 2.0,
-             0.5, 1.0, 2.0, 7.0,
-        ];
-        let a = Array::from_vec(data).reshape(&[4, 4]);
-
-        let (eigenvalues, eigenvectors) = StableDecompositions::symmetric_eigendecomposition(&a)
-            .expect("eigendecomposition should succeed");
-
-        let n = 4;
-        assert_eq!(eigenvalues.len(), n);
-        assert_eq!(eigenvectors.shape(), vec![n, n]);
-
-        // Verify Av = λv  and  |vᵢᵀ·vⱼ| ≈ δᵢⱼ
-        for col in 0..n {
-            let lambda = eigenvalues[col];
-            let v: Vec<f64> = (0..n)
-                .map(|r| eigenvectors.get(&[r, col]).expect("valid"))
-                .collect();
-
-            // Residual ||Av - λv|| < 1e-6
-            let res = eigenpair_residual(&a, lambda, &v);
-            assert!(
-                res < 1e-6,
-                "eigenpair residual {} for eigenvalue {} is too large",
-                res,
-                lambda
-            );
-
-            // Orthogonality of distinct eigenvectors
-            for col2 in (col + 1)..n {
-                let v2: Vec<f64> = (0..n)
-                    .map(|r| eigenvectors.get(&[r, col2]).expect("valid"))
-                    .collect();
-                let dot: f64 = v.iter().zip(v2.iter()).map(|(a, b)| a * b).sum();
-                assert!(
-                    dot.abs() < 1e-6,
-                    "eigenvectors {} and {} not orthogonal: dot = {}",
-                    col,
-                    col2,
-                    dot
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_symmetric_eigen_5x5() {
-        // 5×5 symmetric matrix: Hilbert-like, known to be positive definite.
-        let n = 5usize;
-        let mut data = vec![0.0_f64; n * n];
-        for i in 0..n {
-            for j in 0..n {
-                data[i * n + j] = 1.0 / (1.0 + (i + j) as f64);
-            }
-        }
-        // Make strictly diagonally dominant to guarantee positive definiteness.
-        for i in 0..n {
-            let mut row_sum = 0.0_f64;
-            for j in 0..n {
-                if j != i {
-                    row_sum += data[i * n + j].abs();
-                }
-            }
-            data[i * n + i] = row_sum + 2.0;
-        }
-        let a = Array::from_vec(data).reshape(&[n, n]);
-
-        let (eigenvalues, eigenvectors) = StableDecompositions::symmetric_eigendecomposition(&a)
-            .expect("eigendecomposition should succeed");
-
-        assert_eq!(eigenvalues.len(), n);
-
-        for col in 0..n {
-            let lambda = eigenvalues[col];
-            let v: Vec<f64> = (0..n)
-                .map(|r| eigenvectors.get(&[r, col]).expect("valid"))
-                .collect();
-
-            let res = eigenpair_residual(&a, lambda, &v);
-            assert!(
-                res < 1e-5,
-                "5×5 eigenpair residual {} for eigenvalue {} is too large",
-                res,
-                lambda
-            );
-
-            for col2 in (col + 1)..n {
-                let v2: Vec<f64> = (0..n)
-                    .map(|r| eigenvectors.get(&[r, col2]).expect("valid"))
-                    .collect();
-                let dot: f64 = v.iter().zip(v2.iter()).map(|(a, b)| a * b).sum();
-                assert!(
-                    dot.abs() < 1e-5,
-                    "5×5 eigenvectors {} and {} not orthogonal: dot = {}",
-                    col,
-                    col2,
-                    dot
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_svd_bidiagonal_4x4() {
-        // 4×4 non-symmetric matrix (thin, well-conditioned).
-        #[rustfmt::skip]
-        let data: Vec<f64> = vec![
-            1.0, 2.0, 3.0, 4.0,
-            5.0, 6.0, 7.0, 8.0,
-            9.0, 1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0, 7.0,
-        ];
-        let a = Array::from_vec(data).reshape(&[4, 4]);
-
-        // svd_stable dispatches to svd_bidiagonal for min_mn > 4;
-        // for 4×4 it goes to svd_small_stable (min_mn==4 uses the <=4 path).
-        // We call svd_bidiagonal directly to test the implementation.
-        let result =
-            StableDecompositions::svd_bidiagonal(&a).expect("SVD bidiagonal should succeed");
-
-        let m = 4usize;
-        let n = 4usize;
-        let k = m.min(n);
-
-        assert_eq!(result.u.shape(), vec![m, k]);
-        assert_eq!(result.s.shape(), vec![k]);
-        assert_eq!(result.vt.shape(), vec![k, n]);
-
-        // Verify A ≈ U · diag(σ) · Vᵀ
-        let mut recon = Array::zeros(&[m, n]);
-        for i in 0..m {
-            for j in 0..n {
-                let mut val = 0.0_f64;
-                for l in 0..k {
-                    val += result.u.get(&[i, l]).expect("u")
-                        * result.s.get(&[l]).expect("s")
-                        * result.vt.get(&[l, j]).expect("vt");
-                }
-                recon.set(&[i, j], val).expect("set");
-            }
-        }
-        let err = frob_norm(&recon, m, n) + {
-            // compute || A - recon ||_F
-            let mut diff_sq = 0.0_f64;
-            for i in 0..m {
-                for j in 0..n {
-                    let d = a.get(&[i, j]).expect("a") - recon.get(&[i, j]).expect("recon");
-                    diff_sq += d * d;
-                }
-            }
-            diff_sq.sqrt() - frob_norm(&recon, m, n)
-        };
-        // Just compute the Frobenius norm of the difference directly.
-        let mut diff_frob = 0.0_f64;
-        for i in 0..m {
-            for j in 0..n {
-                let d = a.get(&[i, j]).expect("a") - recon.get(&[i, j]).expect("recon");
-                diff_frob += d * d;
-            }
-        }
-        diff_frob = diff_frob.sqrt();
-        let _ = err;
-        assert!(
-            diff_frob < 1e-6,
-            "SVD 4×4 reconstruction error ||A - UΣVᵀ||_F = {} is too large",
-            diff_frob
-        );
-
-        // U orthogonality: Uᵀ·U ≈ I_k
-        for i in 0..k {
-            for j in 0..k {
-                let mut dot = 0.0_f64;
-                for r in 0..m {
-                    dot += result.u.get(&[r, i]).expect("u") * result.u.get(&[r, j]).expect("u");
-                }
-                let expected = if i == j { 1.0 } else { 0.0 };
-                assert!(
-                    (dot - expected).abs() < 1e-6,
-                    "U not orthogonal at ({},{}) = {}",
-                    i,
-                    j,
-                    dot
-                );
-            }
-        }
-
-        // Vᵀ orthogonality: Vᵀ·V = Vᵀ·(Vᵀ)ᵀ ≈ I_k
-        for i in 0..k {
-            for j in 0..k {
-                let mut dot = 0.0_f64;
-                for c in 0..n {
-                    dot +=
-                        result.vt.get(&[i, c]).expect("vt") * result.vt.get(&[j, c]).expect("vt");
-                }
-                let expected = if i == j { 1.0 } else { 0.0 };
-                assert!(
-                    (dot - expected).abs() < 1e-6,
-                    "Vᵀ rows not orthogonal at ({},{}) = {}",
-                    i,
-                    j,
-                    dot
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_svd_bidiagonal_3x5() {
-        // 3×5 rectangular matrix.
-        #[rustfmt::skip]
-        let data: Vec<f64> = vec![
-            1.0, 2.0, 3.0, 4.0, 5.0,
-            6.0, 7.0, 8.0, 9.0, 1.0,
-            2.0, 3.0, 4.0, 5.0, 6.0,
-        ];
-        let a = Array::from_vec(data).reshape(&[3, 5]);
-
-        let result =
-            StableDecompositions::svd_bidiagonal(&a).expect("SVD bidiagonal 3x5 should succeed");
-
-        let m = 3usize;
-        let n = 5usize;
-        let k = m.min(n); // = 3
-
-        assert_eq!(result.u.shape(), vec![m, k]);
-        assert_eq!(result.s.shape(), vec![k]);
-        assert_eq!(result.vt.shape(), vec![k, n]);
-
-        // Verify A ≈ U · diag(σ) · Vᵀ
-        let mut diff_frob = 0.0_f64;
-        for i in 0..m {
-            for j in 0..n {
-                let mut val = 0.0_f64;
-                for l in 0..k {
-                    val += result.u.get(&[i, l]).expect("u")
-                        * result.s.get(&[l]).expect("s")
-                        * result.vt.get(&[l, j]).expect("vt");
-                }
-                let d = a.get(&[i, j]).expect("a") - val;
-                diff_frob += d * d;
-            }
-        }
-        diff_frob = diff_frob.sqrt();
-        assert!(
-            diff_frob < 1e-6,
-            "SVD 3×5 reconstruction error ||A - UΣVᵀ||_F = {} is too large",
-            diff_frob
-        );
-
-        // U orthogonality
-        for i in 0..k {
-            for j in 0..k {
-                let mut dot = 0.0_f64;
-                for r in 0..m {
-                    dot += result.u.get(&[r, i]).expect("u") * result.u.get(&[r, j]).expect("u");
-                }
-                let expected = if i == j { 1.0 } else { 0.0 };
-                assert!(
-                    (dot - expected).abs() < 1e-6,
-                    "3×5 U not orthogonal at ({},{}) = {}",
-                    i,
-                    j,
-                    dot
-                );
-            }
-        }
-
-        // Vᵀ row orthogonality
-        for i in 0..k {
-            for j in 0..k {
-                let mut dot = 0.0_f64;
-                for c in 0..n {
-                    dot +=
-                        result.vt.get(&[i, c]).expect("vt") * result.vt.get(&[j, c]).expect("vt");
-                }
-                let expected = if i == j { 1.0 } else { 0.0 };
-                assert!(
-                    (dot - expected).abs() < 1e-6,
-                    "3×5 Vᵀ rows not orthogonal at ({},{}) = {}",
-                    i,
-                    j,
-                    dot
-                );
-            }
-        }
-    }
-}
+#[path = "linalg_stable_tests.rs"]
+mod tests;

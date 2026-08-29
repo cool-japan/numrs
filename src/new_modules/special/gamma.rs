@@ -322,7 +322,7 @@ where
 
             // Check for convergence
             if term.abs()
-                < result.abs() * T::from(1e-10).expect("1e-10 should convert to float type")
+                < result.abs() * T::from(1e-14).expect("1e-14 should convert to float type")
             {
                 break;
             }
@@ -332,24 +332,36 @@ where
     }
 
     // Continued fraction for larger x
-    // Using Lentz's algorithm for continued fraction evaluation
+    // Lentz's algorithm from Numerical Recipes §6.2 (gcf routine)
+    // Evaluates: Q(a,x) = e^{-x} x^a / Gamma(a) * CF
+    // CF numerators: a_n = -n*(n-a); denominators: b_n = x + 2n + 1 - a
     let fpmin = T::from(1.0e-30).expect("1.0e-30 should convert to float type");
-    let eps = T::from(1.0e-10).expect("1.0e-10 should convert to float type");
+    let eps = T::from(1.0e-14).expect("1.0e-14 should convert to float type");
+    let two = T::from(2.0).expect("2.0 should convert to float type");
 
     let mut b = x + T::one() - a;
     let mut c = T::one() / fpmin;
-    let mut d = T::one() / b;
+    let mut d = if b.abs() < fpmin { fpmin } else { T::one() / b };
     let mut h = d;
 
-    for i in 1..100 {
+    for i in 1..200 {
         let i_t = T::from(i).expect("i should convert to float type");
-        let a_plus_i = a + i_t - T::one();
+        let an = -i_t * (i_t - a);
 
-        b = b + T::from(2.0).expect("2.0 should convert to float type");
-        d = T::one() / (b + a_plus_i * d);
-        c = b + a_plus_i / c;
+        b = b + two;
 
-        let del = c * d;
+        d = an * d + b;
+        if d.abs() < fpmin {
+            d = fpmin;
+        }
+        d = T::one() / d;
+
+        c = b + an / c;
+        if c.abs() < fpmin {
+            c = fpmin;
+        }
+
+        let del = d * c;
         h = h * del;
 
         if (del - T::one()).abs() < eps {

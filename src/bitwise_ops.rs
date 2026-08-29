@@ -5,6 +5,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+use crate::kernels;
 use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
 
 /// Compute the bit-wise AND of two arrays element-wise
@@ -37,16 +38,11 @@ where
         });
     }
 
-    let x1_data = x1.to_vec();
-    let x2_data = x2.to_vec();
+    let x1_op = kernels::borrow::operand(x1);
+    let x2_op = kernels::borrow::operand(x2);
+    let result = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a & b);
 
-    let result: Vec<T> = x1_data
-        .into_iter()
-        .zip(x2_data)
-        .map(|(a, b)| a & b)
-        .collect();
-
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }
 
 /// Compute the bit-wise OR of two arrays element-wise
@@ -79,16 +75,11 @@ where
         });
     }
 
-    let x1_data = x1.to_vec();
-    let x2_data = x2.to_vec();
+    let x1_op = kernels::borrow::operand(x1);
+    let x2_op = kernels::borrow::operand(x2);
+    let result = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a | b);
 
-    let result: Vec<T> = x1_data
-        .into_iter()
-        .zip(x2_data)
-        .map(|(a, b)| a | b)
-        .collect();
-
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }
 
 /// Compute the bit-wise XOR (exclusive OR) of two arrays element-wise
@@ -121,16 +112,11 @@ where
         });
     }
 
-    let x1_data = x1.to_vec();
-    let x2_data = x2.to_vec();
+    let x1_op = kernels::borrow::operand(x1);
+    let x2_op = kernels::borrow::operand(x2);
+    let result = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a ^ b);
 
-    let result: Vec<T> = x1_data
-        .into_iter()
-        .zip(x2_data)
-        .map(|(a, b)| a ^ b)
-        .collect();
-
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }
 
 /// Compute bit-wise NOT (inversion) element-wise
@@ -214,16 +200,11 @@ where
         });
     }
 
-    let x1_data = x1.to_vec();
-    let x2_data = x2.to_vec();
+    let x1_op = kernels::borrow::operand(x1);
+    let x2_op = kernels::borrow::operand(x2);
+    let result = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a << b);
 
-    let result: Vec<T> = x1_data
-        .into_iter()
-        .zip(x2_data)
-        .map(|(a, b)| a << b)
-        .collect();
-
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }
 
 /// Shift the bits of an integer to the right
@@ -257,16 +238,11 @@ where
         });
     }
 
-    let x1_data = x1.to_vec();
-    let x2_data = x2.to_vec();
+    let x1_op = kernels::borrow::operand(x1);
+    let x2_op = kernels::borrow::operand(x2);
+    let result = kernels::elementwise::binary_serial(&x1_op, &x2_op, |a, b| a >> b);
 
-    let result: Vec<T> = x1_data
-        .into_iter()
-        .zip(x2_data)
-        .map(|(a, b)| a >> b)
-        .collect();
-
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }
 
 /// Shift the bits of an integer to the left by a scalar amount

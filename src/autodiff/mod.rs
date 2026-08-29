@@ -63,7 +63,7 @@ pub use higher_order::{
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, One, Zero};
+use num_traits::Float;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -405,7 +405,7 @@ where
     }
 
     // Reshape to m×n matrix (each column is ∂f/∂xᵢ)
-    Ok(Array::from_vec(jac).reshape(&[m, n]))
+    Array::from_vec_shape(jac, &[m, n])
 }
 
 // ============================================================================
@@ -720,9 +720,6 @@ where
             grad
         };
 
-        // Compute gradient at x
-        let grad = grad_at(&x_vec);
-
         // For each gradient component, compute its derivative (Hessian row)
         for j in 0..n {
             let mut x_plus = x_vec.clone();
@@ -738,7 +735,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(hess).reshape(&[n, n]))
+    Array::from_vec_shape(hess, &[n, n])
 }
 
 /// Compute directional derivative in direction v: ∇_v f = ∇f · v

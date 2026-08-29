@@ -50,12 +50,16 @@ impl UnifiedSimdDispatcher {
 
     /// Optimized matrix multiplication with automatic SIMD selection
     pub fn optimized_matmul_f32(&self, a: &Array<f32>, b: &Array<f32>) -> Result<Array<f32>> {
-        let [m, k] = a.shape()[..] else {
+        // `_m`/`_n` (the output shape) are only read inside the
+        // architecture-gated arms below; on any other target (e.g. wasm32)
+        // only the `_` fallback arm survives and they go unread, hence the
+        // underscore — not a sign they're dead in general.
+        let [_m, k] = a.shape()[..] else {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix A must be 2D".to_string(),
             ));
         };
-        let [k2, n] = b.shape()[..] else {
+        let [k2, _n] = b.shape()[..] else {
             return Err(NumRs2Error::DimensionMismatch(
                 "Matrix B must be 2D".to_string(),
             ));
@@ -68,43 +72,56 @@ impl UnifiedSimdDispatcher {
             });
         }
 
-        let mut result = Array::zeros(&[m, n]);
-
-        match self.implementation {
+        // Each arm produces its own final value (allocating the zeroed
+        // output buffer only where it's actually mutated in place) rather
+        // than clobbering a pre-declared `result`: on any target where
+        // neither the AVX512, AVX2 nor NEON arm exists (e.g. wasm32), the
+        // `_` fallback would otherwise be the only reachable arm and the
+        // pre-declared zeros would be a dead assignment.
+        let result = match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
             SimdImplementation::AVX512 => {
+                let mut result = Array::zeros(&[_m, _n]);
                 let tile_size = 64; // Optimal for AVX-512
                 Avx2EnhancedOps::avx2_matmul_f32(a, b, &mut result, tile_size)?;
+                result
             }
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => {
+                let mut result = Array::zeros(&[_m, _n]);
                 let block_size = 32; // Optimal for AVX2
                 EnhancedSimdOps::cache_aware_matmul_f32(a, b, &mut result, block_size)?;
+                result
             }
             #[cfg(target_arch = "aarch64")]
             SimdImplementation::NEON => {
+                let mut result = Array::zeros(&[_m, _n]);
                 let block_size = 32; // Optimal for NEON
                 NeonEnhancedOps::neon_matmul_f32(a, b, &mut result, block_size)?;
+                result
             }
-            _ => {
-                // Fallback to standard implementation
-                result = a.matmul(b)?;
-            }
-        }
+            // Fallback to standard implementation
+            _ => a.matmul(b)?,
+        };
 
         Ok(result)
     }
 
     /// Optimized mathematical functions with automatic SIMD selection
-    pub fn optimized_exp_f32(&self, input: &Array<f32>) -> Array<f32> {
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
+    pub fn optimized_exp_f32(&self, input: &Array<f32>) -> Result<Array<f32>> {
         match self.implementation {
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
             SimdImplementation::AVX512 => EnhancedSimdOps::vectorized_exp_f32(input),
             #[cfg(target_arch = "x86_64")]
             SimdImplementation::AVX2 => EnhancedSimdOps::vectorized_exp_f32(input),
             #[cfg(target_arch = "aarch64")]
-            SimdImplementation::NEON => NeonEnhancedOps::neon_exp_f32(input),
-            _ => input.map(|x| x.exp()),
+            SimdImplementation::NEON => Ok(NeonEnhancedOps::neon_exp_f32(input)),
+            _ => Ok(input.map(|x| x.exp())),
         }
     }
 
@@ -218,8 +235,8 @@ impl UnifiedSimdDispatcher {
                     .collect();
 
                 Ok((
-                    Array::from_vec(c_r).reshape(&a_real.shape()),
-                    Array::from_vec(c_i).reshape(&a_real.shape()),
+                    Array::from_vec_shape(c_r, &a_real.shape())?,
+                    Array::from_vec_shape(c_i, &a_real.shape())?,
                 ))
             }
         }
@@ -229,9 +246,9 @@ impl UnifiedSimdDispatcher {
     pub fn optimized_copy_f32(&self, src: &Array<f32>) -> Result<Array<f32>> {
         let dst = match self.implementation {
             #[cfg(target_arch = "x86_64")]
-            SimdImplementation::AVX2 => EnhancedSimdOps::simd_copy_f32(src),
+            SimdImplementation::AVX2 => EnhancedSimdOps::simd_copy_f32(src)?,
             #[cfg(all(target_arch = "x86_64", feature = "unstable"))]
-            SimdImplementation::AVX512 => EnhancedSimdOps::simd_copy_f32(src),
+            SimdImplementation::AVX512 => EnhancedSimdOps::simd_copy_f32(src)?,
             #[cfg(target_arch = "aarch64")]
             SimdImplementation::NEON => {
                 let mut dst = Array::zeros(&src.shape());
@@ -354,7 +371,13 @@ pub mod optimized {
         global_dispatcher().optimized_matmul_f32(a, b)
     }
 
-    pub fn exp_f32(input: &Array<f32>) -> Array<f32> {
+    /// SIMD-optimized exponential using the global dispatcher.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+    /// to the input shape.
+    pub fn exp_f32(input: &Array<f32>) -> Result<Array<f32>> {
         global_dispatcher().optimized_exp_f32(input)
     }
 
@@ -415,7 +438,7 @@ mod tests {
         assert_relative_eq!(dot, 70.0, epsilon = 1e-6);
 
         let exp_input = Array::from_vec(vec![0.0, 1.0]);
-        let exp_result = optimized::exp_f32(&exp_input);
+        let exp_result = optimized::exp_f32(&exp_input).expect("exp_f32 should succeed");
 
         // Debug: print actual values to understand the issue
         let result_vec = exp_result.to_vec();
@@ -428,7 +451,8 @@ mod tests {
             let direct_result =
                 crate::simd_optimize::avx2_enhanced::EnhancedSimdOps::vectorized_exp_f32(
                     &exp_input,
-                );
+                )
+                .expect("vectorized_exp_f32 should succeed");
             let direct_vec = direct_result.to_vec();
             println!("Direct AVX2 result: {:?}", direct_vec);
             assert_relative_eq!(direct_vec[0], 1.0, epsilon = 1e-6);

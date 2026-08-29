@@ -9,9 +9,7 @@ use super::boundary::{
     apply_boundary_conditions, validate_boundary_conditions, BoundaryCondition,
     BoundaryConditionSet, DirichletBc,
 };
-use super::elements::{
-    compute_jacobian, matrix_inverse, ElementType, GaussQuadrature, ShapeFunction,
-};
+use super::elements::{compute_jacobian, matrix_inverse, ElementType, ShapeFunction};
 use super::mesh::Mesh;
 use super::{FemError, FemResult, PlaneStress2D};
 
@@ -446,13 +444,105 @@ impl PostProcessor {
                             return Ok(lambda0 * u0 + lambda1 * u1 + lambda2 * u2);
                         }
                     }
-                    // Quad4 bilinear inverse-map is not implemented; skip gracefully
-                    ElementKind::Quad4 | ElementKind::Line2 => {}
+                    ElementKind::Quad4 => {
+                        // Bilinear inverse isoparametric mapping: solve for
+                        // the reference coordinates (xi, eta) in [-1,1]^2
+                        // such that the isoparametric map
+                        //   x(xi,eta) = sum_i N_i(xi,eta) * X_i
+                        // hits (xp, yp), via Newton-Raphson (exact in one
+                        // step for an axis-aligned rectangle, since the map
+                        // is then affine; iterative for a general convex
+                        // quad). Reuses the same bilinear shape functions
+                        // and Jacobian machinery as element assembly.
+                        let coords: Vec<[f64; 2]> = elem
+                            .nodes
+                            .iter()
+                            .map(|&n| [mesh.nodes[n].coords[0], mesh.nodes[n].coords[1]])
+                            .collect();
+
+                        // Cheap bounding-box reject before Newton iteration.
+                        let xs = coords.iter().map(|c| c[0]);
+                        let ys = coords.iter().map(|c| c[1]);
+                        let (xmin, xmax) = xs
+                            .clone()
+                            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                                (lo.min(v), hi.max(v))
+                            });
+                        let (ymin, ymax) = ys
+                            .clone()
+                            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                                (lo.min(v), hi.max(v))
+                            });
+                        let pad = 1e-9 * (1.0 + (xmax - xmin).max(ymax - ymin));
+                        if xp < xmin - pad || xp > xmax + pad || yp < ymin - pad || yp > ymax + pad
+                        {
+                            continue;
+                        }
+
+                        let quad = ElementType::from_kind(&ElementKind::Quad4);
+                        let mut xi = 0.0_f64;
+                        let mut eta = 0.0_f64;
+                        let mut converged = false;
+                        for _ in 0..50 {
+                            let shape_vals = quad.evaluate(&[xi, eta]);
+                            let x: f64 = shape_vals
+                                .iter()
+                                .zip(coords.iter())
+                                .map(|(n, c)| n * c[0])
+                                .sum();
+                            let y: f64 = shape_vals
+                                .iter()
+                                .zip(coords.iter())
+                                .map(|(n, c)| n * c[1])
+                                .sum();
+                            let fx = x - xp;
+                            let fy = y - yp;
+                            if fx.abs() < 1e-12 && fy.abs() < 1e-12 {
+                                converged = true;
+                                break;
+                            }
+
+                            let dshape = quad.derivatives(&[xi, eta]);
+                            let coords_vv: Vec<Vec<f64>> =
+                                coords.iter().map(|c| vec![c[0], c[1]]).collect();
+                            let jac = compute_jacobian(&dshape, &coords_vv);
+                            let jac_inv = match matrix_inverse(&jac) {
+                                Ok(inv) => inv,
+                                // Degenerate (zero-area) quad: cannot invert, skip.
+                                Err(_) => break,
+                            };
+                            xi -= jac_inv[0][0] * fx + jac_inv[0][1] * fy;
+                            eta -= jac_inv[1][0] * fx + jac_inv[1][1] * fy;
+                        }
+
+                        let ref_tol = 1e-7;
+                        if converged
+                            && xi >= -1.0 - ref_tol
+                            && xi <= 1.0 + ref_tol
+                            && eta >= -1.0 - ref_tol
+                            && eta <= 1.0 + ref_tol
+                        {
+                            let shape_vals = quad.evaluate(&[xi, eta]);
+                            let interpolated: f64 = shape_vals
+                                .iter()
+                                .zip(elem.nodes.iter())
+                                .map(|(n, &node_id)| n * solution[node_id])
+                                .sum();
+                            return Ok(interpolated);
+                        }
+                    }
+                    // Line2 in a 2D mesh is a zero-area boundary edge (used
+                    // for applying line loads/BCs), never a 1-D solution
+                    // field -- 1-D solutions are handled entirely by the
+                    // `mesh.dimension == 1` branch above, which never
+                    // reaches this match. There is no 2D interior to
+                    // locate a point within, so it is legitimately skipped.
+                    ElementKind::Line2 => {}
                 }
             }
 
             return Err(FemError::SolverError(format!(
-                "Point {:?} not found in any 2D triangular element",
+                "Point {:?} not found in any 2D element",
                 point
             )));
         }

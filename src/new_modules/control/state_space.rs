@@ -16,8 +16,8 @@
 //! - C is the output matrix (p×n)
 //! - D is the feedthrough matrix (p×m)
 
-use super::{ControlError, ControlResult, SystemType, TransferFunction};
-use scirs2_core::ndarray::{s, Array1, Array2};
+use super::{ControlError, ControlResult, SystemType};
+use scirs2_core::ndarray::{Array1, Array2};
 use scirs2_core::num_complex::Complex64;
 
 /// Type alias for simulation results: (time_points, states, outputs)

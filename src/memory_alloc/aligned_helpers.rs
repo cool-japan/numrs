@@ -3,7 +3,6 @@
 //! This module provides high-level wrapper types that make it easy to allocate
 //! cache-aligned data for optimal performance in SIMD and parallel operations.
 
-use super::aligned::{AlignedAllocator, AlignmentConfig};
 use crate::error::{MemoryError, NumRs2Error, Result};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ops::{Deref, DerefMut};
@@ -670,7 +669,8 @@ pub fn optimal_simd_alignment() -> usize {
     {
         if is_x86_feature_detected!("avx512f") {
             64
-        } else if is_x86_feature_detected!("avx2") || is_x86_feature_detected!("avx") {
+        } else if is_x86_feature_detected!("avx") {
+            // AVX2 implies AVX, so a single AVX check covers both (256-bit / 32-byte).
             32
         } else {
             16

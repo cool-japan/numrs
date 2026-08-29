@@ -51,9 +51,20 @@
 //!
 //! - Basic arithmetic: add, subtract, multiply, divide
 //! - Element-wise functions: exp, log, sin, cos, etc.
-//! - Matrix operations: matmul, transpose
-//! - Reduction operations: sum, mean, min, max
+//! - Broadcasting binary operations following the full NumPy rule
+//! - Matrix operations: matmul, transpose and arbitrary N-D axis permutation
+//! - Strided slice extraction
+//! - Reduction operations: sum, mean, min, max, L1/L2 norms
+//! - 2-D convolution (im2col + GEMM) with stride, padding and dilation
 //! - Batching operations: automatic batching of small operations for improved throughput
+//!
+//! ## Running the GPU test suite
+//!
+//! The in-crate GPU tests execute against whatever adapter the machine
+//! provides and report themselves as skipped when none can be created. Set
+//! `NUMRS2_GPU_FALLBACK=1` to request a software adapter (lavapipe, WARP)
+//! instead of a physical GPU on machines without one - see
+//! [`FALLBACK_ENV_VAR`].
 //!
 //! ## Advanced Features
 //!
@@ -71,7 +82,13 @@
 
 // Re-export public types
 pub use array::GpuArray;
-pub use context::{new_context, GpuContext, GpuContextRef};
+#[cfg(feature = "gpu")]
+pub use context::{fallback_adapter_requested, FALLBACK_ENV_VAR};
+pub use context::{new_context, new_context_async, GpuContext, GpuContextRef};
+#[cfg(feature = "gpu")]
+pub use conv::{conv2d, im2col, Conv2dParams};
+#[cfg(feature = "gpu")]
+pub use nd::SliceRange;
 pub use ops::*;
 #[cfg(feature = "gpu")]
 pub use util::get_gpu_info;
@@ -88,19 +105,20 @@ pub mod compute;
 #[cfg(feature = "gpu")]
 mod context;
 #[cfg(feature = "gpu")]
+pub mod conv;
+#[cfg(feature = "gpu")]
+mod kernel;
+#[cfg(feature = "gpu")]
 pub mod linalg;
 #[cfg(feature = "gpu")]
 pub mod memory;
 #[cfg(feature = "gpu")]
+pub mod nd;
+#[cfg(feature = "gpu")]
 mod ops;
 #[cfg(feature = "gpu")]
-mod shaders;
+mod reduce;
+#[cfg(all(test, feature = "gpu"))]
+mod tests;
 #[cfg(feature = "gpu")]
 pub mod util;
-
-// Placeholder stubs for non-GPU builds
-#[cfg(not(feature = "gpu"))]
-pub struct GpuArray;
-
-#[cfg(not(feature = "gpu"))]
-pub struct GpuContext;

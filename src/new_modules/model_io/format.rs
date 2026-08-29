@@ -5,8 +5,7 @@
 //! optimization state preservation.
 
 use crate::error::NumRs2Error;
-use oxicode::{decode_from_slice, encode_to_vec, Decode, Encode};
-use scirs2_core::ndarray::{Array1, Array2, Array3, Array4};
+use scirs2_core::ndarray::{Array1, Array2, Array4};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;

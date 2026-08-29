@@ -176,6 +176,18 @@ impl BoltzmannExploration {
     }
 
     /// Compute softmax probabilities for action values
+    ///
+    /// Not currently called from [`ExplorationStrategy::select_action`]
+    /// below, which needs different degenerate-sum handling (fall back to
+    /// greedy selection rather than erroring) and so reimplements the same
+    /// formula inline -- confirmed mathematically identical for
+    /// `temperature > 0` (dividing every element by the same positive
+    /// constant before or after taking the max doesn't change which index is
+    /// the max, so the two subtract-max-then-scale orderings agree). Kept as
+    /// a directly-tested reference implementation of the Boltzmann formula
+    /// (see `test_boltzmann_softmax`/`test_boltzmann_softmax_empty` below);
+    /// deleting it would only remove that isolated numerical coverage.
+    #[allow(dead_code)]
     fn softmax(&self, values: &[f64]) -> Result<Vec<f64>> {
         if values.is_empty() {
             return Err(NumRs2Error::ValueError(

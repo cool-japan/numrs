@@ -3,11 +3,8 @@
 //! This module provides visualization for benchmark results, speedup curves,
 //! and scaling analysis.
 
-use super::*;
+use super::{PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
-use scirs2_core::ndarray::Array1;
-use std::collections::HashMap;
 use std::path::Path;
 
 /// Performance plot structure
@@ -46,6 +43,8 @@ impl PerfPlot {
         if results.is_empty() {
             return Err(VizError::InvalidData("No benchmark results".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -100,6 +99,8 @@ impl PerfPlot {
         if scaling_data.is_empty() {
             return Err(VizError::InvalidData("No scaling data".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -187,6 +188,8 @@ impl PerfPlot {
             return Err(VizError::InvalidData("No scaling data".to_string()));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -251,6 +254,8 @@ impl PerfPlot {
         if times.is_empty() {
             return Err(VizError::InvalidData("No time series data".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();

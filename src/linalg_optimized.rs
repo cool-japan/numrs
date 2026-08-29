@@ -183,13 +183,15 @@ where
     let n = shape[0];
     let mut perm = Array::from_vec((0..n).collect::<Vec<_>>());
 
-    // Extract permutation from P matrix
+    // Extract permutation from P matrix (write-only on `perm`; `p` is a
+    // separate, read-only input).
+    let perm_arr = perm.array_mut();
     for i in 0..n {
         for j in 0..n {
             let val = p.get(&[i, j])?;
             // P matrix has a 1 in each row indicating the permuted position
             if val.to_f64().unwrap_or(0.0) > 0.5 {
-                perm.set(&[i], j)?;
+                perm_arr[[i]] = j;
                 break;
             }
         }
@@ -225,6 +227,9 @@ where
     // Use blocked transpose for cache efficiency
     let block_size = 64; // Optimize for cache line size
 
+    // `result` is write-only (every read is from the untouched input `a`),
+    // so one bulk unshare covers the whole blocked pass.
+    let out = result.array_mut();
     for ii in (0..m).step_by(block_size) {
         for jj in (0..n).step_by(block_size) {
             let i_end = (ii + block_size).min(m);
@@ -232,7 +237,7 @@ where
 
             for i in ii..i_end {
                 for j in jj..j_end {
-                    result.set(&[j, i], a.get(&[i, j])?)?;
+                    out[[j, i]] = a.get(&[i, j])?;
                 }
             }
         }

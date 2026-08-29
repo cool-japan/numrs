@@ -88,6 +88,11 @@ impl<T: Clone + num_traits::Zero> Array<T> {
 
         let idx_vec = match &index_specs[fancy_dim] {
             IndexSpec::Indices(idx) => idx,
+            // INVARIANT: unreachable. `fancy_dim = fancy_dims[0]`, and
+            // `fancy_dims` was built a few lines above by filtering
+            // `index_specs` for indices `i` where `index_specs[i]` matches
+            // `IndexSpec::Indices(_)`, so `index_specs[fancy_dim]` is
+            // guaranteed to be that variant.
             _ => unreachable!(),
         };
 
@@ -116,6 +121,12 @@ impl<T: Clone + num_traits::Zero> Array<T> {
 
         // Create a result array with the right shape
         let mut result = Self::zeros(&output_shape);
+
+        // Bulk-acquire once for the whole outer x inner loop below: `result`
+        // is write-only throughout (every read is `slice.get`, a distinct
+        // per-`new_idx` temporary), so one unshare covers every element
+        // across every fancy-index slot instead of one per copied element.
+        let result_arr = result.array_mut();
 
         // For each index in the fancy indexing dimension
         for (new_idx, &orig_idx) in idx_vec.iter().enumerate() {
@@ -158,7 +169,12 @@ impl<T: Clone + num_traits::Zero> Array<T> {
 
                 // Get value from slice and set in result
                 let value = slice.get(&slice_idx)?;
-                result.set(&target_idx, value)?;
+                *result_arr.get_mut(target_idx.as_slice()).ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        target_idx
+                    ))
+                })? = value;
             }
         }
 
@@ -179,6 +195,14 @@ impl<T: Clone + num_traits::Zero> Array<T> {
             .iter()
             .map(|&dim| match &index_specs[dim] {
                 IndexSpec::Indices(idx) => idx,
+                // INVARIANT: unreachable given how this crate calls
+                // `multi_fancy_index` (from `fancy_index`, with `fancy_dims`
+                // filtered from this same `index_specs` for indices whose
+                // spec matches `IndexSpec::Indices(_)`), so every `dim` in
+                // `fancy_dims` indexes that variant. `multi_fancy_index` is
+                // `pub(crate)`: a future in-crate caller that passes a
+                // `fancy_dims` not derived this way from `index_specs`
+                // would violate this invariant.
                 _ => unreachable!(),
             })
             .collect();

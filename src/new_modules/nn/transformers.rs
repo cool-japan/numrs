@@ -48,10 +48,7 @@
 //! - Ba et al. "Layer Normalization" (2016)
 
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{
-    s, Array, Array1, Array2, Array3, ArrayView, ArrayView1, ArrayView2, ArrayView3, Axis,
-    ScalarOperand,
-};
+use scirs2_core::ndarray::{s, Array1, Array2, Array3, ArrayView2, ArrayView3, ScalarOperand};
 use scirs2_core::numeric::Float;
 use scirs2_core::random::*;
 use scirs2_core::simd_ops::SimdUnifiedOps;
@@ -1063,10 +1060,22 @@ where
     }
 
     /// Cross-attention where Q comes from decoder, K and V from encoder
+    ///
+    /// NOTE: `_key_value` is currently ignored. `MultiHeadAttention::forward`
+    /// projects Q, K, and V from a single input, so this call actually
+    /// self-attends over `query` and never sees the encoder output --
+    /// encoder-decoder cross-attention is non-functional (confirmed: the
+    /// existing `test_transformer_decoder`/`test_transformer_decoder_layer`
+    /// tests pass a target and a memory of *different* sequence lengths and
+    /// only assert the output shape, so they cannot and do not catch this).
+    /// Fixing it needs a `MultiHeadAttention` entry point that projects Q
+    /// from one input and K/V from another (new public API, out of scope for
+    /// a lint-fallout pass), plus a numeric test that varies `encoder_output`
+    /// and checks the decoder output actually changes.
     fn cross_attention_forward(
         &self,
         query: &ArrayView2<T>,
-        key_value: &ArrayView2<T>,
+        _key_value: &ArrayView2<T>,
         mask: Option<&ArrayView2<T>>,
         training: bool,
     ) -> TransformerResult<Array2<T>> {

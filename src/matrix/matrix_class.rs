@@ -54,7 +54,7 @@ where
     /// A new Matrix instance with shape (n, 1) where n is the length of the vector
     pub fn from_vec(vec: Vec<T>) -> Self {
         let n = vec.len();
-        let array = Array::from_vec(vec).reshape(&[n, 1]);
+        let array = Array::from_vec_shape(vec, &[n, 1]).unwrap_or_else(|e| panic!("{e}"));
         Self { data: array }
     }
 
@@ -94,7 +94,7 @@ where
         }
 
         // Create an array and reshape it
-        let array = Array::from_vec(flat_vec).reshape(&[rows, first_row_len]);
+        let array = Array::from_vec_shape(flat_vec, &[rows, first_row_len])?;
         Ok(Self { data: array })
     }
 
@@ -149,12 +149,13 @@ where
     {
         let mut array = Array::zeros(&[n, n]);
 
-        // Set diagonal elements to 1
+        // Set diagonal elements to 1. Write-only (each diagonal value is a
+        // fresh `T::from(1u8)`, never read back), so one bulk unshare covers
+        // the whole O(n) pass instead of `Array::set`'s per-element
+        // `Arc::make_mut` check.
+        let out = array.array_mut();
         for i in 0..n {
-            let value = T::from(1u8);
-            array
-                .set(&[i, i], value.clone())
-                .expect("eye: diagonal index should always be valid");
+            out[[i, i]] = T::from(1u8);
         }
 
         Self { data: array }
@@ -270,7 +271,7 @@ where
         }
 
         // Create a row matrix (1 x cols)
-        let row_array = Array::from_vec(row_data).reshape(&[1, cols]);
+        let row_array = Array::from_vec_shape(row_data, &[1, cols])?;
         Ok(Self { data: row_array })
     }
 
@@ -292,7 +293,7 @@ where
         }
 
         // Create a column matrix (rows x 1)
-        let col_array = Array::from_vec(col_data).reshape(&[rows, 1]);
+        let col_array = Array::from_vec_shape(col_data, &[rows, 1])?;
         Ok(Self { data: col_array })
     }
 
@@ -312,7 +313,8 @@ where
         }
 
         // Create a column matrix with the diagonal elements
-        let diag_array = Array::from_vec(diag_data).reshape(&[diag_len, 1]);
+        let diag_array =
+            Array::from_vec_shape(diag_data, &[diag_len, 1]).unwrap_or_else(|e| panic!("{e}"));
         Self { data: diag_array }
     }
 
@@ -373,6 +375,11 @@ where
 
         // Initialize result matrix
         let mut result = Matrix::zeros(m, n);
+        // `result` is write-only here (every read is from `self`/`other`),
+        // so one bulk unshare covers the whole O(m*n*p) pass instead of
+        // `Matrix::set`'s per-element `Arc::make_mut` check (itself a thin
+        // wrapper around `Array::set`).
+        let out = result.data.array_mut();
 
         // Compute matrix product
         for i in 0..m {
@@ -395,7 +402,7 @@ where
                     sum = sum + (a_ik * b_kj);
                 }
 
-                result.set(i, j, sum)?;
+                out[[i, j]] = sum;
             }
         }
 
@@ -556,7 +563,7 @@ where
                 .get(&[])
                 .expect("matrix: 0-dimensional array should have a single element")
                 .clone();
-            let scalar_array = Array::from_vec(vec![scalar_value]).reshape(&[1, 1]);
+            let scalar_array = Array::from_vec_shape(vec![scalar_value], &[1, 1])?;
             Matrix::new(scalar_array)
         }
         1 => {
@@ -637,7 +644,8 @@ pub fn matrix_from_scalar<T>(scalar: T) -> Matrix<T>
 where
     T: Clone + Zero + One + PartialEq + Default + PartialOrd,
 {
-    let scalar_array = Array::from_vec(vec![scalar]).reshape(&[1, 1]);
+    let scalar_array =
+        Array::from_vec_shape(vec![scalar], &[1, 1]).unwrap_or_else(|e| panic!("{e}"));
     Matrix::new(scalar_array).expect("matrix_from_scalar: 1x1 array is always a valid matrix")
 }
 
@@ -699,4 +707,68 @@ where
     T: Clone + Zero + One + PartialEq + Default + PartialOrd,
 {
     matrix_from_nested(nested_vec)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `Matrix<T>` had no test coverage anywhere in the crate (no internal
+    // `#[cfg(test)]` module, no integration test) despite being public
+    // (`numrs2::matrix::Matrix`), even though `eye()` and `dot()` were
+    // restructured for the W3-A2 COW-tax conversion -- added here to pin
+    // down their behavior.
+
+    #[test]
+    fn test_eye_diagonal_and_off_diagonal() {
+        let m: Matrix<f64> = Matrix::eye(3);
+        assert_eq!(m.shape(), (3, 3));
+        for i in 0..3 {
+            for j in 0..3 {
+                let expected = if i == j { 1.0 } else { 0.0 };
+                assert_eq!(m.get(i, j).expect("in-bounds get"), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn test_dot_matches_hand_computed_product() {
+        // A = [[1, 2], [3, 4]], B = [[5, 6], [7, 8]]
+        // A*B = [[19, 22], [43, 50]]
+        let a = Matrix::new(Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]))
+            .expect("2D array should build a matrix");
+        let b = Matrix::new(Array::from_vec(vec![5.0, 6.0, 7.0, 8.0]).reshape(&[2, 2]))
+            .expect("2D array should build a matrix");
+
+        let product = a.dot(&b).expect("dot should succeed for conformant shapes");
+        assert_eq!(product.shape(), (2, 2));
+
+        let expected = [[19.0, 22.0], [43.0, 50.0]];
+        for i in 0..2 {
+            for j in 0..2 {
+                assert_eq!(
+                    product.get(i, j).expect("in-bounds get"),
+                    expected[i][j],
+                    "mismatch at ({i},{j})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_dot_identity_is_no_op() {
+        let a = Matrix::new(Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]))
+            .expect("2D array should build a matrix");
+        let identity: Matrix<f64> = Matrix::eye(3);
+
+        let product = a.dot(&identity).expect("A * I should succeed");
+        for i in 0..2 {
+            for j in 0..3 {
+                assert_eq!(
+                    product.get(i, j).expect("in-bounds get"),
+                    a.get(i, j).expect("in-bounds get")
+                );
+            }
+        }
+    }
 }

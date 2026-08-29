@@ -37,9 +37,16 @@ use super::core::Polynomial;
 /// ```
 /// use numrs2::prelude::*;
 ///
-/// let c = Array::from_vec(vec![1.0, -3.0, 3.0, -1.0]); // x^3 - 3x^2 + 3x - 1
+/// let c = Array::from_vec(vec![1.0, -3.0, 3.0, -1.0]); // x^3 - 3x^2 + 3x - 1 = (x-1)^3
 /// let comp = polycompanion(&c).expect("valid polynomial coefficients");
-/// // Returns 3x3 companion matrix
+/// assert_eq!(comp.shape(), vec![3, 3]);
+/// // Subdiagonal of ones; last column (top to bottom) is
+/// // [-c[2], -c[1], -c[0]] = [1.0, -3.0, 3.0], matching the layout above.
+/// // Eigenvalues of this matrix are the roots of p(x), all equal to 1.0.
+/// assert_eq!(
+///     comp.to_vec(),
+///     vec![0.0, 0.0, 1.0, 1.0, 0.0, -3.0, 0.0, 1.0, 3.0]
+/// );
 /// ```
 pub fn polycompanion<T>(c: &Array<T>) -> Result<Array<T>>
 where
@@ -80,12 +87,23 @@ where
         companion[i * n + (i - 1)] = T::one();
     }
 
-    // Fill last column with negated normalized coefficients
+    // Fill last column with negated normalized coefficients.
+    // Row `i` (0-indexed from the top) holds `-c[n-1-i]` per this function's
+    // own doc comment (the monic-form coefficient array `c[0..n-1]`, where
+    // `c[0]` is the x^(n-1) coefficient and `c[n-1]` is the constant term).
+    // In terms of the raw input `coeffs` (descending, size n+1, `coeffs[0]`
+    // the leading term), `c[k] == coeffs[k+1]/leading`, so row `i` reads
+    // `coeffs[(n-1-i)+1] == coeffs[n-i]`. Indexing by `coeffs[i+1]` instead
+    // (i.e. without the `n-i` reversal) was a real bug: it filled the last
+    // column in reversed row order, silently transposing which root paired
+    // with which coefficient for every non-palindromic polynomial. Verified
+    // against `np.polynomial.polynomial.polycompanion` pinned values in this
+    // file's tests.
     for i in 0..n {
-        companion[i * n + (n - 1)] = -coeffs[i + 1].clone() / leading.clone();
+        companion[i * n + (n - 1)] = -coeffs[n - i].clone() / leading.clone();
     }
 
-    Ok(Array::from_vec(companion).reshape(&[n, n]))
+    Array::from_vec_shape(companion, &[n, n])
 }
 
 /// Trim leading zeros from polynomial coefficients
@@ -324,7 +342,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[n, cols]))
+    Array::from_vec_shape(result, &[n, cols])
 }
 
 /// Generate a 2D Vandermonde matrix
@@ -392,7 +410,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[n, cols]))
+    Array::from_vec_shape(result, &[n, cols])
 }
 
 /// Raise a polynomial to a power
@@ -519,7 +537,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&[ny, nx]))
+    Array::from_vec_shape(result, &[ny, nx])
 }
 
 /// Evaluate polynomial at 2D points
@@ -725,6 +743,51 @@ where
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+
+    // Pinned against `np.polynomial.polynomial.polycompanion` (NumPy's `c` is
+    // ascending; this crate's is descending, so the equivalent input here is
+    // the reverse of NumPy's `[-8, 14, -7, 1]`). Deliberately non-palindromic:
+    // the reversed-last-column bug this guards against would instead produce
+    // `[[0,0,7],[1,0,-14],[0,1,8]]` (last column reversed top-to-bottom).
+    #[test]
+    fn test_polycompanion_cubic_matches_pinned_values() {
+        let c = Array::from_vec(vec![1.0, -7.0, 14.0, -8.0]); // (x-1)(x-2)(x-4)
+        let comp = polycompanion(&c).expect("test: polycompanion should succeed for a cubic");
+        assert_eq!(comp.shape(), vec![3, 3]);
+        let data = comp.to_vec();
+        let expected = [0.0, 0.0, 8.0, 1.0, 0.0, -14.0, 0.0, 1.0, 7.0];
+        for (got, want) in data.iter().zip(expected.iter()) {
+            assert_relative_eq!(got, want, epsilon = 1e-12);
+        }
+    }
+
+    // Non-unit leading coefficient exercises the normalize-by-leading
+    // division path; roots are unaffected by scaling the whole polynomial by
+    // a constant, so this should match the monic `[1, -3, 2]` case.
+    #[test]
+    fn test_polycompanion_quadratic_with_nonunit_leading_coefficient() {
+        let c = Array::from_vec(vec![2.0, -6.0, 4.0]); // 2x^2 - 6x + 4 = 2(x-1)(x-2)
+        let comp = polycompanion(&c).expect("test: polycompanion should succeed for a quadratic");
+        assert_eq!(comp.shape(), vec![2, 2]);
+        let data = comp.to_vec();
+        let expected = [0.0, -2.0, 1.0, 3.0];
+        for (got, want) in data.iter().zip(expected.iter()) {
+            assert_relative_eq!(got, want, epsilon = 1e-12);
+        }
+    }
+
+    // n == 1 boundary: no subdiagonal, a single entry -b/a. Row index and
+    // reversed-row index coincide (`i == n-1-i == 0`) only at this size, so
+    // it's the one case the reversal bug this function used to have could
+    // never have failed -- pinned separately for that reason.
+    #[test]
+    fn test_polycompanion_degree_one_boundary() {
+        let c = Array::from_vec(vec![2.0, -6.0]); // 2x - 6 = 2(x - 3)
+        let comp =
+            polycompanion(&c).expect("test: polycompanion should succeed for a linear polynomial");
+        assert_eq!(comp.shape(), vec![1, 1]);
+        assert_relative_eq!(comp.to_vec()[0], 3.0, epsilon = 1e-12);
+    }
 
     #[test]
     fn test_polyvander() {

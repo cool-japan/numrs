@@ -349,48 +349,130 @@ where
 }
 
 /// Riemann zeta function for scalar values
+///
+/// Covers the full real line (excluding the pole at s = 1):
+///
+/// * s > 1 : Euler-Maclaurin formula with Bernoulli tail corrections.
+/// * 0 < s < 1 : ζ(s) = η(s) / (1 − 2^{1−s}) where the Dirichlet eta
+///   η(s) = Σ (−1)^{n−1}/n^s is summed via Euler's sequence-transform
+///   (converges as 2^{−N}, error ≈ 10^{−18} for N = 60).
+/// * s ≤ 0 : reflection formula  ζ(s) = 2^s π^{s−1} sin(πs/2) Γ(1−s) ζ(1−s),
+///   where ζ(1−s) (argument > 1) uses the Euler-Maclaurin path.
 pub(crate) fn zeta_scalar<T>(s: T) -> T
 where
     T: Float + Debug,
 {
-    // Handle special test values with known accurate results
-    let s_val = s.to_f64().unwrap_or(0.0);
-    if (s_val - 2.0).abs() < 1e-10 {
-        return T::from(std::f64::consts::PI.powi(2) / 6.0)
-            .expect("PI^2/6 should convert to float type"); // zeta(2) = pi^2/6
-    }
-    if s == T::one() {
+    let s_f = s.to_f64().unwrap_or(0.0);
+
+    // Pole
+    if (s_f - 1.0).abs() < 1e-14 {
         return T::infinity();
     }
 
-    // Use Euler-Maclaurin formula for s > 1
-    if s > T::one() {
-        let mut sum = T::zero();
-
-        // Direct summation for first few terms
-        for n in 1..20 {
-            let n_t = T::from(n).expect("n should convert to float type");
-            sum = sum + T::one() / n_t.powf(s);
-        }
-
-        // For better accuracy with larger s, include more terms
-        if s < T::from(10.0).expect("10.0 should convert to float type") {
-            for n in 20..100 {
-                let n_t = T::from(n).expect("n should convert to float type");
-                let term = T::one() / n_t.powf(s);
-                sum = sum + term;
-
-                if term < sum * T::from(1e-15).expect("1e-15 should convert to float type") {
-                    break;
-                }
-            }
-        }
-
-        return sum;
+    // ζ(0) = −1/2  (analytic continuation)
+    if s_f.abs() < 1e-14 {
+        return T::from(-0.5).expect("-0.5 should convert to float type");
     }
 
-    // For s <= 1, use analytical continuation (simplified)
-    T::nan() // Complex implementation needed for s <= 1
+    let result = if s_f < 0.0 {
+        // Functional equation: ζ(s) = 2^s π^{s−1} sin(πs/2) Γ(1−s) ζ(1−s)
+        let pi = std::f64::consts::PI;
+        2.0_f64.powf(s_f)
+            * pi.powf(s_f - 1.0)
+            * (pi * s_f / 2.0).sin()
+            * gamma_lanczos_f64(1.0 - s_f)
+            * zeta_eulermaclaurin_f64(1.0 - s_f)
+    } else if s_f < 1.0 {
+        // 0 < s < 1: Dirichlet eta + conversion to zeta
+        let eta = eta_euler_f64(s_f);
+        let denom = 1.0 - 2.0_f64.powf(1.0 - s_f);
+        eta / denom
+    } else {
+        // s > 1: Euler-Maclaurin
+        zeta_eulermaclaurin_f64(s_f)
+    };
+
+    T::from(result).expect("zeta result should convert to float type")
+}
+
+/// η(s) = Σ_{n=1}^∞ (−1)^{n−1}/n^s via Euler's sequence-transform.
+///
+/// Converges with relative error O(2^{−N}): N = 60 gives ~18-digit accuracy.
+fn eta_euler_f64(s: f64) -> f64 {
+    const N: usize = 60;
+    // a[k] = (-1)^k / (k+1)^s
+    let mut a: Vec<f64> = (0..N)
+        .map(|k| {
+            let v = (k as f64 + 1.0).powf(-s);
+            if k % 2 == 0 {
+                v
+            } else {
+                -v
+            }
+        })
+        .collect();
+
+    // Term n=0: A_0 = a[0] / 2
+    let mut eta = a[0] * 0.5;
+    for n in 1..N {
+        // Running sum: a[k] += a[k+1] simulates the Euler convolution.
+        // After n steps a[0] = Σ_{k=0}^n C(n,k) a_original[k],
+        // and term_n = a[0] / 2^{n+1}.
+        for k in 0..(N - n) {
+            a[k] += a[k + 1];
+        }
+        eta += a[0] / (2.0_f64.powi(n as i32 + 1));
+    }
+    eta
+}
+
+/// ζ(s) for s > 1 via Euler-Maclaurin with three Bernoulli correction terms.
+fn zeta_eulermaclaurin_f64(s: f64) -> f64 {
+    const NTERMS: usize = 100;
+    let mut sum = 0.0_f64;
+    for n in 1..=NTERMS {
+        sum += (n as f64).powf(-s);
+    }
+    let nf = NTERMS as f64;
+    // Tail integral and endpoint
+    sum += nf.powf(1.0 - s) / (s - 1.0) + 0.5 * nf.powf(-s);
+    // Bernoulli corrections (B_2=1/6, B_4=−1/30, B_6=1/42)
+    sum += (1.0 / 6.0) / 2.0 * s * nf.powf(-s - 1.0);
+    sum -= (-1.0 / 30.0) / 24.0 * s * (s + 1.0) * (s + 2.0) * nf.powf(-s - 3.0);
+    sum += (1.0 / 42.0) / 720.0
+        * s
+        * (s + 1.0)
+        * (s + 2.0)
+        * (s + 3.0)
+        * (s + 4.0)
+        * nf.powf(-s - 5.0);
+    sum
+}
+
+/// Γ(x) for x > 0 via Lanczos approximation (g = 7, 9-term, relative error < 1e-15).
+fn gamma_lanczos_f64(x: f64) -> f64 {
+    if x < 0.5 {
+        std::f64::consts::PI / ((std::f64::consts::PI * x).sin() * gamma_lanczos_f64(1.0 - x))
+    } else {
+        const C: [f64; 9] = [
+            0.999_999_999_999_809_930,
+            676.520_368_121_885_100,
+            -1_259.139_216_722_402_800,
+            771.323_428_777_653_130,
+            -176.615_029_162_140_590,
+            12.507_343_278_686_905,
+            -0.138_571_095_265_720_120,
+            9.984_369_578_019_572e-6,
+            1.505_632_735_149_311_600e-7,
+        ];
+        let z = x - 1.0;
+        let t = z + 7.5;
+        let mut s = C[0];
+        for i in 1..9 {
+            s += C[i] / (z + i as f64);
+        }
+        (2.0 * std::f64::consts::PI).sqrt() * t.powf(z + 0.5) * (-t).exp() * s
+    }
 }
 
 /// Sine integral Si(x) for scalar values

@@ -117,7 +117,7 @@ impl ModelSerializer {
         })?;
 
         // Create ZIP archive with compression
-        use oxiarc_archive::zip::{ZipCompressionLevel, ZipWriter};
+        use oxiarc_archive::zip::ZipWriter;
 
         let file = File::create(path.as_ref())
             .map_err(|e| NumRs2Error::IOError(format!("Failed to create file: {}", e)))?;

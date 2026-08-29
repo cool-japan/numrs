@@ -14,9 +14,7 @@
 //! - Jarvis, R.A. (1973). "On the Identification of the Convex Hull of a Finite
 //!   Set of Points in the Plane". Information Processing Letters, 2, 18-21.
 
-use super::{
-    is_ccw, is_collinear, orientation, GeometryError, GeometryResult, Point2D, GEOMETRY_EPSILON,
-};
+use super::{is_collinear, orientation, GeometryError, GeometryResult, Point2D, GEOMETRY_EPSILON};
 
 /// Computes the convex hull of a set of 2D points using Graham scan algorithm.
 ///

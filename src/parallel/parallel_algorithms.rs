@@ -3,12 +3,10 @@
 //! This module provides high-performance parallel implementations of common
 //! numerical algorithms including matrix operations, FFT, and array processing.
 
-use super::WorkStealingPool;
 use crate::error::{NumRs2Error, Result};
 use crate::traits::{FloatingPoint, NumericElement};
 use scirs2_core::parallel_ops::*;
 use std::marker::PhantomData;
-use std::sync::Arc;
 use std::thread;
 
 /// Configuration for parallel algorithm execution
@@ -93,20 +91,12 @@ impl ParallelConfig {
 /// Parallel array operations with optimized work distribution
 pub struct ParallelArrayOps {
     config: ParallelConfig,
-    #[allow(dead_code)]
-    pool: Arc<WorkStealingPool>,
 }
 
 impl ParallelArrayOps {
     /// Create new parallel array operations
     pub fn new(config: ParallelConfig) -> Result<Self> {
-        let num_threads = config
-            .num_threads
-            .unwrap_or_else(|| thread::available_parallelism().map_or(4, |n| n.get()));
-
-        let pool = Arc::new(WorkStealingPool::new(num_threads)?);
-
-        Ok(Self { config, pool })
+        Ok(Self { config })
     }
 
     /// Parallel element-wise operation on two arrays
@@ -356,22 +346,13 @@ impl ParallelArrayOps {
 
 /// Parallel matrix operations
 pub struct ParallelMatrixOps {
-    #[allow(dead_code)]
     config: ParallelConfig,
-    #[allow(dead_code)]
-    pool: Arc<WorkStealingPool>,
 }
 
 impl ParallelMatrixOps {
     /// Create new parallel matrix operations
     pub fn new(config: ParallelConfig) -> Result<Self> {
-        let num_threads = config
-            .num_threads
-            .unwrap_or_else(|| thread::available_parallelism().map_or(4, |n| n.get()));
-
-        let pool = Arc::new(WorkStealingPool::new(num_threads)?);
-
-        Ok(Self { config, pool })
+        Ok(Self { config })
     }
 
     /// Parallel matrix multiplication (A * B = C)
@@ -475,23 +456,14 @@ impl ParallelMatrixOps {
 /// Parallel FFT implementation
 pub struct ParallelFFT<T> {
     config: ParallelConfig,
-    #[allow(dead_code)]
-    pool: Arc<WorkStealingPool>,
     _phantom: PhantomData<T>,
 }
 
 impl<T: FloatingPoint + Send + Sync + Copy> ParallelFFT<T> {
     /// Create new parallel FFT
     pub fn new(config: ParallelConfig) -> Result<Self> {
-        let num_threads = config
-            .num_threads
-            .unwrap_or_else(|| thread::available_parallelism().map_or(4, |n| n.get()));
-
-        let pool = Arc::new(WorkStealingPool::new(num_threads)?);
-
         Ok(Self {
             config,
-            pool,
             _phantom: PhantomData,
         })
     }

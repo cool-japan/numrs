@@ -12,15 +12,14 @@
 
 use numrs2::parallel::{
     BalancingStrategy, LoadBalancer, ParallelArrayOps, ParallelConfig, ParallelFFT,
-    ParallelMatrixOps, ParallelPipeline, ParallelQuickSort, ParallelScheduler, Priority,
-    SchedulerConfig, TaskPriority, ThreadPool, ThreadPoolConfig,
+    ParallelMatrixOps, ParallelPipeline, ParallelScheduler, SchedulerConfig, TaskPriority,
+    ThreadPool, ThreadPoolConfig,
 };
-use scirs2_core::ndarray::Array2;
 use scirs2_core::parallel_ops::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
-    IntoParallelRefMutIterator, ParallelIterator, ParallelSlice, ParallelSliceMut,
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+    ParallelSlice, ParallelSliceMut,
 };
-use scirs2_core::random::{thread_rng, Rng};
+use scirs2_core::random::thread_rng;
 use scirs2_core::Complex;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -340,8 +339,6 @@ fn demo_numa_aware_operations() {
         numa_aware: true,
         ..Default::default()
     };
-    let ops = ParallelArrayOps::new(config).expect("Failed to create parallel ops");
-
     let matrix_size = 500;
     let matrix_a: Vec<f64> = (0..matrix_size * matrix_size).map(|i| i as f64).collect();
     let matrix_b: Vec<f64> = (0..matrix_size * matrix_size)
@@ -349,12 +346,7 @@ fn demo_numa_aware_operations() {
         .collect();
     let mut matrix_c = vec![0.0; matrix_size * matrix_size];
 
-    let matrix_ops = ParallelMatrixOps::new(ParallelConfig {
-        num_threads: Some(4),
-        numa_aware: true,
-        ..Default::default()
-    })
-    .expect("Failed to create matrix ops");
+    let matrix_ops = ParallelMatrixOps::new(config).expect("Failed to create matrix ops");
 
     let start = Instant::now();
     matrix_ops
@@ -561,6 +553,11 @@ fn demo_distributed_array_operations() {
     let transpose_duration = start.elapsed();
 
     println!("    Matrix size: {}x{}", rows, cols);
+    println!(
+        "    Transposed elements: {} (sample transposed[0] = {:.1})",
+        transposed.len(),
+        transposed[0]
+    );
     println!(
         "    Transpose time: {:.6} sec",
         transpose_duration.as_secs_f64()

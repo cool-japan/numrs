@@ -4,8 +4,7 @@
 
 use super::{InferenceEngine, PreprocessingPipeline, Result, ServingError};
 use crate::array::Array;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Prediction request
 #[derive(Clone)]
@@ -386,7 +385,7 @@ impl<'a> EnsemblePredictor<'a> {
         }
 
         let shape = first_shape.to_vec();
-        Ok(Array::from_vec(weighted_sum).reshape(&shape))
+        Ok(Array::from_vec_shape(weighted_sum, &shape)?)
     }
 }
 

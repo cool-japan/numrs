@@ -10,10 +10,8 @@
 //!
 //! Run with: cargo run --example ml_pipeline
 
-use numrs2::nn::*;
 use numrs2::prelude::*;
 use numrs2::random::default_rng;
-use std::collections::HashMap;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("=== NumRS2 Machine Learning Pipeline Example ===\n");

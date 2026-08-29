@@ -4,7 +4,7 @@
 
 use super::{Result, ServingError};
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Latency percentiles

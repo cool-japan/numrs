@@ -14,7 +14,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use numrs2::prelude::*;
 use std::hint::black_box;
-use std::ops::{Div, Mul};
 
 /// Benchmark parallel vs sequential sum
 fn bench_parallel_vs_sequential_sum(c: &mut Criterion) {

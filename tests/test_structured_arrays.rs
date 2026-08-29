@@ -1,6 +1,7 @@
 //! Integration tests for enhanced structured array functionality
 
 use numrs2::prelude::*;
+use numrs2::types::structured::RecordArrayT;
 use std::collections::HashMap;
 
 #[test]
@@ -295,4 +296,197 @@ fn test_multiple_data_types() {
 
     let float64_field: Array<f64> = arr.field("float64_field").unwrap();
     assert_eq!(float64_field.array()[[0]], std::f64::consts::E);
+}
+
+// -- StructuredArray::from_arrays: must copy real values, not defaults --
+//
+// Regression coverage for a bug where `from_arrays` filled every element
+// with `T::default()` (ignoring the input arrays entirely) and hardcoded
+// every field's dtype to `DType::Float64` regardless of `T`.
+
+#[test]
+fn test_structured_array_from_arrays_copies_real_values() {
+    let mut arrays: HashMap<String, Array<f64>> = HashMap::new();
+    arrays.insert("a".to_string(), Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]));
+    arrays.insert(
+        "b".to_string(),
+        Array::from_vec(vec![10.5, 20.5, 30.5, 40.5]),
+    );
+
+    let shape = [4];
+    let structured =
+        StructuredArray::from_arrays(&arrays, &shape).expect("from_arrays should succeed");
+
+    let a_field: Array<f64> = structured.field("a").expect("field a should exist");
+    let b_field: Array<f64> = structured.field("b").expect("field b should exist");
+
+    assert_eq!(a_field.array()[[0]], 1.0);
+    assert_eq!(a_field.array()[[1]], 2.0);
+    assert_eq!(a_field.array()[[2]], 3.0);
+    assert_eq!(a_field.array()[[3]], 4.0);
+
+    assert_eq!(b_field.array()[[0]], 10.5);
+    assert_eq!(b_field.array()[[1]], 20.5);
+    assert_eq!(b_field.array()[[2]], 30.5);
+    assert_eq!(b_field.array()[[3]], 40.5);
+}
+
+#[test]
+fn test_structured_array_from_arrays_copies_real_values_i32() {
+    // Also checks that the field dtype is inferred from T (Int32), not
+    // hardcoded to Float64.
+    let mut arrays: HashMap<String, Array<i32>> = HashMap::new();
+    arrays.insert("count".to_string(), Array::from_vec(vec![5, -3, 100, 0]));
+
+    let shape = [4];
+    let structured =
+        StructuredArray::from_arrays(&arrays, &shape).expect("from_arrays should succeed");
+
+    assert_eq!(
+        structured.dtype(),
+        &DType::Struct(vec![Field::new("count", DType::Int32)])
+    );
+
+    let field: Array<i32> = structured.field("count").expect("field count should exist");
+    assert_eq!(field.array()[[0]], 5);
+    assert_eq!(field.array()[[1]], -3);
+    assert_eq!(field.array()[[2]], 100);
+    assert_eq!(field.array()[[3]], 0);
+}
+
+#[test]
+fn test_structured_array_from_arrays_length_mismatch_errors() {
+    let mut arrays: HashMap<String, Array<f64>> = HashMap::new();
+    arrays.insert("a".to_string(), Array::from_vec(vec![1.0, 2.0, 3.0]));
+
+    // The array holds 3 elements but we claim a shape of 4.
+    let shape = [4];
+    let result = StructuredArray::from_arrays(&arrays, &shape);
+    assert!(result.is_err());
+}
+
+// -- RecordArray add_field/remove_field: rank-generic (any ndim) --
+//
+// Regression coverage for add_field/remove_field hard-erroring with "More
+// than 3 dimensions not supported" for any array with ndim > 3.
+
+#[test]
+fn test_record_array_add_remove_field_4d() {
+    let shape = [2, 2, 2, 2]; // 16 elements, 4-D
+    let size: usize = shape.iter().product();
+
+    let a_values: Vec<f64> = (0..size).map(|i| i as f64).collect();
+    let a_array = Array::from_vec(a_values.clone()).reshape(&shape);
+
+    let mut arrays: HashMap<String, Array<f64>> = HashMap::new();
+    arrays.insert("a".to_string(), a_array);
+    let mut record = RecordArrayT::<f64>::from_arrays(&arrays, &shape)
+        .expect("from_arrays should support 4-D arrays");
+    assert_eq!(record.ndim(), 4);
+
+    let b_values: Vec<f64> = (0..size).map(|i| (i as f64) * 10.0).collect();
+    let b_array = Array::from_vec(b_values.clone()).reshape(&shape);
+    record
+        .add_field("b", b_array)
+        .expect("add_field should support arrays with ndim > 3");
+
+    let b_field = record.field("b").expect("field b should exist");
+    for (i, expected) in b_values.iter().enumerate() {
+        assert_eq!(b_field.get_flat(i).unwrap(), *expected);
+    }
+    let a_field = record.field("a").expect("field a should exist");
+    for (i, expected) in a_values.iter().enumerate() {
+        assert_eq!(a_field.get_flat(i).unwrap(), *expected);
+    }
+
+    let removed = record
+        .remove_field("a")
+        .expect("remove_field should support arrays with ndim > 3");
+    for (i, expected) in a_values.iter().enumerate() {
+        assert_eq!(removed.get_flat(i).unwrap(), *expected);
+    }
+    assert!(!record.field_names().contains(&"a".to_string()));
+    assert!(record.field_names().contains(&"b".to_string()));
+
+    // The remaining field must still read back correctly after the
+    // underlying byte buffer was rebuilt without "a".
+    let b_field_after = record
+        .field("b")
+        .expect("field b should survive removal of a");
+    for (i, expected) in b_values.iter().enumerate() {
+        assert_eq!(b_field_after.get_flat(i).unwrap(), *expected);
+    }
+}
+
+// -- RecordArrayT<T>: generic over the element type --
+//
+// `RecordArray` used to be hardcoded to f64. It is now a type alias for
+// `RecordArrayT<f64>`, and `RecordArrayT<T>` works for any supported T.
+
+#[test]
+fn test_record_array_generic_i32() {
+    let fields = vec![Field::new("x", DType::Int32), Field::new("y", DType::Int32)];
+    let shape = [3];
+    let mut record = RecordArrayT::<i32>::new(&shape, fields);
+
+    record.set_field(&[0], "x", 1).unwrap();
+    record.set_field(&[1], "x", 2).unwrap();
+    record.set_field(&[2], "x", 3).unwrap();
+    record.set_field(&[0], "y", -10).unwrap();
+    record.set_field(&[1], "y", -20).unwrap();
+    record.set_field(&[2], "y", -30).unwrap();
+
+    let x_field = record.field("x").unwrap();
+    let y_field = record.field("y").unwrap();
+    assert_eq!(x_field.array()[[0]], 1);
+    assert_eq!(x_field.array()[[2]], 3);
+    assert_eq!(y_field.array()[[1]], -20);
+
+    let z_array = Array::from_vec(vec![7i32, 8, 9]);
+    record.add_field("z", z_array).unwrap();
+    let z_field = record.field("z").unwrap();
+    assert_eq!(z_field.array()[[0]], 7);
+    assert_eq!(z_field.array()[[2]], 9);
+
+    let removed = record.remove_field("y").unwrap();
+    assert_eq!(removed.array()[[1]], -20);
+    assert!(!record.field_names().contains(&"y".to_string()));
+
+    // Draining every field down to zero must not panic: the rebuilt
+    // structured array degenerates to a 0-byte-per-element buffer, and the
+    // (now-empty) field_cache rebuild loop must simply do nothing.
+    record.remove_field("x").unwrap();
+    record.remove_field("z").unwrap();
+    assert!(record.field_names().is_empty());
+    assert_eq!(record.dtype(), &DType::Struct(vec![]));
+}
+
+#[test]
+fn test_record_array_generic_f32() {
+    let fields = vec![Field::new("value", DType::Float32)];
+    let shape = [2, 2];
+    let mut record = RecordArrayT::<f32>::new(&shape, fields);
+
+    record.set_field(&[0, 0], "value", 1.5f32).unwrap();
+    record.set_field(&[0, 1], "value", 2.5f32).unwrap();
+    record.set_field(&[1, 0], "value", 3.5f32).unwrap();
+    record.set_field(&[1, 1], "value", 4.5f32).unwrap();
+
+    let value_field = record.field("value").unwrap();
+    assert_eq!(value_field.array()[[0, 0]], 1.5f32);
+    assert_eq!(value_field.array()[[0, 1]], 2.5f32);
+    assert_eq!(value_field.array()[[1, 0]], 3.5f32);
+    assert_eq!(value_field.array()[[1, 1]], 4.5f32);
+}
+
+#[test]
+fn test_record_array_f64_alias_still_source_compatible() {
+    // `RecordArray` (used by every other test in this file) must still
+    // resolve to a usable, f64-flavored `RecordArrayT<f64>`.
+    let fields = vec![Field::new("v", DType::Float64)];
+    let mut record = RecordArray::new(&[2], fields);
+    record.set_field(&[0], "v", 9.5).unwrap();
+    record.set_field(&[1], "v", -1.25).unwrap();
+    assert_eq!(record.field("v").unwrap().array()[[0]], 9.5);
+    assert_eq!(record.field("v").unwrap().array()[[1]], -1.25);
 }

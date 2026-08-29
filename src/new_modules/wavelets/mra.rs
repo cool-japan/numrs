@@ -376,29 +376,48 @@ pub fn visushrink_threshold(signal: &[f64], levels: usize) -> f64 {
 
 /// Apply SureShrink threshold (Stein's Unbiased Risk Estimate)
 ///
-/// For simplicity, this implementation uses a heuristic approximation.
+/// Minimizes the exact SURE risk for soft thresholding,
+///
+/// ```text
+/// SURE(t) = n - 2 * #{|x_i| <= t} + sum_i min(x_i^2, t^2)
+/// ```
+///
+/// over the candidate thresholds `t = |x_(i)|` (the sorted absolute
+/// coefficient magnitudes). Donoho & Johnstone (1995) show the minimizer
+/// of SURE(t) over all `t >= 0` is attained at one of these `n` order
+/// statistics, so checking exactly those candidates is exact (not a
+/// heuristic approximation).
 pub fn sureshrink_threshold(detail_coeffs: &[f64]) -> f64 {
     if detail_coeffs.is_empty() {
         return 0.0;
     }
 
-    let mut sorted: Vec<f64> = detail_coeffs.iter().map(|&x| x * x).collect();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    // Sort squared magnitudes ascending: sorted_sq[i] = x_(i)^2, the i-th
+    // order statistic. Candidate threshold at index i is t = sqrt(sorted_sq[i]).
+    let mut sorted_sq: Vec<f64> = detail_coeffs.iter().map(|&x| x * x).collect();
+    sorted_sq.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    let n = sorted.len() as f64;
+    let n = sorted_sq.len();
+    let n_f64 = n as f64;
+
+    // O(n) sweep: `prefix_sum` accumulates sum_{j<=i} x_(j)^2 so that
+    // sum_i min(x_i^2, t^2) = prefix_sum + (n - below_or_eq) * t^2
+    // is computed in O(1) per candidate (overall O(n log n) from the sort).
+    let mut prefix_sum = 0.0;
     let mut min_risk = f64::INFINITY;
     let mut best_threshold = 0.0;
 
-    for (i, &t2) in sorted.iter().enumerate() {
-        let threshold = t2.sqrt();
-        let kept_count = sorted.len() - i;
+    for (i, &t2) in sorted_sq.iter().enumerate() {
+        prefix_sum += t2;
+        let below_or_eq = (i + 1) as f64; // #{|x_j| <= t}, t = sqrt(t2)
+        let above = n_f64 - below_or_eq; // #{|x_j| > t}, each contributes t^2
 
-        // SURE risk estimate
-        let risk = (n - 2.0 * kept_count as f64 + sorted.iter().take(i).sum::<f64>()) / n;
+        let sum_min = prefix_sum + above * t2;
+        let risk = n_f64 - 2.0 * below_or_eq + sum_min;
 
         if risk < min_risk {
             min_risk = risk;
-            best_threshold = threshold;
+            best_threshold = t2.sqrt();
         }
     }
 

@@ -203,7 +203,7 @@ pub fn nanmean<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sy
                     .collect()
             };
 
-            let result = Array::from_vec(result_data).reshape(&out_shape);
+            let result = Array::from_vec_shape(result_data, &out_shape)?;
 
             if keepdims {
                 // Insert dimension of size 1 at the axis position
@@ -416,7 +416,7 @@ pub fn nanvar<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Syn
                 }
             }
 
-            let result = Array::from_vec(result_data).reshape(&out_shape);
+            let result = Array::from_vec_shape(result_data, &out_shape)?;
 
             if keepdims {
                 let mut keepdim_shape = out_shape;
@@ -528,7 +528,7 @@ pub fn nanmin<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
                 result_data.push(min_val.unwrap_or(T::nan()));
             }
 
-            let result = Array::from_vec(result_data).reshape(&out_shape);
+            let result = Array::from_vec_shape(result_data, &out_shape)?;
 
             if keepdims {
                 let mut keepdim_shape = out_shape;
@@ -640,7 +640,7 @@ pub fn nanmax<T: Float + Clone + Zero + NumCast + std::fmt::Display>(
                 result_data.push(max_val.unwrap_or(T::nan()));
             }
 
-            let result = Array::from_vec(result_data).reshape(&out_shape);
+            let result = Array::from_vec_shape(result_data, &out_shape)?;
 
             if keepdims {
                 let mut keepdim_shape = out_shape;
@@ -784,7 +784,7 @@ pub fn nansum<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Syn
                     .collect()
             };
 
-            let result = Array::from_vec(result_data).reshape(&out_shape);
+            let result = Array::from_vec_shape(result_data, &out_shape)?;
 
             if keepdims {
                 let mut keepdim_shape = out_shape;
@@ -927,7 +927,7 @@ pub fn nanprod<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sy
                     .collect()
             };
 
-            let result = Array::from_vec(result_data).reshape(&out_shape);
+            let result = Array::from_vec_shape(result_data, &out_shape)?;
 
             if keepdims {
                 let mut keepdim_shape = out_shape;

@@ -12,7 +12,13 @@ pub(super) fn compute_sum<T: Float>(x: &[T]) -> T {
 }
 
 /// Compute product of a slice for DTLZ problems
+///
+/// Companion to `compute_sum` above for DTLZ variants whose g-function or
+/// shape function needs a product reduction; no currently-implemented
+/// problem in this module needs it yet, so it is kept for that future use
+/// rather than deleted.
 #[inline]
+#[allow(dead_code)]
 pub(super) fn compute_product<T: Float>(x: &[T]) -> T {
     x.iter().copied().fold(T::one(), |acc, xi| acc * xi)
 }

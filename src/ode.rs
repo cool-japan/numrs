@@ -630,11 +630,132 @@ where
     })
 }
 
+/// Solve the dense linear system `a * x = b` in place using Gaussian
+/// elimination with partial pivoting.
+///
+/// `a` is an `n x n` matrix stored row-major (so `a[i * n + j]` is the entry in
+/// row `i`, column `j`) and `b` is the right-hand side of length `n`. On
+/// success the solution vector `x` is returned. If the matrix is singular (a
+/// pivot is numerically zero) the function returns `None`, allowing the caller
+/// to fall back to a more robust path.
+fn solve_linear_system<T>(mut a: Vec<T>, mut b: Vec<T>, n: usize) -> Option<Vec<T>>
+where
+    T: Float,
+{
+    // Forward elimination with partial pivoting.
+    for col in 0..n {
+        // Locate the row with the largest pivot magnitude in this column.
+        let mut pivot_row = col;
+        let mut pivot_mag = a[col * n + col].abs();
+        for row in (col + 1)..n {
+            let mag = a[row * n + col].abs();
+            if mag > pivot_mag {
+                pivot_mag = mag;
+                pivot_row = row;
+            }
+        }
+
+        // A negligible pivot means the Jacobian is (numerically) singular.
+        if pivot_mag <= T::epsilon() {
+            return None;
+        }
+
+        // Swap the pivot row into place (both in `a` and `b`).
+        if pivot_row != col {
+            for j in 0..n {
+                a.swap(pivot_row * n + j, col * n + j);
+            }
+            b.swap(pivot_row, col);
+        }
+
+        // Eliminate the current column from the rows below the pivot.
+        let pivot = a[col * n + col];
+        for row in (col + 1)..n {
+            let factor = a[row * n + col] / pivot;
+            if factor != T::zero() {
+                for j in col..n {
+                    let value = a[col * n + j];
+                    a[row * n + j] = a[row * n + j] - factor * value;
+                }
+                b[row] = b[row] - factor * b[col];
+            }
+        }
+    }
+
+    // Back substitution.
+    let mut x = vec![T::zero(); n];
+    for row in (0..n).rev() {
+        let mut sum = b[row];
+        for j in (row + 1)..n {
+            sum = sum - a[row * n + j] * x[j];
+        }
+        let diag = a[row * n + row];
+        if diag.abs() <= T::epsilon() {
+            return None;
+        }
+        x[row] = sum / diag;
+    }
+
+    Some(x)
+}
+
+/// Approximate the Jacobian `df/dy` of `f(t, y)` at the point `(t, y)` using
+/// forward finite differences.
+///
+/// Each component `y_j` is perturbed by `eps_j = sqrt(machine_eps) * (1 + |y_j|)`
+/// and the column `j` of the Jacobian is `(f(t, y + eps_j e_j) - f0) / eps_j`,
+/// where `f0 = f(t, y)` is supplied by the caller (so it is not recomputed).
+///
+/// The Jacobian is returned row-major as an `n x n` matrix and `nfev` is
+/// incremented by the number of additional function evaluations performed
+/// (`n`, one per perturbed column).
+fn finite_difference_jacobian<T, F>(f: &F, t: T, y: &[T], f0: &[T], nfev: &mut usize) -> Vec<T>
+where
+    T: Float,
+    F: Fn(T, &[T]) -> Vec<T>,
+{
+    let n = y.len();
+    let sqrt_eps = T::epsilon().sqrt();
+    let mut jac = vec![T::zero(); n * n];
+    let mut y_perturbed = y.to_vec();
+
+    for j in 0..n {
+        // Choose a perturbation that scales with the magnitude of y_j to keep
+        // the relative step well-conditioned even for large components.
+        let eps = sqrt_eps * (T::one() + y[j].abs());
+        let original = y_perturbed[j];
+        y_perturbed[j] = original + eps;
+
+        let f_perturbed = f(t, &y_perturbed);
+        *nfev += 1;
+
+        // Use the actual difference (handles the rounding of original + eps).
+        let dy = y_perturbed[j] - original;
+        let inv_dy = if dy != T::zero() {
+            T::one() / dy
+        } else {
+            T::one() / eps
+        };
+
+        for i in 0..n {
+            jac[i * n + j] = (f_perturbed[i] - f0[i]) * inv_dy;
+        }
+
+        // Restore the perturbed component for the next column.
+        y_perturbed[j] = original;
+    }
+
+    jac
+}
+
 /// Implicit Euler method (backward Euler) for stiff equations
 ///
 /// y_{n+1} = y_n + h * f(t_{n+1}, y_{n+1})
 ///
-/// Uses Newton iteration to solve the implicit equation
+/// Solves the implicit equation with a real Newton iteration on
+/// `R(y) = y - y_n - h * f(t_{n+1}, y) = 0`, using a finite-difference Jacobian
+/// `J = I - h * df/dy`. A fixed-point step is used as a fallback when the
+/// Newton linear solve fails (singular Jacobian).
 fn solve_implicit_euler<T, F>(
     f: &F,
     t0: T,
@@ -672,27 +793,50 @@ where
             .map(|(&yi, &fi)| yi + h_actual * fi)
             .collect();
 
-        // Newton iteration to solve: y_new = y + h * f(t_new, y_new)
+        // Newton iteration to solve R(y_new) = y_new - y - h * f(t_new, y_new) = 0.
+        let convergence_tol = newton_tol * T::from(n).expect("n is representable as Float");
         for _ in 0..max_newton_iter {
             let f_new = f(t_new, &y_new);
             nfev += 1;
 
-            // Residual: R = y_new - y - h * f(t_new, y_new)
-            let mut residual = T::zero();
-            let mut y_update = vec![T::zero(); n];
+            // Residual R = y_new - y - h * f(t_new, y_new).
+            let mut residual = vec![T::zero(); n];
+            let mut residual_norm = T::zero();
             for i in 0..n {
                 let r_i = y_new[i] - y[i] - h_actual * f_new[i];
-                y_update[i] = r_i; // Simple fixed-point iteration
-                residual = residual + r_i.abs();
+                residual[i] = r_i;
+                residual_norm = residual_norm + r_i.abs();
             }
 
-            if residual < newton_tol * T::from(n).expect("n is representable as Float") {
+            if residual_norm < convergence_tol {
                 break;
             }
 
-            // Update (simplified: use fixed-point iteration instead of full Newton)
+            // Jacobian of R: J = I - h * df/dy (finite-difference df/dy).
+            let dfdy = finite_difference_jacobian(f, t_new, &y_new, &f_new, &mut nfev);
+            let mut jacobian = vec![T::zero(); n * n];
             for i in 0..n {
-                y_new[i] = y[i] + h_actual * f_new[i];
+                for j in 0..n {
+                    let identity = if i == j { T::one() } else { T::zero() };
+                    jacobian[i * n + j] = identity - h_actual * dfdy[i * n + j];
+                }
+            }
+
+            // Solve J * delta = -R; update y_new += delta.
+            let neg_residual: Vec<T> = residual.iter().map(|&r| -r).collect();
+            match solve_linear_system(jacobian, neg_residual, n) {
+                Some(delta) => {
+                    for i in 0..n {
+                        y_new[i] = y_new[i] + delta[i];
+                    }
+                }
+                None => {
+                    // Singular Jacobian: fall back to a robust fixed-point step
+                    // y_new <- y + h * f(t_new, y_new).
+                    for i in 0..n {
+                        y_new[i] = y[i] + h_actual * f_new[i];
+                    }
+                }
             }
         }
 
@@ -752,19 +896,46 @@ where
             .map(|(&yi, &fi)| yi + h_actual * fi)
             .collect();
 
+        // Bootstrap step: implicit Euler via Newton on
+        // R(y_new) = y_new - y - h * f(t_new, y_new) = 0, J = I - h * df/dy.
+        let convergence_tol = newton_tol * T::from(n).expect("n is representable as Float");
         for _ in 0..max_newton_iter {
             let f_new = f(t_new, &y_new);
             nfev += 1;
 
-            let mut residual = T::zero();
+            let mut residual = vec![T::zero(); n];
+            let mut residual_norm = T::zero();
             for i in 0..n {
                 let r_i = y_new[i] - y[i] - h_actual * f_new[i];
-                residual = residual + r_i.abs();
-                y_new[i] = y[i] + h_actual * f_new[i];
+                residual[i] = r_i;
+                residual_norm = residual_norm + r_i.abs();
             }
 
-            if residual < newton_tol * T::from(n).expect("n is representable as Float") {
+            if residual_norm < convergence_tol {
                 break;
+            }
+
+            let dfdy = finite_difference_jacobian(f, t_new, &y_new, &f_new, &mut nfev);
+            let mut jacobian = vec![T::zero(); n * n];
+            for i in 0..n {
+                for j in 0..n {
+                    let identity = if i == j { T::one() } else { T::zero() };
+                    jacobian[i * n + j] = identity - h_actual * dfdy[i * n + j];
+                }
+            }
+
+            let neg_residual: Vec<T> = residual.iter().map(|&r| -r).collect();
+            match solve_linear_system(jacobian, neg_residual, n) {
+                Some(delta) => {
+                    for i in 0..n {
+                        y_new[i] = y_new[i] + delta[i];
+                    }
+                }
+                None => {
+                    for i in 0..n {
+                        y_new[i] = y[i] + h_actual * f_new[i];
+                    }
+                }
             }
         }
 
@@ -786,22 +957,50 @@ where
             .map(|i| four_thirds * y[i] - one_third * y_prev[i])
             .collect();
 
-        // Newton iteration for BDF2
+        // Newton iteration for BDF2 on
+        // R(y_new) = y_new - (4/3 y - 1/3 y_prev) - (2/3) h f(t_new, y_new) = 0,
+        // with Jacobian J = I - (2/3) h * df/dy.
+        let convergence_tol = newton_tol * T::from(n).expect("n is representable as Float");
         for _ in 0..max_newton_iter {
             let f_new = f(t_new, &y_new);
             nfev += 1;
 
-            let mut residual = T::zero();
+            let mut residual = vec![T::zero(); n];
+            let mut residual_norm = T::zero();
             for i in 0..n {
-                let target =
-                    four_thirds * y[i] - one_third * y_prev[i] + two_thirds * h_actual * f_new[i];
-                let r_i = y_new[i] - target;
-                residual = residual + r_i.abs();
-                y_new[i] = target;
+                let history = four_thirds * y[i] - one_third * y_prev[i];
+                let r_i = y_new[i] - history - two_thirds * h_actual * f_new[i];
+                residual[i] = r_i;
+                residual_norm = residual_norm + r_i.abs();
             }
 
-            if residual < newton_tol * T::from(n).expect("n is representable as Float") {
+            if residual_norm < convergence_tol {
                 break;
+            }
+
+            let dfdy = finite_difference_jacobian(f, t_new, &y_new, &f_new, &mut nfev);
+            let mut jacobian = vec![T::zero(); n * n];
+            for i in 0..n {
+                for j in 0..n {
+                    let identity = if i == j { T::one() } else { T::zero() };
+                    jacobian[i * n + j] = identity - two_thirds * h_actual * dfdy[i * n + j];
+                }
+            }
+
+            let neg_residual: Vec<T> = residual.iter().map(|&r| -r).collect();
+            match solve_linear_system(jacobian, neg_residual, n) {
+                Some(delta) => {
+                    for i in 0..n {
+                        y_new[i] = y_new[i] + delta[i];
+                    }
+                }
+                None => {
+                    // Singular Jacobian: robust fixed-point fallback.
+                    for i in 0..n {
+                        y_new[i] = four_thirds * y[i] - one_third * y_prev[i]
+                            + two_thirds * h_actual * f_new[i];
+                    }
+                }
             }
         }
 
@@ -934,6 +1133,116 @@ mod tests {
         let expected = (-1.0f64).exp();
         // BDF2 is second-order
         assert!((y_final - expected).abs() < 0.05);
+    }
+
+    #[test]
+    fn test_implicit_euler_stiff_scalar() {
+        // dy/dt = -lambda * y, y(0) = 1 with a large lambda makes the problem
+        // stiff. With h0 = 0.1 and lambda = 50 we have |h * lambda| = 5 >> 1,
+        // so plain fixed-point (Picard) iteration would diverge. A correct
+        // Newton-based implicit Euler must stay stable and accurate.
+        let lambda = 50.0f64;
+        let f = move |_t: f64, y: &[f64]| vec![-lambda * y[0]];
+        let config = OdeConfig {
+            h0: 0.1,
+            atol: 1e-10,
+            ..OdeConfig::default()
+        };
+        let result =
+            solve_ivp_with_config(f, (0.0, 1.0), &[1.0], OdeMethod::ImplicitEuler, &config)
+                .expect("ImplicitEuler should solve a stiff scalar problem");
+
+        assert!(result.success);
+        let y_final = result.y.last().expect("solution should have elements")[0];
+        let expected = (-lambda * 1.0).exp();
+        // The solution must remain bounded and small (no divergence / blow-up).
+        assert!(
+            y_final.is_finite() && y_final.abs() < 0.5,
+            "stiff implicit Euler diverged: y_final = {}",
+            y_final
+        );
+        // Implicit Euler is L-stable, so it should decay toward ~0 like the
+        // true solution (which is ~1.9e-22).
+        assert!(
+            (y_final - expected).abs() < 1e-2,
+            "stiff implicit Euler too far from expected {}: got {}",
+            expected,
+            y_final
+        );
+    }
+
+    #[test]
+    fn test_implicit_euler_stiff_system() {
+        // Stiff linear 2x2 system y' = A y with widely separated eigenvalues
+        // (-100 and -1). The Newton iteration must form and solve the coupled
+        // Jacobian; fixed-point iteration would diverge on the fast mode.
+        // A = [[-100, 1], [0, -1]] is upper triangular with the stated eigenvalues.
+        let f = |_t: f64, y: &[f64]| vec![-100.0 * y[0] + y[1], -y[1]];
+        let config = OdeConfig {
+            h0: 0.05,
+            atol: 1e-10,
+            ..OdeConfig::default()
+        };
+        let result = solve_ivp_with_config(
+            f,
+            (0.0, 1.0),
+            &[1.0, 1.0],
+            OdeMethod::ImplicitEuler,
+            &config,
+        )
+        .expect("ImplicitEuler should solve a stiff linear system");
+
+        assert!(result.success);
+        let y_final = result.y.last().expect("solution should have elements");
+        // Both components must stay finite and bounded; the fast (-100) mode
+        // should be heavily damped while the slow (-1) mode decays like e^{-t}.
+        assert!(
+            y_final[0].is_finite() && y_final[1].is_finite(),
+            "stiff system diverged: {:?}",
+            y_final
+        );
+        let slow_expected = (-1.0f64).exp();
+        assert!(
+            (y_final[1] - slow_expected).abs() < 5e-2,
+            "slow mode wrong: got {}, expected ~{}",
+            y_final[1],
+            slow_expected
+        );
+        assert!(
+            y_final[0].abs() < 0.1,
+            "fast mode not damped: got {}",
+            y_final[0]
+        );
+    }
+
+    #[test]
+    fn test_bdf2_stiff_scalar() {
+        // Same stiff scalar test as for implicit Euler, exercising the BDF2
+        // Newton iteration (bootstrap step + BDF2 steps).
+        let lambda = 50.0f64;
+        let f = move |_t: f64, y: &[f64]| vec![-lambda * y[0]];
+        let config = OdeConfig {
+            h0: 0.1,
+            atol: 1e-10,
+            ..OdeConfig::default()
+        };
+        let result = solve_ivp_with_config(f, (0.0, 1.0), &[1.0], OdeMethod::BDF2, &config)
+            .expect("BDF2 should solve a stiff scalar problem");
+
+        assert!(result.success);
+        let y_final = result.y.last().expect("solution should have elements")[0];
+        let expected = (-lambda * 1.0).exp();
+        assert!(
+            y_final.is_finite() && y_final.abs() < 0.5,
+            "stiff BDF2 diverged: y_final = {}",
+            y_final
+        );
+        assert!(
+            (y_final - expected).abs() < 1e-2,
+            "stiff BDF2 too far from expected {}: got {}",
+            expected,
+            y_final
+        );
     }
 
     #[test]

@@ -2,11 +2,9 @@
 //!
 //! This module provides max pooling, average pooling, and adaptive pooling operations.
 
-use super::{NnResult, PaddingMode};
+use super::NnResult;
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{
-    Array, Array1, Array2, Array3, Array4, ArrayView, ArrayView2, Axis, ScalarOperand,
-};
+use scirs2_core::ndarray::{Array2, ArrayView2};
 use scirs2_core::numeric::Float;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 

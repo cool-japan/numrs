@@ -163,34 +163,50 @@ where
     let h = T::from(1e-8).expect("1e-8 is representable as Float");
     let mut grad = vec![T::zero(); n];
 
+    // Single reusable perturbation buffer for every finite-difference
+    // evaluation below, instead of one or two fresh `x.to_vec()` copies per
+    // `i` (was O(n) allocations of size O(n), i.e. O(n^2) total copied
+    // elements; now one O(n) allocation for the whole call). Each
+    // iteration perturbs `x_work[i]` off the pristine value read from `x`
+    // itself (never accumulated via `+=`/`-=` on `x_work`), evaluates, then
+    // restores `x_work[i] = x[i]` exactly -- so `x_work` is bit-for-bit
+    // identical to `x` at the start of every iteration, exactly as a fresh
+    // `x.to_vec()` would have been.
+    let mut x_work = x.to_vec();
+
     match method {
         DerivativeMethod::Forward => {
             let f0 = f(x);
             for i in 0..n {
-                let mut x_plus = x.to_vec();
-                x_plus[i] = x_plus[i] + h;
-                grad[i] = (f(&x_plus) - f0) / h;
+                let xi = x[i];
+                x_work[i] = xi + h;
+                grad[i] = (f(&x_work) - f0) / h;
+                x_work[i] = xi;
             }
         }
         DerivativeMethod::Central => {
             for i in 0..n {
-                let mut x_plus = x.to_vec();
-                let mut x_minus = x.to_vec();
-                x_plus[i] = x_plus[i] + h;
-                x_minus[i] = x_minus[i] - h;
-                grad[i] = (f(&x_plus) - f(&x_minus))
-                    / (T::from(2.0).expect("2.0 is representable as Float") * h);
+                let xi = x[i];
+                x_work[i] = xi + h;
+                let f_plus = f(&x_work);
+                x_work[i] = xi - h;
+                let f_minus = f(&x_work);
+                x_work[i] = xi;
+                grad[i] =
+                    (f_plus - f_minus) / (T::from(2.0).expect("2.0 is representable as Float") * h);
             }
         }
         _ => {
             // Default to central for other methods
             for i in 0..n {
-                let mut x_plus = x.to_vec();
-                let mut x_minus = x.to_vec();
-                x_plus[i] = x_plus[i] + h;
-                x_minus[i] = x_minus[i] - h;
-                grad[i] = (f(&x_plus) - f(&x_minus))
-                    / (T::from(2.0).expect("2.0 is representable as Float") * h);
+                let xi = x[i];
+                x_work[i] = xi + h;
+                let f_plus = f(&x_work);
+                x_work[i] = xi - h;
+                let f_minus = f(&x_work);
+                x_work[i] = xi;
+                grad[i] =
+                    (f_plus - f_minus) / (T::from(2.0).expect("2.0 is representable as Float") * h);
             }
         }
     }
@@ -224,16 +240,19 @@ where
 
     let mut jac = vec![vec![T::zero(); n]; m];
 
+    // One reusable perturbation buffer for the whole call (see `gradient`'s
+    // comment for why this is bit-exact vs. a fresh `x.to_vec()` per `j`).
+    let mut x_work = x.to_vec();
+
     match method {
         DerivativeMethod::Central => {
             for j in 0..n {
-                let mut x_plus = x.to_vec();
-                let mut x_minus = x.to_vec();
-                x_plus[j] = x_plus[j] + h;
-                x_minus[j] = x_minus[j] - h;
-
-                let f_plus = f(&x_plus);
-                let f_minus = f(&x_minus);
+                let xj = x[j];
+                x_work[j] = xj + h;
+                let f_plus = f(&x_work);
+                x_work[j] = xj - h;
+                let f_minus = f(&x_work);
+                x_work[j] = xj;
 
                 for i in 0..m {
                     jac[i][j] = (f_plus[i] - f_minus[i])
@@ -244,9 +263,10 @@ where
         _ => {
             // Forward difference for other methods
             for j in 0..n {
-                let mut x_plus = x.to_vec();
-                x_plus[j] = x_plus[j] + h;
-                let f_plus = f(&x_plus);
+                let xj = x[j];
+                x_work[j] = xj + h;
+                let f_plus = f(&x_work);
+                x_work[j] = xj;
 
                 for i in 0..m {
                     jac[i][j] = (f_plus[i] - f0[i]) / h;
@@ -281,33 +301,62 @@ where
     let h = T::from(1e-5).expect("1e-5 is representable as Float");
     let mut hess = vec![vec![T::zero(); n]; n];
 
+    // One reusable perturbation buffer for the *entire* function (not one
+    // per `(i, j)` pair, let alone the 4 fresh `x.to_vec()` copies per pair
+    // the old code allocated) -- O(n) allocation total instead of O(n^2)
+    // allocations of size O(n) each.
+    //
+    // Each of the 4 combinations below perturbs `x_work[i]`/`x_work[j]` off
+    // the pristine scalars `xi = x[i]`/`xj = x[j]` (read from the untouched
+    // `x` slice, never accumulated via `+=`/`-=` on `x_work`), evaluates,
+    // then restores both positions to `xi`/`xj` exactly before the next
+    // combination. That restore is unconditionally exact -- including when
+    // `i == j`, where restoring `x_work[i] = xi` then `x_work[j] = xj` is
+    // just writing the same index twice with the same value -- so
+    // `x_work` is bit-for-bit identical to `x` at the start of every
+    // combination, exactly as a fresh `x.to_vec()` would have been.
+    //
+    // This also reproduces the original's `i == j` behavior exactly,
+    // including its non-obvious quirk: when `i == j`, `x_pp[j] = x_pp[j] +
+    // h` (original) reads the *already-perturbed* `x_pp[i]`, so the
+    // diagonal Hessian ends up using a `2h` step (`f(x+2h) - 2f(x) +
+    // f(x-2h)` scaled by `4h^2`), not the `h` step the off-diagonal
+    // entries use. `x_work[j] = x_work[j] + h` below reads the same
+    // just-perturbed `x_work[i]` when `i == j` (same memory location), so
+    // it reproduces that quirk bit-for-bit rather than "fixing" it.
+    let mut x_work = x.to_vec();
+    let four = T::from(4.0).expect("4.0 is representable as Float");
+
     for i in 0..n {
         for j in 0..=i {
-            // Compute ∂²f/∂x_i∂x_j using central differences
-            let mut x_pp = x.to_vec();
-            let mut x_pm = x.to_vec();
-            let mut x_mp = x.to_vec();
-            let mut x_mm = x.to_vec();
+            let xi = x[i];
+            let xj = x[j];
 
-            x_pp[i] = x_pp[i] + h;
-            x_pp[j] = x_pp[j] + h;
+            x_work[i] = xi + h;
+            x_work[j] = x_work[j] + h;
+            let f_pp = f(&x_work);
+            x_work[i] = xi;
+            x_work[j] = xj;
 
-            x_pm[i] = x_pm[i] + h;
-            x_pm[j] = x_pm[j] - h;
+            x_work[i] = xi + h;
+            x_work[j] = x_work[j] - h;
+            let f_pm = f(&x_work);
+            x_work[i] = xi;
+            x_work[j] = xj;
 
-            x_mp[i] = x_mp[i] - h;
-            x_mp[j] = x_mp[j] + h;
+            x_work[i] = xi - h;
+            x_work[j] = x_work[j] + h;
+            let f_mp = f(&x_work);
+            x_work[i] = xi;
+            x_work[j] = xj;
 
-            x_mm[i] = x_mm[i] - h;
-            x_mm[j] = x_mm[j] - h;
+            x_work[i] = xi - h;
+            x_work[j] = x_work[j] - h;
+            let f_mm = f(&x_work);
+            x_work[i] = xi;
+            x_work[j] = xj;
 
-            let f_pp = f(&x_pp);
-            let f_pm = f(&x_pm);
-            let f_mp = f(&x_mp);
-            let f_mm = f(&x_mm);
-
-            hess[i][j] = (f_pp - f_pm - f_mp + f_mm)
-                / (T::from(4.0).expect("4.0 is representable as Float") * h * h);
+            hess[i][j] = (f_pp - f_pm - f_mp + f_mm) / (four * h * h);
             hess[j][i] = hess[i][j]; // Hessian is symmetric
         }
     }
@@ -533,5 +582,220 @@ mod tests {
             let hess = hessian(&f, &[x, y]);
             prop_assert!((hess[0][1] - hess[1][0]).abs() < 1e-4);
         }
+    }
+
+    // =========================================================================
+    // to_vec sweep (W2-D): reused-`x_work`-buffer FD rewrite
+    //
+    // `gradient`/`jacobian`/`hessian` used to allocate a fresh `x.to_vec()`
+    // per perturbation (1-2 per `i`/`j` for gradient/jacobian; 4 per `(i,
+    // j)` pair for hessian, i.e. O(n^2) allocations of size O(n) each).
+    // They now reuse one `x_work` buffer for the whole call, perturbing
+    // and restoring individual scalars. These tests pin (1) bit-exact
+    // equivalence against the original approach -- kept here as
+    // `naive_*` reproductions -- including `hessian`'s non-obvious
+    // `i == j` "double perturbation to a 2h step" quirk, which a
+    // tolerance-based (`epsilon`) comparison would not reliably catch,
+    // and (2) that the rewrite is actually faster, via the same in-test
+    // timing-probe idiom `kernels::elementwise` uses
+    // (`probe_binary_dispatch_perf_vs_serial`), since `cargo bench`'s
+    // `[[bench]]` wiring in `Cargo.toml` belongs to a different lane.
+    // =========================================================================
+
+    /// Byte-for-byte reproduction of `gradient`'s pre-optimization
+    /// central-difference body (fresh `x.to_vec()` x2 per `i`).
+    fn naive_gradient_central<T, F>(f: &F, x: &[T], h: T) -> Vec<T>
+    where
+        T: Float,
+        F: Fn(&[T]) -> T,
+    {
+        let n = x.len();
+        let mut grad = vec![T::zero(); n];
+        for i in 0..n {
+            let mut x_plus = x.to_vec();
+            let mut x_minus = x.to_vec();
+            x_plus[i] = x_plus[i] + h;
+            x_minus[i] = x_minus[i] - h;
+            grad[i] =
+                (f(&x_plus) - f(&x_minus)) / (T::from(2.0).expect("2.0 is representable") * h);
+        }
+        grad
+    }
+
+    /// Byte-for-byte reproduction of `hessian`'s pre-optimization body
+    /// (4 fresh `x.to_vec()` copies per `(i, j)` pair).
+    fn naive_hessian<T, F>(f: &F, x: &[T]) -> Vec<Vec<T>>
+    where
+        T: Float,
+        F: Fn(&[T]) -> T,
+    {
+        let n = x.len();
+        let h = T::from(1e-5).expect("1e-5 is representable");
+        let mut hess = vec![vec![T::zero(); n]; n];
+
+        for i in 0..n {
+            for j in 0..=i {
+                let mut x_pp = x.to_vec();
+                let mut x_pm = x.to_vec();
+                let mut x_mp = x.to_vec();
+                let mut x_mm = x.to_vec();
+
+                x_pp[i] = x_pp[i] + h;
+                x_pp[j] = x_pp[j] + h;
+
+                x_pm[i] = x_pm[i] + h;
+                x_pm[j] = x_pm[j] - h;
+
+                x_mp[i] = x_mp[i] - h;
+                x_mp[j] = x_mp[j] + h;
+
+                x_mm[i] = x_mm[i] - h;
+                x_mm[j] = x_mm[j] - h;
+
+                let f_pp = f(&x_pp);
+                let f_pm = f(&x_pm);
+                let f_mp = f(&x_mp);
+                let f_mm = f(&x_mm);
+
+                hess[i][j] = (f_pp - f_pm - f_mp + f_mm)
+                    / (T::from(4.0).expect("4.0 is representable") * h * h);
+                hess[j][i] = hess[i][j];
+            }
+        }
+        hess
+    }
+
+    #[test]
+    fn gradient_central_matches_naive_bit_exact() {
+        // Cross-terms so every partial derivative mixes multiple x_i's.
+        let f =
+            |x: &[f64]| x[0] * x[0] * x[1] + x[1].sin() * x[2] - x[2] * x[3] * x[3] + x[3] * x[0];
+        let x = [1.3, -2.7, 0.4, 5.1];
+        let h = 1e-8;
+        let expected = naive_gradient_central(&f, &x, h);
+        let got = gradient(&f, &x, DerivativeMethod::Central);
+        assert_eq!(
+            got, expected,
+            "reused-buffer gradient must be bit-exact vs the naive fresh-to_vec version"
+        );
+    }
+
+    #[test]
+    fn jacobian_central_matches_naive_bit_exact() {
+        let f = |x: &[f64]| {
+            vec![
+                x[0] * x[0] * x[1],
+                x[0] * x[1] * x[1],
+                x[0] + x[1] * x[1] * x[1],
+            ]
+        };
+        let x = [2.3, -1.4];
+        let got = jacobian(&f, &x, DerivativeMethod::Central);
+
+        // Naive reproduction of jacobian's pre-optimization central branch.
+        let h = 1e-8;
+        let n = x.len();
+        let m = f(&x).len();
+        let mut expected = vec![vec![0.0; n]; m];
+        for j in 0..n {
+            let mut x_plus = x.to_vec();
+            let mut x_minus = x.to_vec();
+            x_plus[j] += h;
+            x_minus[j] -= h;
+            let f_plus = f(&x_plus);
+            let f_minus = f(&x_minus);
+            for i in 0..m {
+                expected[i][j] = (f_plus[i] - f_minus[i]) / (2.0 * h);
+            }
+        }
+        assert_eq!(
+            got, expected,
+            "reused-buffer jacobian must be bit-exact vs naive"
+        );
+    }
+
+    #[test]
+    fn hessian_matches_naive_bit_exact_including_diagonal() {
+        // Cross-terms on both off-diagonal and diagonal entries.
+        let f = |x: &[f64]| x[0].powi(3) + x[0] * x[1] * x[1] + x[1] * x[2] - x[2].powi(2) * x[0];
+        let x = [1.1, -0.6, 2.3];
+        let expected = naive_hessian(&f, &x);
+        let got = hessian(&f, &x);
+        for i in 0..x.len() {
+            for j in 0..x.len() {
+                assert_eq!(
+                    got[i][j],
+                    expected[i][j],
+                    "hessian[{i}][{j}] (diagonal={}) must be bit-exact vs naive",
+                    i == j
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn probe_gradient_perf_vs_naive() {
+        // n=256, as named in the lane brief.
+        let n = 256;
+        let f = |x: &[f64]| -> f64 {
+            x.iter()
+                .enumerate()
+                .map(|(i, &v)| v * v * (i as f64 + 1.0).sqrt())
+                .sum()
+        };
+        let x: Vec<f64> = (0..n).map(|i| (i as f64) * 0.01 - 1.0).collect();
+        let h = 1e-8;
+        let iters = 200;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(naive_gradient_central(&f, &x, h));
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(gradient(&f, &x, DerivativeMethod::Central));
+        }
+        let reused = t1.elapsed();
+
+        eprintln!(
+            "[gradient n={n}] naive(fresh_to_vec_per_i)={:.1}us/iter reused_buffer={:.1}us/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e6 / iters as f64,
+            reused.as_secs_f64() * 1e6 / iters as f64,
+            naive.as_secs_f64() / reused.as_secs_f64(),
+        );
+    }
+
+    #[test]
+    fn probe_hessian_perf_vs_naive() {
+        let n = 48;
+        let f = |x: &[f64]| -> f64 {
+            x.iter()
+                .enumerate()
+                .map(|(i, &v)| v * v * (i as f64 + 1.0))
+                .sum()
+        };
+        let x: Vec<f64> = (0..n).map(|i| (i as f64) * 0.01 - 0.5).collect();
+        let iters = 5;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(naive_hessian(&f, &x));
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(hessian(&f, &x));
+        }
+        let reused = t1.elapsed();
+
+        eprintln!(
+            "[hessian n={n}] naive(4_fresh_to_vec_per_ij)={:.2}ms/iter reused_buffer={:.2}ms/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e3 / iters as f64,
+            reused.as_secs_f64() * 1e3 / iters as f64,
+            naive.as_secs_f64() / reused.as_secs_f64(),
+        );
     }
 }

@@ -8,10 +8,9 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+use crate::kernels::{borrow::operand, cast, reduce};
 use num_traits::{Float, NumCast, Zero};
-use scirs2_core::ndarray::Array1;
 use scirs2_core::parallel_ops::*;
-use scirs2_core::simd_ops::SimdUnifiedOps;
 
 use super::quantile::quantile;
 
@@ -28,141 +27,187 @@ pub trait Statistics<T> {
     fn percentile(&self, q: T) -> T;
 }
 
+/// `mean`/`var`/`std`/`min`/`max` dispatch through `crate::kernels::reduce` (via
+/// `crate::kernels::borrow::operand` for a zero-copy-when-possible slice, and
+/// `crate::kernels::cast` to reinterpret it as `&[f64]`/`&[f32]` when `T` concretely is
+/// one of those) for any array length, replacing the old scheme where only `T == f64` and
+/// only `len() >= 64` got a SIMD fast path (`len() < 64`, and every `f32` array regardless
+/// of length, silently fell back to a plain sequential/parallel fold). Any other `T` keeps
+/// exactly that original fold, unchanged.
+///
+/// # `var`/`std`: population, not sample -- and never `simd_variance`/`simd_std`
+///
+/// This trait's `var`/`std` have no `ddof` parameter, so they have always computed
+/// *population* variance/stddev (divisor `n`, matching NumPy's `ddof=0` default -- see
+/// `tests/numpy_compatibility_validation.rs`'s `test_statistical_functions_numpy_equivalence`,
+/// which pins `Statistics::var`/`std` against `np.var(x, ddof=0)`/`np.std(x, ddof=0)` at
+/// `n == 10`). The previous `len() >= 64 && T == f64` branch called
+/// `scirs2_core::simd_ops::SimdUnifiedOps::{simd_variance, simd_std}`, which hardcode
+/// *sample* variance/stddev (divisor `n - 1`) -- silently wrong for any f64 array of at
+/// least 64 elements, and simply undetected by the `n == 10` regression test above since
+/// `10 < 64` never reached that branch. Fixed here by building variance as
+/// `sum_sq_dev / n` -- via the fused `reduce::var_f64`/`reduce::var_f32` kernels, which
+/// take `ddof` explicitly -- per `reduce`'s own module docs ("never use them"):
+/// `simd_variance`/`simd_std` must not be called from here or anywhere else in this crate.
+///
+/// # `min`/`max`: `NaN` propagates, matching NumPy
+///
+/// `reduce::min_f64`/`reduce::max_f64` (and the `f32` twins) implement NumPy's
+/// `np.min`/`np.max` rule: **any `NaN` anywhere in the array makes the result `NaN`**,
+/// whatever the dtype, length or `NaN` position. The generic-`T` tail below implements the
+/// same rule, so this trait has exactly one `min`/`max` `NaN` convention -- as does the rest
+/// of the crate (`math::aggregation::max`/`min`, [`ptp`], `Array::min_optimized`/
+/// `max_optimized`). The `NaN`-*ignoring* counterparts are `math::nanmin`/`math::nanmax`.
+///
+/// This replaced two earlier conventions, both now gone: the old plain fold's "poisoned only
+/// if the very first element is `NaN`", and the `SimdUnifiedOps::simd_min_element`/
+/// `simd_max_element` wrapper's placement- and length-dependent behavior. The latter was not
+/// merely an unusual convention -- it was found to return a **wrong, finite value** (the true
+/// maximum silently dropped, neither the extremum nor `NaN`) for some `NaN` placements, which
+/// is why `kernels::reduce` no longer calls it at all. See `reduce`'s module docs for the
+/// full finding and `simd_max_element_upstream_wrong_value_is_a_live_bug_not_just_new_nan_convention`
+/// below, which calls the upstream function directly and pins the bad value as a tripwire for
+/// an upstream fix. That test watches `scirs2-core`, not this crate; nothing in `numrs2`
+/// depends on the value it pins any more.
 impl<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync + 'static> Statistics<T>
     for Array<T>
 {
     fn mean(&self) -> T {
-        let data = self.to_vec();
-        if data.is_empty() {
+        let op = operand(self);
+        if let Some(s) = cast::as_f64(&op) {
+            return cast::f64_to(reduce::mean_f64(s)).expect("T == f64 per cast::as_f64 match");
+        }
+        if let Some(s) = cast::as_f32(&op) {
+            return cast::f32_to(reduce::mean_f32(s)).expect("T == f32 per cast::as_f32 match");
+        }
+        if op.is_empty() {
             return T::zero();
         }
 
-        let sum = if data.len() >= PARALLEL_THRESHOLD {
+        let sum = if op.len() >= PARALLEL_THRESHOLD {
             // Use parallel processing for large arrays
-            data.par_iter()
+            op.par_iter()
                 .map(|&x| x)
                 .reduce(|| T::zero(), |acc, x| acc + x)
         } else {
             // Use sequential processing for small arrays
-            data.iter().fold(T::zero(), |acc, &x| acc + x)
+            op.iter().fold(T::zero(), |acc, &x| acc + x)
         };
-        sum / T::from(data.len()).expect("data length should be representable")
+        sum / T::from(op.len()).expect("data length should be representable")
     }
 
     fn var(&self) -> T {
-        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
-        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            let data: Vec<f64> = self
-                .to_vec()
-                .iter()
-                .map(|x| {
-                    let ptr = x as *const T as *const f64;
-                    unsafe { *ptr }
-                })
-                .collect();
-            let nd_array = Array1::from_vec(data);
-            let result = f64::simd_variance(&nd_array.view());
-            return unsafe { std::mem::transmute_copy(&result) };
+        let op = operand(self);
+        // `ddof = 0`: this trait's `var` is population variance (see the impl docs).
+        // `reduce::var_*` fuses the mean and sum-of-squared-deviations passes under one
+        // length-tier decision -- two separate kernel calls used to take one each, which
+        // cost more in `rayon` dispatch than it saved right at the threshold.
+        if let Some(s) = cast::as_f64(&op) {
+            return cast::f64_to(reduce::var_f64(s, 0)).expect("T == f64 per cast::as_f64 match");
         }
-        let data = self.to_vec();
-        if data.is_empty() {
+        if let Some(s) = cast::as_f32(&op) {
+            return cast::f32_to(reduce::var_f32(s, 0)).expect("T == f32 per cast::as_f32 match");
+        }
+        if op.is_empty() {
             return T::zero();
         }
 
         let mean = self.mean();
-        let sum_squared_diff = if data.len() >= PARALLEL_THRESHOLD {
+        let sum_squared_diff = if op.len() >= PARALLEL_THRESHOLD {
             // Use parallel processing for large arrays
-            data.par_iter()
+            op.par_iter()
                 .map(|&x| (x - mean) * (x - mean))
                 .reduce(|| T::zero(), |acc, x| acc + x)
         } else {
             // Use sequential processing for small arrays
-            data.iter()
+            op.iter()
                 .fold(T::zero(), |acc, &x| acc + (x - mean) * (x - mean))
         };
 
-        sum_squared_diff / T::from(data.len()).expect("data length should be representable")
+        sum_squared_diff / T::from(op.len()).expect("data length should be representable")
     }
 
     fn std(&self) -> T {
-        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
-        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            let data: Vec<f64> = self
-                .to_vec()
-                .iter()
-                .map(|x| {
-                    let ptr = x as *const T as *const f64;
-                    unsafe { *ptr }
-                })
-                .collect();
-            let nd_array = Array1::from_vec(data);
-            let result = f64::simd_std(&nd_array.view());
-            return unsafe { std::mem::transmute_copy(&result) };
-        }
+        // `var()` above already routes through `reduce::var_f64`/`var_f32` (never
+        // `simd_variance`/`simd_std` -- see this impl's module docs), so std = sqrt(var)
+        // is both correct (population, matching NumPy's `ddof=0`) and, for `f64`/`f32`,
+        // just as kernel-accelerated as a dedicated `simd_std` call would have been.
         self.var().sqrt()
     }
 
     fn min(&self) -> T {
-        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
-        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            let data: Vec<f64> = self
-                .to_vec()
-                .iter()
-                .map(|x| {
-                    let ptr = x as *const T as *const f64;
-                    unsafe { *ptr }
-                })
-                .collect();
-            let nd_array = Array1::from_vec(data);
-            let result = f64::simd_min_element(&nd_array.view());
-            return unsafe { std::mem::transmute_copy(&result) };
+        let op = operand(self);
+        if let Some(s) = cast::as_f64(&op) {
+            return cast::f64_to(reduce::min_f64(s)).expect("T == f64 per cast::as_f64 match");
         }
-        let data = self.to_vec();
-        if data.is_empty() {
+        if let Some(s) = cast::as_f32(&op) {
+            return cast::f32_to(reduce::min_f32(s)).expect("T == f32 per cast::as_f32 match");
+        }
+        if op.is_empty() {
             return T::zero();
         }
 
-        if data.len() >= PARALLEL_THRESHOLD {
-            // Use parallel processing for large arrays
-            data.par_iter()
-                .cloned()
-                .reduce(|| data[0], |acc, x| if x < acc { x } else { acc })
+        // Generic-`T` tail: same NumPy rule as the `f64`/`f32` kernels above -- any `NaN`
+        // propagates. Carried alongside the extremum as a `saw_nan` flag rather than through
+        // the comparison itself, because `x < acc` is false whenever either side is `NaN`, so
+        // a comparison fold silently *drops* interior `NaN`s. The combiner is associative and
+        // commutative (min, plus a boolean OR), so the parallel branch cannot depend on how
+        // rayon happens to split the work.
+        if op.len() >= PARALLEL_THRESHOLD {
+            let (acc, saw_nan) = op.par_iter().map(|&x| (x, x.is_nan())).reduce(
+                || (op[0], op[0].is_nan()),
+                |(a, a_nan), (b, b_nan)| (if b < a { b } else { a }, a_nan | b_nan),
+            );
+            if saw_nan {
+                T::nan()
+            } else {
+                acc
+            }
         } else {
-            // Use sequential processing for small arrays
-            data.iter()
-                .fold(data[0], |acc, &x| if x < acc { x } else { acc })
+            let (acc, saw_nan) = op.iter().fold((op[0], false), |(acc, saw_nan), &x| {
+                (if x < acc { x } else { acc }, saw_nan | x.is_nan())
+            });
+            if saw_nan {
+                T::nan()
+            } else {
+                acc
+            }
         }
     }
 
     fn max(&self) -> T {
-        // Use SIMD for f64 arrays with sufficient size via SimdUnifiedOps
-        if self.len() >= 64 && std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            let data: Vec<f64> = self
-                .to_vec()
-                .iter()
-                .map(|x| {
-                    let ptr = x as *const T as *const f64;
-                    unsafe { *ptr }
-                })
-                .collect();
-            let nd_array = Array1::from_vec(data);
-            let result = f64::simd_max_element(&nd_array.view());
-            return unsafe { std::mem::transmute_copy(&result) };
+        let op = operand(self);
+        if let Some(s) = cast::as_f64(&op) {
+            return cast::f64_to(reduce::max_f64(s)).expect("T == f64 per cast::as_f64 match");
         }
-        let data = self.to_vec();
-        if data.is_empty() {
+        if let Some(s) = cast::as_f32(&op) {
+            return cast::f32_to(reduce::max_f32(s)).expect("T == f32 per cast::as_f32 match");
+        }
+        if op.is_empty() {
             return T::zero();
         }
 
-        if data.len() >= PARALLEL_THRESHOLD {
-            // Use parallel processing for large arrays
-            data.par_iter()
-                .cloned()
-                .reduce(|| data[0], |acc, x| if x > acc { x } else { acc })
+        // Generic-`T` tail; see `min` above for why the `NaN` flag rides alongside the
+        // extremum instead of being carried by the comparison.
+        if op.len() >= PARALLEL_THRESHOLD {
+            let (acc, saw_nan) = op.par_iter().map(|&x| (x, x.is_nan())).reduce(
+                || (op[0], op[0].is_nan()),
+                |(a, a_nan), (b, b_nan)| (if b > a { b } else { a }, a_nan | b_nan),
+            );
+            if saw_nan {
+                T::nan()
+            } else {
+                acc
+            }
         } else {
-            // Use sequential processing for small arrays
-            data.iter()
-                .fold(data[0], |acc, &x| if x > acc { x } else { acc })
+            let (acc, saw_nan) = op.iter().fold((op[0], false), |(acc, saw_nan), &x| {
+                (if x > acc { x } else { acc }, saw_nan | x.is_nan())
+            });
+            if saw_nan {
+                T::nan()
+            } else {
+                acc
+            }
         }
     }
 
@@ -180,6 +225,7 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync + 'stat
     }
 }
 
+/// Peak-to-peak (maximum minus minimum) range
 ///
 /// # Parameters
 ///
@@ -189,20 +235,40 @@ impl<T: Float + Clone + Zero + NumCast + std::fmt::Display + Send + Sync + 'stat
 /// # Returns
 ///
 /// An array with the peak-to-peak values
+///
+/// # `NaN`
+///
+/// `NaN` propagates, matching `np.ptp` (which is just `np.max - np.min`, and both of those
+/// propagate): any `NaN` in the reduced data -- or in a reduced lane, for the `Some(axis)`
+/// form -- makes the corresponding output `NaN`. Errors on an empty array rather than
+/// returning the `0` that `kernels::reduce`'s empty convention would give.
 pub fn ptp<T: Float + Clone + NumCast + Default + Send + Sync>(
     a: &Array<T>,
     axis: Option<usize>,
 ) -> Result<Array<T>> {
+    if a.is_empty() {
+        return Err(NumRs2Error::InvalidOperation(
+            "Cannot compute ptp (peak-to-peak) of an empty array".to_string(),
+        ));
+    }
+
     // If no axis specified, calculate the global ptp
     if axis.is_none() {
+        // One pass for both extremes and the `NaN` flag. `np.ptp` propagates `NaN` (it is
+        // `np.max - np.min`, and both of those do), so a `NaN` anywhere makes the range
+        // `NaN` -- the plain comparison folds this replaced silently ignored interior
+        // `NaN`s and reported a range computed from the finite elements only.
         let data = a.to_vec();
-        let min_val = data
-            .iter()
-            .fold(data[0], |min, &val| if val < min { val } else { min });
-        let max_val = data
-            .iter()
-            .fold(data[0], |max, &val| if val > max { val } else { max });
-        let result = vec![max_val - min_val];
+        let (min_val, max_val, saw_nan) =
+            data.iter()
+                .fold((data[0], data[0], false), |(min, max, saw_nan), &val| {
+                    (
+                        if val < min { val } else { min },
+                        if val > max { val } else { max },
+                        saw_nan | val.is_nan(),
+                    )
+                });
+        let result = vec![if saw_nan { T::nan() } else { max_val - min_val }];
         return Ok(Array::from_vec(result));
     }
 
@@ -223,10 +289,14 @@ pub fn ptp<T: Float + Clone + NumCast + Default + Send + Sync>(
         result.push(max_data[i] - min_data[i]);
     }
 
-    Ok(Array::from_vec(result).reshape(&min_array.shape()))
+    Array::from_vec_shape(result, &min_array.shape())
 }
 
 /// Calculate minimum values along the specified axis with parallel processing for large arrays
+///
+/// `NaN` propagates per lane, matching NumPy's `np.min(a, axis=k)`: an output element is
+/// `NaN` if *any* element of the lane it reduces is `NaN`. Use `math::nanmin` for the
+/// `NaN`-ignoring variant.
 pub fn min_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
     a: &Array<T>,
     axis: usize,
@@ -246,13 +316,16 @@ pub fn min_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
     let mut result_shape = shape.clone();
     result_shape.remove(axis);
 
-    // Initialize the result array
+    // Initialize the result array. The output element count comes straight from
+    // `result_shape`; it must NOT be obtained by reshaping an `empty_like(a)` scratch array,
+    // which allocates `a.len()` elements and then panics in `reshape` ("Shape mismatch")
+    // for every real axis reduction, since removing an axis of size > 1 necessarily changes
+    // the element count. That panic made this function -- and `ptp(_, Some(axis))`, its only
+    // in-crate caller -- unusable; no test reached the `Some(axis)` path to catch it.
     let data = a.to_vec();
-    let mut result = Array::<T>::empty_like(a);
-    result = result.reshape(&result_shape);
 
     // For each position in the result array
-    let result_size = result.size();
+    let result_size: usize = result_shape.iter().product();
     let mut min_values = vec![T::zero(); result_size];
 
     // Calculate the initial indices
@@ -293,8 +366,12 @@ pub fn min_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                     stride *= shape[j];
                 }
 
-                // Initialize min value with the first element
+                // Initialize min value with the first element. `saw_nan` rides alongside
+                // because `<` is false whenever either side is `NaN`, so the comparison
+                // alone would drop an interior `NaN` instead of propagating it (NumPy's
+                // `np.min` rule, shared with `Statistics::min` and `kernels::reduce`).
                 *min_val = data[flat_idx];
+                let mut saw_nan = min_val.is_nan();
 
                 // Compare with remaining elements along the axis
                 for k in 1..axis_size {
@@ -309,9 +386,14 @@ pub fn min_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                     }
 
                     // Update min if needed
+                    saw_nan |= data[new_idx].is_nan();
                     if data[new_idx] < *min_val {
                         *min_val = data[new_idx];
                     }
+                }
+
+                if saw_nan {
+                    *min_val = T::nan();
                 }
             });
     } else {
@@ -345,8 +427,10 @@ pub fn min_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                 stride *= shape[j];
             }
 
-            // Initialize min value with the first element
+            // Initialize min value with the first element; see the parallel branch above
+            // for why `saw_nan` is tracked separately from the comparison.
             min_values[i] = data[flat_idx];
+            let mut saw_nan = min_values[i].is_nan();
 
             // Compare with remaining elements along the axis
             for k in 1..axis_size {
@@ -361,17 +445,24 @@ pub fn min_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                 }
 
                 // Update min if needed
+                saw_nan |= data[new_idx].is_nan();
                 if data[new_idx] < min_values[i] {
                     min_values[i] = data[new_idx];
                 }
             }
+
+            if saw_nan {
+                min_values[i] = T::nan();
+            }
         }
     }
 
-    Ok(Array::from_vec(min_values).reshape(&result_shape))
+    Array::from_vec_shape(min_values, &result_shape)
 }
 
 /// Calculate maximum values along the specified axis with parallel processing for large arrays
+///
+/// `NaN` propagates per lane, matching NumPy's `np.max(a, axis=k)`; see [`min_along_axis`].
 pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
     a: &Array<T>,
     axis: usize,
@@ -391,13 +482,12 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
     let mut result_shape = shape.clone();
     result_shape.remove(axis);
 
-    // Initialize the result array
+    // Initialize the result array; see `min_along_axis` for why the element count is taken
+    // from `result_shape` rather than from a reshaped `empty_like(a)` scratch array.
     let data = a.to_vec();
-    let mut result = Array::<T>::empty_like(a);
-    result = result.reshape(&result_shape);
 
     // For each position in the result array
-    let result_size = result.size();
+    let result_size: usize = result_shape.iter().product();
     let mut max_values = vec![T::zero(); result_size];
 
     // Calculate the initial indices
@@ -438,8 +528,11 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                     stride *= shape[j];
                 }
 
-                // Initialize max value with the first element
+                // Initialize max value with the first element; `saw_nan` rides alongside
+                // for the same reason as in `min_along_axis` (a `>` comparison is false
+                // for `NaN` operands and would silently drop an interior `NaN`).
                 *max_val = data[flat_idx];
+                let mut saw_nan = max_val.is_nan();
 
                 // Compare with remaining elements along the axis
                 for k in 1..axis_size {
@@ -454,9 +547,14 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                     }
 
                     // Update max if needed
+                    saw_nan |= data[new_idx].is_nan();
                     if data[new_idx] > *max_val {
                         *max_val = data[new_idx];
                     }
+                }
+
+                if saw_nan {
+                    *max_val = T::nan();
                 }
             });
     } else {
@@ -490,8 +588,10 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                 stride *= shape[j];
             }
 
-            // Initialize max value with the first element
+            // Initialize max value with the first element; see the parallel branch above
+            // for why `saw_nan` is tracked separately from the comparison.
             max_values[i] = data[flat_idx];
+            let mut saw_nan = max_values[i].is_nan();
 
             // Compare with remaining elements along the axis
             for k in 1..axis_size {
@@ -506,14 +606,19 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
                 }
 
                 // Update max if needed
+                saw_nan |= data[new_idx].is_nan();
                 if data[new_idx] > max_values[i] {
                     max_values[i] = data[new_idx];
                 }
             }
+
+            if saw_nan {
+                max_values[i] = T::nan();
+            }
         }
     }
 
-    Ok(Array::from_vec(max_values).reshape(&result_shape))
+    Array::from_vec_shape(max_values, &result_shape)
 }
 
 /// Calculate a weighted average of array elements
@@ -523,16 +628,26 @@ pub fn max_along_axis<T: Float + Clone + NumCast + Default + Send + Sync>(
 /// * `a` - Input array
 /// * `weights` - Optional weights for each value
 /// * `axis` - Optional axis along which to average
-/// * `returned` - If True, also return the sum of weights
 ///
 /// # Returns
 ///
-/// The weighted average or (average, sum of weights) if returned is true
+/// The weighted average.
+///
+/// For NumPy's `average(..., returned=True)` semantics — getting the average *and* the sum
+/// of weights back — call [`average_with_weights`] instead, which returns
+/// `(weighted_average, sum_of_weights)` directly rather than silently dropping the weight sum.
+///
+/// # Breaking change (pre-1.0)
+///
+/// This function used to take a fourth `returned: Option<bool>` parameter, but both the
+/// `Some(true)` and `Some(false)`/`None` branches returned the identical value — the weight
+/// sum was computed and then thrown away, so `returned=True` never actually worked. The dead
+/// parameter has been removed rather than fixed in place, since [`average_with_weights`]
+/// already provides the correct, honest implementation of that behavior.
 pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
     a: &Array<T>,
     weights: Option<&Array<T>>,
     axis: Option<usize>,
-    returned: Option<bool>,
 ) -> Result<Array<T>> {
     // If no weights provided, return mean
     if weights.is_none() {
@@ -590,15 +705,9 @@ pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
             }
         }
 
-        let avg = Array::from_vec(result).reshape(&weight_sum.shape());
+        let avg = Array::from_vec_shape(result, &weight_sum.shape())?;
 
-        if returned.unwrap_or(false) {
-            // Return both the average and the sum of weights
-            // In a real implementation, we would have a way to return multiple arrays
-            Ok(avg)
-        } else {
-            Ok(avg)
-        }
+        Ok(avg)
     } else {
         // Overall weighted average
         let mut weighted_sum = T::zero();
@@ -615,13 +724,7 @@ pub fn average<T: Float + Clone + Zero + NumCast + Send + Sync>(
             weighted_sum / weight_sum
         };
 
-        if returned.unwrap_or(false) {
-            // Return both the average and the sum of weights
-            // In a real implementation, we would have a way to return multiple arrays
-            Ok(Array::from_vec(vec![avg]))
-        } else {
-            Ok(Array::from_vec(vec![avg]))
-        }
+        Ok(Array::from_vec(vec![avg]))
     }
 }
 
@@ -699,7 +802,7 @@ pub fn average_with_weights<T: Float + Clone + Zero + NumCast + Send + Sync>(
                         s.remove(ax);
                         s
                     };
-                    Array::from_vec(sums).reshape(&result_shape_inner)
+                    Array::from_vec_shape(sums, &result_shape_inner)?
                 };
 
                 let n = T::from(axis_size).ok_or_else(|| {
@@ -712,10 +815,10 @@ pub fn average_with_weights<T: Float + Clone + Zero + NumCast + Send + Sync>(
                     s.remove(ax);
                     s
                 };
-                let avg = Array::from_vec(avg_data).reshape(&out_shape);
+                let avg = Array::from_vec_shape(avg_data, &out_shape)?;
                 let weight_sum_arr = {
                     let ws: Vec<T> = weight_sum_data.iter().map(|_| n).collect();
-                    Array::from_vec(ws).reshape(&out_shape)
+                    Array::from_vec_shape(ws, &out_shape)?
                 };
                 Ok((avg, weight_sum_arr))
             }
@@ -744,7 +847,7 @@ pub fn average_with_weights<T: Float + Clone + Zero + NumCast + Send + Sync>(
                     })
                     .collect();
                 let out_shape = weight_sum_arr.shape();
-                let avg = Array::from_vec(avg_data).reshape(&out_shape);
+                let avg = Array::from_vec_shape(avg_data, &out_shape)?;
                 Ok((avg, weight_sum_arr))
             }
         }
@@ -831,6 +934,12 @@ fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast + Send + Sync>(
     // Calculate the total number of elements in the result
     let result_size = result.size();
 
+    // Bulk-acquire once: `result` is write-only across this whole loop
+    // (exactly one write per `i`, dynamic-rank index so `get_mut` replaces
+    // `Array::set`'s bounds-checked, per-call `Arc::make_mut` path), so one
+    // unshare covers all `result_size` writes.
+    let result_arr = result.array_mut();
+
     // For each position in the result array
     for i in 0..result_size {
         // Convert flat index to multi-dimensional indices
@@ -869,10 +978,342 @@ fn weighted_sum_along_axis<T: Float + Clone + Zero + NumCast + Send + Sync>(
         }
 
         // Set the result value
-        result.set(&result_indices, sum)?;
+        *result_arr
+            .get_mut(result_indices.as_slice())
+            .ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    result_indices
+                ))
+            })? = sum;
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod mean_var_std_min_max_tests {
+    use super::*;
+
+    /// Hand-computed (no kernel code involved) population mean/variance for an
+    /// arbitrary `f64` slice, used as independent ground truth below.
+    fn hand_population_mean_var(data: &[f64]) -> (f64, f64) {
+        let n = data.len() as f64;
+        let mean = data.iter().sum::<f64>() / n;
+        let sum_sq_dev: f64 = data.iter().map(|&x| (x - mean) * (x - mean)).sum();
+        (mean, sum_sq_dev / n)
+    }
+
+    /// Regression test for the `var`/`std` population-vs-sample bug: at `n == 100`
+    /// (well past the old `len() >= 64` threshold that gated the buggy
+    /// `simd_variance`/`simd_std` branch), `Statistics::var`/`std` must still match
+    /// NumPy's `ddof=0` (population) convention, exactly as the `n == 10` case already
+    /// pinned in `tests/numpy_compatibility_validation.rs` -- population variance does
+    /// NOT equal sample variance at this size (`n/(n-1)` is a ~1% difference at n=100,
+    /// nowhere near float noise), so this test would have failed loudly on the old code.
+    #[test]
+    fn var_std_are_population_not_sample_at_n_100() {
+        let data: Vec<f64> = (0..100).map(|i| i as f64).collect(); // uniform 0..99
+        let (_, expected_var) = hand_population_mean_var(&data);
+        // Closed form for a discrete uniform {0, ..., n-1}: (n^2 - 1) / 12.
+        assert!(
+            (expected_var - 833.25).abs() < 1e-9,
+            "sanity: {expected_var}"
+        );
+
+        let arr = Array::from_vec(data);
+        let got_var = arr.var();
+        let got_std = arr.std();
+
+        assert!(
+            (got_var - expected_var).abs() < 1e-9,
+            "population variance mismatch at n=100: got {got_var}, expected {expected_var} \
+             (sample variance would have been {})",
+            expected_var * 100.0 / 99.0
+        );
+        assert!(
+            (got_std - expected_var.sqrt()).abs() < 1e-9,
+            "population std mismatch at n=100: got {got_std}, expected {}",
+            expected_var.sqrt()
+        );
+    }
+
+    /// Same population-vs-sample check for `f32`, which never had a SIMD fast path in
+    /// this trait before (only `T == f64` did) and so was never at risk of the
+    /// `simd_variance`/`simd_std` bug itself, but must still land on population semantics
+    /// now that it is wired onto `kernels::reduce` too.
+    #[test]
+    fn var_std_are_population_for_f32_at_n_100() {
+        let data_f64: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let (_, expected_var) = hand_population_mean_var(&data_f64);
+
+        let data_f32: Vec<f32> = data_f64.iter().map(|&x| x as f32).collect();
+        let arr = Array::from_vec(data_f32);
+        let got_var = arr.var();
+        let got_std = arr.std();
+
+        assert!(
+            (got_var as f64 - expected_var).abs() < 1e-2,
+            "f32 population variance mismatch at n=100: got {got_var}, expected {expected_var}"
+        );
+        assert!(
+            (got_std as f64 - expected_var.sqrt()).abs() < 1e-2,
+            "f32 population std mismatch at n=100: got {got_std}, expected {}",
+            expected_var.sqrt()
+        );
+    }
+
+    /// Below the old 64-element threshold, `var`/`std` were never routed through
+    /// `simd_variance`/`simd_std`, so this is a same-answer-everywhere sanity check
+    /// rather than a regression pin -- included so the n=100 test above isn't the only
+    /// place population semantics are checked.
+    #[test]
+    fn var_std_are_population_below_old_threshold() {
+        let data = vec![1.0f64, 2.0, 3.0, 4.0, 5.0];
+        let arr = Array::from_vec(data);
+        // Population variance of [1,2,3,4,5] is 2.0 (mean 3.0); sample (ddof=1) is 2.5.
+        assert!((arr.var() - 2.0).abs() < 1e-12);
+        assert!((arr.std() - 2.0f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn var_std_empty_is_zero() {
+        let arr: Array<f64> = Array::from_vec(vec![]);
+        assert_eq!(arr.var(), 0.0);
+        assert_eq!(arr.std(), 0.0);
+    }
+
+    #[test]
+    fn mean_matches_naive_across_dispatch_tiers() {
+        for &n in &[0usize, 10, 100, 20_000] {
+            let data: Vec<f64> = (0..n).map(|i| i as f64 * 0.75 - 1.0).collect();
+            let naive = if data.is_empty() {
+                0.0
+            } else {
+                data.iter().sum::<f64>() / data.len() as f64
+            };
+            let arr = Array::from_vec(data);
+            assert!(
+                (arr.mean() - naive).abs() / naive.abs().max(1.0) < 1e-9,
+                "n={n}: got {}, naive {naive}",
+                arr.mean()
+            );
+        }
+    }
+
+    /// `min`/`max` on `f64`/`f32` dispatch through
+    /// `kernels::reduce::{min,max}_{f64,f32}` at any length, and those kernels implement
+    /// NumPy's rule: `NaN` propagates, wherever it sits. This test replaces an earlier
+    /// version that pinned the previous `simd_min_element`/`simd_max_element` wrapper's
+    /// placement-dependent values (`[NaN, 1.0, 2.0] -> 1.0`, `[1.0, 2.0, NaN] -> 1.0`);
+    /// those values are no longer produced by anything in this crate.
+    #[test]
+    fn min_max_propagate_nan_like_numpy_below_64() {
+        let a = Array::from_vec(vec![1.0, f64::NAN, 3.0, -2.0, f64::NAN]);
+        assert!(a.min().is_nan());
+        assert!(a.max().is_nan());
+
+        // NaN first.
+        let b = Array::from_vec(vec![f64::NAN, 1.0, 2.0]);
+        assert!(b.min().is_nan());
+        assert!(b.max().is_nan());
+
+        // NaN last -- the case the old comparison fold silently ignored.
+        let c = Array::from_vec(vec![1.0, 2.0, f64::NAN]);
+        assert!(c.min().is_nan());
+        assert!(c.max().is_nan());
+    }
+
+    /// Was `#[ignore]`d as an upstream-regression tripwire while `min`/`max` still wrapped
+    /// `simd_min_element`/`simd_max_element`. Re-enabled: `kernels::reduce` no longer calls
+    /// those, and its own comparison-based kernels return `NaN` here as NumPy does.
+    #[test]
+    fn min_max_propagate_nan_at_len_64_boundary() {
+        // The vector that first exposed the upstream wrong-finite-value defect: true maximum
+        // 5.0 at index 0, one NaN at index 10, len 64. `simd_max_element` returned 1.0 for
+        // this on the 2-lane vector path (SSE2, aarch64 NEON), where index 10 shares lane 0
+        // with the maximum; index 8 is the placement that is lane-aligned at *every* lane
+        // width upstream can pick (2 and 4), so both are checked here. This crate's rule is
+        // placement-independent, so its own kernel returns NaN for either.
+        for &nan_at in &[10usize, 8] {
+            let mut data = vec![1.0f64; 64];
+            data[0] = 5.0;
+            data[nan_at] = f64::NAN;
+            let arr = Array::from_vec(data);
+            assert!(arr.min().is_nan(), "NaN at index {nan_at}");
+            assert!(arr.max().is_nan(), "NaN at index {nan_at}");
+        }
+    }
+
+    /// Both tiers of the dispatched kernel, through the public trait: the sequential one
+    /// below `kernels::PARALLEL_MIN_LEN` and the chunked parallel one above it, with the
+    /// `NaN` in an interior chunk so a kernel that only inspected the first or last chunk
+    /// would fail. (The generic-`T` tail below the `cast::as_f64`/`as_f32` dispatch was
+    /// given the identical rule, but cannot be exercised from here: `f64` and `f32` are the
+    /// only `Float` types this crate has, so every `Statistics` instantiation available to a
+    /// test takes the dispatched path.)
+    #[test]
+    fn min_max_propagate_nan_on_both_dispatch_tiers() {
+        for &n in &[5usize, PARALLEL_THRESHOLD + 7] {
+            let mut data: Vec<f64> = (0..n).map(|i| i as f64).collect();
+            data[n / 2] = f64::NAN;
+            let arr = Array::from_vec(data);
+            assert!(arr.min().is_nan(), "n={n}");
+            assert!(arr.max().is_nan(), "n={n}");
+        }
+    }
+
+    /// `ptp` is `max - min` and inherits the same rule (`np.ptp` propagates).
+    #[test]
+    fn ptp_propagates_nan_like_numpy() {
+        let arr = Array::from_vec(vec![1.0f64, 5.0, f64::NAN, 2.0]);
+        let got = ptp(&arr, None).expect("ptp on non-empty array should succeed");
+        assert!(got.to_vec()[0].is_nan());
+    }
+
+    /// Per-lane propagation for the `Some(axis)` reductions behind `ptp`: only the lane
+    /// containing the `NaN` goes `NaN`, the other lane keeps its real range.
+    #[test]
+    fn min_max_along_axis_propagate_nan_per_lane() {
+        // [[1, NaN, 3], [4, 5, 6]] reduced along axis 1.
+        let arr = Array::from_vec(vec![1.0f64, f64::NAN, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let mins = min_along_axis(&arr, 1).expect("min_along_axis should succeed");
+        let maxs = max_along_axis(&arr, 1).expect("max_along_axis should succeed");
+        assert!(mins.to_vec()[0].is_nan());
+        assert!(maxs.to_vec()[0].is_nan());
+        assert_eq!(mins.to_vec()[1], 4.0);
+        assert_eq!(maxs.to_vec()[1], 6.0);
+
+        let ranges = ptp(&arr, Some(1)).expect("ptp should succeed");
+        assert!(ranges.to_vec()[0].is_nan());
+        assert_eq!(ranges.to_vec()[1], 2.0);
+    }
+
+    /// **Live upstream bug, not a NaN-convention change.** Found while wiring
+    /// `math::aggregation::max`/`min` onto `kernels::reduce` (withheld as a result -- see that
+    /// module's doc comments): `scirs2_core::simd_ops::SimdUnifiedOps::simd_max_element` can
+    /// return a *wrong, finite* value -- neither the true maximum nor `NaN` -- for an input
+    /// containing a `NaN`, silently discarding the real maximum.
+    ///
+    /// The mechanism is **lane poisoning** in upstream's vectorized max reduction. It folds the
+    /// input into a per-lane running maximum with `_mm256_max_pd` (4 `f64` lanes, AVX2),
+    /// `_mm_max_pd` (2 lanes, SSE2) or `vmaxq_f64` (2 lanes, aarch64 NEON), then reduces the
+    /// lanes with `>` comparisons. `MAXPD(a, b)` returns `b` whenever *either* operand is `NaN`,
+    /// so once a lane's accumulator holds `NaN` the **next chunk overwrites it** and the real
+    /// maximum already seen in that lane is gone. (On aarch64 `FMAX` propagates the `NaN` in the
+    /// lane instead, but the horizontal `if low > high { low } else { high }` step then discards
+    /// it in favour of the other lane's value.) Either way the true maximum can vanish.
+    ///
+    /// **Which `NaN` placements trip the defect is therefore a function of the SIMD lane width
+    /// chosen at runtime**: the `NaN` must land in the *same lane* as the maximum. The original
+    /// witness put the `NaN` at index 10, which shares lane 0 with index 0 only at width 2
+    /// (SSE2, aarch64 NEON); on AVX2's width 4 it lands in lane 2 instead, the two never meet,
+    /// and the call returns the correct `5.0` -- correct **by luck, not because the kernel was
+    /// fixed**. The probe below is consequently *lane-aligned* at index 8 (`8 % 2 == 0` and
+    /// `8 % 4 == 0`), so it poisons the maximum's lane at every width this kernel can pick, and
+    /// `len = 64` leaves plenty of chunks after it to overwrite the poisoned lane.
+    ///
+    /// The upstream function is called *directly* here, with no `numrs2` dispatch code
+    /// (`kernels::borrow::operand`/`kernels::cast`) in between, specifically to rule out a bug in
+    /// this crate's own plumbing: the defect reproduces with zero numrs2 code involved, so it is
+    /// upstream in `scirs2-core` itself.
+    ///
+    /// This test intentionally pins the *current, believed-wrong* value (`1.0`) as a tripwire: it
+    /// is expected to start FAILING the moment a `scirs2-core` upgrade fixes the underlying
+    /// kernel, at which point `min_max_propagate_nan_at_len_64_boundary` above and, more
+    /// importantly, `kernels::reduce`'s deliberate "do **not** call
+    /// `simd_min_element`/`simd_max_element`" decision -- plus `math::aggregation::max`/`min`'s
+    /// withheld dispatch -- should be revisited. The placement scan that follows the pinned case
+    /// keeps that tripwire from hanging on one hardcoded index: it asserts the defect *class* is
+    /// still live for *some* placement, whatever lane width this machine ends up using.
+    #[test]
+    fn simd_max_element_upstream_wrong_value_is_a_live_bug_not_just_new_nan_convention() {
+        use scirs2_core::ndarray::ArrayView1;
+        use scirs2_core::simd_ops::SimdUnifiedOps;
+
+        // 64 elements, true maximum 5.0 at index 0, a single NaN at `nan_at`, straight into
+        // the upstream kernel.
+        let upstream_max_with_nan_at = |nan_at: usize| -> f64 {
+            let mut data = vec![1.0f64; 64];
+            data[0] = 5.0; // true maximum
+            data[nan_at] = f64::NAN;
+            <f64 as SimdUnifiedOps>::simd_max_element(&ArrayView1::from(&data[..]))
+        };
+
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        {
+            // A vector path is architecturally guaranteed on both of these arches (SSE2 is
+            // x86_64 baseline, NEON is aarch64 baseline), so lane poisoning is reachable.
+            assert_eq!(
+                upstream_max_with_nan_at(8),
+                1.0,
+                "if this fails because the result is now 5.0 (correct) or NaN (conservative), \
+                 scirs2-core has changed this kernel's behavior -- see this test's doc comment \
+                 for what to do next; do NOT just update this assertion to match a new value \
+                 without re-checking whether other NaN placements are still wrong. In \
+                 particular a 5.0 obtained from a placement that is NOT lane-aligned with the \
+                 maximum proves nothing: index 10 returns 5.0 on AVX2's 4 lanes purely because \
+                 it misses the maximum's lane, while still returning a wrong 1.0 on the 2-lane \
+                 SSE2/NEON paths"
+            );
+
+            // ... and the defect *class*, independent of that single hardcoded index: at least
+            // one NaN placement must still yield a wrong finite value. Index 0 is skipped
+            // because writing the NaN there would overwrite the maximum itself.
+            let wrong_placements: Vec<usize> = (1..64)
+                .filter(|&i| {
+                    let got = upstream_max_with_nan_at(i);
+                    !got.is_nan() && got != 5.0
+                })
+                .collect();
+            assert!(
+                !wrong_placements.is_empty(),
+                "no NaN placement in 1..64 made simd_max_element drop the true maximum -- the \
+                 upstream lane-poisoning defect appears to be FIXED; revisit kernels::reduce's \
+                 deliberate refusal to call simd_min_element/simd_max_element (wrong placements \
+                 found: {wrong_placements:?})"
+            );
+        }
+
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            // No vector path here: upstream falls back to a plain `if x > result { result = x }`
+            // loop, which skips NaNs and is correct, so there is no lane to poison.
+            assert_eq!(upstream_max_with_nan_at(8), 5.0);
+        }
+    }
+
+    #[test]
+    fn min_max_no_nan_matches_naive_across_dispatch_tiers() {
+        for &n in &[1usize, 10, 100, 20_000] {
+            let data: Vec<f64> = (0..n).map(|i| ((i * 7919) % 1000) as f64 - 500.0).collect();
+            let naive_min = data.iter().cloned().fold(f64::INFINITY, f64::min);
+            let naive_max = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let arr = Array::from_vec(data);
+            assert_eq!(arr.min(), naive_min, "n={n}");
+            assert_eq!(arr.max(), naive_max, "n={n}");
+        }
+    }
+
+    #[test]
+    fn min_max_empty_is_zero() {
+        let arr: Array<f64> = Array::from_vec(vec![]);
+        assert_eq!(arr.min(), 0.0);
+        assert_eq!(arr.max(), 0.0);
+    }
+
+    #[test]
+    fn ptp_empty_array_is_error() {
+        let arr: Array<f64> = Array::from_vec(vec![]);
+        assert!(ptp(&arr, None).is_err());
+    }
+
+    #[test]
+    fn ptp_matches_max_minus_min() {
+        let arr = Array::from_vec(vec![5.0f64, -3.0, 8.0, 0.5, -10.0, 2.0]);
+        let result = ptp(&arr, None).expect("ptp on non-empty array should succeed");
+        assert_eq!(result.to_vec(), vec![18.0]); // 8.0 - (-10.0)
+    }
 }
 
 #[cfg(test)]

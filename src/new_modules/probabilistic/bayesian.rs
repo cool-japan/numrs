@@ -50,13 +50,10 @@
 //! - All array operations use `scirs2_core::ndarray`
 //! - All RNG operations use `scirs2_core::random`
 
-use crate::array::Array;
 use crate::new_modules::probabilistic::{
     validate_positive, validate_probability, BetaDistribution, DirichletDistribution,
     GammaDistribution, ProbabilisticError, Result,
 };
-use scirs2_core::random::{thread_rng, Rng};
-use std::f64::consts::PI;
 
 // ============================================================================
 // Conjugate Prior Distributions

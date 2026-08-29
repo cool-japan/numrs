@@ -31,13 +31,10 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use parquet::basic::Type as PhysicalType;
 use parquet::errors::ParquetError;
 use parquet::file::properties::WriterProperties;
-use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::file::writer::SerializedFileWriter;
 use parquet::schema::parser::parse_message_type;
-use parquet::schema::types::Type;
 use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
@@ -161,8 +158,9 @@ macro_rules! impl_parquet_io {
                 // Note: Parquet schema metadata is set at schema creation time
                 // We'll encode shape in the data itself for now
 
-                // Get flattened data
-                let data = array.to_vec();
+                // Values are not yet written into the Parquet column itself
+                // (see the note below) - only the shape/dtype sidecar is
+                // populated, so the array data is not flattened here.
                 let shape = array.shape();
 
                 // Write data to a single row group
@@ -192,8 +190,8 @@ macro_rules! impl_parquet_io {
                 // Store shape metadata separately
                 let metadata_path = path.with_extension("parquet.meta");
                 let metadata = serde_json::json!({
-                    "shape": shape,
-                    "dtype": $type_name,
+                    SHAPE_METADATA_KEY: shape,
+                    DTYPE_METADATA_KEY: $type_name,
                 });
 
                 std::fs::write(&metadata_path, metadata.to_string())
@@ -204,39 +202,18 @@ macro_rules! impl_parquet_io {
         }
 
         impl ParquetReadable for $type {
-            fn read_from_parquet(path: &Path) -> Result<Array<Self>> {
-                // Read metadata
-                let metadata_path = path.with_extension("parquet.meta");
-                let metadata_str = std::fs::read_to_string(&metadata_path)
-                    .map_err(|e| NumRs2Error::IOError(format!("Failed to read metadata: {}", e)))?;
-
-                let metadata: serde_json::Value = serde_json::from_str(&metadata_str)
-                    .map_err(|e| NumRs2Error::DeserializationError(format!("Invalid metadata: {}", e)))?;
-
-                let shape: Vec<usize> = metadata["shape"]
-                    .as_array()
-                    .ok_or_else(|| NumRs2Error::DeserializationError("Missing shape in metadata".to_string()))?
-                    .iter()
-                    .map(|v| v.as_u64().ok_or_else(|| NumRs2Error::DeserializationError("Invalid shape value".to_string())).map(|x| x as usize))
-                    .collect::<Result<Vec<_>>>()?;
-
-                // Open file
-                let file = File::open(path)
-                    .map_err(|e| NumRs2Error::IOError(format!("Failed to open file: {}", e)))?;
-
-                let reader = SerializedFileReader::new(file)
-                    .map_err(parquet_err_to_numrs2)?;
-
-                // Read data
-                let data = Vec::<$type>::new();
-
-                // Note: This is a simplified implementation
-                // A full implementation would use typed column readers
-
-                // For now, return error indicating incomplete implementation
-                return Err(NumRs2Error::IOError(
+            fn read_from_parquet(_path: &Path) -> Result<Array<Self>> {
+                // Not implemented yet: a full implementation would open the
+                // file, parse the shape/dtype sidecar written by
+                // `write_to_parquet` above, and reconstruct the array via
+                // typed Parquet column readers. Since `write_to_parquet`
+                // does not yet write real column values either (see the
+                // note there), there is nothing to read back regardless -
+                // fail fast rather than doing sidecar/file I/O that would
+                // be discarded anyway.
+                Err(NumRs2Error::IOError(
                     "Parquet reading not fully implemented yet - use Arrow format instead".to_string()
-                ));
+                ))
             }
         }
     };
@@ -262,11 +239,29 @@ mod tests {
 
         let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 
-        // Note: This will currently fail with "not fully implemented"
-        // This is expected as we're providing a framework for full implementation
+        // `write_to_parquet` does not yet write real column values (see the
+        // note on `ParquetWritable::write_to_parquet`), but the schema and
+        // the shape/dtype sidecar should be written successfully.
         let result = write_parquet(&array, &path, None);
+        assert!(
+            result.is_ok(),
+            "write_parquet should succeed: {:?}",
+            result.err()
+        );
 
-        // For now, we expect this to work for metadata writing
-        // The full Parquet implementation would be completed in a future iteration
+        let metadata_path = path.with_extension("parquet.meta");
+        assert!(metadata_path.exists(), "shape/dtype sidecar should exist");
+
+        let metadata_str =
+            std::fs::read_to_string(&metadata_path).expect("sidecar should be readable");
+        let metadata: serde_json::Value =
+            serde_json::from_str(&metadata_str).expect("sidecar should be valid JSON");
+        assert_eq!(metadata[SHAPE_METADATA_KEY], serde_json::json!([2, 2]));
+        assert_eq!(metadata[DTYPE_METADATA_KEY], "f64");
+
+        // `read_parquet` is not implemented yet - it must fail explicitly
+        // rather than silently returning wrong data.
+        let read_result = read_parquet::<f64, _>(&path);
+        assert!(read_result.is_err());
     }
 }

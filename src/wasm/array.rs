@@ -3,7 +3,6 @@
 //! This module provides JavaScript-friendly wrappers for NumRS2's core Array type.
 
 use crate::array::Array;
-use crate::error::Result as NumRs2Result;
 use crate::stats::Statistics;
 use wasm_bindgen::prelude::*;
 
@@ -11,6 +10,10 @@ use wasm_bindgen::prelude::*;
 ///
 /// This struct provides JavaScript-friendly bindings for NumRS2's Array type.
 /// All operations return Results and avoid unwrap() calls for robust error handling.
+///
+/// `Array<f64>` is `Arc`-backed (copy-on-write), so deriving `Clone` here is
+/// an O(1) reference-count bump, not a deep copy.
+#[derive(Clone)]
 #[wasm_bindgen]
 pub struct WasmArray {
     inner: Array<f64>,
@@ -93,7 +96,7 @@ impl WasmArray {
         }
 
         Ok(WasmArray {
-            inner: Array::from_vec(data.to_vec()).reshape(shape),
+            inner: Array::from_vec_shape(data.to_vec(), shape)?,
         })
     }
 
@@ -399,10 +402,23 @@ impl WasmArray {
         WasmArray { inner: array }
     }
 
+    /// Borrow the inner Array
+    ///
+    /// # Returns
+    /// A reference to the contained Array<f64>, avoiding an unnecessary
+    /// `to_vec()` + reconstruction round-trip for callers in sibling
+    /// modules that only need to read the data.
+    pub(crate) fn inner(&self) -> &Array<f64> {
+        &self.inner
+    }
+
     /// Consume this WasmArray and return the inner Array
     ///
     /// # Returns
     /// The contained Array<f64>
+    // Consuming counterpart to `inner()` (which is used); no sibling module
+    // needs ownership yet, only a borrow, so this has no call sites today.
+    #[allow(dead_code)]
     pub(crate) fn into_inner(self) -> Array<f64> {
         self.inner
     }

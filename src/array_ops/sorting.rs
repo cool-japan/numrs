@@ -48,7 +48,11 @@ pub fn partition<T: Clone + PartialOrd>(
 ) -> Result<Array<T>> {
     match axis {
         None => {
-            // Flatten array and partition
+            // Flatten array and partition.
+            // owning: `quick_select` partitions `data` in place, and the
+            // partitioned buffer becomes the returned `Array` directly
+            // (`Array::from_vec(data)` below) -- an owned, mutable copy
+            // is inherent to the operation, not incidental.
             let mut data = array.to_vec();
             let n = data.len();
 
@@ -63,7 +67,7 @@ pub fn partition<T: Clone + PartialOrd>(
             quick_select(&mut data, 0, n - 1, kth);
 
             // Reshape back to original shape
-            Ok(Array::from_vec(data).reshape(&array.shape()))
+            Ok(Array::from_vec_shape(data, &array.shape())?)
         }
         Some(axis_val) => {
             let shape = array.shape();
@@ -284,20 +288,24 @@ pub fn searchsorted<T: Clone + PartialOrd>(
             )));
         }
 
-        // Create a new array using the sorter indices
+        // Create a new array using the sorter indices. Both `a` and
+        // `sorter_array` are only ever read here (indexed / iterated),
+        // never mutated or moved, so a zero-copy (when contiguous)
+        // `operand` borrow replaces the old `a.to_vec()`; `sorter_array`
+        // needs no owned buffer at all since it is walked once,
+        // sequentially.
         let mut sorted_data = Vec::with_capacity(a.size());
-        let a_vec = a.to_vec();
-        let sorter_vec = sorter_array.to_vec();
+        let a_op = crate::kernels::borrow::operand(a);
 
-        for &idx in &sorter_vec {
-            if idx >= a_vec.len() {
+        for &idx in sorter_array.array().iter() {
+            if idx >= a_op.len() {
                 return Err(NumRs2Error::InvalidOperation(format!(
                     "Sorter index {} out of range for array of size {}",
                     idx,
-                    a_vec.len()
+                    a_op.len()
                 )));
             }
-            sorted_data.push(a_vec[idx].clone());
+            sorted_data.push(a_op[idx].clone());
         }
 
         Array::from_vec(sorted_data)
@@ -312,34 +320,35 @@ pub fn searchsorted<T: Clone + PartialOrd>(
         a_sorted
     };
 
-    // Check if a_flat is sorted
-    let a_flat_vec = a_flat.to_vec();
-    for i in 1..a_flat_vec.len() {
-        if a_flat_vec[i] < a_flat_vec[i - 1] {
+    // Check if a_flat is sorted. `operand` zero-copy borrows `a_flat`'s
+    // data (contiguous case) and is reused below for the binary search
+    // itself -- `binary_search_left`/`_right` take `&[T]`, which
+    // `&a_flat_op` coerces to via `Operand`'s `Deref`.
+    let a_flat_op = crate::kernels::borrow::operand(&a_flat);
+    for i in 1..a_flat_op.len() {
+        if a_flat_op[i] < a_flat_op[i - 1] {
             return Err(NumRs2Error::InvalidOperation(
                 "The input array must be sorted in ascending order".into(),
             ));
         }
     }
 
-    // Convert v to a flat array if needed
-    let v_vec = v.to_vec();
+    // Perform binary search for each value in v (iterated directly,
+    // never needing an owned copy of `v`'s data).
+    let mut result = Vec::with_capacity(v.size());
 
-    // Perform binary search for each value in v
-    let mut result = Vec::with_capacity(v_vec.len());
-
-    for val in &v_vec {
+    for val in v.array().iter() {
         let idx = if side == "left" {
-            binary_search_left(&a_flat_vec, val)
+            binary_search_left(&a_flat_op, val)
         } else {
-            binary_search_right(&a_flat_vec, val)
+            binary_search_right(&a_flat_op, val)
         };
 
         result.push(idx);
     }
 
     // Reshape result to match v's shape
-    Ok(Array::from_vec(result).reshape(&v.shape()))
+    Array::from_vec_shape(result, &v.shape())
 }
 
 /// Binary search for the leftmost insertion point
@@ -409,16 +418,18 @@ pub fn sort<T: Clone + PartialOrd>(array: &Array<T>, kind: Option<&str>) -> Resu
     match sort_kind {
         "mergesort" => msort(array),
         "quicksort" => {
-            // Use standard library sort (which is typically introsort)
+            // Use standard library sort (which is typically introsort).
+            // owning: `sort_by` sorts `data` in place and it becomes the
+            // returned `Array` directly.
             let mut data = array.to_vec();
             data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            Ok(Array::from_vec(data).reshape(&array.shape()))
+            Ok(Array::from_vec_shape(data, &array.shape())?)
         }
         "heapsort" => {
-            // Implement heap sort
+            // Implement heap sort. owning: same as the quicksort arm above.
             let mut data = array.to_vec();
             heap_sort(&mut data);
-            Ok(Array::from_vec(data).reshape(&array.shape()))
+            Ok(Array::from_vec_shape(data, &array.shape())?)
         }
         _ => Err(NumRs2Error::InvalidOperation(format!(
             "Unknown sort kind: {}. Must be 'quicksort', 'mergesort', or 'heapsort'",
@@ -510,6 +521,8 @@ where
         array.flatten(None)
     };
 
+    // owning: `data.sort_by` below sorts in place and the buffer becomes
+    // the returned `Array` directly.
     let mut data = flattened.to_vec();
 
     // Sort by magnitude first, then by argument for equal magnitudes
@@ -534,7 +547,7 @@ where
     });
 
     // Reshape back to original shape
-    Ok(Array::from_vec(data).reshape(&array.shape()))
+    Array::from_vec_shape(data, &array.shape())
 }
 
 /// Count number of occurrences of each value in array of non-negative integers
@@ -588,11 +601,14 @@ where
         ));
     }
 
-    let x_data = x.to_vec();
+    // Read-only throughout (validated, scanned for a max, and indexed
+    // in step with `w_data` below), so a zero-copy-when-possible
+    // `operand` borrow replaces the old owned `x.to_vec()`.
+    let x_data = crate::kernels::borrow::operand(x);
     let _n = x_data.len();
 
     // Check for negative values
-    for val in &x_data {
+    for val in x_data.iter() {
         if *val < T::zero() {
             return Err(NumRs2Error::InvalidOperation(
                 "bincount requires non-negative integers".to_string(),
@@ -600,14 +616,18 @@ where
         }
     }
 
-    // Find maximum value to determine output size
-    let max_val = x_data
-        .iter()
-        .filter_map(|v| v.to_usize())
-        .max()
-        .unwrap_or(0);
-
-    let output_len = std::cmp::max(max_val + 1, minlength.unwrap_or(0));
+    // Find maximum value to determine output size. NumPy's output length is
+    // `max(x) + 1` when `x` is non-empty, and exactly `minlength` (0 if
+    // unspecified) when `x` is empty -- there is no implicit "+1" bin for an
+    // empty array (`np.bincount([])` is `array([], dtype=int64)`, not a
+    // single zero bin). Folding the empty case into `.max().unwrap_or(0)`
+    // then unconditionally adding 1 below would produce a length-1 output
+    // for empty, non-`minlength` input instead of NumPy's length-0 one, so
+    // the "+1" only applies when a real maximum was found.
+    let output_len = match x_data.iter().filter_map(|v| v.to_usize()).max() {
+        Some(max_val) => std::cmp::max(max_val + 1, minlength.unwrap_or(0)),
+        None => minlength.unwrap_or(0),
+    };
 
     // Initialize output array
     let mut counts = vec![W::zero(); output_len];
@@ -620,7 +640,7 @@ where
             });
         }
 
-        let w_data = w.to_vec();
+        let w_data = crate::kernels::borrow::operand(w);
         for (i, val) in x_data.iter().enumerate() {
             if let Some(idx) = val.to_usize() {
                 if idx < output_len {
@@ -630,7 +650,7 @@ where
         }
     } else {
         // Without weights, count occurrences
-        for val in &x_data {
+        for val in x_data.iter() {
             if let Some(idx) = val.to_usize() {
                 if idx < output_len {
                     counts[idx] += W::from(1).unwrap_or(W::zero());
@@ -683,7 +703,11 @@ where
         ));
     }
 
-    let bins_data = bins.to_vec();
+    // Read-only: indexed for the monotonic check and passed straight
+    // into `binary_search_left`/`_right` below (`&[T]`, via `Operand`'s
+    // `Deref`), so a zero-copy-when-possible `operand` borrow replaces
+    // the old owned `bins.to_vec()`.
+    let bins_data = crate::kernels::borrow::operand(bins);
     if bins_data.is_empty() {
         return Err(NumRs2Error::InvalidOperation(
             "bins cannot be empty".to_string(),
@@ -708,31 +732,52 @@ where
         ));
     }
 
-    let x_data = x.to_vec();
-    let mut indices = Vec::with_capacity(x_data.len());
+    // For decreasing bins, precompute the reversed bin edges once. The
+    // old code rebuilt this identical `Vec` from scratch (`.iter().rev()
+    // .cloned().collect()`) on *every* element of `x` inside the loop
+    // below, even though it never depends on the element being
+    // digitized -- an O(len(x) * len(bins)) allocation pattern for the
+    // decreasing case, hoisted here to O(len(bins)) once.
+    let reversed_bins: Vec<T> = if increasing {
+        Vec::new()
+    } else {
+        bins_data.iter().rev().cloned().collect()
+    };
 
-    for val in x_data {
+    let mut indices = Vec::with_capacity(x.size());
+
+    for val in x.array().iter() {
         let idx = if increasing {
-            // Use binary search for increasing bins
+            // Use binary search for increasing bins. NumPy defines digitize
+            // in terms of searchsorted as `bins.searchsorted(x, side='right'
+            // if not right else 'left')` -- i.e. `right=False` (the
+            // NumPy-default, half-open-on-the-right bins `bins[i-1] <= x <
+            // bins[i]`) needs the *rightmost* insertion point (count of
+            // bin edges <= x), and `right=True` needs the *leftmost* one
+            // (count of edges < x). Swapped relative to the naive
+            // `right -> binary_search_right` reading, which silently
+            // inverts the two on every value that lands exactly on a bin
+            // edge (interior, non-edge values happen to agree either way,
+            // which is how this went unnoticed).
             if right {
-                binary_search_right(&bins_data, &val)
+                binary_search_left(&bins_data, val)
             } else {
-                binary_search_left(&bins_data, &val)
+                binary_search_right(&bins_data, val)
             }
         } else {
             // For decreasing bins, we need to reverse the logic
             let n = bins_data.len();
             if right {
-                n - binary_search_left(&bins_data.iter().rev().cloned().collect::<Vec<_>>(), &val)
+                n - binary_search_left(&reversed_bins, val)
             } else {
-                n - binary_search_right(&bins_data.iter().rev().cloned().collect::<Vec<_>>(), &val)
+                n - binary_search_right(&reversed_bins, val)
             }
         };
 
         indices.push(idx);
     }
 
-    Ok(Array::from_vec(indices).reshape(&x.shape()))
+    Array::from_vec_shape(indices, &x.shape())
 }
 
 /// Perform an indirect stable sort using a sequence of keys
@@ -840,11 +885,13 @@ pub fn msort<T: Clone + PartialOrd>(array: &Array<T>) -> Result<Array<T>> {
         array.flatten(None)
     };
 
+    // owning: `merge_sort` sorts `data` in place and it becomes the
+    // returned `Array` directly.
     let mut data = flattened.to_vec();
     merge_sort(&mut data);
 
     // Reshape back to original shape
-    Ok(Array::from_vec(data).reshape(&array.shape()))
+    Array::from_vec_shape(data, &array.shape())
 }
 
 /// Merge sort implementation for in-place sorting
@@ -946,6 +993,27 @@ mod tests {
         assert_eq!(indices_right.to_vec(), vec![3, 5]); // After last occurrence
     }
 
+    /// `searchsorted`'s `sorter` argument (an unsorted `a` plus the
+    /// permutation that would sort it, typically `argsort(a)`'s output) is
+    /// the one piece of the NumPy signature the `math::search` duplicate
+    /// has no way to reach at all -- pinned against
+    /// `numpy.searchsorted(np.array([5,1,3,9,7]), [0,2,6,10],
+    /// side=..., sorter=np.argsort([5,1,3,9,7]))` (numpy 2.4.2).
+    #[test]
+    fn test_searchsorted_with_sorter() {
+        let a = Array::from_vec(vec![5, 1, 3, 9, 7]); // unsorted
+        let sorter = Array::from_vec(vec![1usize, 2, 0, 4, 3]); // argsort(a)
+        let v = Array::from_vec(vec![0, 2, 6, 10]);
+
+        let left =
+            searchsorted(&a, &v, Some("left"), Some(&sorter)).expect("operation should succeed");
+        assert_eq!(left.to_vec(), vec![0, 1, 3, 5]);
+
+        let right =
+            searchsorted(&a, &v, Some("right"), Some(&sorter)).expect("operation should succeed");
+        assert_eq!(right.to_vec(), vec![0, 1, 3, 5]);
+    }
+
     #[test]
     fn test_binary_search_functions() {
         let arr = vec![1, 3, 5, 7, 9];
@@ -991,6 +1059,43 @@ mod tests {
         assert_eq!(counts.to_vec(), vec![0, 0, 0, 0, 0]);
     }
 
+    /// Regression test: an empty input array with no `minlength` must
+    /// produce a length-0 output, not a length-1 `[0]` output. Pinned
+    /// against `numpy.bincount(np.array([], dtype=int))` (numpy 2.4.2),
+    /// which is `array([], dtype=int64)` -- there is no implicit "empty
+    /// array has a max of 0, so allocate one bin" behavior. This previously
+    /// failed because the output length was computed as
+    /// `max(x_data.max().unwrap_or(0) + 1, minlength.unwrap_or(0))`: for an
+    /// empty `x_data` that reads as `max(0 + 1, 0) == 1`, one bin too many.
+    /// `minlength` and `weights` combined: pinned against
+    /// `numpy.bincount(np.array([1,2,3]), minlength=8,
+    /// weights=np.array([0.5,1.0,1.5]))` (numpy 2.4.2) ==
+    /// `[0., 0.5, 1., 1.5, 0., 0., 0., 0.]` -- `minlength` pads the tail
+    /// with zero-weight bins past `max(x)+1`, and every bin (including the
+    /// padding) is `weights`-typed (`f64`), not the input's own (`i32`)
+    /// dtype.
+    #[test]
+    fn test_bincount_minlength_and_weights_combined() {
+        let x = Array::from_vec(vec![1, 2, 3]);
+        let weights = Array::from_vec(vec![0.5, 1.0, 1.5]);
+        let counts: Array<f64> =
+            bincount(&x, Some(&weights), Some(8)).expect("operation should succeed");
+        assert_eq!(counts.shape(), vec![8]);
+        assert_eq!(
+            counts.to_vec(),
+            vec![0.0, 0.5, 1.0, 1.5, 0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    #[test]
+    fn test_bincount_empty_no_minlength_is_empty() {
+        let empty: Array<i32> = Array::from_vec(vec![]);
+        let counts: Array<i32> =
+            bincount(&empty, None::<&Array<i32>>, None).expect("operation should succeed");
+        assert_eq!(counts.shape(), vec![0]);
+        assert_eq!(counts.to_vec(), Vec::<i32>::new());
+    }
+
     #[test]
     fn test_digitize() {
         // Basic digitize with increasing bins
@@ -999,14 +1104,19 @@ mod tests {
         let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
 
-        // Test boundary values
+        // Test boundary values: every sample sits exactly on a bin edge, so
+        // this is the case that actually distinguishes `right=false` from
+        // `right=true` (interior, non-edge samples give the same answer
+        // either way). Pinned against `numpy.digitize` 2.4.2:
+        // `np.digitize([0,1,2.5,4,10], [0,1,2.5,4,10], right=False)`
+        // == `[1, 2, 3, 4, 5]`, and with `right=True` == `[0, 1, 2, 3, 4]`.
         let x = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
         let indices = digitize(&x, &bins, false).expect("operation should succeed");
-        assert_eq!(indices.to_vec(), vec![0, 1, 2, 3, 4]);
+        assert_eq!(indices.to_vec(), vec![1, 2, 3, 4, 5]);
 
         // Test with right=true
         let indices = digitize(&x, &bins, true).expect("operation should succeed");
-        assert_eq!(indices.to_vec(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(indices.to_vec(), vec![0, 1, 2, 3, 4]);
 
         // Test values outside bounds
         let x = Array::from_vec(vec![-1.0, 15.0]);
@@ -1025,6 +1135,23 @@ mod tests {
         let indices = digitize(&x, &bins, false).expect("operation should succeed");
         assert_eq!(indices.shape(), vec![2, 2]);
         assert_eq!(indices.to_vec(), vec![1, 4, 3, 2]);
+    }
+
+    /// Decreasing-bins edge-value case, mirroring `test_digitize`'s
+    /// increasing-bins boundary check above but for the reversed-bins
+    /// branch. Pinned against `numpy.digitize` 2.4.2:
+    /// `np.digitize([0,1,2.5,4,10], [10,4,2.5,1,0], right=False)`
+    /// == `[4, 3, 2, 1, 0]`, and with `right=True` == `[5, 4, 3, 2, 1]`.
+    #[test]
+    fn test_digitize_decreasing_bins_edge_values() {
+        let bins_dec = Array::from_vec(vec![10.0, 4.0, 2.5, 1.0, 0.0]);
+        let x = Array::from_vec(vec![0.0, 1.0, 2.5, 4.0, 10.0]);
+
+        let right_false = digitize(&x, &bins_dec, false).expect("operation should succeed");
+        assert_eq!(right_false.to_vec(), vec![4, 3, 2, 1, 0]);
+
+        let right_true = digitize(&x, &bins_dec, true).expect("operation should succeed");
+        assert_eq!(right_true.to_vec(), vec![5, 4, 3, 2, 1]);
     }
 
     #[test]
@@ -1062,7 +1189,7 @@ mod tests {
         let sorted = sort_complex(&a).expect("operation should succeed");
 
         // Check that magnitudes are in ascending order
-        let magnitudes: Vec<f64> = sorted.to_vec().iter().map(|c| c.norm()).collect();
+        let magnitudes: Vec<f64> = sorted.array().iter().map(|c| c.norm()).collect();
         for i in 1..magnitudes.len() {
             assert!(magnitudes[i] >= magnitudes[i - 1]);
         }
@@ -1077,7 +1204,7 @@ mod tests {
         let sorted_b = sort_complex(&b).expect("operation should succeed");
 
         // All should have magnitude 1, sorted by argument
-        for val in sorted_b.to_vec() {
+        for val in sorted_b.array().iter() {
             assert!((val.norm() - 1.0_f64).abs() < 1e-10);
         }
     }
@@ -1119,5 +1246,72 @@ mod tests {
         // Should sort by primary key (row 1) first: [1,1,2,2,3]
         // Then by secondary key (row 0) within ties
         assert_eq!(indices.to_vec(), vec![3, 2, 1, 0, 4]);
+    }
+
+    /// Manual timing probe (no `[[bench]]` entry available in this
+    /// lane's `Cargo.toml`, owned elsewhere) for `digitize`'s
+    /// decreasing-bins path: the old code rebuilt the reversed bin-edge
+    /// `Vec` from scratch on *every* element of `x` even though it never
+    /// depends on that element; it is now hoisted out of the loop.
+    #[test]
+    fn probe_digitize_decreasing_bins_perf_vs_naive_rebuild_per_element() {
+        fn naive_digitize_decreasing(x: &Array<f64>, bins_data: &[f64], right: bool) -> Vec<usize> {
+            let x_data = x.to_vec();
+            let mut indices = Vec::with_capacity(x_data.len());
+            let n = bins_data.len();
+            for val in x_data {
+                let idx = if right {
+                    n - binary_search_left(
+                        &bins_data.iter().rev().cloned().collect::<Vec<_>>(),
+                        &val,
+                    )
+                } else {
+                    n - binary_search_right(
+                        &bins_data.iter().rev().cloned().collect::<Vec<_>>(),
+                        &val,
+                    )
+                };
+                indices.push(idx);
+            }
+            indices
+        }
+
+        let n_bins = 200;
+        let bins_data: Vec<f64> = (0..n_bins).rev().map(|i| i as f64).collect(); // decreasing
+        let bins = Array::from_vec(bins_data.clone());
+        let n_x = 5000;
+        let x = Array::from_vec(
+            (0..n_x)
+                .map(|i| (i % n_bins) as f64 + 0.5)
+                .collect::<Vec<_>>(),
+        );
+        let iters = 20;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(naive_digitize_decreasing(&x, &bins_data, false));
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ =
+                std::hint::black_box(digitize(&x, &bins, false).expect("digitize should succeed"));
+        }
+        let hoisted = t1.elapsed();
+
+        eprintln!(
+            "[digitize decreasing bins, len(x)={n_x} len(bins)={n_bins}] naive(rebuild_per_element)={:.2}ms/iter hoisted={:.2}ms/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e3 / iters as f64,
+            hoisted.as_secs_f64() * 1e3 / iters as f64,
+            naive.as_secs_f64() / hoisted.as_secs_f64(),
+        );
+
+        // Confirm the hoist changed no output, not just that it's faster.
+        let expected = naive_digitize_decreasing(&x, &bins_data, false);
+        let got = digitize(&x, &bins, false)
+            .expect("digitize should succeed")
+            .to_vec();
+        assert_eq!(got, expected);
     }
 }

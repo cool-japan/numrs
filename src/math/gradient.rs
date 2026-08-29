@@ -147,6 +147,12 @@ where
             .map(|(_, &s)| s)
             .product();
 
+        // Bulk-acquire once: `grad` is write-only across this whole
+        // perpendicular-position x axis-position loop (every read is
+        // `f.get(..)`, a distinct object), so one unshare covers all
+        // `total_perp * n` writes.
+        let grad_arr = grad.array_mut();
+
         for perp_idx in 0..total_perp {
             // Convert linear index to multi-dimensional indices for perpendicular dimensions
             let mut temp = perp_idx;
@@ -221,7 +227,12 @@ where
                 };
 
                 indices[ax] = i;
-                grad.set(&indices, derivative)?;
+                *grad_arr.get_mut(indices.as_slice()).ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        indices
+                    ))
+                })? = derivative;
             }
         }
 
@@ -437,7 +448,7 @@ pub fn fmax<T: Float + Clone>(x1: &Array<T>, x2: &Array<T>) -> Result<Array<T>> 
         })
         .collect();
 
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
 }
 
 /// Element-wise minimum of array elements, ignoring NaN
@@ -489,5 +500,80 @@ pub fn fmin<T: Float + Clone>(x1: &Array<T>, x2: &Array<T>) -> Result<Array<T>> 
         })
         .collect();
 
-    Ok(Array::from_vec(result).reshape(&x1.shape()))
+    Array::from_vec_shape(result, &x1.shape())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pinned against `numpy.gradient` (numpy 2.4.2), default `edge_order=1`,
+    /// unit spacing: `np.gradient(np.array([1.,2.,4.,7.,11.,16.]))` ==
+    /// `[1. , 1.5, 2.5, 3.5, 4.5, 5. ]` (simple forward/backward difference
+    /// at the two boundary points, central difference in the interior).
+    #[test]
+    fn test_gradient_edge_order_1_unit_spacing() {
+        let f = Array::from_vec(vec![1.0, 2.0, 4.0, 7.0, 11.0, 16.0]);
+        let grad = gradient(&f, None, None, 1).expect("gradient should succeed");
+        assert_eq!(grad.len(), 1);
+        assert_eq!(grad[0].to_vec(), vec![1.0, 1.5, 2.5, 3.5, 4.5, 5.0]);
+    }
+
+    /// Pinned against `numpy.gradient` 2.4.2, `edge_order=2`, unit spacing:
+    /// `np.gradient(np.array([1.,2.,4.,7.,11.,16.]), edge_order=2)` ==
+    /// `[0.5, 1.5, 2.5, 3.5, 4.5, 5.5]` -- the boundary points use a
+    /// second-order one-sided difference (`(-3f0+4f1-f2)/2h` /
+    /// `(3fn-4fn-1+fn-2)/2h`) instead of edge_order=1's simple two-point
+    /// difference, so only the two endpoints differ from the test above.
+    #[test]
+    fn test_gradient_edge_order_2_unit_spacing() {
+        let f = Array::from_vec(vec![1.0, 2.0, 4.0, 7.0, 11.0, 16.0]);
+        let grad = gradient(&f, None, None, 2).expect("gradient should succeed");
+        assert_eq!(grad.len(), 1);
+        assert_eq!(grad[0].to_vec(), vec![0.5, 1.5, 2.5, 3.5, 4.5, 5.5]);
+    }
+
+    /// Pinned against `numpy.gradient` 2.4.2, `edge_order=2`, non-unit
+    /// uniform spacing: `np.gradient(np.array([1.,2.,4.,7.,11.,16.]), 2.0,
+    /// edge_order=2)` == `[0.25, 0.75, 1.25, 1.75, 2.25, 2.75]` (exactly
+    /// the `h=1` result above, halved, since every finite-difference term
+    /// here divides by `h`).
+    #[test]
+    fn test_gradient_edge_order_2_non_unit_spacing() {
+        let f = Array::from_vec(vec![1.0, 2.0, 4.0, 7.0, 11.0, 16.0]);
+        let grad = gradient(&f, Some(GradientSpacing::Uniform(2.0)), None, 2)
+            .expect("gradient should succeed");
+        assert_eq!(grad.len(), 1);
+        assert_eq!(grad[0].to_vec(), vec![0.25, 0.75, 1.25, 1.75, 2.25, 2.75]);
+    }
+
+    /// 2-D, per-axis spacing (`GradientSpacing::PerAxis`), default
+    /// `edge_order=1`. Pinned against `numpy.gradient` 2.4.2:
+    /// `np.gradient(np.array([[1.,2.,4.],[7.,11.,16.]]), 1.0, 2.0)` ==
+    /// `(array([[6.,9.,12.],[6.,9.,12.]]),
+    ///   array([[0.5,0.75,1.],[2.,2.25,2.5]]))` -- axis 0 has only 2 points,
+    /// so both its "boundary" derivatives collapse to the same simple
+    /// two-point difference for every column; axis 1 (spacing `2.0`)
+    /// exercises the interior central-difference and both one-sided ends.
+    #[test]
+    fn test_gradient_2d_per_axis_spacing() {
+        let f = Array::from_vec(vec![1.0, 2.0, 4.0, 7.0, 11.0, 16.0]).reshape(&[2, 3]);
+        let grad = gradient(&f, Some(GradientSpacing::PerAxis(vec![1.0, 2.0])), None, 1)
+            .expect("gradient should succeed");
+        assert_eq!(grad.len(), 2);
+        assert_eq!(grad[0].to_vec(), vec![6.0, 9.0, 12.0, 6.0, 9.0, 12.0]);
+        assert_eq!(grad[1].to_vec(), vec![0.5, 0.75, 1.0, 2.0, 2.25, 2.5]);
+    }
+
+    #[test]
+    fn test_gradient_invalid_edge_order_errors() {
+        let f = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        assert!(gradient(&f, None, None, 3).is_err());
+    }
+
+    #[test]
+    fn test_gradient_out_of_bounds_axis_errors() {
+        let f = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        assert!(gradient(&f, None, Some(vec![1]), 1).is_err());
+    }
 }

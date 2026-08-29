@@ -6,11 +6,9 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, NumCast, ToPrimitive};
+use num_traits::{Float, NumCast};
 use scirs2_core::random::prelude::*;
 use scirs2_core::SliceRandomExt;
-use scirs2_stats::distributions::{ChiSquare, Gamma, Normal, Poisson};
-use scirs2_stats::Distribution;
 use std::fmt::Debug;
 use std::fmt::Display;
 
@@ -59,13 +57,14 @@ impl RandomState {
 
         // Generate standard normal samples
         let mut result = Vec::with_capacity(total_samples * n);
-        let _rng = self.get_rng()?;
+        let mut rng = self.get_rng()?;
+        let standard_normal = Normal::new(0.0, 1.0).map_err(|e| {
+            NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
+        })?;
 
         // Generate samples from standard normal distribution
         for _ in 0..total_samples * n {
-            let standard_normal = Normal::new(0.0, 1.0)
-                .expect("multivariate_normal: standard normal N(0,1) should always be valid");
-            let val_f64: f64 = standard_normal.rvs(1).expect("normal sampling failed")[0];
+            let val_f64: f64 = rng.sample(standard_normal);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert standard normal sample".to_string(),
@@ -89,7 +88,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(transformed).reshape(&out_shape))
+        Array::from_vec_shape(transformed, &out_shape)
     }
 
     /// Generate random values from a multivariate normal distribution with rotation
@@ -151,14 +150,14 @@ impl RandomState {
 
         // Generate standard normal samples
         let mut result = Vec::with_capacity(total_samples * n);
-        let _rng = self.get_rng()?;
+        let mut rng = self.get_rng()?;
+        let standard_normal = Normal::new(0.0, 1.0).map_err(|e| {
+            NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
+        })?;
 
         // Generate samples from standard normal distribution
         for _ in 0..total_samples * n {
-            let standard_normal = Normal::new(0.0, 1.0).expect(
-                "multivariate_normal_with_rotation: standard normal N(0,1) should always be valid",
-            );
-            let val_f64: f64 = standard_normal.rvs(1).expect("normal sampling failed")[0];
+            let val_f64: f64 = rng.sample(standard_normal);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert standard normal sample".to_string(),
@@ -203,7 +202,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(transformed).reshape(&out_shape))
+        Array::from_vec_shape(transformed, &out_shape)
     }
 
     /// Generate random values from a Laplace (double exponential) distribution
@@ -256,7 +255,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Gumbel distribution
@@ -305,7 +304,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a logistic distribution
@@ -354,7 +353,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a rayleigh distribution
@@ -399,7 +398,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a Wald (inverse Gaussian) distribution
@@ -431,9 +430,13 @@ impl RandomState {
 
         for _ in 0..size {
             // Generate a standard normal random variable
-            let standard_normal =
-                Normal::new(0.0, 1.0).expect("wald: standard normal N(0,1) should always be valid");
-            let z: f64 = standard_normal.rvs(1).expect("normal sampling failed")[0];
+            let standard_normal = Normal::new(0.0, 1.0).map_err(|e| {
+                NumRs2Error::InvalidOperation(format!(
+                    "Failed to create normal distribution: {}",
+                    e
+                ))
+            })?;
+            let z: f64 = rng.sample(standard_normal);
 
             // Calculate intermediate values
             let y = z * z;
@@ -459,7 +462,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a negative binomial distribution
@@ -478,27 +481,27 @@ impl RandomState {
 
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        let _rng = self.get_rng()?;
+        let mut rng = self.get_rng()?;
+
+        // Generate gamma random variable with shape=n and scale=(1-p)/p
+        let gamma_dist = Gamma::new(n, (1.0 - p) / p).map_err(|e| {
+            NumRs2Error::InvalidOperation(format!("Failed to create gamma distribution: {}", e))
+        })?;
 
         // Generate negative binomial using gamma-poisson mixture
         for _ in 0..size {
-            // 1. Generate gamma random variable with shape=n and scale=(1-p)/p
-            let gamma_dist = Gamma::new(n, (1.0 - p) / p, 0.0).map_err(|e| {
-                NumRs2Error::InvalidOperation(format!("Failed to create gamma distribution: {}", e))
-            })?;
-
-            let lambda = gamma_dist.rvs(1).expect("gamma sampling failed")[0];
+            let lambda: f64 = rng.sample(gamma_dist);
 
             // 2. Generate Poisson random variable with mean=lambda
-            let poisson_dist = Poisson::new(lambda, 0.0).map_err(|e| {
+            let poisson_dist = Poisson::new(lambda).map_err(|e| {
                 NumRs2Error::InvalidOperation(format!(
                     "Failed to create poisson distribution: {}",
                     e
                 ))
             })?;
 
-            let val_u64 = poisson_dist.rvs(1).expect("distribution sampling failed")[0];
-            let val = T::from(val_u64).ok_or_else(|| {
+            let val_f64: f64 = rng.sample(poisson_dist);
+            let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert negative binomial sample to target type".to_string(),
                 )
@@ -506,7 +509,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a geometric distribution
@@ -547,7 +550,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a multinomial distribution
@@ -628,7 +631,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&out_shape))
+        Array::from_vec_shape(result, &out_shape)
     }
 
     /// Generate random values from a hypergeometric distribution
@@ -649,7 +652,7 @@ impl RandomState {
 
         let size: usize = shape.iter().product();
         let mut vec = Vec::with_capacity(size);
-        let _rng = self.get_rng()?;
+        let mut rng = self.get_rng()?;
 
         // Naive implementation using direct sampling
         for _ in 0..size {
@@ -658,7 +661,7 @@ impl RandomState {
             population.extend(vec![true; ngood]);
 
             // Shuffle the population
-            population.shuffle(&mut thread_rng());
+            population.shuffle(&mut *rng);
 
             // Count number of ones in the sample
             let count = population[..nsample].iter().filter(|&&x| x).count() as u64;
@@ -671,7 +674,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a zipf distribution
@@ -722,7 +725,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a logseries distribution
@@ -770,7 +773,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(shape))
+        Array::from_vec_shape(vec, shape)
     }
 
     /// Generate random values from a multivariate t-distribution
@@ -853,19 +856,17 @@ impl RandomState {
             NumRs2Error::InvalidOperation(format!("Failed to create normal distribution: {}", e))
         })?;
 
-        let chi_square_dist = ChiSquare::new(df_f64, 0.0, 1.0).map_err(|e| {
+        let chi_square_dist = ChiSquared::new(df_f64).map_err(|e| {
             NumRs2Error::InvalidOperation(format!(
                 "Failed to create chi-square distribution: {}",
                 e
             ))
         })?;
 
-        let _rng = self.get_rng()?;
+        let mut rng = self.get_rng()?;
 
         for _ in 0..total_samples * n {
-            let val_f64 = normal_dist.rvs(1).map_err(|e| {
-                NumRs2Error::InvalidOperation(format!("Failed to sample from normal: {}", e))
-            })?[0];
+            let val_f64: f64 = rng.sample(normal_dist);
             let val = T::from(val_f64).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert normal sample to target type".to_string(),
@@ -881,9 +882,7 @@ impl RandomState {
         let mut result = vec![T::zero(); total_samples * n];
         for i in 0..total_samples {
             // Generate chi-square sample
-            let chi_val = chi_square_dist.rvs(1).map_err(|e| {
-                NumRs2Error::InvalidOperation(format!("Failed to sample from chi-square: {}", e))
-            })?[0];
+            let chi_val: f64 = rng.sample(chi_square_dist);
             let scale_factor = T::from((df_f64 / chi_val).sqrt()).ok_or_else(|| {
                 NumRs2Error::InvalidOperation(
                     "Failed to convert scale factor to target type".to_string(),
@@ -900,7 +899,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&out_shape))
+        Array::from_vec_shape(result, &out_shape)
     }
 
     /// Generate random values from a Wishart distribution
@@ -973,26 +972,21 @@ impl RandomState {
 
         // Use Bartlett decomposition method
         // Generate each Wishart matrix independently
+        let mut rng = self.get_rng()?;
         for _ in 0..total_samples {
             // Create Bartlett matrix A (lower triangular)
             let mut a = vec![T::zero(); p * p];
-            let _rng = self.get_rng()?;
 
             // Fill diagonal with chi-distributed values
             for i in 0..p {
                 let chi_df = df_val - i as f64;
-                let chi_dist = ChiSquare::new(chi_df, 0.0, 1.0).map_err(|e| {
+                let chi_dist = ChiSquared::new(chi_df).map_err(|e| {
                     NumRs2Error::InvalidOperation(format!(
                         "Failed to create chi-square distribution: {}",
                         e
                     ))
                 })?;
-                let chi_val = chi_dist.rvs(1).map_err(|e| {
-                    NumRs2Error::InvalidOperation(format!(
-                        "Failed to sample from chi-square: {}",
-                        e
-                    ))
-                })?[0];
+                let chi_val: f64 = rng.sample(chi_dist);
                 a[i * p + i] = T::from(chi_val.sqrt()).ok_or_else(|| {
                     NumRs2Error::InvalidOperation("Failed to convert chi-square sample".to_string())
                 })?;
@@ -1008,12 +1002,7 @@ impl RandomState {
 
             for i in 1..p {
                 for j in 0..i {
-                    let norm_val = normal_dist.rvs(1).map_err(|e| {
-                        NumRs2Error::InvalidOperation(format!(
-                            "Failed to sample from normal: {}",
-                            e
-                        ))
-                    })?[0];
+                    let norm_val: f64 = rng.sample(normal_dist);
                     a[i * p + j] = T::from(norm_val).ok_or_else(|| {
                         NumRs2Error::InvalidOperation("Failed to convert normal sample".to_string())
                     })?;
@@ -1047,7 +1036,7 @@ impl RandomState {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&out_shape))
+        Array::from_vec_shape(result, &out_shape)
     }
 
     /// Generate random values from a Frechet distribution
@@ -1124,7 +1113,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(output_shape))
+        Array::from_vec_shape(vec, output_shape)
     }
 
     /// Generate random values from a Generalized Extreme Value (GEV) distribution
@@ -1205,7 +1194,7 @@ impl RandomState {
             vec.push(val);
         }
 
-        Ok(Array::from_vec(vec).reshape(output_shape))
+        Array::from_vec_shape(vec, output_shape)
     }
 }
 

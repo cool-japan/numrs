@@ -156,7 +156,7 @@ pub fn outer_product(a: &WasmArray, b: &WasmArray) -> Result<WasmArray, JsValue>
 pub fn compute_norm(arr: &WasmArray, ord: f64) -> Result<f64, JsValue> {
     let arr_vec = arr.to_vec();
     let arr_shape = arr.shape();
-    let inner = Array::from_vec(arr_vec).reshape(&arr_shape);
+    let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
 
     let ord_option = if ord.is_finite() {
         Some(ord)
@@ -194,7 +194,7 @@ pub fn trace(arr: &WasmArray) -> Result<f64, JsValue> {
     }
 
     let arr_vec = arr.to_vec();
-    let inner = Array::from_vec(arr_vec).reshape(&arr_shape);
+    let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
 
     crate::linalg::trace(&inner)
         .map_err(|e| JsValue::from_str(&format!("Trace computation error: {}", e)))
@@ -231,7 +231,7 @@ pub fn determinant(arr: &WasmArray) -> Result<f64, JsValue> {
     }
 
     let arr_vec = arr.to_vec();
-    let inner = Array::from_vec(arr_vec).reshape(&arr_shape);
+    let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
 
     crate::linalg::det(&inner)
         .map_err(|e| JsValue::from_str(&format!("Determinant computation error: {}", e)))
@@ -266,7 +266,7 @@ pub fn inverse(arr: &WasmArray) -> Result<WasmArray, JsValue> {
     }
 
     let arr_vec = arr.to_vec();
-    let inner = Array::from_vec(arr_vec).reshape(&arr_shape);
+    let inner = Array::from_vec_shape(arr_vec, &arr_shape)?;
 
     crate::linalg::inv(&inner)
         .map(WasmArray::from_array)

@@ -4,17 +4,15 @@
 //!
 //! Note: Full implementation using scirs2-linalg im2col algorithm.
 
-use super::{DataFormat, NnResult, PaddingMode};
+use super::NnResult;
 use crate::error::NumRs2Error;
 use scirs2_core::ndarray::{
-    Array, Array1, Array2, Array3, Array4, ArrayView, ArrayView1, ArrayView2, ArrayView4, Axis,
-    Dimension, ScalarOperand,
+    Array1, Array2, Array4, ArrayView1, ArrayView2, ArrayView4, ScalarOperand,
 };
 use scirs2_core::numeric::{Float, NumAssign, Zero};
 use scirs2_core::simd_ops::SimdUnifiedOps;
 pub use scirs2_linalg::convolution::{col2im, im2col};
 use scirs2_linalg::convolution::{conv2d_im2col, conv_transpose2d};
-use scirs2_linalg::error::LinalgError;
 use std::iter::Sum;
 
 /// 1D Convolution (simplified)
@@ -484,7 +482,7 @@ where
 mod tests {
     use super::*;
     use approx::assert_abs_diff_eq;
-    use scirs2_core::ndarray::{array, Array1, Array2};
+    use scirs2_core::ndarray::{array, Array2};
 
     #[test]
     fn test_conv1d_basic() {
@@ -652,7 +650,7 @@ mod tests {
             .expect("standard conv should succeed");
 
         assert_eq!(grouped.dim(), standard.dim());
-        for ((idx, &g), &s) in grouped.indexed_iter().zip(standard.iter()) {
+        for ((_idx, &g), &s) in grouped.indexed_iter().zip(standard.iter()) {
             assert_abs_diff_eq!(g, s, epsilon = 1e-6);
         }
     }

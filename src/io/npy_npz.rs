@@ -98,6 +98,167 @@ fn construct_npy_header<T>(shape: &[usize]) -> Result<Vec<u8>> {
     Ok(header)
 }
 
+/// Appends the little-endian NPY payload bytes for `data: &[T]` to `out`,
+/// dispatching on `type_name` (the caller's `std::any::type_name::<T>()`).
+///
+/// # Soundness
+///
+/// `std::mem::transmute_copy` performs **no size check**: if the
+/// destination type is larger than the source, it silently reads past the
+/// end of the source value, which is undefined behavior. This module
+/// dispatches on `std::any::type_name::<T>()` rather than
+/// `std::any::TypeId::of::<T>()` (the pattern used at
+/// `src/types/structured.rs`) because the public entry points that call
+/// this helper (`serialize_to_file`, `save_npz_arrays`) are themselves
+/// called generically from `io::mod` and `io::text` with only a `T: Clone`
+/// bound — `TypeId::of` requires `T: 'static`, and adding that bound here
+/// would require adding it all the way up through those call sites too,
+/// which live outside this module.
+///
+/// To stay sound despite the weaker `type_name` guard, every arm below
+/// re-verifies `size_of::<T>() == size_of::<Target>()` immediately before
+/// its `transmute_copy`, turning any mismatch into a clean `Err` instead of
+/// an out-of-bounds read. `bool` gets extra care beyond the size check:
+/// transmuting *into* `bool` materializes an invalid value (instant
+/// undefined behavior, even if never branched on) if the source byte is
+/// anything but 0 or 1, so the `bool` arm never constructs a `bool` via
+/// transmute — it reads `T`'s raw byte directly instead.
+fn encode_npy_elements<T: Clone>(
+    format_label: &str,
+    type_name: &str,
+    data: &[T],
+    out: &mut Vec<u8>,
+) -> Result<()> {
+    macro_rules! encode_numeric {
+        ($target:ty) => {{
+            if std::mem::size_of::<T>() != std::mem::size_of::<$target>() {
+                return Err(NumRs2Error::SerializationError(format!(
+                    "Internal size mismatch encoding '{}' as {}",
+                    type_name,
+                    stringify!($target)
+                )));
+            }
+            for val in data {
+                // SAFETY: size checked immediately above.
+                let bytes = unsafe { std::mem::transmute_copy::<T, $target>(val) }.to_le_bytes();
+                out.extend_from_slice(&bytes);
+            }
+        }};
+    }
+
+    match type_name {
+        "f32" => encode_numeric!(f32),
+        "f64" => encode_numeric!(f64),
+        "i8" => encode_numeric!(i8),
+        "i16" => encode_numeric!(i16),
+        "i32" => encode_numeric!(i32),
+        "i64" => encode_numeric!(i64),
+        "u8" => encode_numeric!(u8),
+        "u16" => encode_numeric!(u16),
+        "u32" => encode_numeric!(u32),
+        "u64" => encode_numeric!(u64),
+        "bool" => {
+            if std::mem::size_of::<T>() != std::mem::size_of::<u8>() {
+                return Err(NumRs2Error::SerializationError(format!(
+                    "Internal size mismatch encoding '{}' as bool",
+                    type_name
+                )));
+            }
+            for val in data {
+                // SAFETY: size checked above. Read the raw byte instead of
+                // transmuting to `bool`: an arbitrary same-size `T` could
+                // carry a bit pattern that is not a valid `bool`, and
+                // materializing an invalid `bool` is immediate UB even if
+                // it is never branched on.
+                let raw_byte: u8 = unsafe { *(val as *const T as *const u8) };
+                out.push(if raw_byte != 0 { 1u8 } else { 0u8 });
+            }
+        }
+        other => {
+            return Err(NumRs2Error::SerializationError(format!(
+                "{} format does not support type: {}",
+                format_label, other
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Decodes `raw_data` (little-endian NPY payload bytes for the primitive
+/// type identified by `type_name`) into `Vec<T>`. See
+/// [`encode_npy_elements`] for why dispatch is by `type_name` rather than
+/// `TypeId`, and why the size check below is what keeps every
+/// `transmute_copy` sound.
+fn decode_npy_elements<T: Clone>(type_name: &str, raw_data: &[u8]) -> Result<Vec<T>> {
+    macro_rules! decode_numeric {
+        ($target:ty, $chunk_size:literal) => {{
+            if std::mem::size_of::<T>() != std::mem::size_of::<$target>() {
+                return Err(NumRs2Error::DeserializationError(format!(
+                    "Internal size mismatch decoding '{}' from {}",
+                    type_name,
+                    stringify!($target)
+                )));
+            }
+            let mut typed_data = Vec::with_capacity(raw_data.len() / $chunk_size);
+            for chunk in raw_data.chunks_exact($chunk_size) {
+                let mut buf = [0u8; $chunk_size];
+                buf.copy_from_slice(chunk);
+                let value = <$target>::from_le_bytes(buf);
+                // SAFETY: size checked above.
+                typed_data.push(unsafe { std::mem::transmute_copy::<$target, T>(&value) });
+            }
+            Ok(typed_data)
+        }};
+    }
+
+    match type_name {
+        "f32" => decode_numeric!(f32, 4),
+        "f64" => decode_numeric!(f64, 8),
+        "i8" => decode_numeric!(i8, 1),
+        "i16" => decode_numeric!(i16, 2),
+        "i32" => decode_numeric!(i32, 4),
+        "i64" => decode_numeric!(i64, 8),
+        "u8" => decode_numeric!(u8, 1),
+        "u16" => decode_numeric!(u16, 2),
+        "u32" => decode_numeric!(u32, 4),
+        "u64" => decode_numeric!(u64, 8),
+        "bool" => {
+            if std::mem::size_of::<T>() != std::mem::size_of::<u8>() {
+                return Err(NumRs2Error::DeserializationError(format!(
+                    "Internal size mismatch decoding '{}' from bool",
+                    type_name
+                )));
+            }
+            let mut typed_data = Vec::with_capacity(raw_data.len());
+            for chunk in raw_data.chunks_exact(1) {
+                let value: u8 = if chunk[0] != 0 { 1 } else { 0 };
+                // SAFETY: size checked above. Transmute from a plain,
+                // always-valid `u8` rather than an intermediate `bool`, so
+                // no `bool`-typed value with a possibly-invalid bit
+                // pattern is ever materialized.
+                typed_data.push(unsafe { std::mem::transmute_copy::<u8, T>(&value) });
+            }
+            Ok(typed_data)
+        }
+        other => {
+            // Unreachable in normal use: every caller of this function
+            // already matched `type_name` against this exact literal set
+            // (see the `element_size`/`expected_dtype` computation in
+            // `read_npy_generic`) before calling here, and `type_name` is
+            // never recomputed in between -- so any value that reaches
+            // this arm was already proven to be one of the arms above.
+            // Kept as a returned `Err` rather than `unreachable!()` so
+            // that if a future edit ever breaks that invariant (e.g. the
+            // two literal sets drift apart), the library reports a clean
+            // error instead of panicking.
+            Err(NumRs2Error::DeserializationError(format!(
+                "Unsupported type for NPY deserialization: {}",
+                other
+            )))
+        }
+    }
+}
+
 // Parse NPY header to extract shape and dtype information
 fn parse_npy_header(header: &[u8]) -> Result<(Vec<usize>, String)> {
     // Check magic string
@@ -195,95 +356,8 @@ pub fn serialize_to_file<T: Clone, W: Write + Seek>(
     npy_data.extend_from_slice(&header);
 
     // Write the data based on its type
-    match type_name {
-        "f32" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, f32>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "f64" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, f64>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "i8" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, i8>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "i16" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, i16>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "i32" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, i32>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "i64" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, i64>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "u8" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, u8>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "u16" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, u16>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "u32" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, u32>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "u64" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_bytes = unsafe { std::mem::transmute_copy::<T, u64>(val) }.to_le_bytes();
-                npy_data.extend_from_slice(&val_bytes);
-            }
-        }
-        "bool" => {
-            let data = array.to_vec();
-            for val in data.iter() {
-                let val_byte = if unsafe { std::mem::transmute_copy::<T, bool>(val) } {
-                    1u8
-                } else {
-                    0u8
-                };
-                npy_data.push(val_byte);
-            }
-        }
-        _ => {
-            return Err(NumRs2Error::SerializationError(format!(
-                "NPY/NPZ format does not support type: {}",
-                type_name
-            )));
-        }
-    }
+    let data = array.to_vec();
+    encode_npy_elements("NPY/NPZ", type_name, &data, &mut npy_data)?;
 
     // If it's just NPY format, write directly to the file
     if matches!(format, SerializeFormat::Npy) {
@@ -383,86 +457,10 @@ fn read_npy_generic<T: Clone, R: Read>(mut reader: R) -> Result<Array<T>> {
     })?;
 
     // Convert raw bytes to typed values
-    let mut typed_data = Vec::with_capacity(total_elements);
-
-    match type_name {
-        "f32" => {
-            for chunk in raw_data.chunks_exact(4) {
-                let value = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<f32, T>(&value) });
-            }
-        }
-        "f64" => {
-            for chunk in raw_data.chunks_exact(8) {
-                let value = f64::from_le_bytes([
-                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
-                ]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<f64, T>(&value) });
-            }
-        }
-        "i8" => {
-            for chunk in raw_data.chunks_exact(1) {
-                let value = i8::from_le_bytes([chunk[0]]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<i8, T>(&value) });
-            }
-        }
-        "i16" => {
-            for chunk in raw_data.chunks_exact(2) {
-                let value = i16::from_le_bytes([chunk[0], chunk[1]]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<i16, T>(&value) });
-            }
-        }
-        "i32" => {
-            for chunk in raw_data.chunks_exact(4) {
-                let value = i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<i32, T>(&value) });
-            }
-        }
-        "i64" => {
-            for chunk in raw_data.chunks_exact(8) {
-                let value = i64::from_le_bytes([
-                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
-                ]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<i64, T>(&value) });
-            }
-        }
-        "u8" => {
-            for chunk in raw_data.chunks_exact(1) {
-                let value = u8::from_le_bytes([chunk[0]]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<u8, T>(&value) });
-            }
-        }
-        "u16" => {
-            for chunk in raw_data.chunks_exact(2) {
-                let value = u16::from_le_bytes([chunk[0], chunk[1]]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<u16, T>(&value) });
-            }
-        }
-        "u32" => {
-            for chunk in raw_data.chunks_exact(4) {
-                let value = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<u32, T>(&value) });
-            }
-        }
-        "u64" => {
-            for chunk in raw_data.chunks_exact(8) {
-                let value = u64::from_le_bytes([
-                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
-                ]);
-                typed_data.push(unsafe { std::mem::transmute_copy::<u64, T>(&value) });
-            }
-        }
-        "bool" => {
-            for chunk in raw_data.chunks_exact(1) {
-                let value = chunk[0] != 0;
-                typed_data.push(unsafe { std::mem::transmute_copy::<bool, T>(&value) });
-            }
-        }
-        _ => unreachable!(),
-    }
+    let typed_data = decode_npy_elements::<T>(type_name, &raw_data)?;
 
     // Create the array
-    Ok(Array::from_vec(typed_data).reshape(&shape))
+    Array::from_vec_shape(typed_data, &shape)
 }
 
 // Generic function to read NPZ data for any supported type
@@ -676,103 +674,8 @@ pub fn save_npz_arrays<T: Clone, W: Write + Seek>(
         npy_data.extend_from_slice(&header);
 
         // Write the data based on its type
-        match type_name {
-            "f32" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, f32>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "f64" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, f64>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "i8" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes = unsafe { std::mem::transmute_copy::<T, i8>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "i16" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, i16>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "i32" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, i32>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "i64" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, i64>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "u8" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes = unsafe { std::mem::transmute_copy::<T, u8>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "u16" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, u16>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "u32" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, u32>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "u64" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_bytes =
-                        unsafe { std::mem::transmute_copy::<T, u64>(val) }.to_le_bytes();
-                    npy_data.extend_from_slice(&val_bytes);
-                }
-            }
-            "bool" => {
-                let data = array.to_vec();
-                for val in data.iter() {
-                    let val_byte = if unsafe { std::mem::transmute_copy::<T, bool>(val) } {
-                        1u8
-                    } else {
-                        0u8
-                    };
-                    npy_data.push(val_byte);
-                }
-            }
-            _ => {
-                return Err(NumRs2Error::SerializationError(format!(
-                    "NPZ format does not support type: {}",
-                    type_name
-                )));
-            }
-        }
+        let data = array.to_vec();
+        encode_npy_elements("NPZ", type_name, &data, &mut npy_data)?;
 
         // Add this array to the ZIP archive using OxiARC
         let filename = format!("{}.npy", name);
@@ -1053,6 +956,101 @@ mod tests {
         // Try to load an array that doesn't exist
         buffer.set_position(0);
         let result = load_npz_array::<f64, _>(buffer, "nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bool_roundtrip_npy() {
+        use std::io::Cursor;
+
+        let array = Array::from_vec(vec![true, false, true, true, false]);
+        let mut buffer = Cursor::new(Vec::new());
+        serialize_to_file(&array, &mut buffer, SerializeFormat::Npy)
+            .expect("Failed to serialize bool array to NPY");
+
+        buffer.set_position(0);
+        let loaded: Array<bool> = deserialize_from_file(buffer, SerializeFormat::Npy)
+            .expect("Failed to deserialize bool array from NPY");
+
+        assert_eq!(loaded.to_vec(), vec![true, false, true, true, false]);
+    }
+
+    #[test]
+    fn test_bool_roundtrip_npz() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        let mut arrays = HashMap::new();
+        arrays.insert(
+            "flags".to_string(),
+            Array::from_vec(vec![false, true, false, false, true, true]),
+        );
+
+        let mut buffer = Cursor::new(Vec::new());
+        save_npz_arrays(&arrays, &mut buffer, true).expect("Failed to save bool array to NPZ");
+
+        buffer.set_position(0);
+        let loaded =
+            load_npz_array::<bool, _>(buffer, "flags").expect("Failed to load bool array from NPZ");
+
+        assert_eq!(loaded.to_vec(), vec![false, true, false, false, true, true]);
+    }
+
+    #[test]
+    fn test_type_name_dispatch_not_confused_by_custom_type_named_f32() {
+        // A zero-sized type deliberately named `f32`, defined in a nested
+        // module, to prove that the `type_name`-based dispatch above
+        // distinguishes it from the real primitive `f32`. `std::any::type_name`
+        // always includes the defining module's path for non-primitive
+        // types -- only the actual primitives print as a bare keyword like
+        // "f32" -- so this type's `type_name()` is `"...::fake::f32"`, not
+        // `"f32"`, and dispatch must fall through to the "unsupported
+        // type" error path rather than (mis)treating it as the primitive.
+        #[allow(non_camel_case_types)]
+        mod fake {
+            #[derive(Clone)]
+            pub struct f32;
+        }
+
+        use std::io::Cursor;
+
+        let array: Array<fake::f32> = Array::from_vec(vec![fake::f32, fake::f32, fake::f32]);
+        let mut buffer = Cursor::new(Vec::new());
+        let result = serialize_to_file(&array, &mut buffer, SerializeFormat::Npy);
+
+        assert!(
+            result.is_err(),
+            "a custom type literally named `f32` must not be silently treated as the primitive f32"
+        );
+    }
+
+    #[test]
+    fn test_encode_size_mismatch_is_caught_not_ub() {
+        // Simulates what would happen if the `type_name`-based
+        // classification were ever wrong: force a mismatch between the
+        // dispatch string ("f64", 8 bytes) and T's real size (i32, 4
+        // bytes) and confirm the explicit size guard turns it into a
+        // clean error instead of an out-of-bounds `transmute_copy` read.
+        let data: Vec<i32> = vec![1, 2, 3];
+        let mut out = Vec::new();
+        let result = encode_npy_elements("test", "f64", &data, &mut out);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_size_mismatch_is_caught_not_ub() {
+        let raw = vec![0u8; 32];
+        let result: Result<Vec<i32>> = decode_npy_elements("f64", &raw);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_unsupported_type_name_returns_error() {
+        // Exercises the (should-be-unreachable-in-practice) fallback arm
+        // directly: an unknown dispatch string must return a clean `Err`,
+        // never panic.
+        let raw = vec![0u8; 16];
+        let result: Result<Vec<f64>> = decode_npy_elements("totally_unknown_type", &raw);
         assert!(result.is_err());
     }
 }

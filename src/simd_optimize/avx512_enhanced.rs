@@ -6,7 +6,13 @@
 //! Note: AVX-512 features are currently unstable in Rust, so this module
 //! provides production-ready implementations using stable AVX2 instructions.
 
+// `Array`/`NumRs2Error`/`Result`, the constants below and the x86_64
+// intrinsics are used exclusively by the `#[cfg(target_arch = "x86_64")]`
+// methods and tests in this file; gated the same way so non-x86_64 builds
+// (aarch64, wasm32, ...) don't see them as unused.
+#[cfg(target_arch = "x86_64")]
 use crate::array::Array;
+#[cfg(target_arch = "x86_64")]
 use crate::error::{NumRs2Error, Result};
 
 // AVX512 operations - currently using stable AVX2 implementations
@@ -14,11 +20,18 @@ use crate::error::{NumRs2Error, Result};
 use std::arch::x86_64::*;
 
 /// AVX2 vectorization constants for production stability
-#[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
 const AVX2_F32_LANES: usize = 8;
+// AVX2 fallback parameters for this module, which implements its AVX-512-era
+// operations with stable AVX2 instructions (see the module docs). Of the three,
+// only `AVX2_F32_LANES` is referenced by the kernels here; this one and
+// `AVX2_ALIGNMENT` are currently unused and kept for reference.
 #[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
 const AVX2_F64_LANES: usize = 4;
+// Unreferenced AVX2 fallback parameter -- see the note on `AVX2_F64_LANES`.
 #[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
 const AVX2_ALIGNMENT: usize = 32;
 
 /// Advanced AVX2 operations with maximum vectorization
@@ -72,7 +85,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        *c = Array::from_vec(c_data).reshape(&[m, n]);
+        *c = Array::from_vec_shape(c_data, &[m, n])?;
         Ok(())
     }
 
@@ -166,7 +179,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&a.shape()))
+        Array::from_vec_shape(result, &a.shape())
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -304,7 +317,7 @@ impl Avx2EnhancedOps {
             }
         }
 
-        Ok(Array::from_vec(result).reshape(&[output_len]))
+        Array::from_vec_shape(result, &[output_len])
     }
 
     #[cfg(target_arch = "x86_64")]

@@ -20,28 +20,37 @@ use crate::{prelude::Array, Result};
 use scirs2_core::ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 
 /// Get information about available optimizations
+///
+/// The SIMD, AVX2, AVX512, NEON, and parallel-thread lines describe optimizations
+/// that NumRS2 actually executes. The CUDA / OpenCL / Metal lines are reported
+/// purely as scirs2-core platform detection (informational): they indicate which
+/// devices the host exposes, not execution paths inside NumRS2. NumRS2's only GPU
+/// execution path is the WGPU backend (enabled via the `gpu` feature), which itself
+/// dispatches to Vulkan / Metal / DirectX 12 / WebGPU.
 pub fn get_optimization_info() -> String {
     let caps = PlatformCapabilities::detect();
     format!(
         "NumRS2 Optimizations Available:\n\
          - SIMD: {}\n\
-         - GPU: {}\n\
-         - CUDA: {}\n\
-         - OpenCL: {}\n\
-         - Metal: {}\n\
+         - GPU (WGPU backend, enable with the `gpu` feature): {}\n\
          - AVX2: {}\n\
          - AVX512: {}\n\
          - NEON: {}\n\
-         - Parallel threads: {}",
+         - Parallel threads: {}\n\
+         NumRS2 GPU execution uses the WGPU backend only.\n\
+         The following are scirs2-core platform detection (informational), not NumRS2 execution paths:\n\
+         - CUDA device detected: {}\n\
+         - OpenCL device detected: {}\n\
+         - Metal device detected: {}",
         caps.simd_available,
         caps.gpu_available,
-        caps.cuda_available,
-        caps.opencl_available,
-        caps.metal_available,
         caps.avx2_available,
         caps.avx512_available,
         caps.neon_available,
-        num_threads()
+        num_threads(),
+        caps.cuda_available,
+        caps.opencl_available,
+        caps.metal_available,
     )
 }
 
@@ -92,6 +101,22 @@ pub struct SimdOpsResult {
 }
 
 /// Optimized vector operations using SIMD via SimdUnifiedOps
+///
+/// `min`/`max` follow NumPy `np.min`/`np.max` semantics: **any `NaN`
+/// anywhere in `v` makes the result `NaN`**, independent of where the
+/// `NaN` sits or how long `v` is. [`crate::math::nanmin`]/
+/// [`crate::math::nanmax`] are the `NaN`-ignoring alternative.
+///
+/// These no longer route through
+/// `scirs2_core::simd_ops::SimdUnifiedOps::simd_min_element`/
+/// `simd_max_element`: that upstream pair has a proven bug where it
+/// returns a **wrong, finite value** (neither the true extremum nor
+/// `NaN`) for some `NaN` placements -- see
+/// `crate::kernels::reduce`'s module docs for the reproduction. Instead
+/// this calls `crate::kernels::reduce::min_f32`/
+/// `crate::kernels::reduce::max_f32`, the same deterministic
+/// comparison-fold kernels backing `stats::basic` and
+/// `Array::min_optimized`/`max_optimized`.
 pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
     // Use SimdUnifiedOps from scirs2-core for SIMD operations
     let sum = f32::simd_sum(v);
@@ -100,9 +125,35 @@ pub fn simd_vector_ops(v: &ArrayView1<f32>) -> SimdVectorResult {
     // Calculate L2 norm using SIMD
     let norm = f32::simd_norm(v);
 
-    // Find min and max using SIMD
-    let min = f32::simd_min_element(v);
-    let max = f32::simd_max_element(v);
+    // Borrow `v`'s data as a flat slice for the min/max kernels below,
+    // zero-copy when `v` is contiguous (the common case); materializing
+    // an owned copy only for a non-contiguous view (e.g. a strided
+    // slice), matching `crate::kernels::borrow::operand`'s approach for
+    // `Array<T>`.
+    let owned_for_minmax;
+    let slice: &[f32] = match v.as_slice() {
+        Some(s) => s,
+        None => {
+            owned_for_minmax = v.iter().copied().collect::<Vec<f32>>();
+            &owned_for_minmax
+        }
+    };
+
+    // `crate::kernels::reduce::min_f32`/`max_f32` return `0.0` for an
+    // empty slice (their documented contract), which does not match this
+    // function's pre-existing empty-input behavior of +/-infinity
+    // (inherited from `simd_min_element`/`simd_max_element`'s own empty
+    // case) -- guarded explicitly here so that contract is unchanged.
+    let min = if slice.is_empty() {
+        f32::INFINITY
+    } else {
+        crate::kernels::reduce::min_f32(slice)
+    };
+    let max = if slice.is_empty() {
+        f32::NEG_INFINITY
+    } else {
+        crate::kernels::reduce::max_f32(slice)
+    };
 
     SimdVectorResult {
         sum,
@@ -144,7 +195,6 @@ pub fn parallel_matrix_ops(matrices: &[Array<f64>]) -> Result<Vec<f64>> {
 /// Adaptive processing that automatically chooses between scalar, SIMD, or GPU
 pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
     let optimizer = AutoOptimizer::new();
-    let caps = PlatformCapabilities::detect();
     let size = data.len();
 
     if optimizer.should_use_gpu(size) {
@@ -152,9 +202,11 @@ pub fn adaptive_array_sum(data: &ArrayView1<f64>) -> f64 {
         // For now, fall back to SIMD
         adaptive_array_sum_simd(data)
     } else if optimizer.should_use_simd(size) {
-        // On ARM64, prefer NEON if available
+        // On ARM64, prefer NEON if available. `caps` is only meaningful
+        // (and only computed) here: no other target branches on it.
         #[cfg(target_arch = "aarch64")]
         {
+            let caps = PlatformCapabilities::detect();
             if caps.neon_available && data.len() >= 4 {
                 // Convert f64 to f32 for NEON processing if beneficial
                 let f32_data: Vec<f32> = data.iter().map(|&x| x as f32).collect();
@@ -691,6 +743,44 @@ mod tests {
         assert_eq!(result.max, 4.0);
         // norm = sqrt(1^2 + 2^2 + 3^2 + 4^2) = sqrt(30) ≈ 5.477
         assert!((result.norm - 5.477).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_simd_vector_ops_upstream_bug_vector_yields_nan() {
+        // The proven `scirs2_core::simd_ops::SimdUnifiedOps::
+        // simd_max_element` bug vector: a 64-element f32 slice
+        // `[5.0, 1.0 x9, NaN at index 10, 1.0 x53]`. Upstream silently
+        // returned `1.0` (dropping the true max, `5.0`) instead of `NaN`
+        // -- that value was observed on the narrower vector lane widths,
+        // where index 10 shares a lane with the maximum; which placements
+        // trip it depends on the lane width chosen at runtime (and f32's
+        // widths differ from f64's again).
+        // `simd_vector_ops` must now report `NaN` for both min and max.
+        let mut data = vec![1.0f32; 64];
+        data[0] = 5.0;
+        data[10] = f32::NAN;
+        let v = Array1::from_vec(data);
+
+        let result = simd_vector_ops(&v.view());
+
+        assert!(result.min.is_nan(), "min should be NaN, got {}", result.min);
+        assert!(result.max.is_nan(), "max should be NaN, got {}", result.max);
+    }
+
+    #[test]
+    fn test_simd_vector_ops_nan_at_first_position_yields_nan() {
+        let v = array![f32::NAN, 1.0, 2.0, 3.0];
+        let result = simd_vector_ops(&v.view());
+        assert!(result.min.is_nan());
+        assert!(result.max.is_nan());
+    }
+
+    #[test]
+    fn test_simd_vector_ops_nan_at_last_position_yields_nan() {
+        let v = array![1.0f32, 2.0, 3.0, f32::NAN];
+        let result = simd_vector_ops(&v.view());
+        assert!(result.min.is_nan());
+        assert!(result.max.is_nan());
     }
 
     #[test]

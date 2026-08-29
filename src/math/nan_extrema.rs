@@ -163,7 +163,7 @@ where
                 result_data[out_idx] = max_idx;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -296,7 +296,7 @@ where
                 result_data[out_idx] = min_idx;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -359,6 +359,11 @@ where
         let axis_stride = strides[ax];
         let group_size = axis_stride * axis_len;
 
+        // Bulk-acquire once: `result` is write-only here (`array`, the only
+        // read source, is a distinct object), so one unshare covers every
+        // group/offset/axis-position write below.
+        let result_arr = result.array_mut();
+
         // Process each group independently
         for group_start in (0..total_elems).step_by(group_size) {
             for offset in 0..axis_stride {
@@ -380,7 +385,12 @@ where
                     if !value.is_nan() {
                         cumprod = cumprod * value;
                     }
-                    result.set(&indices, cumprod)?;
+                    *result_arr.get_mut(indices.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            indices
+                        ))
+                    })? = cumprod;
                 }
             }
         }
@@ -399,6 +409,6 @@ where
             result.push(cumprod);
         }
 
-        Ok(Array::from_vec(result).reshape(&array.shape()))
+        Ok(Array::from_vec_shape(result, &array.shape())?)
     }
 }

@@ -85,14 +85,25 @@ pub mod distributions;
 pub mod distributions_enhanced;
 pub mod generator;
 pub mod legacy;
+pub mod philox;
+pub mod seed_sequence;
+pub mod sfc64;
 pub mod state;
 pub mod state_distributions;
 
 // Re-export essential items from the modules
 pub use advanced_distributions::{maxwell, noncentral_chisquare, noncentral_f, vonmises, wald};
 pub use distributions::*;
-pub use generator::{default_rng, BitGenerator, Generator, PCG64BitGenerator, StdBitGenerator};
-pub use generator::{pcg64_rng, pcg64_seed_rng};
+pub use generator::{
+    default_rng, BitGenerator, Generator, PCG64BitGenerator, SeedableBitGenerator, StdBitGenerator,
+};
+pub use generator::{
+    pcg64_rng, pcg64_seed_rng, philox_from_seed_sequence, philox_rng, philox_seed_rng,
+    sfc64_from_seed_sequence, sfc64_rng, sfc64_seed_rng,
+};
+pub use philox::Philox4x64BitGenerator;
+pub use seed_sequence::SeedSequence;
+pub use sfc64::SFC64BitGenerator;
 pub use state::RandomState;
 
 // Re-export enhanced distributions
@@ -141,7 +152,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
     fn test_random_state() {
         let rng1 = RandomState::with_seed(42);
         let rng2 = RandomState::with_seed(42);

@@ -3,26 +3,13 @@
 //! This example demonstrates all the visualization capabilities of NumRS2.
 //!
 //! Run with: cargo run --example visualization --features visualization
-//!
-//! FIXME: This example is currently disabled because the viz module is not yet implemented.
-//! Once the viz module is available, uncomment the code below.
 
-// FIXME: Uncomment when viz module is implemented
-// use numrs2::viz::*;
-// use scirs2_core::ndarray::{Array1, Array2};
-// use scirs2_core::random::prelude::*;
-// use std::f64::consts::PI;
+use numrs2::viz::*;
+use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::random::prelude::*;
+use std::f64::consts::PI;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    println!("Visualization example is currently disabled.");
-    println!("The viz module is not yet implemented.");
-    println!("This example will be enabled once the viz module is available.");
-    Ok(())
-}
-
-// FIXME: Uncomment when viz module is implemented
-/*
-fn _main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("NumRS2 Visualization Examples");
     println!("=============================\n");
 
@@ -112,7 +99,7 @@ fn scatter_plot_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std:
     let x: Vec<f64> = (0..n).map(|i| i as f64 / 10.0).collect();
     let y: Vec<f64> = x
         .iter()
-        .map(|&xi| xi.powi(2) + normal.sample(&mut rng))
+        .map(|&xi| xi.powi(2) + rng.sample(normal))
         .collect();
 
     let x_arr = Array1::from_vec(x);
@@ -166,7 +153,7 @@ fn histogram_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std::er
     let mut rng = StdRng::seed_from_u64(42);
     let normal = Normal::new(0.0, 1.0)?;
 
-    let data: Vec<f64> = (0..1000).map(|_| normal.sample(&mut rng)).collect();
+    let data: Vec<f64> = (0..1000).map(|_| rng.sample(normal)).collect();
     let data_arr = Array1::from_vec(data);
 
     let config = PlotConfig::with_title("Histogram of Normal Distribution")
@@ -188,7 +175,7 @@ fn boxplot_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std::erro
     let mut rng = StdRng::seed_from_u64(42);
     let normal = Normal::new(50.0, 10.0)?;
 
-    let data: Vec<f64> = (0..100).map(|_| normal.sample(&mut rng)).collect();
+    let data: Vec<f64> = (0..100).map(|_| rng.sample(normal)).collect();
     let data_arr = Array1::from_vec(data);
 
     let config = PlotConfig::with_title("Box Plot Example").with_y_label("Value");
@@ -204,7 +191,7 @@ fn qqplot_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std::error
     let mut rng = StdRng::seed_from_u64(42);
     let normal = Normal::new(0.0, 1.0)?;
 
-    let data: Vec<f64> = (0..200).map(|_| normal.sample(&mut rng)).collect();
+    let data: Vec<f64> = (0..200).map(|_| rng.sample(normal)).collect();
     let data_arr = Array1::from_vec(data);
 
     let config = PlotConfig::with_title("Q-Q Plot: Normal Distribution");
@@ -280,7 +267,7 @@ fn surface_plot_example(output_dir: &std::path::Path) -> Result<(), Box<dyn std:
         for j in 0..n {
             let xi = x[j];
             let yi = y[i];
-            z[[i, j]] = (-(xi * xi + yi * yi) / 2.0).exp();
+            z[[i, j]] = (-(xi * xi + yi * yi) / 2.0_f64).exp();
         }
     }
 
@@ -421,4 +408,3 @@ fn export_formats_example(output_dir: &std::path::Path) -> Result<(), Box<dyn st
 
     Ok(())
 }
-*/

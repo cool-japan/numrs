@@ -20,29 +20,11 @@ fn identity_f64(n: usize) -> Vec<Vec<f64>> {
     m
 }
 
-/// In-place matrix multiply C = A * B  (n×n, f64).
-fn mat_mul_f64(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    let n = a.len();
-    let mut c = vec![vec![0.0_f64; n]; n];
-    for i in 0..n {
-        for k in 0..n {
-            let a_ik = a[i][k];
-            if a_ik == 0.0 {
-                continue;
-            }
-            for j in 0..n {
-                c[i][j] += a_ik * b[k][j];
-            }
-        }
-    }
-    c
-}
-
 /// Reduce A to upper Hessenberg form H = Q^T A Q via Householder reflectors.
 /// Returns (H, Q) where Q accumulates all reflectors.
 fn hessenberg_reduction(a: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
     let n = a.len();
-    let mut h: Vec<Vec<f64>> = a.iter().map(|r| r.clone()).collect();
+    let mut h: Vec<Vec<f64>> = a.to_vec();
     let mut q = identity_f64(n);
 
     for k in 0..n.saturating_sub(2) {
@@ -103,15 +85,7 @@ fn hessenberg_reduction(a: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
 /// Apply a Givens rotation G_{p,q}(c,s) from the left to rows p and q of h
 /// for columns col_start..n.
 #[inline]
-fn givens_left(
-    h: &mut Vec<Vec<f64>>,
-    p: usize,
-    q: usize,
-    c: f64,
-    s: f64,
-    col_start: usize,
-    n: usize,
-) {
+fn givens_left(h: &mut [Vec<f64>], p: usize, q: usize, c: f64, s: f64, col_start: usize, n: usize) {
     for j in col_start..n {
         let hp = h[p][j];
         let hq = h[q][j];
@@ -123,7 +97,7 @@ fn givens_left(
 /// Apply a Givens rotation G_{p,q}(c,s) from the right to columns p and q of h
 /// for rows 0..row_end.
 #[inline]
-fn givens_right(h: &mut Vec<Vec<f64>>, p: usize, q: usize, c: f64, s: f64, row_end: usize) {
+fn givens_right(h: &mut [Vec<f64>], p: usize, q: usize, c: f64, s: f64, row_end: usize) {
     for i in 0..row_end {
         let hp = h[i][p];
         let hq = h[i][q];
@@ -135,7 +109,7 @@ fn givens_right(h: &mut Vec<Vec<f64>>, p: usize, q: usize, c: f64, s: f64, row_e
 /// Apply a Givens rotation from the right to columns p and q of q_mat
 /// for rows 0..n (accumulate into Z).
 #[inline]
-fn givens_right_full(q_mat: &mut Vec<Vec<f64>>, p: usize, q_idx: usize, c: f64, s: f64, n: usize) {
+fn givens_right_full(q_mat: &mut [Vec<f64>], p: usize, q_idx: usize, c: f64, s: f64, n: usize) {
     for i in 0..n {
         let zp = q_mat[i][p];
         let zq = q_mat[i][q_idx];
@@ -164,8 +138,8 @@ fn givens_cs(a: f64, b: f64) -> (f64, f64) {
 /// Perform a Francis double-shift QR step when the active submatrix is 2×2.
 /// This is essentially a single-shift QR step using a Givens rotation.
 fn francis_2x2_step(
-    h: &mut Vec<Vec<f64>>,
-    z: &mut Vec<Vec<f64>>,
+    h: &mut [Vec<f64>],
+    z: &mut [Vec<f64>],
     p: usize, // top of active 2×2 block (row/col index p and p+1)
     n: usize,
 ) {
@@ -183,7 +157,7 @@ fn francis_2x2_step(
 /// Core Francis double-shift QR algorithm on an n×n upper Hessenberg matrix h.
 /// On entry  h  is upper Hessenberg; z is the identity (will accumulate Q).
 /// On exit   h  is in real Schur form (quasi-upper-triangular).
-fn francis_qr(h: &mut Vec<Vec<f64>>, z: &mut Vec<Vec<f64>>) {
+fn francis_qr(h: &mut [Vec<f64>], z: &mut [Vec<f64>]) {
     let n = h.len();
     if n <= 1 {
         return;
@@ -267,8 +241,8 @@ fn francis_qr(h: &mut Vec<Vec<f64>>, z: &mut Vec<Vec<f64>>) {
 /// Francis double-shift step on h[p_start..p_end][p_start..p_end],
 /// chasing the bulge within that window, updating global h and z.
 fn francis_double_shift_step_range(
-    h: &mut Vec<Vec<f64>>,
-    z: &mut Vec<Vec<f64>>,
+    h: &mut [Vec<f64>],
+    z: &mut [Vec<f64>],
     p_start: usize,
     p_end: usize,
     n: usize,
@@ -296,7 +270,7 @@ fn francis_double_shift_step_range(
     let y = h[r1][r0] * (h[r0][r0] + h[r1][r1] - s);
     let z_val = h[r2][r1] * h[r1][r0];
 
-    let mut v = vec![x, y, z_val];
+    let mut v = [x, y, z_val];
     let sigma: f64 = {
         let sq: f64 = v.iter().map(|&a| a * a).sum::<f64>().sqrt();
         if v[0] >= 0.0 {
@@ -409,6 +383,12 @@ fn francis_double_shift_step_range(
 /// 1×1 diagonal blocks → real eigenvalue.
 /// 2×2 diagonal blocks → complex-conjugate pair (stored as two consecutive
 ///   entries in the returned Vec; the imaginary parts are ±im).
+///
+/// Test-only: production eigenvalue computation goes through
+/// `new_modules::eigenvalues`'s scirs2-core-backed path instead. This
+/// helper exists purely to check `hessenberg_reduction` + `francis_qr`'s
+/// output against known eigenvalues in this module's own tests.
+#[cfg(test)]
 fn extract_eigenvalues_from_schur(t: &[Vec<f64>]) -> Vec<(f64, f64)> {
     let n = t.len();
     let mut eigenvalues = Vec::with_capacity(n);
@@ -510,21 +490,30 @@ where
         }
     }
 
-    // Convert back to Array<T>.
-    let mut q_out = Array::zeros(&[n, n]);
-    let mut t_out = Array::zeros(&[n, n]);
+    // Convert back to Array<T>, built as flat row-major Vecs rather than
+    // `Array::zeros(..)` + per-element `set()`: every entry is written
+    // exactly once here, so `Array::from_vec_shape` both skips the zero-fill
+    // `zeros()` would otherwise do just to have it immediately overwritten,
+    // and needs no `Arc::make_mut` unshare check at all (the buffer is
+    // fresh). One shared (i, j) loop still pushes into both Vecs in the
+    // original interleaved order, so a conversion failure surfaces for the
+    // same (i, j) and the same entry (Q before T) as before.
+    let mut q_vec = Vec::with_capacity(n * n);
+    let mut t_vec = Vec::with_capacity(n * n);
     for i in 0..n {
         for j in 0..n {
             let q_val = T::from(q[i][j]).ok_or_else(|| {
                 NumRs2Error::ComputationError("Cannot convert Q entry back to T".to_string())
             })?;
-            q_out.set(&[i, j], q_val)?;
+            q_vec.push(q_val);
             let t_val = T::from(h[i][j]).ok_or_else(|| {
                 NumRs2Error::ComputationError("Cannot convert T entry back to T".to_string())
             })?;
-            t_out.set(&[i, j], t_val)?;
+            t_vec.push(t_val);
         }
     }
+    let q_out = Array::from_vec_shape(q_vec, &[n, n])?;
+    let t_out = Array::from_vec_shape(t_vec, &[n, n])?;
 
     Ok((q_out, t_out))
 }
@@ -587,9 +576,9 @@ mod tests {
         let d = [1.0_f64, 2.0, 3.0, 4.0];
         let mut a_data = vec![0.0_f64; 16];
         // Build Q explicitly
-        let mut q_data = vec![0.0_f64; 16];
-        q_data[0 * 4 + 0] = c;
-        q_data[0 * 4 + 1] = -s;
+        let mut q_data = [0.0_f64; 16];
+        q_data[0] = c;
+        q_data[1] = -s;
         q_data[1 * 4 + 0] = s;
         q_data[1 * 4 + 1] = c;
         q_data[2 * 4 + 2] = 1.0;

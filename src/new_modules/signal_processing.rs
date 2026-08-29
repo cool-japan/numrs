@@ -395,7 +395,7 @@ impl SignalProcessor {
         }
 
         Ok(SpectrogramResult {
-            spectrogram: Array::from_vec(spectrogram_data).reshape(&[time_axis.len(), n_freqs]),
+            spectrogram: Array::from_vec_shape(spectrogram_data, &[time_axis.len(), n_freqs])?,
             time_axis: Array::from_vec(time_axis),
             freq_axis: FFT::rfftfreq(window_size, T::one())?,
         })
@@ -434,7 +434,7 @@ impl SignalProcessor {
             cwt_result.extend(complex_row);
         }
 
-        Ok(Array::from_vec(cwt_result).reshape(&[n_scales, n]))
+        Array::from_vec_shape(cwt_result, &[n_scales, n])
     }
 
     /// Generate wavelet function

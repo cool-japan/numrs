@@ -41,6 +41,11 @@ fn test_adaptive_task_granularity() {
     let stats = scheduler.statistics();
     assert_eq!(stats.tasks_submitted, 10);
     assert!(stats.tasks_completed > 0);
+
+    // Signal workers to stop before the test process exits; `shutdown` takes
+    // `&self` and cannot join (see `ParallelScheduler::shutdown`'s doc
+    // comment), so this only shrinks the race window, it does not close it.
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -69,6 +74,8 @@ fn test_task_profiling() {
     let stats = scheduler.statistics();
     assert_eq!(stats.tasks_submitted, 5);
     assert!(stats.average_execution_time > Duration::ZERO);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -102,6 +109,8 @@ fn test_dynamic_load_balancing() {
     std::thread::sleep(Duration::from_millis(1000));
 
     assert_eq!(counter.load(Ordering::SeqCst), 50);
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }
 
 #[test]
@@ -125,6 +134,11 @@ fn test_scheduler_statistics_tracking() {
 
     let stats = scheduler.statistics();
     assert_eq!(stats.tasks_submitted, 10);
-    assert!(stats.thread_efficiency.len() > 0);
-    assert!(stats.thread_efficiency.iter().all(|&e| e >= 0.0 && e <= 1.0));
+    assert!(!stats.thread_efficiency.is_empty());
+    assert!(stats
+        .thread_efficiency
+        .iter()
+        .all(|&e| (0.0..=1.0).contains(&e)));
+
+    scheduler.shutdown().expect("Failed to shut down scheduler");
 }

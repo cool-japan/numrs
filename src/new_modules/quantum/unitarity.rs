@@ -562,7 +562,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&[m, n]))
+    Array::from_vec_shape(result_data, &[m, n])
 }
 
 #[cfg(test)]

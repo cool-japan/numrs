@@ -89,6 +89,8 @@ impl WorkerQueue {
         self.deque.len()
     }
 
+    // Read-only counterpart to `len()` (used via `queue_length()`); no
+    // caller needs a boolean check instead of the count yet.
     #[allow(dead_code)]
     fn is_empty(&self) -> bool {
         self.deque.is_empty()
@@ -132,6 +134,8 @@ impl WorkerState {
         self.is_idle.store(idle, Ordering::Relaxed);
     }
 
+    // No caller: `total_execution_time`/`tasks_executed` feed pool-level
+    // stats, but this per-worker derived rate isn't surfaced anywhere yet.
     #[allow(dead_code)]
     fn throughput(&self) -> f64 {
         let total_time = self
@@ -183,6 +187,12 @@ impl Default for WorkStealingConfig {
 pub struct WorkStealingPool {
     config: WorkStealingConfig,
     workers: Vec<Arc<WorkerState>>,
+    // Populated in `with_config` but never joined: `shutdown(&self)` flips
+    // the flag and wakes idle workers but returns without draining these
+    // handles (see the comment in `shutdown` — joining needs to consume
+    // `self`, which `&self` can't do here). Same limitation as
+    // `ParallelScheduler::worker_threads`; fixing it is an API/behavior
+    // change, out of scope for a lint-only pass.
     #[allow(dead_code)]
     threads: Vec<JoinHandle<()>>,
     shutdown: Arc<AtomicBool>,

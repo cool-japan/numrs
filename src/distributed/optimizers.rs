@@ -61,16 +61,14 @@
 //! # }
 //! ```
 
+use super::collective::{allreduce, ReduceOp};
 use super::communication::{
     compress_tensor, decompress_tensor, AsyncCommunicator, CommunicationError, CompressionStrategy,
-    MessagePriority, TensorMessage,
 };
 use super::coordinator::{CoordinatorError, RingAllReduce};
 use super::data_parallel::GradientAggregation;
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::Array1;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -152,6 +150,12 @@ pub struct DistributedSGD {
     communicator: Arc<Communicator>,
 
     /// Async communicator
+    // `step`/`step_named` aggregate gradients via `allreduce`/`ring_reducer`
+    // and never touch this handle; it documents the asynchronous push/pull
+    // path (see the module's "Asynchronous Optimization" pattern) that
+    // hasn't been wired into `DistributedSGD` yet. Wiring it in is a
+    // behavioral change, out of scope for a lint-only pass.
+    #[allow(dead_code)]
     async_comm: AsyncCommunicator,
 
     /// Gradient aggregation strategy
@@ -327,25 +331,32 @@ impl DistributedSGD {
         Ok(new_params)
     }
 
-    /// Aggregate gradients across workers
+    /// Aggregate gradients across workers.
+    ///
+    /// A real all-reduce **sum** across every rank, divided by the world
+    /// size. An earlier version's `AllReduce`/`Hierarchical` branch never
+    /// talked to another rank: it divided *this rank's own* gradients by
+    /// the world size and returned that, so every rank silently computed a
+    /// different step from a different, wrong "aggregate" (and
+    /// `RingAllReduce`'s branch summed for real but never divided down to
+    /// a mean).
     async fn aggregate_gradients(&self, gradients: &[f32]) -> Result<Vec<f32>, OptimizerError> {
-        match self.aggregation {
+        let world_size = self.communicator.size() as f32;
+        let summed = match self.aggregation {
             GradientAggregation::RingAllReduce => {
-                if let Some(ref reducer) = self.ring_reducer {
-                    Ok(reducer.allreduce(gradients).await?)
-                } else {
-                    Err(OptimizerError::StateMismatch(
-                        "Ring reducer not initialized".to_string(),
-                    ))
-                }
+                let reducer = self.ring_reducer.as_ref().ok_or_else(|| {
+                    OptimizerError::StateMismatch("Ring reducer not initialized".to_string())
+                })?;
+                reducer.allreduce(gradients).await?
             }
 
             GradientAggregation::AllReduce | GradientAggregation::Hierarchical => {
-                // Simple averaging
-                let world_size = self.communicator.size() as f32;
-                Ok(gradients.iter().map(|&g| g / world_size).collect())
+                allreduce(gradients, ReduceOp::Sum, &self.communicator)
+                    .await
+                    .map_err(CoordinatorError::from)?
             }
-        }
+        };
+        Ok(summed.into_iter().map(|g| g / world_size).collect())
     }
 
     /// Get learning rate
@@ -385,6 +396,9 @@ pub struct DistributedAdam {
     communicator: Arc<Communicator>,
 
     /// Async communicator
+    // Same story as `DistributedSGD::async_comm`: `step`/`step_named` here
+    // aggregate via `allreduce`/`ring_reducer` and never touch this handle.
+    #[allow(dead_code)]
     async_comm: AsyncCommunicator,
 
     /// Gradient aggregation strategy
@@ -511,7 +525,6 @@ impl DistributedAdam {
             .or_insert_with(|| OptimizerState::new(params.len(), true));
 
         state.t += 1;
-        let t = state.t as f32;
 
         // Bias correction
         let bias_correction1 = 1.0 - self.beta1.powi(state.t as i32);
@@ -547,25 +560,32 @@ impl DistributedAdam {
         Ok(new_params)
     }
 
-    /// Aggregate gradients across workers
+    /// Aggregate gradients across workers.
+    ///
+    /// A real all-reduce **sum** across every rank, divided by the world
+    /// size. An earlier version's `AllReduce`/`Hierarchical` branch never
+    /// talked to another rank: it divided *this rank's own* gradients by
+    /// the world size and returned that, so every rank silently computed a
+    /// different step from a different, wrong "aggregate" (and
+    /// `RingAllReduce`'s branch summed for real but never divided down to
+    /// a mean).
     async fn aggregate_gradients(&self, gradients: &[f32]) -> Result<Vec<f32>, OptimizerError> {
-        match self.aggregation {
+        let world_size = self.communicator.size() as f32;
+        let summed = match self.aggregation {
             GradientAggregation::RingAllReduce => {
-                if let Some(ref reducer) = self.ring_reducer {
-                    Ok(reducer.allreduce(gradients).await?)
-                } else {
-                    Err(OptimizerError::StateMismatch(
-                        "Ring reducer not initialized".to_string(),
-                    ))
-                }
+                let reducer = self.ring_reducer.as_ref().ok_or_else(|| {
+                    OptimizerError::StateMismatch("Ring reducer not initialized".to_string())
+                })?;
+                reducer.allreduce(gradients).await?
             }
 
             GradientAggregation::AllReduce | GradientAggregation::Hierarchical => {
-                // Simple averaging
-                let world_size = self.communicator.size() as f32;
-                Ok(gradients.iter().map(|&g| g / world_size).collect())
+                allreduce(gradients, ReduceOp::Sum, &self.communicator)
+                    .await
+                    .map_err(CoordinatorError::from)?
             }
-        }
+        };
+        Ok(summed.into_iter().map(|g| g / world_size).collect())
     }
 
     /// Get learning rate
@@ -593,6 +613,7 @@ impl DistributedAdam {
 mod tests {
     use super::*;
     use crate::distributed::process::{ProcessGroup, ProcessInfo};
+    use crate::distributed::testing::{ClusterNode, LocalCluster};
     use std::collections::HashMap;
     use std::net::SocketAddr;
 
@@ -749,5 +770,93 @@ mod tests {
             .with_amsgrad();
 
         assert!(adam.amsgrad);
+    }
+
+    // -----------------------------------------------------------------
+    // aggregate_gradients: a real all-reduce-then-mean over a LocalCluster,
+    // for both `DistributedSGD` and `DistributedAdam`, and for every
+    // `GradientAggregation` strategy. An earlier version's
+    // `AllReduce`/`Hierarchical` branch never left its own rank (dividing
+    // *this rank's own* gradients by the world size), so every rank
+    // produced a different, wrong "aggregate" from a step that never
+    // actually synchronized gradients across the cluster.
+    // -----------------------------------------------------------------
+
+    /// Every rank contributes `[r + 1.0, 2 * (r + 1.0)]`; the mean over
+    /// ranks 0..4 is `[(1+2+3+4)/4, 2*(1+2+3+4)/4] = [2.5, 5.0]`.
+    fn local_gradient(rank: u32) -> Vec<f32> {
+        vec![(rank + 1) as f32, 2.0 * (rank + 1) as f32]
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn sgd_step_averages_gradients_across_ranks() {
+        for aggregation in [
+            GradientAggregation::AllReduce,
+            GradientAggregation::Hierarchical,
+            GradientAggregation::RingAllReduce,
+        ] {
+            let results = LocalCluster::run_connected(4, move |node: ClusterNode| async move {
+                let comm = Arc::new(
+                    Communicator::from_endpoint(Arc::new(node.endpoint))
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?,
+                );
+                let rank = comm.rank() as u32;
+                let mut sgd = DistributedSGD::new(1.0, comm)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?
+                    .with_aggregation(aggregation)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                let params = vec![0.0_f32, 0.0];
+                let updated = sgd
+                    .step(&params, &local_gradient(rank))
+                    .await
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                Ok(updated)
+            })
+            .await
+            .expect("cluster run should succeed");
+
+            // lr = 1.0, no momentum: updated = params - lr * mean_grad = -mean_grad.
+            for updated in results {
+                assert_eq!(updated, vec![-2.5, -5.0], "aggregation={aggregation:?}");
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn adam_step_averages_gradients_across_ranks() {
+        for aggregation in [
+            GradientAggregation::AllReduce,
+            GradientAggregation::Hierarchical,
+            GradientAggregation::RingAllReduce,
+        ] {
+            let results = LocalCluster::run_connected(4, move |node: ClusterNode| async move {
+                let comm = Arc::new(
+                    Communicator::from_endpoint(Arc::new(node.endpoint))
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?,
+                );
+                let rank = comm.rank() as u32;
+                let mut adam = DistributedAdam::new(1.0, comm)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?
+                    .with_aggregation(aggregation)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                let params = vec![0.0_f32, 0.0];
+                let updated = adam
+                    .step(&params, &local_gradient(rank))
+                    .await
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                Ok(updated)
+            })
+            .await
+            .expect("cluster run should succeed");
+
+            // Every rank must land on the identical update: proof the
+            // gradient actually crossed the network rather than each rank
+            // computing Adam's first step from its own local (and
+            // therefore different) gradient.
+            let first = results[0].clone();
+            for updated in &results {
+                assert_eq!(updated, &first, "aggregation={aggregation:?}");
+            }
+        }
     }
 }

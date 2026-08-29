@@ -51,7 +51,7 @@ pub fn conjugate_gradient<T>(
     max_iter: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     // Validate dimensions
     let shape = a.shape();
@@ -215,7 +215,7 @@ pub fn pcg<T, P>(
     max_iter: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
     P: Preconditioner<T>,
 {
     // Validate dimensions
@@ -355,7 +355,7 @@ pub fn pcg_jacobi<T>(
     max_iter: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let precond = JacobiPreconditioner::new(a)?;
     pcg(a, b, &precond, x0, tol, max_iter)
@@ -371,7 +371,7 @@ pub fn pcg_ssor<T>(
     max_iter: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let precond = SSORPreconditioner::new(a, omega)?;
     pcg(a, b, &precond, x0, tol, max_iter)
@@ -386,7 +386,7 @@ pub fn pcg_ichol<T>(
     max_iter: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     let precond = IncompleteCholeskyPreconditioner::new(a)?;
     pcg(a, b, &precond, x0, tol, max_iter)

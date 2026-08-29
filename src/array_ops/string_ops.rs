@@ -209,7 +209,7 @@ pub fn add(arr1: &StringArray, arr2: &StringArray) -> Result<StringArray> {
         result.push(StringElement::unicode(combined));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr1.shape()))
+    Array::from_vec_shape(result, &arr1.shape())
 }
 
 /// Multiply string array by integer array element-wise
@@ -236,7 +236,7 @@ pub fn multiply(arr: &StringArray, times: &Array<i32>) -> Result<StringArray> {
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Apply modulo formatting to string array
@@ -268,7 +268,7 @@ pub fn mod_format(arr: &StringArray, values: &Array<f64>) -> Result<StringArray>
         result.push(StringElement::unicode(formatted));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Center string array elements
@@ -297,7 +297,7 @@ pub fn center(arr: &StringArray, width: usize, fillchar: Option<char>) -> Result
         result.push(StringElement::unicode(centered));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Left justify string array elements
@@ -319,7 +319,7 @@ pub fn ljust(arr: &StringArray, width: usize, fillchar: Option<char>) -> Result<
         result.push(StringElement::unicode(justified));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Right justify string array elements
@@ -341,7 +341,7 @@ pub fn rjust(arr: &StringArray, width: usize, fillchar: Option<char>) -> Result<
         result.push(StringElement::unicode(justified));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Strip leading and trailing characters from string array elements
@@ -363,7 +363,7 @@ pub fn strip(arr: &StringArray, chars: Option<&str>) -> Result<StringArray> {
         result.push(StringElement::unicode(stripped));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Strip leading characters from string array elements
@@ -387,7 +387,7 @@ pub fn lstrip(arr: &StringArray, chars: Option<&str>) -> Result<StringArray> {
         result.push(StringElement::unicode(stripped));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Strip trailing characters from string array elements
@@ -411,7 +411,7 @@ pub fn rstrip(arr: &StringArray, chars: Option<&str>) -> Result<StringArray> {
         result.push(StringElement::unicode(stripped));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Convert string array elements to uppercase
@@ -426,7 +426,7 @@ pub fn upper(arr: &StringArray) -> Result<StringArray> {
         result.push(StringElement::unicode(upper_str));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Convert string array elements to lowercase
@@ -441,7 +441,7 @@ pub fn lower(arr: &StringArray) -> Result<StringArray> {
         result.push(StringElement::unicode(lower_str));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Convert string array elements to title case
@@ -472,7 +472,7 @@ pub fn title(arr: &StringArray) -> Result<StringArray> {
         result.push(StringElement::unicode(title_str));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Capitalize first character of string array elements
@@ -499,7 +499,7 @@ pub fn capitalize(arr: &StringArray) -> Result<StringArray> {
         result.push(StringElement::unicode(capitalized));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Replace occurrences of substring in string array elements
@@ -523,7 +523,7 @@ pub fn replace(
         result.push(StringElement::unicode(replaced));
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Split string array elements by delimiter
@@ -613,7 +613,7 @@ pub fn count(
         result.push(count);
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Find index of first occurrence of substring
@@ -660,7 +660,7 @@ pub fn find(
         result.push(index);
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Find index of last occurrence of substring
@@ -707,7 +707,7 @@ pub fn rfind(
         result.push(index);
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Check if string array elements start with prefix
@@ -751,7 +751,7 @@ pub fn startswith(
         result.push(starts);
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Check if string array elements end with suffix
@@ -795,7 +795,7 @@ pub fn endswith(
         result.push(ends);
     }
 
-    Ok(Array::from_vec(result).reshape(&arr.shape()))
+    Array::from_vec_shape(result, &arr.shape())
 }
 
 /// Check character type properties
@@ -813,7 +813,7 @@ pub mod chartype {
             result.push(is_alpha);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Check if string array elements are alphanumeric
@@ -827,7 +827,7 @@ pub mod chartype {
             result.push(is_alnum);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Check if string array elements are digits
@@ -841,7 +841,7 @@ pub mod chartype {
             result.push(is_digit);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Check if string array elements are lowercase
@@ -859,7 +859,7 @@ pub mod chartype {
             result.push(is_lower);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Check if string array elements are uppercase
@@ -877,7 +877,7 @@ pub mod chartype {
             result.push(is_upper);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Check if string array elements are title case
@@ -917,7 +917,7 @@ pub mod chartype {
             result.push(is_title);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 
     /// Check if string array elements contain only whitespace
@@ -931,7 +931,7 @@ pub mod chartype {
             result.push(is_space);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr.shape()))
+        Array::from_vec_shape(result, &arr.shape())
     }
 }
 
@@ -957,14 +957,14 @@ pub mod compare {
             result.push(equal);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr1.shape()))
+        Array::from_vec_shape(result, &arr1.shape())
     }
 
     /// Element-wise string inequality comparison
     pub fn not_equal(arr1: &StringArray, arr2: &StringArray) -> Result<Array<bool>> {
         let eq_result = equal(arr1, arr2)?;
         let result: Vec<bool> = eq_result.to_vec().into_iter().map(|x| !x).collect();
-        Ok(Array::from_vec(result).reshape(&arr1.shape()))
+        Array::from_vec_shape(result, &arr1.shape())
     }
 
     /// Element-wise string less than comparison
@@ -985,7 +985,7 @@ pub mod compare {
             result.push(less);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr1.shape()))
+        Array::from_vec_shape(result, &arr1.shape())
     }
 
     /// Element-wise string less than or equal comparison
@@ -1006,7 +1006,7 @@ pub mod compare {
             result.push(less_eq);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr1.shape()))
+        Array::from_vec_shape(result, &arr1.shape())
     }
 
     /// Element-wise string greater than comparison
@@ -1027,7 +1027,7 @@ pub mod compare {
             result.push(greater);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr1.shape()))
+        Array::from_vec_shape(result, &arr1.shape())
     }
 
     /// Element-wise string greater than or equal comparison
@@ -1048,7 +1048,7 @@ pub mod compare {
             result.push(greater_eq);
         }
 
-        Ok(Array::from_vec(result).reshape(&arr1.shape()))
+        Array::from_vec_shape(result, &arr1.shape())
     }
 }
 

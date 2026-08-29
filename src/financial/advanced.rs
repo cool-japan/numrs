@@ -62,7 +62,6 @@ where
     let pmt = calculate_pmt(rate, nper_t, pv, fv, when_t)?;
 
     // Calculate balance at beginning of period
-    let per_t = T::from(per).expect("Failed to convert per to type T");
     let per_minus_1 = T::from(per - 1).expect("Failed to convert per-1 to type T");
 
     let balance = if rate.is_zero() {

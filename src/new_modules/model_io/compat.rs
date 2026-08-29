@@ -262,10 +262,18 @@ impl ModelMigration {
     }
 
     /// Migrates from a specific version to another
+    ///
+    /// NOTE: `_to` is currently unused -- every step below is gated only on
+    /// `from`, so this always migrates all the way to the latest known
+    /// version rather than stopping at an arbitrary intermediate `to`. This
+    /// is harmless today because the sole caller (`migrate_to_current`)
+    /// always passes the crate's current format version as `to`, but a
+    /// future caller wanting a partial migration would need real `to`-bounded
+    /// gating added here first.
     fn migrate_from_version(
         mut model: NumRS2Model,
         from: &VersionInfo,
-        to: &VersionInfo,
+        _to: &VersionInfo,
     ) -> FormatResult<NumRS2Model> {
         // Migration path: 0.1.x -> 0.2.x -> 0.3.x -> 0.4.x
 

@@ -46,15 +46,50 @@
 //! - [`builder`]: Fluent API for building expressions
 //! - [`shared`]: Reference-counted expression types (no lifetime constraints)
 //! - [`cse`]: Common Subexpression Elimination (CSE) optimization
+//! - [`owned`]: **Owned, lifetime-free expression templates that actually
+//!   fuse** ([`ExprNode`] / [`IntoExpr`]) -- start here. Its evaluator lives
+//!   in the crate-internal `fused_eval` module.
+//!
+//! # Which expression API to use
+//!
+//! [`owned`] is the one that fuses. Its [`ExprNode`] owns its operands (an
+//! O(1) copy-on-write clone per leaf), so it carries no lifetime parameter,
+//! supports ordinary operator syntax, and evaluates the common tree shapes in
+//! one pass over flat slices (wider trees fall back to ordinary eager
+//! evaluation, at eager's speed -- see [`owned`] for exactly which shapes
+//! fuse):
+//!
+//! ```
+//! use numrs2::prelude::*;
+//!
+//! let a = Array::from_vec(vec![1.0_f64, 2.0, 3.0]);
+//! let b = Array::from_vec(vec![4.0, 5.0, 6.0]);
+//! let c = Array::from_vec(vec![2.0, 2.0, 2.0]);
+//!
+//! let fused = (a.expr() + b.expr() * c.expr()).eval()?;
+//! assert_eq!(fused.to_vec(), vec![9.0, 12.0, 15.0]);
+//! # Ok::<(), numrs2::error::NumRs2Error>(())
+//! ```
+//!
+//! The older borrowing types below ([`core`], [`shared`], [`simd_eval`],
+//! [`builder`], [`cse`], [`optimized_eval`], [`fusion`]) predate
+//! copy-on-write storage and evaluate per element through a `get_flat`
+//! dispatch chain; they remain for compatibility, but new code that wants
+//! fusion should use [`owned`].
 
 pub mod builder;
 pub mod core;
 pub mod cse;
 pub mod enhanced;
+pub(crate) mod fused_eval;
 pub mod fusion;
 pub mod optimized_eval;
+pub mod owned;
 pub mod shared;
 pub mod simd_eval;
+
+// Re-export the owned (fusing) expression templates
+pub use owned::{BinOp, ExprNode, IntoExpr, UnaryOp};
 
 // Re-export core types
 pub use self::core::{ArrayExpr, BinaryExpr, Expr, LazyEval, ScalarExpr, UnaryExpr};

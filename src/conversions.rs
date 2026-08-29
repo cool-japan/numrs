@@ -129,7 +129,7 @@ impl<T> Array<T> {
             converted.push(value.convert_to()?);
         }
 
-        Ok(Array::from_vec(converted).reshape(&self.shape()))
+        Array::from_vec_shape(converted, &self.shape())
     }
 
     /// Safely upcasts the array to a wider type that can represent all values without loss of precision.
@@ -170,7 +170,7 @@ impl<T> Array<T> {
         let data = self.to_vec();
         let converted: Vec<U> = data.into_iter().map(|x| x.as_()).collect();
 
-        Ok(Array::from_vec(converted).reshape(&self.shape()))
+        Array::from_vec_shape(converted, &self.shape())
     }
 
     /// Attempts to downcast the array to a smaller type, returning an error if any values cannot be represented.
@@ -221,7 +221,7 @@ impl<T> Array<T> {
             converted.push(converted_value);
         }
 
-        Ok(Array::from_vec(converted).reshape(&self.shape()))
+        Array::from_vec_shape(converted, &self.shape())
     }
 
     /// Converts the array to a complex number array with zero imaginary parts.
@@ -272,7 +272,7 @@ impl<T> Array<T> {
             converted.push(Complex::new(real, U::zero()));
         }
 
-        Ok(Array::from_vec(converted).reshape(&self.shape()))
+        Array::from_vec_shape(converted, &self.shape())
     }
 }
 

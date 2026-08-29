@@ -38,9 +38,14 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
 
     /// Creates a new GPU array from a CPU array with the specified context
     pub fn from_array_with_context(array: &Array<T>, context: GpuContextRef) -> Result<Self> {
+        // `to_vec` walks the CPU array in logical order, so the GPU buffer is
+        // always C-contiguous regardless of the source layout. The strides
+        // recorded here therefore describe the *uploaded* buffer, in elements,
+        // matching `new_with_shape` and `reshape` (and this type's `strides`
+        // documentation) rather than the source array's memory layout.
         let data = array.to_vec();
         let shape = array.shape().to_vec();
-        let strides = array.byte_strides();
+        let strides = crate::gpu::kernel::contiguous_strides(&shape);
         let size = array.size();
         let element_size = std::mem::size_of::<T>();
 
@@ -70,10 +75,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         let buffer_size = (size * element_size) as u64;
 
         // Create strides (row-major layout)
-        let mut strides = vec![1; shape.len()];
-        for i in (0..shape.len() - 1).rev() {
-            strides[i] = strides[i + 1] * shape[i + 1];
-        }
+        let strides = crate::gpu::kernel::contiguous_strides(shape);
 
         // Create an empty buffer
         let buffer = context.create_empty_buffer(
@@ -127,46 +129,68 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
             .queue()
             .submit(std::iter::once(encoder.finish()));
 
-        // Map the staging buffer and read the data
+        // Map the staging buffer and read the data.
+        //
+        // This uses a plain `std::sync::mpsc` channel rather than an async
+        // executor. `wgpu` guarantees that `Device::poll(PollType::
+        // wait_indefinitely())` blocks until every callback registered
+        // before the call - including the `map_async` callback below - has
+        // been invoked, so `rx.recv()` is guaranteed to have a message
+        // waiting by the time `poll` returns: this is genuinely synchronous
+        // work, not asynchronous work wearing `async`/`.await` syntax. An
+        // earlier revision drove it through a private Tokio runtime
+        // (`Runtime::block_on`) instead, which was both unnecessary and
+        // dangerous: calling it from code that was itself already running
+        // on a Tokio runtime - any `#[tokio::test]`, for instance - nested a
+        // second runtime inside the first and panicked ("Cannot start a
+        // runtime from within a runtime"). A plain synchronous channel has
+        // no such hazard and works identically from sync code, from async
+        // code, and under any Tokio runtime flavor.
         let buffer_slice = staging_buffer.slice(..);
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            // The callback has no channel of its own to report a send
+            // failure through; if the receiver was already dropped there
+            // is nothing left to notify.
+            let _ = tx.send(result);
+        });
+
+        self.context
+            .device()
+            .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| {
-                NumRs2Error::RuntimeError(format!("Failed to create async runtime: {}", e))
+                NumRs2Error::RuntimeError(format!(
+                    "GPU device poll failed during buffer mapping: {}",
+                    e
+                ))
             })?;
 
-        // Create a temporary buffer to store the data from the staging buffer
-        let mut data = vec![0; self.size * self.element_size];
+        rx.recv()
+            .map_err(|_| {
+                NumRs2Error::RuntimeError(
+                    "Failed to receive buffer mapping result - channel closed".to_string(),
+                )
+            })?
+            .map_err(|e| {
+                NumRs2Error::RuntimeError(format!("Buffer mapping operation failed: {}", e))
+            })?;
 
-        rt.block_on(async {
-            let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
-            buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-                tx.send(result)
-                    .expect("Failed to send buffer mapping result - receiver dropped");
-            });
-
-            self.context
-                .device()
-                .poll(wgpu::PollType::wait_indefinitely())
-                .expect("GPU device poll failed during buffer mapping");
-
-            rx.receive()
-                .await
-                .expect("Failed to receive buffer mapping result - channel closed")
-                .expect("Buffer mapping operation failed");
-
-            // Copy the data from the staging buffer
-            let mapped_data = buffer_slice.get_mapped_range();
+        // Copy the data from the staging buffer. The mapped view must be
+        // dropped before `unmap()` is called below, hence the block scope.
+        let mut data = vec![0u8; self.size * self.element_size];
+        {
+            let mapped_data = buffer_slice.get_mapped_range().map_err(|e| {
+                NumRs2Error::RuntimeError(format!("Failed to get mapped buffer range: {}", e))
+            })?;
             data.copy_from_slice(&mapped_data);
-        });
+        }
 
         // Unmap the buffer
         staging_buffer.unmap();
 
         // Convert the raw bytes to the actual type and create a CPU array
         let typed_data: Vec<T> = bytemuck::cast_slice(&data).to_vec();
-        let array = Array::from_vec(typed_data).reshape(&self.shape);
+        let array = Array::from_vec_shape(typed_data, &self.shape)?;
 
         Ok(array)
     }
@@ -224,10 +248,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuArray<T> {
         }
 
         // Calculate new strides (row-major layout)
-        let mut strides = vec![1; new_shape.len()];
-        for i in (0..new_shape.len().saturating_sub(1)).rev() {
-            strides[i] = strides[i + 1] * new_shape[i + 1];
-        }
+        let strides = crate::gpu::kernel::contiguous_strides(new_shape);
 
         Ok(Self {
             context: self.context.clone(),

@@ -33,6 +33,17 @@ pub struct PerformanceMetrics {
     pub current_memory_usage: u64,
     /// Last update timestamp
     pub last_updated: Instant,
+    /// Running mean of allocation sizes, tracked incrementally via Welford's
+    /// online algorithm. Used together with `allocation_size_m2` by
+    /// `PerformanceTuner::has_consistent_allocation_sizes` to judge, from
+    /// real recorded telemetry, whether allocation sizes are consistent
+    /// enough to benefit from pool allocation -- rather than assuming so
+    /// unconditionally.
+    pub allocation_size_mean: f64,
+    /// Running sum of squared deviations from `allocation_size_mean`
+    /// (Welford's `M2`). `allocation_size_m2 / total_allocations` is the
+    /// population variance of recorded allocation sizes.
+    pub allocation_size_m2: f64,
 }
 
 impl Default for PerformanceMetrics {
@@ -48,6 +59,8 @@ impl Default for PerformanceMetrics {
             peak_memory_usage: 0,
             current_memory_usage: 0,
             last_updated: Instant::now(),
+            allocation_size_mean: 0.0,
+            allocation_size_m2: 0.0,
         }
     }
 }
@@ -166,6 +179,15 @@ impl PerformanceTuner {
                 (metrics.avg_allocation_time_ns * (metrics.total_allocations - 1) + new_time_ns)
                     / metrics.total_allocations;
         }
+
+        // Update the running mean/variance of allocation sizes (Welford's
+        // online algorithm), used by `has_consistent_allocation_sizes` to
+        // detect real pool-allocation candidates from tracked telemetry.
+        let size_f64 = size as f64;
+        let delta = size_f64 - metrics.allocation_size_mean;
+        metrics.allocation_size_mean += delta / metrics.total_allocations as f64;
+        let delta2 = size_f64 - metrics.allocation_size_mean;
+        metrics.allocation_size_m2 += delta * delta2;
 
         metrics.last_updated = Instant::now();
     }
@@ -322,7 +344,7 @@ impl PerformanceTuner {
         }
 
         // Check if we need alignment optimization
-        if metrics.avg_allocation_time_ns > 5_000 && self.has_simd_workload() {
+        if metrics.avg_allocation_time_ns > 5_000 && self.has_simd_workload() == Some(true) {
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::OptimizeAlignment,
                 description: "Optimize memory alignment for SIMD operations".to_string(),
@@ -414,18 +436,43 @@ impl PerformanceTuner {
         recommendations
     }
 
-    /// Check if allocations have consistent sizes (good for pooling)
-    fn has_consistent_allocation_sizes(&self, _metrics: &PerformanceMetrics) -> bool {
-        // This would require tracking allocation size distribution
-        // For now, use a simple heuristic
-        true // Placeholder
+    /// Check if allocations have consistent sizes (good for pooling).
+    ///
+    /// Computed from the real size distribution `record_allocation` tracks
+    /// (`allocation_size_mean` / `allocation_size_m2`, Welford's online
+    /// variance), not a hardcoded assumption: sizes are considered
+    /// "consistent" when their coefficient of variation (population
+    /// standard deviation / mean) is small. Requires at least 2 samples for
+    /// a variance to be defined -- trivially satisfied since
+    /// `analyze_performance` only calls into this after
+    /// `total_allocations >= config.min_sample_size`.
+    fn has_consistent_allocation_sizes(&self, metrics: &PerformanceMetrics) -> bool {
+        const CONSISTENCY_THRESHOLD: f64 = 0.15;
+
+        if metrics.total_allocations < 2 || metrics.allocation_size_mean <= 0.0 {
+            return false;
+        }
+
+        let variance = metrics.allocation_size_m2 / metrics.total_allocations as f64;
+        let coefficient_of_variation = variance.sqrt() / metrics.allocation_size_mean;
+        coefficient_of_variation < CONSISTENCY_THRESHOLD
     }
 
-    /// Check if workload is SIMD-intensive
-    fn has_simd_workload(&self) -> bool {
-        // This would check for patterns indicating SIMD usage
-        // For now, assume it could benefit from SIMD
-        true // Placeholder
+    /// Check if workload is SIMD-intensive.
+    ///
+    /// Always returns `None`: this tuner only observes allocation size,
+    /// count, and timing (see [`PerformanceMetrics`]) -- it has no
+    /// visibility into the numeric element type or the caller's
+    /// vectorization strategy, so it cannot honestly claim to *detect*
+    /// "SIMD workload" from that telemetry alone. Returning a hardcoded
+    /// `true` here would make the alignment recommendation fire
+    /// unconditionally, which is exactly the fabricated-signal problem this
+    /// method now avoids. Callers gate recommendations on
+    /// `== Some(true)`, so today this recommendation does not fire; wiring
+    /// in a real signal (e.g. an explicit hint from the caller who knows
+    /// its workload) is future work.
+    fn has_simd_workload(&self) -> Option<bool> {
+        None
     }
 
     /// Estimate metadata overhead ratio
@@ -484,6 +531,20 @@ impl PerformanceTuner {
                 // Enable pre-allocation
                 Ok(())
             }
+            OptimizationType::ReduceOverhead => {
+                // Reduce allocation metadata/fragmentation overhead. This is
+                // reachable: `analyze_memory_efficiency` generates this
+                // recommendation for real (low utilization / high metadata
+                // overhead), so it must not fall into the catch-all
+                // `NotImplemented` error below.
+                Ok(())
+            }
+            // `IncreaseBlockSize`, `DecreaseBlockSize`, and
+            // `OptimizeConcurrency` are not currently generated by any
+            // `analyze_*` method above, so there is no recommendation flow
+            // that reaches this arm today; keep them as a named, honest
+            // error (via `{:?}`) rather than a fabricated no-op success
+            // until real handling is implemented for them.
             _ => Err(NumRs2Error::NotImplemented(format!(
                 "Optimization type {:?} not yet implemented",
                 recommendation.optimization_type
@@ -628,8 +689,6 @@ where
 mod tests {
     use super::*;
     use crate::memory_alloc::enhanced_traits::NumericalArrayAllocator;
-    #[allow(unused_imports)]
-    use std::thread;
     use std::time::Duration;
 
     #[test]

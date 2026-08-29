@@ -11,7 +11,14 @@ use std::cmp::Ordering;
 ///
 /// When `axis` is None, returns a scalar f64.
 /// When `axis` is Some(ax), reduces along that axis and returns a PyArray.
+///
+/// PyO3 0.29 does not infer a default of `None` for a trailing `Option<T>`
+/// parameter without an explicit `#[pyo3(signature = ...)]` -- confirmed
+/// empirically (see `eye`'s doc comment in `src/python/array.rs`), so
+/// every `axis: Option<...>`-taking function in this file needed one added
+/// for `nr.stats.mean(a)` (omitting `axis`) to actually work from Python.
 #[pyfunction]
+#[pyo3(signature = (a, axis=None))]
 fn mean(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny>> {
     match axis {
         None => {
@@ -35,6 +42,7 @@ fn mean(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny>>
 /// When `axis` is Some(ax), sorts each 1-D slice along that axis and returns the median
 /// for each slice as a PyArray.
 #[pyfunction]
+#[pyo3(signature = (a, axis=None))]
 fn median(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny>> {
     match axis {
         None => {
@@ -110,7 +118,7 @@ fn median(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny
                 };
             }
 
-            let arr = Array::from_vec(result).reshape(&out_shape);
+            let arr = Array::from_vec_shape(result, &out_shape)?;
             let py_arr = PyArray { inner: arr };
             py_arr.into_pyobject(py).map(|b| b.into_any().unbind())
         }
@@ -124,6 +132,7 @@ fn median(py: Python<'_>, a: &PyArray, axis: Option<usize>) -> PyResult<Py<PyAny
 /// `ddof` controls the degrees-of-freedom correction (default 0).
 #[pyfunction]
 #[pyo3(name = "std")]
+#[pyo3(signature = (a, axis=None, ddof=None))]
 fn stddev(
     py: Python<'_>,
     a: &PyArray,
@@ -169,6 +178,7 @@ fn stddev(
 /// When `axis` is Some(ax), reduces along that axis returning a PyArray.
 /// `ddof` controls the degrees-of-freedom correction (default 0).
 #[pyfunction]
+#[pyo3(signature = (a, axis=None, ddof=None))]
 fn var(
     py: Python<'_>,
     a: &PyArray,
@@ -206,57 +216,51 @@ fn var(
     }
 }
 
-/// Compute the correlation coefficient
+/// Compute the Pearson correlation coefficient matrix.
+///
+/// Delegates to `crate::stats::correlation::corrcoef`, which implements
+/// NumPy's full `corrcoef(x, y=None, rowvar=True)` semantics: `x`/`y` may
+/// each be 1-D (a single variable) or 2-D (`rowvar` variables x
+/// observations by default, or the transpose when `rowvar=False`); `y`, if
+/// given, is treated as an additional variable appended to `x` (this
+/// replaces the old restricted implementation, which only accepted two
+/// 1-D arrays and rejected a single-array `x` outright).
+///
+/// Mirrors NumPy's own return-type quirk: a bare 1-D `x` with no `y` (one
+/// variable "correlated with itself") collapses to a scalar `float`, e.g.
+/// `np.corrcoef([1, 2, 3])` returns `np.float64(1.0)` rather than
+/// `array([[1.]])`. Every other input shape returns the full correlation
+/// matrix as an `Array`, matching `mean`/`median`/`std`/`var` above in
+/// using the caller's argument shape to pick a scalar vs. `Array` result.
+///
+/// Note: unlike NumPy, a constant (zero-variance) input's diagonal entry is
+/// `1.0` here rather than `NaN` -- this is the underlying
+/// `crate::stats::correlation::cov`/`corrcoef` core's own convention
+/// (avoiding `0/0` propagation), applied uniformly rather than special
+/// enough to redo the shared core's math computed in the low-level call.
 #[pyfunction]
-fn corrcoef(x: &PyArray, y: Option<&PyArray>) -> PyResult<PyArray> {
-    if let Some(y_arr) = y {
-        let x_data = x.inner.to_vec();
-        let y_data = y_arr.inner.to_vec();
+#[pyo3(signature = (x, y=None, rowvar=None))]
+fn corrcoef(
+    py: Python<'_>,
+    x: &PyArray,
+    y: Option<&PyArray>,
+    rowvar: Option<bool>,
+) -> PyResult<Py<PyAny>> {
+    let y_inner = y.map(|a| &a.inner);
+    let result = crate::stats::correlation::corrcoef::<f64>(&x.inner, y_inner, rowvar)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        if x_data.len() != y_data.len() {
-            return Err(PyValueError::new_err("Arrays must have the same length"));
-        }
-
-        if x_data.is_empty() {
-            return Err(PyValueError::new_err("Arrays must not be empty"));
-        }
-
-        // Compute means
-        let mean_x = x_data.iter().sum::<f64>() / x_data.len() as f64;
-        let mean_y = y_data.iter().sum::<f64>() / y_data.len() as f64;
-
-        // Compute covariance and standard deviations
-        let mut cov = 0.0;
-        let mut var_x = 0.0;
-        let mut var_y = 0.0;
-
-        for i in 0..x_data.len() {
-            let dx = x_data[i] - mean_x;
-            let dy = y_data[i] - mean_y;
-            cov += dx * dy;
-            var_x += dx * dx;
-            var_y += dy * dy;
-        }
-
-        let std_x = var_x.sqrt();
-        let std_y = var_y.sqrt();
-
-        if std_x == 0.0 || std_y == 0.0 {
-            return Err(PyValueError::new_err("Standard deviation is zero"));
-        }
-
-        let corr = cov / (std_x * std_y);
-
-        // Return 2x2 correlation matrix
-        let data = vec![1.0, corr, corr, 1.0];
-        Ok(PyArray {
-            inner: crate::array::Array::from_vec(data).reshape(&[2, 2]),
-        })
-    } else {
-        Err(PyValueError::new_err(
-            "Single array correlation not yet supported",
-        ))
+    if y.is_none() && x.inner.ndim() == 1 {
+        // NumPy's scalar-collapse case: see doc comment above.
+        let v = *result
+            .to_vec()
+            .first()
+            .ok_or_else(|| PyValueError::new_err("corrcoef produced an empty result"))?;
+        return Ok(v.into_pyobject(py)?.into_any().unbind());
     }
+
+    let py_arr = PyArray { inner: result };
+    py_arr.into_pyobject(py).map(|b| b.into_any().unbind())
 }
 
 /// Compute covariance matrix
@@ -264,6 +268,7 @@ fn corrcoef(x: &PyArray, y: Option<&PyArray>) -> PyResult<PyArray> {
 /// Delegates to `crate::stats::correlation::cov` which is fully implemented.
 /// `rowvar=true` (default): each row represents a variable.
 #[pyfunction]
+#[pyo3(signature = (m, rowvar=None))]
 fn cov(m: &PyArray, rowvar: Option<bool>) -> PyResult<PyArray> {
     let cov_matrix = crate::stats::correlation::cov::<f64>(&m.inner, None, rowvar, None, None)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -272,6 +277,7 @@ fn cov(m: &PyArray, rowvar: Option<bool>) -> PyResult<PyArray> {
 
 /// Compute histogram
 #[pyfunction]
+#[pyo3(signature = (a, bins=None, range=None))]
 fn histogram(
     a: &PyArray,
     bins: Option<usize>,
@@ -353,40 +359,12 @@ fn percentile(a: &PyArray, q: f64) -> PyResult<f64> {
     Ok(data[lower] + fraction * (data[upper] - data[lower]))
 }
 
-/// Generate random samples from normal distribution
-#[pyfunction]
-fn randn(size: Vec<usize>) -> PyResult<PyArray> {
-    use scirs2_core::random::*;
-
-    let total_size: usize = size.iter().product();
-    let mut rng = thread_rng();
-    let dist = Normal::new(0.0, 1.0).map_err(|e| {
-        PyValueError::new_err(format!("Failed to create normal distribution: {}", e))
-    })?;
-
-    let data: Vec<f64> = (0..total_size).map(|_| dist.sample(&mut rng)).collect();
-
-    Ok(PyArray {
-        inner: crate::array::Array::from_vec(data).reshape(&size),
-    })
-}
-
-/// Generate random samples from uniform distribution
-#[pyfunction]
-fn rand(size: Vec<usize>) -> PyResult<PyArray> {
-    use scirs2_core::random::*;
-
-    let total_size: usize = size.iter().product();
-    let mut rng = thread_rng();
-
-    let data: Vec<f64> = (0..total_size).map(|_| rng.random::<f64>()).collect();
-
-    Ok(PyArray {
-        inner: crate::array::Array::from_vec(data).reshape(&size),
-    })
-}
-
 /// Register statistics functions
+///
+/// Random-number generation (`randn`/`rand` and the fuller `Generator` API)
+/// used to live here as a token two-function `random` submodule; it has
+/// moved to `crate::python::random`, which registers the real `random`
+/// submodule itself (see `crate::python::mod::register`).
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Create stats submodule
     let stats_module = PyModule::new(m.py(), "stats")?;
@@ -402,13 +380,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     stats_module.add_function(wrap_pyfunction!(percentile, m)?)?;
 
     m.add_submodule(&stats_module)?;
-
-    // Add random module
-    let random_module = PyModule::new(m.py(), "random")?;
-    random_module.add_function(wrap_pyfunction!(randn, m)?)?;
-    random_module.add_function(wrap_pyfunction!(rand, m)?)?;
-
-    m.add_submodule(&random_module)?;
 
     Ok(())
 }

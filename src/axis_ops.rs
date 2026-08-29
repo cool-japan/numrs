@@ -68,14 +68,23 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, sum along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: `result` is write-only across this
+                // whole loop (exactly one write per `i`, dynamic-rank index
+                // so `get_mut` replaces `Array::set`'s bounds-checked,
+                // per-call `Arc::make_mut` path), so one unshare covers all
+                // `result_size` writes.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -96,7 +105,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, sum)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = sum;
                 }
 
                 Ok(result)
@@ -181,14 +195,19 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, find the minimum along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: same rationale as `sum_axis` above.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -217,7 +236,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, min_val)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = min_val;
                 }
 
                 Ok(result)
@@ -265,14 +289,19 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, find the maximum along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: same rationale as `sum_axis` above.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -301,7 +330,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, max_val)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = max_val;
                 }
 
                 Ok(result)
@@ -346,14 +380,19 @@ where
                 let mut output_shape = self.shape();
                 output_shape.remove(ax);
                 let mut result = Array::zeros(&output_shape);
+                let result_size = result.size();
+                let result_ndim = result.ndim();
 
                 // For each element in the output, compute product along the axis
                 let axis_len = self.shape()[ax];
 
+                // Bulk-acquire once: same rationale as `sum_axis` above.
+                let result_arr = result.array_mut();
+
                 // Iterate over the output array
-                for i in 0..result.size() {
+                for i in 0..result_size {
                     // Calculate multi-dimensional index for output
-                    let mut out_idx = Vec::with_capacity(result.ndim());
+                    let mut out_idx = Vec::with_capacity(result_ndim);
                     let mut tmp = i;
 
                     for dim in output_shape.iter().rev() {
@@ -374,7 +413,12 @@ where
                     }
 
                     // Set the result
-                    result.set(&out_idx, prod)?;
+                    *result_arr.get_mut(out_idx.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            out_idx
+                        ))
+                    })? = prod;
                 }
 
                 Ok(result)
@@ -397,45 +441,42 @@ where
             )));
         }
 
-        // Create a copy of the array
-        let mut result = self.clone();
-
         // Get the shape
         let shape = self.shape();
         let axis_len = shape[axis];
 
-        // Calculate the stride for the axis
+        // Calculate the stride for the axis (number of elements between
+        // consecutive positions along `axis`, in logical row-major order;
+        // this is 1 when `axis` is the last dimension since an empty
+        // product is 1).
         let stride = shape[axis + 1..].iter().product::<usize>();
 
         // Calculate the number of independent sequences to process
         let n_sequences = shape[..axis].iter().product::<usize>();
 
-        // For each sequence, compute the cumulative sum
+        // Snapshot the elements in *logical* row-major order via `.iter()`,
+        // which respects strides regardless of memory layout. This both
+        // avoids requiring a contiguous backing slice (the array may be a
+        // non-contiguous view, e.g. after `transpose_axis`) and avoids
+        // repeatedly re-reading the whole array on every inner-loop step.
+        let mut data: Vec<T> = self.array().iter().cloned().collect();
+
         for seq in 0..n_sequences {
             let base_idx = seq * stride * axis_len;
 
-            // Initialize the accumulator for this sequence
-            let mut sum = T::zero();
-
-            // Calculate cumulative sum for this sequence
-            for i in 0..axis_len {
-                let idx = base_idx + i * stride;
-
-                // For a proper implementation, we would directly index into the array
-                // using multidimensional indices. For simplicity, we'll linearize.
-                let arr_data = result.to_vec();
-                sum = sum + arr_data[idx].clone();
-
-                // Update the array
-                let result_data = result
-                    .array_mut()
-                    .as_slice_mut()
-                    .expect("Array must be contiguous for cumsum_axis");
-                result_data[idx] = sum.clone();
+            // Each of the `stride` positions within a sequence block is an
+            // independent run to accumulate along `axis`.
+            for elem in 0..stride {
+                let mut sum = T::zero();
+                for i in 0..axis_len {
+                    let idx = base_idx + i * stride + elem;
+                    sum = sum + data[idx].clone();
+                    data[idx] = sum.clone();
+                }
             }
         }
 
-        Ok(result)
+        Array::from_vec_shape(data, &shape)
     }
 
     /// Cumulative product along specified axis
@@ -451,45 +492,37 @@ where
             )));
         }
 
-        // Create a copy of the array
-        let mut result = self.clone();
-
         // Get the shape
         let shape = self.shape();
         let axis_len = shape[axis];
 
-        // Calculate the stride for the axis
+        // Calculate the stride for the axis (see `cumsum_axis` for details).
         let stride = shape[axis + 1..].iter().product::<usize>();
 
         // Calculate the number of independent sequences to process
         let n_sequences = shape[..axis].iter().product::<usize>();
 
-        // For each sequence, compute the cumulative product
+        // Snapshot the elements in logical row-major order (see
+        // `cumsum_axis` for why `.iter()` is used instead of a contiguous
+        // slice or `to_vec()`).
+        let mut data: Vec<T> = self.array().iter().cloned().collect();
+
         for seq in 0..n_sequences {
             let base_idx = seq * stride * axis_len;
 
-            // Initialize the accumulator for this sequence
-            let mut prod = T::one();
-
-            // Calculate cumulative product for this sequence
-            for i in 0..axis_len {
-                let idx = base_idx + i * stride;
-
-                // For a proper implementation, we would directly index into the array
-                // using multidimensional indices. For simplicity, we'll linearize.
-                let arr_data = result.to_vec();
-                prod = prod * arr_data[idx].clone();
-
-                // Update the array
-                let result_data = result
-                    .array_mut()
-                    .as_slice_mut()
-                    .expect("Array must be contiguous for cumprod_axis");
-                result_data[idx] = prod.clone();
+            // Each of the `stride` positions within a sequence block is an
+            // independent run to accumulate along `axis`.
+            for elem in 0..stride {
+                let mut prod = T::one();
+                for i in 0..axis_len {
+                    let idx = base_idx + i * stride + elem;
+                    prod = prod * data[idx].clone();
+                    data[idx] = prod.clone();
+                }
             }
         }
 
-        Ok(result)
+        Array::from_vec_shape(data, &shape)
     }
 
     /// Argmin along specified axis
@@ -512,18 +545,35 @@ where
         let mut output_shape = self.shape();
         let axis_len = output_shape.remove(axis);
 
-        // Calculate the stride for the axis
+        // Calculate the stride for the axis (also equal to the number of
+        // output elements produced per sequence, since `output_shape` is
+        // `self.shape()` with `axis` removed: the dimensions after `axis`
+        // become both the axis's stride and the per-sequence output count).
         let stride = if axis < self.ndim() - 1 {
             self.shape()[axis + 1..].iter().product::<usize>()
         } else {
             1
         };
+        let elements_per_sequence = stride;
 
         // Calculate the number of independent sequences to process
         let n_sequences = self.shape()[..axis].iter().product::<usize>();
 
-        // Create result array
-        let mut result_data = vec![0; n_sequences * output_shape.iter().product::<usize>()];
+        // Create result array. `output_shape.iter().product()` is already
+        // `n_sequences * elements_per_sequence` (the full output size, since
+        // `output_shape` = `self.shape()` with `axis` removed = the
+        // concatenation of the before-`axis` and after-`axis` dimensions);
+        // multiplying by `n_sequences` again here would over-allocate and
+        // make the final `.reshape(&output_shape)` fail whenever
+        // `n_sequences > 1` (i.e. whenever `axis` is not the first
+        // dimension).
+        let mut result_data = vec![0; output_shape.iter().product::<usize>()];
+
+        // Snapshot the elements in logical row-major order via `.iter()`,
+        // which respects strides regardless of memory layout -- this avoids
+        // requiring a contiguous backing slice (the array may be a
+        // non-contiguous view, e.g. after `transpose_axis`).
+        let slice: Vec<T> = self.array().iter().cloned().collect();
 
         // For each sequence, compute the argmin
         for seq in 0..n_sequences {
@@ -531,16 +581,6 @@ where
             let base_idx = seq * stride * axis_len;
 
             // For each element in the output, find the argmin
-            let elements_per_sequence = if axis < self.ndim() - 1 {
-                self.shape()[axis + 1..].iter().product::<usize>()
-            } else {
-                1
-            };
-
-            let slice = self
-                .array()
-                .as_slice()
-                .expect("Array must be contiguous for argmin_axis");
             for elem in 0..elements_per_sequence {
                 // Initialize with first element
                 let mut min_val = slice[base_idx + elem].clone();
@@ -563,7 +603,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(result_data).reshape(&output_shape))
+        Array::from_vec_shape(result_data, &output_shape)
     }
 
     /// Argmax along specified axis
@@ -586,18 +626,35 @@ where
         let mut output_shape = self.shape();
         let axis_len = output_shape.remove(axis);
 
-        // Calculate the stride for the axis
+        // Calculate the stride for the axis (also equal to the number of
+        // output elements produced per sequence, since `output_shape` is
+        // `self.shape()` with `axis` removed: the dimensions after `axis`
+        // become both the axis's stride and the per-sequence output count).
         let stride = if axis < self.ndim() - 1 {
             self.shape()[axis + 1..].iter().product::<usize>()
         } else {
             1
         };
+        let elements_per_sequence = stride;
 
         // Calculate the number of independent sequences to process
         let n_sequences = self.shape()[..axis].iter().product::<usize>();
 
-        // Create result array
-        let mut result_data = vec![0; n_sequences * output_shape.iter().product::<usize>()];
+        // Create result array. `output_shape.iter().product()` is already
+        // `n_sequences * elements_per_sequence` (the full output size, since
+        // `output_shape` = `self.shape()` with `axis` removed = the
+        // concatenation of the before-`axis` and after-`axis` dimensions);
+        // multiplying by `n_sequences` again here would over-allocate and
+        // make the final `.reshape(&output_shape)` fail whenever
+        // `n_sequences > 1` (i.e. whenever `axis` is not the first
+        // dimension).
+        let mut result_data = vec![0; output_shape.iter().product::<usize>()];
+
+        // Snapshot the elements in logical row-major order via `.iter()`,
+        // which respects strides regardless of memory layout -- this avoids
+        // requiring a contiguous backing slice (the array may be a
+        // non-contiguous view, e.g. after `transpose_axis`).
+        let slice: Vec<T> = self.array().iter().cloned().collect();
 
         // For each sequence, compute the argmax
         for seq in 0..n_sequences {
@@ -605,16 +662,6 @@ where
             let base_idx = seq * stride * axis_len;
 
             // For each element in the output, find the argmax
-            let elements_per_sequence = if axis < self.ndim() - 1 {
-                self.shape()[axis + 1..].iter().product::<usize>()
-            } else {
-                1
-            };
-
-            let slice = self
-                .array()
-                .as_slice()
-                .expect("Array must be contiguous for argmax_axis");
             for elem in 0..elements_per_sequence {
                 // Initialize with first element
                 let mut max_val = slice[base_idx + elem].clone();
@@ -637,7 +684,7 @@ where
             }
         }
 
-        Ok(Array::from_vec(result_data).reshape(&output_shape))
+        Array::from_vec_shape(result_data, &output_shape)
     }
 
     /// Variance along specified axis
@@ -702,7 +749,7 @@ where
                     squared_diffs_data.push(diff * diff);
                 }
 
-                let squared_diffs = Array::from_vec(squared_diffs_data).reshape(&self.shape());
+                let squared_diffs = Array::from_vec_shape(squared_diffs_data, &self.shape())?;
 
                 // Calculate mean of squared differences
                 squared_diffs.mean_axis(Some(ax))
@@ -836,7 +883,7 @@ where
         Ok(Array::from_vec(results))
     } else {
         // Reshape to the output shape
-        Ok(Array::from_vec(results).reshape(&output_shape))
+        Ok(Array::from_vec_shape(results, &output_shape)?)
     }
 }
 
@@ -953,6 +1000,6 @@ where
         let data = array.to_vec();
         let func_clone = func.clone();
         let results: Vec<U> = data.into_iter().map(func_clone).collect();
-        Array::from_vec(results).reshape(&array.shape())
+        Array::from_vec_shape(results, &array.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }

@@ -10,19 +10,16 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+use crate::kernels::{borrow::operand, cast, SIMD_MIN_LEN};
 use num_traits::Float;
-use scirs2_core::ndarray::{Array1, ArrayView1};
+use scirs2_core::ndarray::ArrayView1;
 use scirs2_core::random::prelude::*;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 use scirs2_core::Complex;
 use std::fmt::Debug;
 
-/// Threshold for using SIMD optimizations (minimum vector size)
-/// v0.3.0: Increased from 32 to 64 to better amortize allocation overhead
-const SIMD_THRESHOLD: usize = 64;
-
 /// Compute the norm of a vector or matrix
-pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static>(
+pub fn norm<T: Float + Clone + Debug + std::fmt::Display + std::ops::AddAssign + 'static>(
     a: &Array<T>,
     ord: Option<T>,
 ) -> Result<T> {
@@ -30,88 +27,73 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
     let ord = ord.unwrap_or_else(|| T::from(2.0).unwrap_or(T::one() + T::one()));
 
     if shape.len() == 1 {
-        // Vector norm
+        // Vector norm. Each branch borrows `a`'s data once via `operand`
+        // (zero-copy when `a` is contiguous), then, only when long enough
+        // to be worth it, tries reinterpreting that borrow as `&[f32]`/
+        // `&[f64]` via `cast` -- sound because `cast::as_f32`/`as_f64`
+        // only ever return `Some` when `T` really is that concrete type
+        // (a `TypeId` proof, not a heuristic; see `kernels::cast`'s
+        // module docs) -- and wraps it in an `ArrayView1` directly.
+        //
+        // This replaces the old `a.to_vec()` (materializing a `Vec<T>`)
+        // followed by `.iter().filter_map(|&x| x.to_f64()...)` (a
+        // *second*, real per-element conversion through the `Float`
+        // trait, done only to reconstruct a value already known
+        // bit-for-bit identical to `T`) followed by a *third* allocation
+        // (`Array1::from_vec`) -- three allocations plus a redundant
+        // conversion pass, collapsed to zero allocations on this path.
         if ord == T::one() {
             // L1 norm (sum of absolute values)
-            // Use SIMD for large vectors via SimdUnifiedOps
-            if a.len() >= SIMD_THRESHOLD {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    let data = a.to_vec();
-                    let f32_data: Vec<f32> = data
-                        .iter()
-                        .filter_map(|&x| x.to_f64().map(|v| v as f32))
-                        .collect();
-                    let f32_array = Array1::from_vec(f32_data);
-                    let result = f32::simd_norm_l1(&f32_array.view());
+            let op = operand(a);
+            if a.len() >= SIMD_MIN_LEN {
+                if let Some(s) = cast::as_f32(&op) {
+                    let result = f32::simd_norm_l1(&ArrayView1::from(s));
                     return Ok(T::from(result).unwrap_or(T::zero()));
-                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let data = a.to_vec();
-                    let f64_data: Vec<f64> = data.iter().filter_map(|&x| x.to_f64()).collect();
-                    let f64_array = Array1::from_vec(f64_data);
-                    let result = f64::simd_norm_l1(&f64_array.view());
+                }
+                if let Some(s) = cast::as_f64(&op) {
+                    let result = f64::simd_norm_l1(&ArrayView1::from(s));
                     return Ok(T::from(result).unwrap_or(T::zero()));
                 }
             }
 
-            let data = a.to_vec();
-            let sum = data.iter().fold(T::zero(), |acc, &x| acc + x.abs());
+            let sum = op.iter().fold(T::zero(), |acc, &x| acc + x.abs());
             Ok(sum)
         } else if ord == T::one() + T::one() {
             // L2 norm (Euclidean norm)
-            // Use SIMD for large vectors via SimdUnifiedOps
-            if a.len() >= SIMD_THRESHOLD {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    let data = a.to_vec();
-                    let f32_data: Vec<f32> = data
-                        .iter()
-                        .filter_map(|&x| x.to_f64().map(|v| v as f32))
-                        .collect();
-                    let f32_array = Array1::from_vec(f32_data);
-                    let result = f32::simd_norm(&f32_array.view());
+            let op = operand(a);
+            if a.len() >= SIMD_MIN_LEN {
+                if let Some(s) = cast::as_f32(&op) {
+                    let result = f32::simd_norm(&ArrayView1::from(s));
                     return Ok(T::from(result).unwrap_or(T::zero()));
-                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let data = a.to_vec();
-                    let f64_data: Vec<f64> = data.iter().filter_map(|&x| x.to_f64()).collect();
-                    let f64_array = Array1::from_vec(f64_data);
-                    let result = f64::simd_norm(&f64_array.view());
+                }
+                if let Some(s) = cast::as_f64(&op) {
+                    let result = f64::simd_norm(&ArrayView1::from(s));
                     return Ok(T::from(result).unwrap_or(T::zero()));
                 }
             }
 
-            let data = a.to_vec();
-            let sum_squares = data.iter().fold(T::zero(), |acc, &x| acc + x * x);
+            let sum_squares = op.iter().fold(T::zero(), |acc, &x| acc + x * x);
             Ok(sum_squares.sqrt())
         } else if ord == T::infinity() {
             // L-infinity norm (maximum absolute value)
-            // Use SIMD for large vectors via SimdUnifiedOps
-            if a.len() >= SIMD_THRESHOLD {
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-                    let data = a.to_vec();
-                    let f32_data: Vec<f32> = data
-                        .iter()
-                        .filter_map(|&x| x.to_f64().map(|v| v as f32))
-                        .collect();
-                    let f32_array = Array1::from_vec(f32_data);
-                    let result = f32::simd_norm_linf(&f32_array.view());
+            let op = operand(a);
+            if a.len() >= SIMD_MIN_LEN {
+                if let Some(s) = cast::as_f32(&op) {
+                    let result = f32::simd_norm_linf(&ArrayView1::from(s));
                     return Ok(T::from(result).unwrap_or(T::zero()));
-                } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                    let data = a.to_vec();
-                    let f64_data: Vec<f64> = data.iter().filter_map(|&x| x.to_f64()).collect();
-                    let f64_array = Array1::from_vec(f64_data);
-                    let result = f64::simd_norm_linf(&f64_array.view());
+                }
+                if let Some(s) = cast::as_f64(&op) {
+                    let result = f64::simd_norm_linf(&ArrayView1::from(s));
                     return Ok(T::from(result).unwrap_or(T::zero()));
                 }
             }
 
-            let data = a.to_vec();
-            let max_abs = data.iter().fold(T::zero(), |acc, &x| T::max(acc, x.abs()));
+            let max_abs = op.iter().fold(T::zero(), |acc, &x| T::max(acc, x.abs()));
             Ok(max_abs)
         } else {
             // General case
-            let data = a.to_vec();
-            let sum_pow = data
-                .iter()
-                .fold(T::zero(), |acc, &x| acc + x.abs().powf(ord));
+            let op = operand(a);
+            let sum_pow = op.iter().fold(T::zero(), |acc, &x| acc + x.abs().powf(ord));
             Ok(sum_pow.powf(T::one() / ord))
         }
     } else if shape.len() == 2 {
@@ -120,7 +102,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             // Maximum column sum
             let m = shape[0];
             let n = shape[1];
-            let data = a.to_vec();
+            let data = operand(a);
 
             let mut max_col_sum = T::zero();
             for j in 0..n {
@@ -136,7 +118,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             // Maximum row sum
             let m = shape[0];
             let n = shape[1];
-            let data = a.to_vec();
+            let data = operand(a);
 
             let mut max_row_sum = T::zero();
             for i in 0..m {
@@ -155,7 +137,7 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             let n = shape[1];
 
             // Special case: if all elements are zero, the spectral norm is zero
-            let data = a.to_vec();
+            let data = operand(a);
             let is_zero = data.iter().all(|&x| x == T::zero());
             if is_zero {
                 return Ok(T::zero());
@@ -234,8 +216,12 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
                 // y = A^T * A * x (or A * A^T * x for tall matrices)
                 let y = ata.matmul(&x)?;
 
-                // Find the largest element (for normalization)
-                let y_data = y.to_vec();
+                // Find the largest element (for normalization). `y` is
+                // freshly produced by `ata.matmul(&x)` above every one of
+                // up to `max_iter` (1000) iterations, so borrowing it
+                // zero-copy here (instead of the old owned
+                // `y.to_vec()`) avoids one allocation per iteration.
+                let y_data = operand(&y);
                 let max_abs = y_data
                     .iter()
                     .fold(T::zero(), |acc, &val| T::max(acc, val.abs()));
@@ -248,27 +234,31 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
                 // Normalize to prevent overflow/underflow
                 let mut y_normalized = Array::zeros(&y.shape());
 
-                // Handle the indices correctly based on array dimensionality
+                // Handle the indices correctly based on array dimensionality.
+                // `y_normalized` is write-only here (every read is from
+                // `y_data`, borrowed from `y`), and it is freshly zeroed on
+                // every one of up to `max_iter` power-iteration steps, so one
+                // bulk unshare per iteration replaces one per element.
                 let ndim = y.ndim();
                 if ndim == 1 {
-                    #[allow(clippy::needless_range_loop)]
+                    let out = y_normalized.array_mut();
                     for i in 0..y_data.len() {
-                        y_normalized.set(&[i], y_data[i] / max_abs)?;
+                        out[[i]] = y_data[i] / max_abs;
                     }
                 } else if ndim == 2 {
                     // For a 2D vector with shape (n, 1) or (1, n)
                     let shape = y.shape();
                     if shape[0] == 1 {
                         // Shape (1, n) - row vector
-                        #[allow(clippy::needless_range_loop)]
+                        let out = y_normalized.array_mut();
                         for i in 0..y_data.len() {
-                            y_normalized.set(&[0, i], y_data[i] / max_abs)?;
+                            out[[0, i]] = y_data[i] / max_abs;
                         }
                     } else if shape[1] == 1 {
                         // Shape (n, 1) - column vector
-                        #[allow(clippy::needless_range_loop)]
+                        let out = y_normalized.array_mut();
                         for i in 0..y_data.len() {
-                            y_normalized.set(&[i, 0], y_data[i] / max_abs)?;
+                            out[[i, 0]] = y_data[i] / max_abs;
                         }
                     } else {
                         // This is a matrix, not a vector
@@ -326,6 +316,32 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
             // Return the square root of the largest eigenvalue,
             // which is the largest singular value (spectral norm)
             Ok(lambda.sqrt())
+        } else if ord == -(T::one() + T::one()) {
+            // Smallest singular value (NumPy's matrix `ord=-2`). Unlike
+            // `ord=2` above, there is no comparably cheap iterative route
+            // to the *smallest* singular value (inverse power iteration
+            // would need `A^-1`, which costs at least as much as an SVD),
+            // so this goes straight through the existing SVD
+            // implementation.
+            #[cfg(feature = "lapack")]
+            {
+                let (_, s, _) = crate::new_modules::matrix_decomp::svd(a)?;
+                let s_vec = s.to_vec();
+                if s_vec.is_empty() {
+                    return Err(NumRs2Error::ComputationError(
+                        "cannot compute ord=-2 norm of an empty matrix".to_string(),
+                    ));
+                }
+                Ok(s_vec
+                    .into_iter()
+                    .fold(T::infinity(), |acc, x| if x < acc { x } else { acc }))
+            }
+            #[cfg(not(feature = "lapack"))]
+            {
+                Err(NumRs2Error::FeatureNotEnabled(
+                    "ord=-2 (smallest singular value) requires the 'lapack' feature".to_string(),
+                ))
+            }
         } else {
             Err(NumRs2Error::InvalidOperation(format!(
                 "Invalid matrix norm order: {}",
@@ -335,6 +351,50 @@ pub fn norm<T: Float + Clone + std::fmt::Display + std::ops::AddAssign + 'static
     } else {
         Err(NumRs2Error::DimensionMismatch(
             "norm requires a 1D or 2D array".to_string(),
+        ))
+    }
+}
+
+/// Compute the nuclear norm of a matrix: the sum of its singular values
+/// (NumPy's `ord='nuc'` for [`norm`]).
+///
+/// Unlike every numeric order `norm` accepts, `'nuc'` has no representation
+/// as a single value of `T` (`norm`'s `ord: Option<T>` parameter), so it
+/// gets its own entry point here rather than a sentinel value.
+///
+/// # Errors
+/// * `DimensionMismatch` if `a` is not 2-D.
+/// * `FeatureNotEnabled` if the `lapack` feature (which backs the SVD this
+///   is computed from) is disabled.
+///
+/// # Examples
+/// ```
+/// use numrs2::prelude::*;
+/// use numrs2::linalg::nuclear_norm;
+///
+/// // A diagonal matrix's singular values are the absolute values of its
+/// // diagonal entries, so its nuclear norm is their sum.
+/// let a = Array::<f64>::from_vec(vec![3.0, 0.0, 0.0, -4.0]).reshape(&[2, 2]);
+/// let nn = nuclear_norm(&a).expect("nuclear_norm should succeed");
+/// assert!((nn - 7.0).abs() < 1e-8);
+/// ```
+pub fn nuclear_norm<T: Float + Clone + Debug>(a: &Array<T>) -> Result<T> {
+    let shape = a.shape();
+    if shape.len() != 2 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "nuclear norm (ord='nuc') requires a 2D matrix".to_string(),
+        ));
+    }
+
+    #[cfg(feature = "lapack")]
+    {
+        let (_, s, _) = crate::new_modules::matrix_decomp::svd(a)?;
+        Ok(s.to_vec().into_iter().fold(T::zero(), |acc, x| acc + x))
+    }
+    #[cfg(not(feature = "lapack"))]
+    {
+        Err(NumRs2Error::FeatureNotEnabled(
+            "nuclear norm (ord='nuc') requires the 'lapack' feature".to_string(),
         ))
     }
 }
@@ -393,14 +453,19 @@ pub fn complex_vdot<T: Float + Clone + Debug>(
     // For complex arrays, first conjugate a
     let a_conj = a.map(|x| x.conj());
 
-    // Then compute the dot product
-    let a_data = a_conj.to_vec();
-    let b_data = b.to_vec();
-    let mut result = Complex::new(T::zero(), T::zero());
-
-    for i in 0..a.size() {
-        result = result + a_data[i] * b_data[i];
-    }
+    // Then compute the dot product. Both operands are only ever walked
+    // once, in lockstep (lengths already validated equal above), so a
+    // zip fold over `.array().iter()` needs no owned `Vec<Complex<T>>`
+    // for either side (`Complex<T>: Copy` here, since `T: Float` implies
+    // `T: Copy`, so `*av`/`*bv` are cheap copies, not clones-through-
+    // allocation).
+    let result = a_conj
+        .array()
+        .iter()
+        .zip(b.array().iter())
+        .fold(Complex::new(T::zero(), T::zero()), |acc, (&av, &bv)| {
+            acc + av * bv
+        });
 
     Ok(result)
 }
@@ -422,31 +487,19 @@ pub fn inner<T: Float + Clone + Debug + 'static>(a: &Array<T>, b: &Array<T>) -> 
         });
     }
 
-    // Use SIMD for large vectors via SimdUnifiedOps
-    if a.len() >= SIMD_THRESHOLD {
-        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-            let a_data = a.to_vec();
-            let b_data = b.to_vec();
-            let f32_a_data: Vec<f32> = a_data
-                .iter()
-                .filter_map(|&x| x.to_f64().map(|v| v as f32))
-                .collect();
-            let f32_b_data: Vec<f32> = b_data
-                .iter()
-                .filter_map(|&x| x.to_f64().map(|v| v as f32))
-                .collect();
-            let f32_a = Array1::from_vec(f32_a_data);
-            let f32_b = Array1::from_vec(f32_b_data);
-            let result = f32::simd_dot(&f32_a.view(), &f32_b.view());
+    // Use SIMD for large vectors via SimdUnifiedOps. Same `operand` +
+    // `cast` zero-copy pipeline as `norm` above, replacing the old
+    // to_vec()-then-per-element-`to_f64()`-then-`Array1::from_vec()`
+    // triple allocation with borrows all the way through.
+    if a.len() >= SIMD_MIN_LEN {
+        let a_op = operand(a);
+        let b_op = operand(b);
+        if let (Some(sa), Some(sb)) = (cast::as_f32(&a_op), cast::as_f32(&b_op)) {
+            let result = f32::simd_dot(&ArrayView1::from(sa), &ArrayView1::from(sb));
             return Ok(T::from(result).unwrap_or(T::zero()));
-        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            let a_data = a.to_vec();
-            let b_data = b.to_vec();
-            let f64_a_data: Vec<f64> = a_data.iter().filter_map(|&x| x.to_f64()).collect();
-            let f64_b_data: Vec<f64> = b_data.iter().filter_map(|&x| x.to_f64()).collect();
-            let f64_a = Array1::from_vec(f64_a_data);
-            let f64_b = Array1::from_vec(f64_b_data);
-            let result = f64::simd_dot(&f64_a.view(), &f64_b.view());
+        }
+        if let (Some(sa), Some(sb)) = (cast::as_f64(&a_op), cast::as_f64(&b_op)) {
+            let result = f64::simd_dot(&ArrayView1::from(sa), &ArrayView1::from(sb));
             return Ok(T::from(result).unwrap_or(T::zero()));
         }
     }
@@ -469,7 +522,7 @@ pub fn trace<T: Float + Clone + Debug + std::ops::AddAssign>(a: &Array<T>) -> Re
     let n = shape[1];
     let min_dim = std::cmp::min(m, n);
 
-    let a_data = a.to_vec();
+    let a_data = operand(a);
     let mut sum = T::zero();
 
     for i in 0..min_dim {
@@ -490,8 +543,6 @@ pub fn outer<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
 
     let a_shape = a.shape();
     let b_shape = b.shape();
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
 
     // Create output array of shape (len(a), len(b))
     let mut result = Array::zeros(&[a_shape[0], b_shape[0]]);
@@ -499,9 +550,25 @@ pub fn outer<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
         NumRs2Error::ComputationError("array should have contiguous memory layout".to_string())
     })?;
 
-    // Compute outer product
-    for (i, &a_val) in a_data.iter().enumerate() {
-        for (j, &b_val) in b_data.iter().enumerate() {
+    // Both operands hoisted into one `operand` borrow each, before the
+    // loop. An earlier version of this fix called `b.array().iter()`
+    // fresh on *every* outer-loop iteration (recipe [B]: no buffer,
+    // reasoning that each pass is individually sequential) -- but that
+    // reruns an `NdArray<T, IxDyn>` traversal `len(a)` times instead of
+    // once, which measured as a real regression against the pre-sweep
+    // `a.to_vec()`/`b.to_vec()` baseline in the sibling `take`/`place`/
+    // `put` fixes (`IxDyn`'s rank-erased iterator doesn't fold down to a
+    // pointer-bump loop the way `&[T]`'s does, so `len(a) * len(b)` steps
+    // through it costs more than `len(a) + len(b)` steps through it once
+    // each plus the copies `operand` avoids). `operand(a)`/`operand(b)`
+    // are each walked exactly once total here -- `a_op` by the outer loop,
+    // `b_op` by the inner loop re-iterating the *same* already-hoisted
+    // slice `len(a)` times, which is cheap because slice-iterator
+    // construction is O(1), unlike `IxDyn`'s.
+    let a_op = operand(a);
+    let b_op = operand(b);
+    for (i, &a_val) in a_op.iter().enumerate() {
+        for (j, &b_val) in b_op.iter().enumerate() {
             result_data[i * b_shape[0] + j] = a_val * b_val;
         }
     }
@@ -549,8 +616,8 @@ pub fn cross<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
         ));
     }
 
-    let a_data = a.to_vec();
-    let b_data = b.to_vec();
+    let a_data = operand(a);
+    let b_data = operand(b);
 
     match (a_data.len(), b_data.len()) {
         (2, 2) => {
@@ -576,12 +643,149 @@ pub fn cross<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Result<Arr
                     "Cross product only supports 2D and 3D vectors".to_string(),
                 ))
             } else {
-                // Should not reach here due to pattern matching above
+                // INVARIANT: unreachable. This arm requires
+                // `2 <= a_len <= 3` (the `if`/`else if` above), but the
+                // `(2, 2)` and `(3, 3)` match arms earlier in this same
+                // `match` already consumed those exact cases -- Rust match
+                // arms are tried in order, so this guarded arm only ever
+                // runs when `a_len == b_len` and `a_len` is neither 2 nor 3.
                 unreachable!()
             }
         }
         _ => Err(NumRs2Error::DimensionMismatch(
             "Cross product requires vectors of the same length".to_string(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use num_traits::ToPrimitive;
+    use scirs2_core::ndarray::Array1;
+
+    /// Manual timing probe (no `[[bench]]` entry available in this
+    /// lane's `Cargo.toml`, owned by another lane) for `inner`'s SIMD
+    /// path: `operand` + `cast` (zero-copy throughout) vs. the old
+    /// `a.to_vec()` -> per-element `x.to_f64()` -> `Array1::from_vec()`
+    /// pipeline (three allocations plus a redundant `Float`-trait
+    /// conversion pass, even though `T` is already known to be `f64`
+    /// once `cast::as_f64` matches).
+    #[test]
+    fn probe_inner_simd_perf_vs_naive_to_vec_pipeline() {
+        fn naive_inner_f64(a: &Array<f64>, b: &Array<f64>) -> f64 {
+            let a_data = a.to_vec();
+            let b_data = b.to_vec();
+            let f64_a_data: Vec<f64> = a_data.iter().filter_map(|&x| x.to_f64()).collect();
+            let f64_b_data: Vec<f64> = b_data.iter().filter_map(|&x| x.to_f64()).collect();
+            let f64_a = Array1::from_vec(f64_a_data);
+            let f64_b = Array1::from_vec(f64_b_data);
+            f64::simd_dot(&f64_a.view(), &f64_b.view())
+        }
+
+        let n = 200_000;
+        let a = Array::from_vec((0..n).map(|i| i as f64 * 0.001).collect::<Vec<_>>());
+        let b = Array::from_vec((0..n).map(|i| i as f64 * 0.002).collect::<Vec<_>>());
+        let iters = 200;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(naive_inner_f64(&a, &b));
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(inner(&a, &b).expect("inner should succeed"));
+        }
+        let operand_cast = t1.elapsed();
+
+        eprintln!(
+            "[inner SIMD path, n={n}] naive(to_vec+to_f64+from_vec)={:.1}us/iter operand_cast={:.1}us/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e6 / iters as f64,
+            operand_cast.as_secs_f64() * 1e6 / iters as f64,
+            naive.as_secs_f64() / operand_cast.as_secs_f64(),
+        );
+
+        let expected = naive_inner_f64(&a, &b);
+        let got = inner(&a, &b).expect("inner should succeed");
+        assert!(
+            (got - expected).abs() < 1e-6,
+            "got {got}, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn test_outer_basic() {
+        let a = Array::from_vec(vec![1.0, 2.0, 3.0]);
+        let b = Array::from_vec(vec![4.0, 5.0]);
+        let result = outer(&a, &b).expect("outer should succeed");
+        assert_eq!(result.shape(), &[3, 2]);
+        assert_eq!(result.to_vec(), vec![4.0, 5.0, 8.0, 10.0, 12.0, 15.0]);
+    }
+
+    /// Manual timing probe (no `[[bench]]` entry available in this
+    /// lane's `Cargo.toml`, owned by another lane) for `outer`'s
+    /// `a.to_vec()`/`b.to_vec()` -> hoisted-`operand` conversion. Unlike
+    /// the other sites this lane fixed, `outer`'s inner loop re-reads `b`
+    /// for every element of `a`, so a naive "no buffer, `.array().iter()`
+    /// per pass" version (see `outer`'s fix comment) redoes an
+    /// `NdArray<f64, IxDyn>` traversal of the whole of `b` `len(a)` times
+    /// -- `O(len(a) * len(b))` `IxDyn` steps instead of `O(len(a) +
+    /// len(b))` -- so this is the site where that intermediate
+    /// mis-application of recipe [B] cost the most.
+    #[test]
+    fn probe_outer_perf_vs_naive_to_vec() {
+        // Generic with the same bound as `outer<T: Float + Clone +
+        // Debug>` itself (instantiated at `f64` below) -- comparing a
+        // hand-specialized concrete `fn(&Array<f64>, ..)` against the
+        // actual (generic) `outer` would conflate "old to_vec() vs new
+        // operand()" with "concrete vs generic monomorphization", which
+        // is a different question this probe isn't meant to answer.
+        fn naive_outer<T: Float + Clone + Debug>(a: &Array<T>, b: &Array<T>) -> Array<T> {
+            let a_data = a.to_vec();
+            let b_data = b.to_vec();
+            let mut result = Array::zeros(&[a_data.len(), b_data.len()]);
+            let result_data = result
+                .array_mut()
+                .as_slice_mut()
+                .expect("test array is contiguous");
+            for (i, &a_val) in a_data.iter().enumerate() {
+                for (j, &b_val) in b_data.iter().enumerate() {
+                    result_data[i * b_data.len() + j] = a_val * b_val;
+                }
+            }
+            result
+        }
+
+        let m = 800;
+        let n = 800;
+        let a = Array::from_vec((0..m).map(|i| i as f64 * 0.01).collect::<Vec<_>>());
+        let b = Array::from_vec((0..n).map(|i| i as f64 * 0.02).collect::<Vec<_>>());
+        let iters = 20;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(naive_outer(&a, &b));
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(outer(&a, &b).expect("outer should succeed"));
+        }
+        let operand = t1.elapsed();
+
+        eprintln!(
+            "[outer, m={m} n={n}] naive(to_vec_pair)={:.2}ms/iter operand={:.2}ms/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e3 / iters as f64,
+            operand.as_secs_f64() * 1e3 / iters as f64,
+            naive.as_secs_f64() / operand.as_secs_f64(),
+        );
+
+        assert_eq!(
+            naive_outer(&a, &b).to_vec(),
+            outer(&a, &b).expect("outer should succeed").to_vec()
+        );
     }
 }

@@ -107,6 +107,27 @@ impl From<io::Error> for NumRs2Error {
 // using map_err instead of a blanket From implementation.
 
 impl NumRs2Error {
+    /// Build the `IndexOutOfBounds` error for a bulk-acquired dense-array
+    /// loop.
+    ///
+    /// Several hot loops across the crate (hand-rolled matrix
+    /// decompositions, iterative solvers) used to call `Array::get`/
+    /// `Array::set` per element, which -- besides paying `Arc::make_mut`'s
+    /// unshare check on every `set()` -- re-validated bounds and returned
+    /// `Result` on every access. Converting such a loop to bulk
+    /// acquisition (one `array()`/`array_mut()` above the loop, then
+    /// `ndarray`'s own `get`/`get_mut`, which return `Option`) collapses
+    /// that per-element cost to a single unshare check for the whole loop,
+    /// but still needs a `Result` to hand back on the `None` case so the
+    /// conversion changes no observable behavior. Every site that calls
+    /// this has already validated `n` against every operand's shape before
+    /// the loop runs, so the `None` case is unreachable in practice.
+    pub(crate) fn bulk_index_oob(indices: &[usize]) -> Self {
+        NumRs2Error::IndexOutOfBounds(format!(
+            "index {indices:?} out of bounds for a bulk-acquired array"
+        ))
+    }
+
     /// Get the error category for this error
     pub fn category(&self) -> ErrorCategory {
         match self {

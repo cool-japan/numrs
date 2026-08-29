@@ -59,7 +59,7 @@ pub fn minres<T>(
     max_iter: Option<usize>,
 ) -> Result<SolverResult<T>>
 where
-    T: Float + Clone + Zero,
+    T: Float + Clone + Zero + 'static,
 {
     // Validate inputs
     let shape = a.shape();

@@ -76,6 +76,3 @@ pub use config::CMAESConfig;
 
 // Result types
 pub use types::{CMAESResult, CmaEsConfig, CmaEsResult, TerminationReason};
-
-// Internal re-exports for submodule use
-pub(crate) use config::{compute_default_weights, compute_mu_eff};

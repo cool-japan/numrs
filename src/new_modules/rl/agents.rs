@@ -6,7 +6,7 @@
 use crate::error::{NumRs2Error, Result};
 use crate::new_modules::rl::replay::Experience;
 use crate::new_modules::rl::utils::RLAgent as RLAgentTrait;
-use scirs2_core::ndarray::{Array1, Array2, Array3, Axis};
+use scirs2_core::ndarray::{Array1, Array2, Axis};
 use scirs2_core::random::{Distribution, Rng, Uniform};
 use std::collections::HashMap;
 
@@ -161,6 +161,10 @@ pub struct SARSAAgent {
     q_table: HashMap<Vec<u64>, Array1<f64>>,
     learning_rate: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }
@@ -273,6 +277,10 @@ pub struct DQNAgent {
     target_network: SimpleNetwork,
     learning_rate: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }
@@ -432,6 +440,10 @@ pub struct PolicyGradientAgent {
     policy_network: SimpleNetwork,
     learning_rate: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }
@@ -561,6 +573,10 @@ pub struct ActorCriticAgent {
     actor_lr: f64,
     critic_lr: f64,
     gamma: f64,
+    /// Stored for symmetry with `action_dim` (which `RLAgent` requires and
+    /// this agent's exploration strategies read); not currently re-read
+    /// internally, but a private, semantically meaningful config value.
+    #[allow(dead_code)]
     state_dim: usize,
     action_dim: usize,
 }
@@ -739,6 +755,21 @@ impl SimpleNetwork {
         Ok(activation)
     }
 
+    /// Update network parameters via backpropagation.
+    ///
+    /// `gradient_signal` is the upstream ascent signal applied at the selected
+    /// `action` output (and zero at all other outputs). A positive value pushes
+    /// that output up. This matches the callers, which all pass a quantity to be
+    /// ascended at the chosen output:
+    /// - DQN: `td_error = target - Q(s,a)` (move `Q(s,a)` toward target),
+    /// - Policy gradient: the (normalized) return for the taken action,
+    /// - Actor-Critic: the advantage at the actor's action / critic's value.
+    ///
+    /// The forward pass computes, for layer `l`, `z_l = W_lᵀ a_{l-1} + b_l`
+    /// (since `W_l` has shape `(in, out)`), with ReLU on every hidden layer and a
+    /// linear output layer. We back-propagate the single non-zero output error,
+    /// accumulate parameter gradients (`dW_l = a_{l-1} ⊗ δ_l`, `db_l = δ_l`), and
+    /// perform a gradient-ascent step (`W_l += lr·dW_l`, `b_l += lr·db_l`).
     fn update(
         &mut self,
         state: &Array1<f64>,
@@ -746,10 +777,40 @@ impl SimpleNetwork {
         gradient_signal: f64,
         learning_rate: f64,
     ) -> Result<f64> {
-        // Simplified gradient update (placeholder)
-        // In production, use full backpropagation
-        let output = self.forward(state)?;
+        let num_layers = self.weights.len();
 
+        // Forward pass storing each layer's pre-activation (z) and the input
+        // activation feeding it. `activations[l]` is the input to layer `l`;
+        // `activations[num_layers]` is the network output.
+        let mut activations: Vec<Array1<f64>> = Vec::with_capacity(num_layers + 1);
+        let mut pre_activations: Vec<Array1<f64>> = Vec::with_capacity(num_layers);
+        activations.push(state.clone());
+
+        for (i, (w, b)) in self.weights.iter().zip(self.biases.iter()).enumerate() {
+            let input = &activations[i];
+
+            // z = Wᵀ · input + b   (W has shape (in, out)).
+            let mut z = Array1::zeros(w.ncols());
+            for (row_idx, row) in w.axis_iter(Axis(0)).enumerate() {
+                let input_val = input[row_idx];
+                for (col_idx, &val) in row.iter().enumerate() {
+                    z[col_idx] += input_val * val;
+                }
+            }
+            z = &z + b;
+
+            // ReLU on hidden layers, identity on the output layer.
+            let a = if i < num_layers - 1 {
+                z.mapv(|x: f64| x.max(0.0))
+            } else {
+                z.clone()
+            };
+
+            pre_activations.push(z);
+            activations.push(a);
+        }
+
+        let output = &activations[num_layers];
         if action >= output.len() {
             return Err(NumRs2Error::ValueError(format!(
                 "Action {} out of bounds for output size {}",
@@ -758,17 +819,51 @@ impl SimpleNetwork {
             )));
         }
 
-        // Simple update: adjust weights based on gradient signal
-        for (w, b) in self.weights.iter_mut().zip(self.biases.iter_mut()) {
-            for val in w.iter_mut() {
-                *val += learning_rate * gradient_signal * 0.01;
+        // Upstream error at the output layer: only the selected action carries the
+        // signal. The output layer is linear, so delta == upstream error directly.
+        let mut delta = Array1::zeros(output.len());
+        delta[action] = gradient_signal;
+
+        // Backward pass from the output layer down to the input layer.
+        for layer in (0..num_layers).rev() {
+            let input = &activations[layer];
+
+            // Gradient w.r.t. weights: dW[i, j] = input[i] * delta[j].
+            let w = &mut self.weights[layer];
+            for (row_idx, mut row) in w.axis_iter_mut(Axis(0)).enumerate() {
+                let input_val = input[row_idx];
+                for (col_idx, val) in row.iter_mut().enumerate() {
+                    *val += learning_rate * input_val * delta[col_idx];
+                }
             }
-            for val in b.iter_mut() {
-                *val += learning_rate * gradient_signal * 0.01;
+
+            // Gradient w.r.t. biases: db[j] = delta[j].
+            let b = &mut self.biases[layer];
+            for (j, val) in b.iter_mut().enumerate() {
+                *val += learning_rate * delta[j];
+            }
+
+            // Propagate delta to the previous layer (skip when at the input layer).
+            if layer > 0 {
+                let w = &self.weights[layer];
+                let prev_z = &pre_activations[layer - 1];
+                let mut prev_delta = Array1::zeros(w.nrows());
+                // prev_delta[i] = Σ_j W[i, j] * delta[j].
+                for (row_idx, row) in w.axis_iter(Axis(0)).enumerate() {
+                    let mut acc = 0.0;
+                    for (col_idx, &val) in row.iter().enumerate() {
+                        acc += val * delta[col_idx];
+                    }
+                    // Apply ReLU'(z) of the previous (hidden) layer.
+                    prev_delta[row_idx] = if prev_z[row_idx] > 0.0 { acc } else { 0.0 };
+                }
+                delta = prev_delta;
             }
         }
 
-        Ok(gradient_signal.abs())
+        // Report the squared-error loss implied by the upstream signal so callers
+        // accumulate a meaningful scalar (matches the TD/return magnitude used).
+        Ok(gradient_signal * gradient_signal)
     }
 
     fn soft_update(&mut self, other: &SimpleNetwork, tau: f64) -> Result<()> {

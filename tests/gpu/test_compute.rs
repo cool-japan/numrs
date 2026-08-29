@@ -1,11 +1,13 @@
 //! Tests for GPU compute shader management
 
 use numrs2::gpu::compute::{DataType, KernelBuilder, KernelOp, ShaderCache};
-use numrs2::gpu::new_context;
+use numrs2::gpu::new_context_async;
 
 #[tokio::test]
 async fn test_shader_cache_creation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let cache = ShaderCache::new(context);
 
     assert_eq!(cache.shader_count().ok(), Some(0));
@@ -14,7 +16,9 @@ async fn test_shader_cache_creation() {
 
 #[tokio::test]
 async fn test_shader_compilation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let cache = ShaderCache::new(context);
 
     let shader_source = r#"
@@ -30,13 +34,17 @@ async fn test_shader_compilation() {
 
     assert_eq!(cache.shader_count().ok(), Some(1));
 
-    let shader = cache.get_shader("test_shader").expect("Failed to get shader");
+    let shader = cache
+        .get_shader("test_shader")
+        .expect("Failed to get shader");
     assert!(shader.is_some());
 }
 
 #[tokio::test]
 async fn test_shader_cache_get_nonexistent() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let cache = ShaderCache::new(context);
 
     let shader = cache
@@ -47,7 +55,9 @@ async fn test_shader_cache_get_nonexistent() {
 
 #[tokio::test]
 async fn test_shader_cache_clear() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let cache = ShaderCache::new(context.clone());
 
     // Add a shader
@@ -134,7 +144,11 @@ async fn test_kernel_builder_all_unary_ops() {
     for op in unary_ops {
         let builder = KernelBuilder::new().add_operation(op);
         let shader = builder.build();
-        assert!(shader.is_ok(), "Failed to build shader for operation {:?}", op);
+        assert!(
+            shader.is_ok(),
+            "Failed to build shader for operation {:?}",
+            op
+        );
     }
 }
 
@@ -150,7 +164,11 @@ async fn test_kernel_builder_all_binary_ops() {
     for op in binary_ops {
         let builder = KernelBuilder::new().add_operation(op);
         let shader = builder.build();
-        assert!(shader.is_ok(), "Failed to build shader for operation {:?}", op);
+        assert!(
+            shader.is_ok(),
+            "Failed to build shader for operation {:?}",
+            op
+        );
     }
 }
 

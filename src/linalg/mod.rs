@@ -1,13 +1,20 @@
 //! Basic linear algebra operations with Array
 //! Includes matrix multiplication, dot product, matrix inversion, etc.
 
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+// Needed by both the primary (matrix_decomp+lapack) impl block below and the
+// complementary fallback impl block further down; each block only uses a
+// subset depending on which sub-cfg branch is active, so allow unused.
+// (Confirmed empirically during the W6-F2 allow-audit: `cargo check --lib
+// --no-default-features --features scirs,matrix_decomp` -- i.e. lapack off
+// -- flags `ToPrimitive` specifically as unused, while `Array`/`NumRs2Error`/
+// `Result`/`Float`/`Debug` stay used either way.)
+#[allow(unused_imports)]
 use crate::array::Array;
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#[allow(unused_imports)]
 use crate::error::{NumRs2Error, Result};
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#[allow(unused_imports)]
 use num_traits::{Float, ToPrimitive};
-#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+#[allow(unused_imports)]
 use std::fmt::Debug;
 
 // Matrix decomposition submodule
@@ -18,9 +25,16 @@ pub mod decomposition;
 #[path = "../linalg_solve.rs"]
 pub mod solve;
 
+// `scirs2-linalg` fast-path backend for the primary impl block below.
+// Gated identically to that block, so nothing here is dead code in any
+// other feature combination.
+#[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
+mod backend;
+
 // Import submodules
 pub mod iterative_solvers;
 pub mod matrix_ops;
+pub mod parity;
 pub mod randomized;
 pub mod tensor_decomp;
 pub mod tensor_ops;
@@ -37,10 +51,11 @@ pub use solve::{inv, solve};
 pub use decomposition::matrix_rank;
 #[cfg(feature = "lapack")]
 pub use matrix_ops::{det, matrix_power};
+pub use parity::{multi_dot, tensorinv, tensorsolve};
 #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
 pub use solve::pinv;
 pub use tensor_ops::{einsum, kron, tensordot};
-pub use vector_ops::{complex_vdot, inner, norm, outer, trace, vdot};
+pub use vector_ops::{complex_vdot, inner, norm, nuclear_norm, outer, trace, vdot};
 
 // Randomized linear algebra
 pub use randomized::{
@@ -78,7 +93,8 @@ where
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     /// Compute the determinant of a matrix using LU decomposition for large matrices
     /// and direct formula for small matrices.
@@ -89,6 +105,13 @@ where
     /// 3. Scaling to prevent overflow/underflow in intermediate calculations
     /// 4. Near-zero detection with appropriate thresholds
     pub fn det(&self) -> Result<T> {
+        // Fast path: LAPACK-backed det for f32/f64 at n >= 16 (see
+        // `backend`). `None` == not eligible, so the body below is
+        // reached unchanged -- including for every malformed input.
+        if let Some(r) = backend::try_scirs2_det(self) {
+            return r;
+        }
+
         // Verify the array is square
         let shape = self.shape();
         if shape.len() != 2 || shape[0] != shape[1] {
@@ -135,7 +158,7 @@ where
                 }
 
                 // Create 3x3 submatrix for minor
-                let minor = Array::from_vec(minor_data).reshape(&[3, 3]);
+                let minor = Array::from_vec_shape(minor_data, &[3, 3])?;
 
                 // Compute 3x3 determinant (we know this works from the 3x3 case)
                 let minor_det = minor.det()?;
@@ -160,7 +183,7 @@ where
         #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
         let (_, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
@@ -214,6 +237,13 @@ where
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
     pub fn inv(&self) -> Result<Array<T>> {
+        // Fast path: see `backend`. Declining is the norm (small,
+        // non-square, non-f32/f64, or a singular matrix), and every
+        // decline falls through to the LU path below untouched.
+        if let Some(r) = backend::try_scirs2_inv(self) {
+            return r;
+        }
+
         // Check if the matrix is square
         let shape = self.shape();
         if shape.len() != 2 || shape[0] != shape[1] {
@@ -238,7 +268,7 @@ where
             // For 1x1 matrix, inverse is 1/a
             let a = self.get(&[0, 0])?;
             let result = vec![T::one() / a];
-            return Ok(Array::from_vec(result).reshape(&[1, 1]));
+            return Array::from_vec_shape(result, &[1, 1]);
         } else if n == 2 {
             // For 2x2 matrix, use the formula:
             // [a b]^-1 = (1/det) * [d -b]
@@ -252,7 +282,7 @@ where
             let inv_det = T::one() / det;
             let result = vec![d * inv_det, -b * inv_det, -c * inv_det, a * inv_det];
 
-            return Ok(Array::from_vec(result).reshape(&[2, 2]));
+            return Array::from_vec_shape(result, &[2, 2]);
         } else if n == 3 {
             // For 3x3 matrix, use adjugate formula:
             // A^-1 = (1/det) * adj(A)
@@ -285,7 +315,7 @@ where
                 c22 * inv_det,
             ];
 
-            return Ok(Array::from_vec(result).reshape(&[3, 3]));
+            return Array::from_vec_shape(result, &[3, 3]);
         }
 
         // For larger matrices, use LU decomposition
@@ -297,13 +327,18 @@ where
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
 
         // Step 2: Create a result matrix
         let mut result = Array::zeros(&[n, n]);
+        // Bulk-acquire once for all n columns: `result` is write-only here
+        // (each column's values come from the local `x` buffer, not from
+        // `result` itself), so one unshare replaces what used to be n^2
+        // `Arc::make_mut` calls.
+        let result_arr = result.array_mut();
 
         // Step 3: Solve LUX = I column by column to find A^-1
         // For each column of the identity matrix...
@@ -314,7 +349,6 @@ where
 
             // Step 3.1: Apply permutation to b (Pb)
             let mut pb = vec![T::zero(); n];
-            #[allow(clippy::needless_range_loop)]
             for i in 0..n {
                 let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
                 pb[i] = b[p_idx];
@@ -324,7 +358,6 @@ where
             let mut y = vec![T::zero(); n];
             for i in 0..n {
                 let mut sum = pb[i];
-                #[allow(clippy::needless_range_loop)]
                 for k in 0..i {
                     sum -= l.get(&[i, k])? * y[k];
                 }
@@ -335,7 +368,6 @@ where
             let mut x = vec![T::zero(); n];
             for i in (0..n).rev() {
                 let mut sum = y[i];
-                #[allow(clippy::needless_range_loop)]
                 for k in (i + 1)..n {
                     sum -= u.get(&[i, k])? * x[k];
                 }
@@ -343,9 +375,8 @@ where
             }
 
             // Step 3.4: Store the solution in the j-th column of the result
-            #[allow(clippy::needless_range_loop)]
             for i in 0..n {
-                result.set(&[i, j], x[i])?;
+                result_arr[[i, j]] = x[i];
             }
         }
 
@@ -396,6 +427,14 @@ where
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
+        // Fast path: see `backend`. Note the gate is n >= 4 here, not
+        // 16 -- the fallback below this point recurses infinitely (see
+        // `backend::SOLVE_MIN_DIM`), so eligible input must not be
+        // handed back to it.
+        if let Some(r) = backend::try_scirs2_solve(self, b) {
+            return r;
+        }
+
         // Check dimensions
         let a_shape = self.shape();
         let b_shape = b.shape();
@@ -585,14 +624,13 @@ where
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];
-        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
             pb[i] = b.get(&[p_idx])?;
@@ -602,7 +640,6 @@ where
         let mut y = vec![T::zero(); n];
         for i in 0..n {
             let mut sum = pb[i];
-            #[allow(clippy::needless_range_loop)]
             for k in 0..i {
                 sum -= l.get(&[i, k])? * y[k];
             }
@@ -613,7 +650,6 @@ where
         let mut x = vec![T::zero(); n];
         for i in (0..n).rev() {
             let mut sum = y[i];
-            #[allow(clippy::needless_range_loop)]
             for k in (i + 1)..n {
                 sum -= u.get(&[i, k])? * x[k];
             }
@@ -631,7 +667,7 @@ where
     /// 2. Gaussian elimination with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(not(feature = "matrix_decomp"))]
+    #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -803,6 +839,11 @@ where
 
     /// Compute the singular value decomposition of a matrix
     pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
+        // Fast path: see `backend` (square, n >= 16, f32/f64 only).
+        if let Some(r) = backend::try_scirs2_svd(self) {
+            return r;
+        }
+
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::svd;
         let (u, s_real, vt) = svd(self)?;
@@ -828,6 +869,12 @@ where
     /// Uses the QR iteration algorithm with Wilkinson shifts to compute real
     /// eigenvalues and eigenvectors of a square matrix.
     pub fn eig(&self) -> Result<(Array<T>, Array<T>)> {
+        // Fast path: see `backend` (symmetric input only; note the
+        // documented eigenvalue-ordering deviation there).
+        if let Some(r) = backend::try_scirs2_eig(self) {
+            return r;
+        }
+
         use crate::new_modules::matrix_decomp::qr as qr_decomp;
 
         // Check if the matrix is square
@@ -875,9 +922,11 @@ where
 
             // Apply shift: H_shifted = H - shift * I
             let mut h_shifted = h.clone();
-            for i in 0..n {
-                let v = h_shifted.get(&[i, i])?;
-                h_shifted.set(&[i, i], v - shift)?;
+            {
+                let hs_arr = h_shifted.array_mut();
+                for i in 0..n {
+                    hs_arr[[i, i]] -= shift;
+                }
             }
 
             // QR decompose the shifted matrix
@@ -885,9 +934,11 @@ where
 
             // H_new = R * Q + shift * I (unshift)
             let mut h_new = r_k.matmul(&q_k)?;
-            for i in 0..n {
-                let v = h_new.get(&[i, i])?;
-                h_new.set(&[i, i], v + shift)?;
+            {
+                let hn_arr = h_new.array_mut();
+                for i in 0..n {
+                    hn_arr[[i, i]] += shift;
+                }
             }
 
             // Accumulate Q: Q_total = Q_total * Q_k
@@ -920,6 +971,12 @@ where
 
     /// Compute the Cholesky decomposition of a matrix
     pub fn cholesky(&self) -> Result<Array<T>> {
+        // Fast path: see `backend`. Declines on failure so the
+        // existing perturbation-based fallback still gets its turn.
+        if let Some(r) = backend::try_scirs2_cholesky(self) {
+            return r;
+        }
+
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::cholesky;
         cholesky(self)
@@ -927,6 +984,12 @@ where
 
     /// Compute the QR decomposition of a matrix
     pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
+        // Fast path: see `backend` (square input only, so full QR and
+        // the economy QR below agree on shapes).
+        if let Some(r) = backend::try_scirs2_qr(self) {
+            return r;
+        }
+
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::qr;
         qr(self)
@@ -934,7 +997,7 @@ where
 }
 
 /// A simplified direct implementation of linear algebra functions for Array
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 impl<T> Array<T>
 where
     T: Float
@@ -942,8 +1005,10 @@ where
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     /// Compute the determinant of a matrix using LU decomposition for large matrices
     /// and direct formula for small matrices.
@@ -1000,7 +1065,7 @@ where
                 }
 
                 // Create 3x3 submatrix for minor
-                let minor = Array::from_vec(minor_data).reshape(&[3, 3]);
+                let minor = Array::from_vec_shape(minor_data, &[3, 3])?;
 
                 // Compute 3x3 determinant (we know this works from the 3x3 case)
                 let minor_det = minor.det()?;
@@ -1019,12 +1084,18 @@ where
         let mut a_copy = self.clone();
         let mut det_sign = T::one(); // Track sign changes due to row swaps
 
+        // Bulk-acquire once for the whole function: every remaining access to
+        // `a_copy` below (scale computation, in-place elimination, and the
+        // final diagonal product) is a direct call with no intervening
+        // helper, so one hoisted handle replaces every per-element unshare.
+        let a_arr = a_copy.array_mut();
+
         // Scale factors for each row (for numerical stability)
         let mut row_scale = vec![T::zero(); n];
         for i in 0..n {
             let mut max_in_row = T::zero();
             for j in 0..n {
-                let abs_val = num_traits::Float::abs(a_copy.get(&[i, j])?);
+                let abs_val = num_traits::Float::abs(a_arr[[i, j]]);
                 if abs_val > max_in_row {
                     max_in_row = abs_val;
                 }
@@ -1042,10 +1113,10 @@ where
         for k in 0..n - 1 {
             // Find pivot using scaled partial pivoting
             let mut p_row = k;
-            let mut p_val = num_traits::Float::abs(a_copy.get(&[k, k])?) * row_scale[k];
+            let mut p_val = num_traits::Float::abs(a_arr[[k, k]]) * row_scale[k];
 
             for i in k + 1..n {
-                let val = num_traits::Float::abs(a_copy.get(&[i, k])?) * row_scale[i];
+                let val = num_traits::Float::abs(a_arr[[i, k]]) * row_scale[i];
                 if val > p_val {
                     p_row = i;
                     p_val = val;
@@ -1061,9 +1132,9 @@ where
             // Swap rows if needed
             if p_row != k {
                 for j in 0..n {
-                    let temp = a_copy.get(&[k, j])?;
-                    a_copy.set(&[k, j], a_copy.get(&[p_row, j])?)?;
-                    a_copy.set(&[p_row, j], temp)?;
+                    let temp = a_arr[[k, j]];
+                    a_arr[[k, j]] = a_arr[[p_row, j]];
+                    a_arr[[p_row, j]] = temp;
                 }
 
                 // Swap scale factors too
@@ -1074,15 +1145,15 @@ where
             }
 
             // Perform elimination
-            let pivot = a_copy.get(&[k, k])?;
+            let pivot = a_arr[[k, k]];
 
             for i in k + 1..n {
-                let factor = a_copy.get(&[i, k])? / pivot;
-                a_copy.set(&[i, k], factor)?; // Store multiplier in L part
+                let factor = a_arr[[i, k]] / pivot;
+                a_arr[[i, k]] = factor; // Store multiplier in L part
 
                 for j in k + 1..n {
-                    let val = a_copy.get(&[i, j])? - factor * a_copy.get(&[k, j])?;
-                    a_copy.set(&[i, j], val)?;
+                    let val = a_arr[[i, j]] - factor * a_arr[[k, j]];
+                    a_arr[[i, j]] = val;
                 }
             }
         }
@@ -1090,7 +1161,7 @@ where
         // Compute determinant as product of diagonal elements times the sign
         let mut det = det_sign;
         for i in 0..n {
-            det *= a_copy.get(&[i, i])?;
+            det *= a_arr[[i, i]];
         }
 
         Ok(det)
@@ -1128,7 +1199,7 @@ where
             // For 1x1 matrix, inverse is 1/a
             let a = self.get(&[0, 0])?;
             let result = vec![T::one() / a];
-            return Ok(Array::from_vec(result).reshape(&[1, 1]));
+            return Ok(Array::from_vec_shape(result, &[1, 1])?);
         } else if n == 2 {
             // For 2x2 matrix, use the formula:
             // [a b]^-1 = (1/det) * [d -b]
@@ -1142,7 +1213,7 @@ where
             let inv_det = T::one() / det;
             let result = vec![d * inv_det, -b * inv_det, -c * inv_det, a * inv_det];
 
-            return Ok(Array::from_vec(result).reshape(&[2, 2]));
+            return Ok(Array::from_vec_shape(result, &[2, 2])?);
         } else if n == 3 {
             // For 3x3 matrix, use adjugate formula:
             // A^-1 = (1/det) * adj(A)
@@ -1175,7 +1246,7 @@ where
                 c22 * inv_det,
             ];
 
-            return Ok(Array::from_vec(result).reshape(&[3, 3]));
+            return Ok(Array::from_vec_shape(result, &[3, 3])?);
         }
 
         // For larger matrices, use Gaussian elimination with identity matrix augmentation
@@ -1184,26 +1255,31 @@ where
         // Step 1: Create an augmented matrix [A|I]
         let mut aug = Array::zeros(&[n, 2 * n]);
 
+        // Bulk-acquire once: `aug` is read and written throughout
+        // construction, pivoting, scaling, and elimination below via direct
+        // calls only, so a single hoisted handle covers the whole routine.
+        let aug_arr = aug.array_mut();
+
         // Fill the left side with our matrix
         for i in 0..n {
             for j in 0..n {
-                aug.set(&[i, j], self.get(&[i, j])?)?;
+                aug_arr[[i, j]] = self.get(&[i, j])?;
             }
         }
 
         // Fill the right side with identity matrix
         for i in 0..n {
-            aug.set(&[i, i + n], T::one())?;
+            aug_arr[[i, i + n]] = T::one();
         }
 
         // Step 2: Compute row-echelon form using Gaussian elimination with pivoting
         for i in 0..n {
             // Find pivot (maximum value in current column)
-            let mut max_val = num_traits::Float::abs(aug.get(&[i, i])?);
+            let mut max_val = num_traits::Float::abs(aug_arr[[i, i]]);
             let mut max_row = i;
 
             for j in (i + 1)..n {
-                let abs_val = num_traits::Float::abs(aug.get(&[j, i])?);
+                let abs_val = num_traits::Float::abs(aug_arr[[j, i]]);
                 if abs_val > max_val {
                     max_val = abs_val;
                     max_row = j;
@@ -1221,26 +1297,24 @@ where
             // Swap rows if needed
             if max_row != i {
                 for j in 0..(2 * n) {
-                    let temp = aug.get(&[i, j])?;
-                    aug.set(&[i, j], aug.get(&[max_row, j])?)?;
-                    aug.set(&[max_row, j], temp)?;
+                    let temp = aug_arr[[i, j]];
+                    aug_arr[[i, j]] = aug_arr[[max_row, j]];
+                    aug_arr[[max_row, j]] = temp;
                 }
             }
 
             // Scale current row to get 1 on diagonal
-            let pivot = aug.get(&[i, i])?;
+            let pivot = aug_arr[[i, i]];
             for j in 0..(2 * n) {
-                let val = aug.get(&[i, j])? / pivot;
-                aug.set(&[i, j], val)?;
+                aug_arr[[i, j]] = aug_arr[[i, j]] / pivot;
             }
 
             // Eliminate current column for all other rows
             for j in 0..n {
                 if j != i {
-                    let factor = aug.get(&[j, i])?;
+                    let factor = aug_arr[[j, i]];
                     for k in 0..(2 * n) {
-                        let val = aug.get(&[j, k])? - factor * aug.get(&[i, k])?;
-                        aug.set(&[j, k], val)?;
+                        aug_arr[[j, k]] = aug_arr[[j, k]] - factor * aug_arr[[i, k]];
                     }
                 }
             }
@@ -1248,9 +1322,10 @@ where
 
         // Step 3: Extract the right side, which is now A^-1
         let mut result = Array::zeros(&[n, n]);
+        let result_arr = result.array_mut();
         for i in 0..n {
             for j in 0..n {
-                result.set(&[i, j], aug.get(&[i, j + n])?)?;
+                result_arr[[i, j]] = aug_arr[[i, j + n]];
             }
         }
 
@@ -1295,6 +1370,7 @@ where
     /// 2. LU decomposition with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
+    #[cfg(feature = "lapack")]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -1391,7 +1467,7 @@ where
     /// 2. LU decomposition with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(all(feature = "matrix_decomp", not(feature = "scirs")))]
+    #[cfg(all(feature = "matrix_decomp", feature = "lapack", not(feature = "scirs")))]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -1485,14 +1561,13 @@ where
         #[cfg(feature = "matrix_decomp")]
         let (l, u, p) = lu(self)?;
 
-        #[cfg(not(feature = "matrix_decomp"))]
+        #[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
         return Err(NumRs2Error::FeatureNotEnabled(
             "matrix_decomp feature required for LU decomposition".to_string(),
         ));
 
         // Step 2: Apply permutation to b (Pb)
         let mut pb = vec![T::zero(); n];
-        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             let p_idx = p.get(&[i])?.to_usize().unwrap_or(i);
             pb[i] = b.get(&[p_idx])?;
@@ -1502,7 +1577,6 @@ where
         let mut y = vec![T::zero(); n];
         for i in 0..n {
             let mut sum = pb[i];
-            #[allow(clippy::needless_range_loop)]
             for k in 0..i {
                 sum -= l.get(&[i, k])? * y[k];
             }
@@ -1513,7 +1587,6 @@ where
         let mut x = vec![T::zero(); n];
         for i in (0..n).rev() {
             let mut sum = y[i];
-            #[allow(clippy::needless_range_loop)]
             for k in (i + 1)..n {
                 sum -= u.get(&[i, k])? * x[k];
             }
@@ -1531,7 +1604,7 @@ where
     /// 2. Gaussian elimination with partial pivoting for larger systems
     /// 3. Numerical stability checks with appropriate condition number thresholds
     /// 4. Proper error handling for singular or ill-conditioned matrices
-    #[cfg(not(feature = "matrix_decomp"))]
+    #[cfg(not(feature = "lapack"))]
     pub fn solve(&self, b: &Array<T>) -> Result<Array<T>> {
         // Check dimensions
         let a_shape = self.shape();
@@ -1636,22 +1709,30 @@ where
         // Create an augmented matrix [A|b]
         let mut aug = Array::zeros(&[n, n + 1]);
 
+        // Bulk-acquire once: construction, pivoting, and elimination below
+        // all touch `aug` via direct calls only, so a single hoisted handle
+        // covers everything up through the end of the elimination loop. Back
+        // substitution afterward only reads `aug` (never writes), so it is
+        // left on plain `.get()` -- no COW cost either way once the handle's
+        // borrow has ended.
+        let aug_arr = aug.array_mut();
+
         // Fill in the augmented matrix
         for i in 0..n {
             for j in 0..n {
-                aug.set(&[i, j], self.get(&[i, j])?)?;
+                aug_arr[[i, j]] = self.get(&[i, j])?;
             }
-            aug.set(&[i, n], b.get(&[i])?)?;
+            aug_arr[[i, n]] = b.get(&[i])?;
         }
 
         // Gaussian elimination with partial pivoting
         for i in 0..n {
             // Find pivot (maximum absolute value in current column)
-            let mut max_val = num_traits::Float::abs(aug.get(&[i, i])?);
+            let mut max_val = num_traits::Float::abs(aug_arr[[i, i]]);
             let mut max_row = i;
 
             for j in (i + 1)..n {
-                let abs_val = num_traits::Float::abs(aug.get(&[j, i])?);
+                let abs_val = num_traits::Float::abs(aug_arr[[j, i]]);
                 if abs_val > max_val {
                     max_val = abs_val;
                     max_row = j;
@@ -1669,19 +1750,18 @@ where
             // Swap rows if needed
             if max_row != i {
                 for j in i..(n + 1) {
-                    let temp = aug.get(&[i, j])?;
-                    aug.set(&[i, j], aug.get(&[max_row, j])?)?;
-                    aug.set(&[max_row, j], temp)?;
+                    let temp = aug_arr[[i, j]];
+                    aug_arr[[i, j]] = aug_arr[[max_row, j]];
+                    aug_arr[[max_row, j]] = temp;
                 }
             }
 
             // Eliminate below
             for j in (i + 1)..n {
-                let factor = aug.get(&[j, i])? / aug.get(&[i, i])?;
+                let factor = aug_arr[[j, i]] / aug_arr[[i, i]];
 
                 for k in i..(n + 1) {
-                    let val = aug.get(&[j, k])? - factor * aug.get(&[i, k])?;
-                    aug.set(&[j, k], val)?;
+                    aug_arr[[j, k]] = aug_arr[[j, k]] - factor * aug_arr[[i, k]];
                 }
             }
         }
@@ -1702,6 +1782,7 @@ where
     }
 
     /// Compute the singular value decomposition of a matrix
+    #[cfg(feature = "lapack")]
     pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::svd;
@@ -1723,6 +1804,14 @@ where
         Ok((u, s, vt))
     }
 
+    /// Compute the singular value decomposition of a matrix (fallback)
+    ///
+    /// Without the `lapack` feature this operation is not available.
+    #[cfg(not(feature = "lapack"))]
+    pub fn svd(&self) -> Result<(Array<T>, Array<T>, Array<T>)> {
+        Err(NumRs2Error::FeatureNotEnabled("lapack".to_string()))
+    }
+
     /// Compute the eigenvalues and eigenvectors of a square matrix
     ///
     /// Without the `matrix_decomp` feature this operation is not available.
@@ -1732,16 +1821,34 @@ where
     }
 
     /// Compute the Cholesky decomposition of a matrix
+    #[cfg(feature = "lapack")]
     pub fn cholesky(&self) -> Result<Array<T>> {
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::cholesky;
         cholesky(self)
     }
 
+    /// Compute the Cholesky decomposition of a matrix (fallback)
+    ///
+    /// Without the `lapack` feature this operation is not available.
+    #[cfg(not(feature = "lapack"))]
+    pub fn cholesky(&self) -> Result<Array<T>> {
+        Err(NumRs2Error::FeatureNotEnabled("lapack".to_string()))
+    }
+
     /// Compute the QR decomposition of a matrix
+    #[cfg(feature = "lapack")]
     pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
         // Use the implementation from new_modules::matrix_decomp
         use crate::new_modules::matrix_decomp::qr;
         qr(self)
+    }
+
+    /// Compute the QR decomposition of a matrix (fallback)
+    ///
+    /// Without the `lapack` feature this operation is not available.
+    #[cfg(not(feature = "lapack"))]
+    pub fn qr(&self) -> Result<(Array<T>, Array<T>)> {
+        Err(NumRs2Error::FeatureNotEnabled("lapack".to_string()))
     }
 }

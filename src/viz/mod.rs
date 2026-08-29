@@ -41,11 +41,67 @@ pub mod stats;
 pub use export::{ExportConfig, ExportFormat, Exporter};
 pub use matrix::MatrixPlot;
 pub use perf::{BenchmarkResult, PerfPlot, ScalingPoint};
-pub use plot2d::Plot2D;
+pub use plot2d::{Plot2D, SeriesStyle};
 pub use plot3d::Plot3D;
 pub use stats::{BinStrategy, StatPlot};
 
 use thiserror::Error;
+
+/// Registers the bundled pure-Rust Noto Sans font (via `oxifont-bundled`,
+/// SIL OFL-1.1) with plotters' `ab_glyph` text backend.
+///
+/// `numrs2` builds `plotters` with `default-features = false` and the
+/// `ab_glyph` font feature instead of plotters' default `ttf` feature, to
+/// keep the `visualization` feature C/FFI-free (no `font-kit`, no
+/// `freetype-sys`/`yeslogic-fontconfig-sys`). Unlike `ttf`, `ab_glyph` does
+/// not discover system fonts on its own — plotters requires the caller to
+/// register a font for every family name used (`plotters::style::register_font`)
+/// before drawing any text, or every draw call that renders a caption, axis
+/// label, or legend entry returns `Err`. Every plot in this module uses the
+/// `"sans-serif"` family (see e.g. `.caption(title, ("sans-serif", 40))`), so
+/// registering it here once covers all of them.
+///
+/// Idempotent and cheap to call repeatedly: the actual registration work
+/// happens at most once per process, guarded by a `OnceLock`.
+pub(crate) fn ensure_fonts_registered() {
+    static FONTS_REGISTERED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    FONTS_REGISTERED.get_or_init(|| {
+        use plotters::style::{register_font, FontStyle};
+
+        // `register_font` only fails if the embedded bytes aren't a valid
+        // OpenType/TrueType font, which cannot happen for our compile-time
+        // `include_bytes!`-sourced, test-covered oxifont-bundled data — but we
+        // still surface a diagnostic instead of unwrapping, per COOLJAPAN policy.
+        // (plotters' `InvalidFont` carries no fields and implements neither
+        // `Debug` nor `Display`, so there is nothing more to report than the
+        // fact that it failed.) A registration failure degrades to plotters'
+        // own FontUnavailable error at draw time rather than panicking here.
+        if register_font(
+            "sans-serif",
+            FontStyle::Normal,
+            oxifont_bundled::NOTO_SANS_REGULAR,
+        )
+        .is_err()
+        {
+            eprintln!("numrs2::viz: failed to register bundled sans-serif font");
+        }
+        // Bold/Italic are registered too so styled text renders with the
+        // matching weight/slant; if either were skipped, plotters would fall
+        // back to the Normal face registered above (documented fallback
+        // behavior of `register_font`), so this is a quality improvement, not
+        // a correctness requirement.
+        let _ = register_font(
+            "sans-serif",
+            FontStyle::Bold,
+            oxifont_bundled::NOTO_SANS_BOLD,
+        );
+        let _ = register_font(
+            "sans-serif",
+            FontStyle::Italic,
+            oxifont_bundled::NOTO_SANS_ITALIC,
+        );
+    });
+}
 
 /// Visualization error types
 #[derive(Error, Debug)]

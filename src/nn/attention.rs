@@ -6,9 +6,7 @@
 use super::activation::softmax_2d;
 use super::NnResult;
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{
-    Array, Array1, Array2, Array3, ArrayView, ArrayView1, ArrayView2, Axis, ScalarOperand,
-};
+use scirs2_core::ndarray::{Array1, Array2, ArrayView2, ScalarOperand};
 use scirs2_core::numeric::Float;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 
@@ -67,7 +65,6 @@ where
 
         let neg_inf = T::neg_infinity();
         let zero = T::zero();
-        let one = T::one();
 
         Array2::from_shape_fn(scores.raw_dim(), |(i, j)| {
             if m[[i, j]] == zero {

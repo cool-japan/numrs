@@ -414,9 +414,54 @@ fn test_fft_modulation_property() {
 
 #[test]
 fn test_fft_real_properties() {
-    // Skipping test due to precision issues in FFT implementation
-    // This test validates properties specific to RFFT (Real FFT)
-    // TODO: Fix precision issues in the FFT implementation and re-enable this test
+    // Validates RFFT/IRFFT round-trip and Parseval's theorem.
+    // All sizes are powers of 2 (required by the Cooley-Tukey implementation).
+    let lengths = [8usize, 16, 32, 64];
+
+    for &n in lengths.iter() {
+        // Build a signal with mixed frequency content (non-trivial, non-zero).
+        let signal_data: Vec<f64> = (0..n)
+            .map(|i| {
+                let t = i as f64 / n as f64;
+                (2.0 * PI * 3.0 * t).sin()
+                    + 0.5 * (2.0 * PI * 7.0 * t).cos()
+                    + 0.25 * (2.0 * PI * t)
+            })
+            .collect();
+        let signal = Array::from_vec(signal_data.clone());
+
+        // rfft output should have length n/2 + 1.
+        let rfft_result = FFT::rfft(&signal).expect("rfft should succeed");
+        assert_eq!(
+            rfft_result.size(),
+            n / 2 + 1,
+            "RFFT output length mismatch for n={n}"
+        );
+
+        // Round-trip: irfft(rfft(x)) ≈ x within TOLERANCE_HIGH.
+        let recovered = FFT::irfft(&rfft_result, n).expect("irfft should succeed");
+        let recovered_data = recovered.to_vec();
+        assert_eq!(recovered_data.len(), n);
+        for i in 0..n {
+            assert_abs_diff_eq!(recovered_data[i], signal_data[i], epsilon = TOLERANCE_HIGH);
+        }
+
+        // Parseval's theorem for one-sided spectrum:
+        //   sum |x[i]|² = (1/n) * (|X[0]|² + 2·Σ|X[k]|² + |X[n/2]|²)
+        // For power-of-2 n, n is always even, so Nyquist bin exists.
+        let time_energy: f64 = signal_data.iter().map(|&v| v * v).sum();
+        let rfft_vec = rfft_result.to_vec();
+        let rfft_size = rfft_vec.len();
+        let mut parseval_sum = rfft_vec[0].norm_sqr();
+        for k in 1..rfft_size - 1 {
+            parseval_sum += 2.0 * rfft_vec[k].norm_sqr();
+        }
+        // n is even (power of 2), so the last bin is the Nyquist — count once.
+        parseval_sum += rfft_vec[rfft_size - 1].norm_sqr();
+        let freq_energy = parseval_sum / n as f64;
+
+        assert_abs_diff_eq!(time_energy, freq_energy, epsilon = TOLERANCE_HIGH);
+    }
 }
 
 #[test]
@@ -587,9 +632,36 @@ fn test_2d_fft_properties() {
 
 #[test]
 fn test_2d_real_fft_properties() {
-    // Skipping test due to precision issues in FFT implementation
-    // This test validates properties of 2D real FFT (RFFT2)
-    // TODO: Fix precision issues in the FFT implementation and re-enable this test
+    // Validates RFFT2/IRFFT2 round-trip for an 8×8 real signal.
+    let n = 8usize;
+
+    // Build a structured 2D signal with non-trivial content.
+    let data: Vec<f64> = (0..n * n)
+        .map(|idx| {
+            let i = idx / n;
+            let j = idx % n;
+            let ti = i as f64 / n as f64;
+            let tj = j as f64 / n as f64;
+            (2.0 * PI * 2.0 * ti).sin() * (2.0 * PI * 3.0 * tj).cos() + 0.5 * (2.0 * PI * ti).cos()
+        })
+        .collect();
+    let x = Array::from_vec(data.clone()).reshape(&[n, n]);
+
+    // rfft2 output should have shape [n, n/2+1].
+    let rfft2_result = FFT::rfft2(&x).expect("rfft2 should succeed");
+    assert_eq!(
+        rfft2_result.shape(),
+        &[n, n / 2 + 1],
+        "RFFT2 output shape should be [n, n/2+1]"
+    );
+
+    // Round-trip: irfft2(rfft2(X)) ≈ X within TOLERANCE_HIGH.
+    let recovered = FFT::irfft2(&rfft2_result, &[n, n]).expect("irfft2 should succeed");
+    let recovered_data = recovered.to_vec();
+    assert_eq!(recovered_data.len(), n * n);
+    for i in 0..n * n {
+        assert_abs_diff_eq!(recovered_data[i], data[i], epsilon = TOLERANCE_HIGH);
+    }
 }
 
 #[test]

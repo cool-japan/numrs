@@ -8,6 +8,7 @@
 //! - from_vec
 
 use super::Array;
+use crate::error::{NumRs2Error, Result};
 use num_traits::{One, Zero};
 use scirs2_core::ndarray::{Array as NdArray, IxDyn};
 
@@ -145,7 +146,7 @@ impl<T: Clone> Array<T> {
         let shape = other.shape();
         let size: usize = shape.iter().product();
         let vec = vec![T::default(); size];
-        Self::from_vec(vec).reshape(&shape)
+        Self::from_vec_shape(vec, &shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Create a new array with the specified shape, data type, and order, uninitialized
@@ -184,7 +185,46 @@ impl<T: Clone> Array<T> {
 
         let size: usize = shape_to_use.iter().product();
         let vec = vec![T::default(); size];
-        Self::from_vec(vec).reshape(shape_to_use)
+        Self::from_vec_shape(vec, shape_to_use).unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// Create a new array directly from a flat `Vec<T>` and an explicit
+    /// shape, without any intermediate copy.
+    ///
+    /// Unlike [`Array::from_vec`] followed by [`Array::reshape`] (which
+    /// clones the data, since `reshape` takes `&self`), this consumes
+    /// `vec` and builds the array directly via `NdArray::from_shape_vec`,
+    /// so `vec`'s original allocation becomes the array's backing
+    /// storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(NumRs2Error::ShapeMismatch)` if `shape`'s element
+    /// count does not equal `vec.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numrs2::prelude::*;
+    ///
+    /// let a = Array::from_vec_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3]).expect("shapes agree");
+    /// assert_eq!(a.shape(), vec![2, 3]);
+    /// assert_eq!(a.to_vec(), vec![1, 2, 3, 4, 5, 6]);
+    ///
+    /// let err = Array::<i32>::from_vec_shape(vec![1, 2, 3], &[2, 2]);
+    /// assert!(err.is_err());
+    /// ```
+    pub fn from_vec_shape(vec: Vec<T>, shape: &[usize]) -> Result<Self> {
+        let expected: usize = shape.iter().product();
+        if vec.len() != expected {
+            return Err(NumRs2Error::ShapeMismatch {
+                expected: shape.to_vec(),
+                actual: vec![vec.len()],
+            });
+        }
+        NdArray::from_shape_vec(IxDyn(shape), vec)
+            .map(Self::from_nd)
+            .map_err(|e| NumRs2Error::InvalidOperation(format!("from_vec_shape failed: {e}")))
     }
 
     /// Create a new array from a vector and reshape it
@@ -200,7 +240,7 @@ impl<T: Clone> Array<T> {
             NdArray::from_shape_vec(IxDyn(&[0]), Vec::new())
                 .expect("empty array creation should succeed")
         });
-        Self { data }
+        Self::from_nd(data)
     }
 
     /// Create a new array with a specific shape, filled with zeros
@@ -209,7 +249,7 @@ impl<T: Clone> Array<T> {
         T: Zero + Clone,
     {
         let data = NdArray::zeros(IxDyn(shape));
-        Self { data }
+        Self::from_nd(data)
     }
 
     /// Create a triangular matrix with ones below the given diagonal and zeros elsewhere
@@ -248,6 +288,9 @@ impl<T: Clone> Array<T> {
 
         for i in 0..n {
             for j in 0..m {
+                // INVARIANT: `result` was just created as `zeros(&[n, m])`, and
+                // `i`/`j` are bounded by `0..n`/`0..m`, so `[i, j]` is always a
+                // valid index into `result` and `set` cannot return `Err` here.
                 // NumPy's tri returns 1s on or below the diagonal (i-j <= k)
                 if (j as isize) <= (i as isize) + k {
                     result.set(&[i, j], value.clone()).unwrap_or_else(|_| {
@@ -294,12 +337,30 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(strictly_lower.shape(), vec![3, 3]);
     /// assert_eq!(strictly_lower.to_vec(), vec![0, 0, 0, 4, 0, 0, 7, 8, 0]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is not a 2D array. Use [`Array::try_tril`] for a
+    /// non-panicking version that returns a [`crate::error::NumRs2Error`].
     pub fn tril(&self, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        self.try_tril(k)
+            .unwrap_or_else(|e| panic!("tril requires a 2D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::tril`].
+    ///
+    /// Returns `Err` if `self` is not a 2D array instead of panicking.
+    pub fn try_tril(&self, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if self.ndim() != 2 {
-            panic!("tril requires a 2D array");
+            return Err(NumRs2Error::DimensionMismatch(
+                "tril requires a 2D array".to_string(),
+            ));
         }
 
         let shape = self.shape();
@@ -314,17 +375,12 @@ impl<T: Clone> Array<T> {
                 // Zero out elements above the k-th diagonal
                 // In NumPy, the condition is j > i + k
                 if (j as isize) > (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
-                        panic!(
-                            "Internal error: failed to set element at [{}, {}] in tril function",
-                            i, j
-                        )
-                    });
+                    result.set(&[i, j], zero.clone())?;
                 }
             }
         }
 
-        result
+        Ok(result)
     }
 
     /// Create an upper triangular matrix or extract the upper triangle from an existing matrix
@@ -351,12 +407,30 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(strictly_upper.shape(), vec![3, 3]);
     /// assert_eq!(strictly_upper.to_vec(), vec![0, 2, 3, 0, 0, 6, 0, 0, 0]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is not a 2D array. Use [`Array::try_triu`] for a
+    /// non-panicking version that returns a [`crate::error::NumRs2Error`].
     pub fn triu(&self, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        self.try_triu(k)
+            .unwrap_or_else(|e| panic!("triu requires a 2D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::triu`].
+    ///
+    /// Returns `Err` if `self` is not a 2D array instead of panicking.
+    pub fn try_triu(&self, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if self.ndim() != 2 {
-            panic!("triu requires a 2D array");
+            return Err(NumRs2Error::DimensionMismatch(
+                "triu requires a 2D array".to_string(),
+            ));
         }
 
         let shape = self.shape();
@@ -371,17 +445,12 @@ impl<T: Clone> Array<T> {
                 // Zero out elements below the k-th diagonal
                 // In NumPy, the condition is j < i + k
                 if (j as isize) < (i as isize) + k {
-                    result.set(&[i, j], zero.clone()).unwrap_or_else(|_| {
-                        panic!(
-                            "Internal error: failed to set element at [{}, {}] in triu function",
-                            i, j
-                        )
-                    });
+                    result.set(&[i, j], zero.clone())?;
                 }
             }
         }
 
-        result
+        Ok(result)
     }
 
     /// Create a new array with a specific shape, filled with ones
@@ -390,7 +459,7 @@ impl<T: Clone> Array<T> {
         T: One + Clone,
     {
         let data = NdArray::ones(IxDyn(shape));
-        Self { data }
+        Self::from_nd(data)
     }
 
     /// Create a new array with a specific shape, filled with a specific value
@@ -400,7 +469,7 @@ impl<T: Clone> Array<T> {
     {
         let size: usize = shape.iter().product();
         let vec = vec![value; size];
-        Self::from_vec(vec).reshape(shape)
+        Self::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Create a new array with a specific shape, with uninitialized values
@@ -428,7 +497,7 @@ impl<T: Clone> Array<T> {
     {
         let size: usize = shape.iter().product();
         let vec = vec![T::default(); size];
-        Self::from_vec(vec).reshape(shape)
+        Self::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Create a 2D identity matrix of the specified size
@@ -504,6 +573,14 @@ impl<T: Clone> Array<T> {
             .min(n_cols.saturating_sub(diagonal_col_start));
 
         // Set ones on the specified diagonal efficiently
+        //
+        // INVARIANT: `max_diagonal_length` is `min(n_rows - diagonal_start,
+        // n_cols - diagonal_col_start)` (saturating), so for every
+        // `i < max_diagonal_length`, `row = diagonal_start + i < n_rows` and
+        // `col = diagonal_col_start + i < n_cols`. `result` has shape
+        // `[n_rows, n_cols]`, so `set` cannot return `Err` here; the
+        // `row < n_rows && col < n_cols` check below is a defensive
+        // restatement of that same invariant, not evidence it can fail.
         for i in 0..max_diagonal_length {
             let row = diagonal_start + i;
             let col = diagonal_col_start + i;
@@ -537,14 +614,31 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(diag_above.shape(), vec![4, 4]);
     /// assert_eq!(diag_above.to_vec(), vec![0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 0, 0, 0]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `v` is not a 1D array. Use
+    /// [`Array::try_create_diagonal_matrix_helper`] for a non-panicking
+    /// version that returns a [`crate::error::NumRs2Error`].
     pub fn create_diagonal_matrix_helper(v: &Array<T>, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        Self::try_create_diagonal_matrix_helper(v, k)
+            .unwrap_or_else(|e| panic!("diag requires a 1D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::create_diagonal_matrix_helper`].
+    ///
+    /// Returns `Err` if `v` is not a 1D array instead of panicking.
+    pub fn try_create_diagonal_matrix_helper(v: &Array<T>, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if v.ndim() != 1 {
-            // In a real implementation, we should return a Result, but for simplicity,
-            // we'll panic with a clear message
-            panic!("diag requires a 1D array");
+            return Err(NumRs2Error::DimensionMismatch(
+                "diag requires a 1D array".to_string(),
+            ));
         }
 
         let diag_len = v.size();
@@ -557,43 +651,29 @@ impl<T: Clone> Array<T> {
             if k >= 0 {
                 let j = i + k as usize;
                 if j < size {
-                    result
-                        .set(
-                            &[i, j],
-                            v.array()
-                                .get([i])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        )
-                        .unwrap_or_else(|_| {
-                            panic!(
-                                "Internal error: failed to set element at [{}, {}] in diag function",
-                                i, j
-                            )
-                        });
+                    let value = v.array().get([i]).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "diag: failed to read source element at [{}]",
+                            i
+                        ))
+                    })?;
+                    result.set(&[i, j], value.clone())?;
                 }
             } else {
                 let i_offset = (-k) as usize;
                 if i + i_offset < size {
-                    result
-                        .set(
-                            &[i + i_offset, i],
-                            v.array()
-                                .get([i])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        )
-                        .unwrap_or_else(|_| {
-                            panic!(
-                                "Internal error: failed to set element at [{}, {}] in diag function",
-                                i + i_offset, i
-                            )
-                        });
+                    let value = v.array().get([i]).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "diag: failed to read source element at [{}]",
+                            i
+                        ))
+                    })?;
+                    result.set(&[i + i_offset, i], value.clone())?;
                 }
             }
         }
 
-        result
+        Ok(result)
     }
 
     /// Extract a diagonal from a 2D array or create a diagonal matrix from a 1D array
@@ -629,14 +709,32 @@ impl<T: Clone> Array<T> {
     /// assert_eq!(above_diag.shape(), vec![2]);
     /// assert_eq!(above_diag.to_vec(), vec![2, 6]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `v` is neither a 1D nor a 2D array. Use
+    /// [`Array::try_create_diagonal_matrix`] for a non-panicking version
+    /// that returns a [`crate::error::NumRs2Error`].
     // This needs a different name to avoid conflict with the instance method in indexing.rs
     pub fn create_diagonal_matrix(v: &Array<T>, k: isize) -> Self
     where
         T: Zero + Clone,
     {
+        Self::try_create_diagonal_matrix(v, k)
+            .unwrap_or_else(|e| panic!("diag requires a 1D or 2D array: {e}"))
+    }
+
+    /// Non-panicking version of [`Array::create_diagonal_matrix`].
+    ///
+    /// Returns `Err` if `v` is neither a 1D nor a 2D array instead of
+    /// panicking.
+    pub fn try_create_diagonal_matrix(v: &Array<T>, k: isize) -> Result<Self>
+    where
+        T: Zero + Clone,
+    {
         if v.ndim() == 1 {
             // Create a diagonal matrix
-            Self::create_diagonal_matrix_helper(v, k)
+            Self::try_create_diagonal_matrix_helper(v, k)
         } else if v.ndim() == 2 {
             // Extract the diagonal
             let shape = v.shape();
@@ -657,30 +755,35 @@ impl<T: Clone> Array<T> {
                 if k >= 0 {
                     let j = i + k as usize;
                     if j < n_cols {
-                        diag_elements.push(
-                            v.array()
-                                .get([i, j])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        );
+                        let value = v.array().get([i, j]).ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "diag: failed to read source element at [{}, {}]",
+                                i, j
+                            ))
+                        })?;
+                        diag_elements.push(value.clone());
                     }
                 } else {
                     let i_offset = (-k) as usize;
                     if i + i_offset < n_rows {
-                        diag_elements.push(
-                            v.array()
-                                .get([i + i_offset, i])
-                                .expect("element access should succeed within bounds")
-                                .clone(),
-                        );
+                        let value = v.array().get([i + i_offset, i]).ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "diag: failed to read source element at [{}, {}]",
+                                i + i_offset,
+                                i
+                            ))
+                        })?;
+                        diag_elements.push(value.clone());
                     }
                 }
             }
 
             // Return as a 1D array
-            Self::from_vec(diag_elements)
+            Ok(Self::from_vec(diag_elements))
         } else {
-            panic!("diag requires a 1D or 2D array");
+            Err(NumRs2Error::DimensionMismatch(
+                "diag requires a 1D or 2D array".to_string(),
+            ))
         }
     }
 
@@ -714,5 +817,148 @@ impl<T: Clone> Array<T> {
         // Otherwise, flatten the array and create a diagonal matrix
         let flat = v.reshape(&[v.size()]);
         Self::create_diagonal_matrix(&flat, k)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_vec_shape_builds_expected_array() {
+        let a = Array::from_vec_shape(vec![1, 2, 3, 4, 5, 6], &[2, 3]).expect("shapes agree");
+        assert_eq!(a.shape(), vec![2, 3]);
+        assert_eq!(a.to_vec(), vec![1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn from_vec_shape_matches_from_vec_then_reshape() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let via_from_vec_shape =
+            Array::from_vec_shape(data.clone(), &[2, 4]).expect("shapes agree");
+        let via_from_vec_reshape = Array::from_vec(data).reshape(&[2, 4]);
+        assert_eq!(via_from_vec_shape.shape(), via_from_vec_reshape.shape());
+        assert_eq!(via_from_vec_shape.to_vec(), via_from_vec_reshape.to_vec());
+    }
+
+    #[test]
+    fn from_vec_shape_errs_on_size_mismatch() {
+        let err = Array::<i32>::from_vec_shape(vec![1, 2, 3], &[2, 2]);
+        assert!(err.is_err());
+        assert!(matches!(
+            err.unwrap_err(),
+            NumRs2Error::ShapeMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn from_vec_shape_empty_vec_and_zero_shape() {
+        let a: Array<f64> = Array::from_vec_shape(vec![], &[0, 3]).expect("0*3 == 0");
+        assert_eq!(a.shape(), vec![0, 3]);
+        assert_eq!(a.size(), 0);
+    }
+
+    #[test]
+    fn from_vec_shape_scalar_shape() {
+        // An empty shape slice is NumPy's 0-d (scalar) array: product of
+        // no dimensions is 1.
+        let a = Array::from_vec_shape(vec![42], &[]).expect("empty shape == 1 element");
+        assert_eq!(a.shape(), Vec::<usize>::new());
+        assert_eq!(a.to_vec(), vec![42]);
+    }
+
+    #[test]
+    fn from_vec_shape_is_zero_copy_for_contiguous_result() {
+        // Not directly observable from outside, but a reshape into the
+        // *same* shape the Vec already logically has should round-trip
+        // exactly through the contiguous fast path (as_slice must return
+        // Some, proving no non-contiguous fallback copy occurred).
+        let a = Array::from_vec_shape(vec![1, 2, 3, 4], &[4]).expect("shapes agree");
+        assert!(a.as_slice().is_some());
+        assert_eq!(a.as_slice(), Some([1, 2, 3, 4].as_slice()));
+    }
+
+    /// Manual timing probe (lane W2-F's `Cargo.toml` is off-limits, so no
+    /// new `[[bench]]` entry) for the `from_vec(..).reshape(..)` ->
+    /// `from_vec_shape(..)` call-site sweep: `reshape` takes `&self`, so
+    /// chaining it onto a freshly built `from_vec` array clones the whole
+    /// buffer a second time before `into_shape_with_order` can (on the
+    /// clone) reinterpret it in place; `from_vec_shape` builds straight
+    /// from the `Vec` via `NdArray::from_shape_vec`, no intermediate array
+    /// or clone at all.
+    #[test]
+    fn probe_from_vec_shape_perf_vs_from_vec_then_reshape() {
+        let n = 1_000_000usize;
+        let shape = [1000usize, 1000usize];
+        let data: Vec<f64> = (0..n).map(|i| i as f64).collect();
+        let iters = 200;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let v = data.clone();
+            let _ = std::hint::black_box(Array::from_vec(v).reshape(&shape));
+        }
+        let old = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let v = data.clone();
+            let _ = std::hint::black_box(Array::from_vec_shape(v, &shape).expect("shapes agree"));
+        }
+        let new = t1.elapsed();
+
+        eprintln!(
+            "[from_vec+reshape vs from_vec_shape, n={n}] old={:.2}us/iter new={:.2}us/iter ({:.2}x)",
+            old.as_secs_f64() * 1e6 / iters as f64,
+            new.as_secs_f64() * 1e6 / iters as f64,
+            old.as_secs_f64() / new.as_secs_f64(),
+        );
+
+        // Correctness, not just speed: identical output on the shared
+        // (cloned) input.
+        let a_old = Array::from_vec(data.clone()).reshape(&shape);
+        let a_new = Array::from_vec_shape(data.clone(), &shape).expect("shapes agree");
+        assert_eq!(a_old.shape(), a_new.shape());
+        assert_eq!(a_old.to_vec(), a_new.to_vec());
+    }
+
+    /// Manual timing probe for one of the sweep's actual converted
+    /// call sites: [`Array::full`] itself changed from
+    /// `Self::from_vec(vec).reshape(shape)` to
+    /// `Self::from_vec_shape(vec, shape).unwrap_or_else(|e| panic!("{e}"))`
+    /// (same panic-on-mismatch semantics `reshape` always had, preserved
+    /// because `full` returns `Self` directly and so cannot propagate a
+    /// `Result`). This measures the real shipped constructor before/after,
+    /// not just a synthetic comparison of the two APIs in isolation.
+    #[test]
+    fn probe_array_full_perf_vs_old_from_vec_reshape_pattern() {
+        let shape = [1000usize, 1000usize];
+        let size: usize = shape.iter().product();
+        let iters = 200;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let vec = vec![3.14f64; size];
+            let _ = std::hint::black_box(Array::from_vec(vec).reshape(&shape));
+        }
+        let old = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = std::hint::black_box(Array::<f64>::full(&shape, 3.14));
+        }
+        let new = t1.elapsed();
+
+        eprintln!(
+            "[Array::full, n={size}] old(from_vec+reshape)={:.2}us/iter new(from_vec_shape+unwrap_or_else)={:.2}us/iter ({:.2}x)",
+            old.as_secs_f64() * 1e6 / iters as f64,
+            new.as_secs_f64() * 1e6 / iters as f64,
+            old.as_secs_f64() / new.as_secs_f64(),
+        );
+
+        let a_old = Array::from_vec(vec![3.14f64; size]).reshape(&shape);
+        let a_new = Array::<f64>::full(&shape, 3.14);
+        assert_eq!(a_old.shape(), a_new.shape());
+        assert_eq!(a_old.to_vec(), a_new.to_vec());
     }
 }

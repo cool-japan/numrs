@@ -2,8 +2,6 @@
 //!
 //! This module provides common imports and types used across all special function implementations.
 
-#![allow(unused_imports)]
-
 use num_traits::Float;
 use std::fmt::Debug;
 
@@ -17,6 +15,12 @@ pub trait SpecialFloat: Float + Debug + Clone {}
 impl<T: Float + Debug + Clone> SpecialFloat for T {}
 
 /// Helper function to convert a float constant, returning a descriptive error
+///
+/// No current caller (verified across `src/`, `tests/`, `examples/`) -- this
+/// module exists specifically to hold shared infrastructure "used across all
+/// special function implementations" (see module doc comment above), and
+/// this conversion helper is exactly that kind of shared building block, so
+/// it's kept rather than deleted even though nothing has needed it yet.
 #[inline]
 #[allow(dead_code)]
 pub fn float_const<T: Float>(value: f64, name: &str) -> T {

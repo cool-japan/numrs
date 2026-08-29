@@ -1,0 +1,39 @@
+{
+  "name": "numrs2-wasm-build",
+  "version": "0.4.1",
+  "private": true,
+  "description": "Dev-only build tooling for NumRS2's WebAssembly bindings. NOT the published package: scripts/build-wasm.sh runs wasm-pack with --scope cooljapan, which generates the real, publishable pkg/package.json (name \"@cooljapan/numrs2\") from Cargo.toml at build time.",
+  "license": "Apache-2.0",
+  "author": "COOLJAPAN OU (Team KitaSan)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cool-japan/numrs.git"
+  },
+  "homepage": "https://github.com/cool-japan/numrs#readme",
+  "bugs": {
+    "url": "https://github.com/cool-japan/numrs/issues"
+  },
+  "keywords": [
+    "numpy",
+    "numerical",
+    "array",
+    "linear-algebra",
+    "mathematics",
+    "wasm",
+    "webassembly"
+  ],
+  "scripts": {
+    "build": "bash scripts/build-wasm.sh web dev",
+    "build:web": "bash scripts/build-wasm.sh web release",
+    "build:bundler": "bash scripts/build-wasm.sh bundler release",
+    "build:nodejs": "bash scripts/build-wasm.sh nodejs release",
+    "build:all": "npm run build:web && npm run build:bundler && npm run build:nodejs",
+    "test": "wasm-pack test --node --features wasm"
+  },
+  "devDependencies": {
+    "wasm-pack": "^0.13.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

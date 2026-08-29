@@ -9,8 +9,13 @@
 //! - Gradient computation
 //! - Memory copy optimization
 
-use super::{EnhancedSimdOps, AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
+use super::EnhancedSimdOps;
+// See `arithmetic.rs` for why these are gated the same as the intrinsics.
+#[cfg(target_arch = "x86_64")]
+use super::{AVX2_F32_LANES, AVX2_F64_LANES, PREFETCH_DISTANCE};
+#[cfg(target_arch = "x86_64")]
 use crate::array::Array;
+#[cfg(target_arch = "x86_64")]
 use crate::error::{NumRs2Error, Result};
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
@@ -54,7 +59,7 @@ impl EnhancedSimdOps {
             Self::blocked_matmul_avx2_f32(&a_data, &b_data, &mut c_data, m, n, k, block_size);
         }
 
-        *c = Array::from_vec(c_data).reshape(&[m, n]);
+        *c = Array::from_vec_shape(c_data, &[m, n])?;
         Ok(())
     }
 
@@ -161,8 +166,8 @@ impl EnhancedSimdOps {
         }
 
         Ok((
-            Array::from_vec(c_r).reshape(&a_real.shape()),
-            Array::from_vec(c_i).reshape(&a_real.shape()),
+            Array::from_vec_shape(c_r, &a_real.shape())?,
+            Array::from_vec_shape(c_i, &a_real.shape())?,
         ))
     }
 
@@ -228,6 +233,11 @@ impl EnhancedSimdOps {
     }
 
     /// AVX2 optimized Kahan summation
+    // Implemented but not wired to the public wrapper, which currently uses a
+    // scalar fallback. The whole `simd_optimize` module is deprecated in favor
+    // of `scirs2_core::simd_ops::SimdUnifiedOps`, so wiring this up is not
+    // planned. Retained for reference rather than deleted.
+    #[allow(dead_code)]
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn avx2_kahan_sum_f32(input: &[f32]) -> f32 {
@@ -318,11 +328,20 @@ impl EnhancedSimdOps {
     }
 
     /// Vectorized cumulative sum for f64
+    ///
+    /// The cumulative sum produces exactly one output element per input
+    /// element, so the result keeps the shape of `input`. An empty input is a
+    /// degenerate case and yields an empty 1-D array.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped to
+    /// the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_cumsum_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_cumsum_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         if data.is_empty() {
-            return Array::from_vec(vec![]);
+            return Ok(Array::from_vec(vec![]));
         }
         let mut result = vec![0.0f64; data.len()];
 
@@ -334,7 +353,7 @@ impl EnhancedSimdOps {
             result[i] = sum;
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())
     }
 
     // ========================================
@@ -419,15 +438,24 @@ impl EnhancedSimdOps {
     /// Vectorized gradient computation for f64
     /// Uses central differences: grad[i] = (x[i+1] - x[i-1]) / 2
     /// For boundaries: forward/backward differences
+    ///
+    /// The gradient produces exactly one output element per input element, so
+    /// the result keeps the shape of `input`. Degenerate inputs of zero or one
+    /// element return a 1-D array instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped to
+    /// the input shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn vectorized_gradient_f64(input: &Array<f64>) -> Array<f64> {
+    pub fn vectorized_gradient_f64(input: &Array<f64>) -> Result<Array<f64>> {
         let data = input.to_vec();
         let len = data.len();
         if len == 0 {
-            return Array::from_vec(vec![]);
+            return Ok(Array::from_vec(vec![]));
         }
         if len == 1 {
-            return Array::from_vec(vec![0.0]);
+            return Ok(Array::from_vec(vec![0.0]));
         }
 
         let mut result = vec![0.0f64; len];
@@ -443,7 +471,7 @@ impl EnhancedSimdOps {
         // Backward difference at end
         result[len - 1] = data[len - 1] - data[len - 2];
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape())
     }
 
     /// AVX2 optimized gradient (central differences)
@@ -478,8 +506,15 @@ impl EnhancedSimdOps {
     // ========================================
 
     /// Optimized memory copy for f32 arrays
+    ///
+    /// The copy is element-for-element, so the result keeps the shape of `src`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the copied buffer cannot be
+    /// reshaped to the source shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn simd_copy_f32(src: &Array<f32>) -> Array<f32> {
+    pub fn simd_copy_f32(src: &Array<f32>) -> Result<Array<f32>> {
         let src_data = src.to_vec();
         let mut dst = vec![0.0f32; src_data.len()];
 
@@ -487,12 +522,19 @@ impl EnhancedSimdOps {
             Self::avx2_copy_f32(&src_data, &mut dst);
         }
 
-        Array::from_vec(dst).reshape(&src.shape())
+        Array::from_vec_shape(dst, &src.shape())
     }
 
     /// Optimized memory copy for f64 arrays
+    ///
+    /// The copy is element-for-element, so the result keeps the shape of `src`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumRs2Error::ShapeMismatch` if the copied buffer cannot be
+    /// reshaped to the source shape.
     #[cfg(target_arch = "x86_64")]
-    pub fn simd_copy_f64(src: &Array<f64>) -> Array<f64> {
+    pub fn simd_copy_f64(src: &Array<f64>) -> Result<Array<f64>> {
         let src_data = src.to_vec();
         let mut dst = vec![0.0f64; src_data.len()];
 
@@ -500,7 +542,7 @@ impl EnhancedSimdOps {
             Self::avx2_copy_f64(&src_data, &mut dst);
         }
 
-        Array::from_vec(dst).reshape(&src.shape())
+        Array::from_vec_shape(dst, &src.shape())
     }
 
     /// AVX2 optimized copy for f32

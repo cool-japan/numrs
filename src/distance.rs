@@ -39,7 +39,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, One, Zero};
+use num_traits::Float;
 use std::fmt::Debug;
 
 /// Converts a f64 value to generic Float type T.
@@ -447,7 +447,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(distances).reshape(&[n_samples_a, n_samples_b]))
+    Array::from_vec_shape(distances, &[n_samples_a, n_samples_b])
 }
 
 // ============================================================================

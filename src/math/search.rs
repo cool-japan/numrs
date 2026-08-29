@@ -11,10 +11,15 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, NumCast, Zero};
-use std::ops::{Add, Div};
+use num_traits::Float;
 
 /// Count occurrences of each value in array of non-negative ints
+///
+/// This is a thin, unweighted-`usize` specialization of the canonical
+/// [`crate::array_ops::sorting::bincount`] (which additionally supports
+/// non-`usize` inputs and an optional `weights` array); see that function's
+/// docs for the full NumPy-compatible semantics, including the empty-input
+/// edge case this delegates rather than reimplements.
 ///
 /// # Parameters
 ///
@@ -25,28 +30,20 @@ use std::ops::{Add, Div};
 ///
 /// Array where element i is the count of occurrences of i in the input array
 pub fn bincount(array: &Array<usize>, minlength: Option<usize>) -> Result<Array<usize>> {
-    let array_vec = array.to_vec();
-    let max_val = array_vec.iter().max().cloned().unwrap_or(0);
-    let size = if let Some(min) = minlength {
-        min.max(max_val + 1)
-    } else {
-        max_val + 1
-    };
-
-    let mut counts = vec![0; size];
-    for &val in array_vec.iter() {
-        counts[val] += 1;
-    }
-
-    Ok(Array::from_vec(counts))
+    crate::array_ops::sorting::bincount(array, None::<&Array<usize>>, minlength)
 }
 
 /// Return indices of bins to which each value belongs
 ///
+/// Delegates to the canonical [`crate::array_ops::sorting::digitize`], which
+/// additionally accepts monotonically *decreasing* bins (this copy
+/// previously rejected them outright, and used a linear rather than binary
+/// search); see that function's docs for full NumPy-compatible semantics.
+///
 /// # Parameters
 ///
 /// * `array` - Input array
-/// * `bins` - Array of bin edges (must be monotonically increasing)
+/// * `bins` - Array of bin edges (must be monotonically increasing or decreasing)
 /// * `right` - If true, intervals include right edge; otherwise left edge
 ///
 /// # Returns
@@ -67,47 +64,17 @@ pub fn digitize<T>(array: &Array<T>, bins: &Array<T>, right: bool) -> Result<Arr
 where
     T: Float + Clone + PartialOrd,
 {
-    // Verify bins are monotonic
-    let bins_vec = bins.to_vec();
-    for i in 1..bins_vec.len() {
-        if bins_vec[i] <= bins_vec[i - 1] {
-            return Err(NumRs2Error::InvalidOperation(
-                "bins must be monotonically increasing".to_string(),
-            ));
-        }
-    }
-
-    let mut result = Vec::with_capacity(array.len());
-
-    let array_vec = array.to_vec();
-    for value in array_vec.iter() {
-        let mut idx = 0;
-        if right {
-            // Find rightmost bin where value <= bin_edge
-            for (i, &bin) in bins_vec.iter().enumerate() {
-                if value <= &bin {
-                    idx = i;
-                    break;
-                }
-                idx = i + 1;
-            }
-        } else {
-            // Find rightmost bin where value < bin_edge
-            for (i, &bin) in bins_vec.iter().enumerate() {
-                if value < &bin {
-                    idx = i;
-                    break;
-                }
-                idx = i + 1;
-            }
-        }
-        result.push(idx);
-    }
-
-    Ok(Array::from_vec(result).reshape(&array.shape()))
+    crate::array_ops::sorting::digitize(array, bins, right)
 }
 
 /// Find indices where elements should be inserted to maintain order
+///
+/// Delegates to the canonical [`crate::array_ops::sorting::searchsorted`],
+/// which additionally accepts an optional `sorter` permutation (this copy's
+/// `side` is a required `&str` rather than `Option<&str>` and there is no
+/// way to reach `sorter` through this signature); see that function's docs
+/// for full NumPy-compatible semantics, including the binary- rather than
+/// linear-search implementation used underneath.
 ///
 /// # Parameters
 ///
@@ -137,30 +104,12 @@ pub fn searchsorted<T>(
 where
     T: Float + Clone + PartialOrd,
 {
-    let arr_vec = sorted_array.to_vec();
-    let mut result = Vec::with_capacity(values.len());
-
-    let values_vec = values.to_vec();
-    for value in values_vec.iter() {
-        let idx = match side {
-            "left" => arr_vec
-                .iter()
-                .position(|x| x >= value)
-                .unwrap_or(arr_vec.len()),
-            "right" => arr_vec
-                .iter()
-                .position(|x| x > value)
-                .unwrap_or(arr_vec.len()),
-            _ => {
-                return Err(NumRs2Error::InvalidOperation(
-                    "side must be 'left' or 'right'".to_string(),
-                ))
-            }
-        };
-        result.push(idx);
+    if side != "left" && side != "right" {
+        return Err(NumRs2Error::InvalidOperation(
+            "side must be 'left' or 'right'".to_string(),
+        ));
     }
-
-    Ok(Array::from_vec(result).reshape(&values.shape()))
+    crate::array_ops::sorting::searchsorted(sorted_array, values, Some(side), None)
 }
 
 /// Partially sort array so that kth element is in its final sorted position
@@ -170,8 +119,12 @@ where
 /// * `array` - Input array
 /// * `kth` - Index of element to partition by
 /// * `axis` - Axis along which to sort
-/// * `kind` - Selection algorithm (currently ignored)
-/// * `order` - Not used, for compatibility
+/// * `kind` - Selection algorithm. Only `None` or `"introselect"` are accepted: this path
+///   always uses an introselect-style selection (`slice::select_nth_unstable_by`), so there is
+///   no separate algorithm to switch to. Any other value returns an error rather than being
+///   silently accepted and ignored.
+/// * `order` - Structured-array field names to partition by. Plain `Array<T>` has no named
+///   fields, so passing `Some(_)` returns an error instead of silently ignoring it.
 ///
 /// # Returns
 ///
@@ -190,12 +143,27 @@ pub fn partition<T>(
     array: &Array<T>,
     kth: usize,
     axis: Option<isize>,
-    _kind: Option<&str>,
-    _order: Option<&[&str]>,
+    kind: Option<&str>,
+    order: Option<&[&str]>,
 ) -> Result<Array<T>>
 where
     T: Float + Clone + PartialOrd,
 {
+    if order.is_some() {
+        return Err(NumRs2Error::NotImplemented(
+            "partition: `order` (structured-array sort keys) is not supported for a plain \
+             Array<T>; there are no named fields to partition by"
+                .to_string(),
+        ));
+    }
+    if !matches!(kind, None | Some("introselect")) {
+        return Err(NumRs2Error::InvalidOperation(format!(
+            "partition: kind must be `None` or \"introselect\" (got {:?}); this path always \
+             uses an introselect-style selection",
+            kind
+        )));
+    }
+
     let mut result = array.clone();
 
     if let Some(axis_val) = axis {
@@ -223,6 +191,15 @@ where
 
         let total_size: usize = shape.iter().product();
         let n_slices = total_size / axis_len;
+
+        // Bulk-acquire once for the whole axis-partition pass: `result` was
+        // just cloned from `array` above, so this first mutable access is
+        // the ONE unshare the COW buffer ever needs here (subsequent access
+        // through this same handle is free); every read in the loop below
+        // goes through the still-shared, untouched `array` (a distinct
+        // `Array` handle from `result`), so nothing here can read stale data
+        // through the mutable borrow.
+        let result_arr = result.array_mut();
 
         for slice_idx in 0..n_slices {
             // Get indices for this slice along the axis
@@ -264,7 +241,12 @@ where
             // Write back partitioned values
             for i in 0..axis_len {
                 base_indices[ax] = i;
-                result.set(&base_indices, values[i])?;
+                *result_arr.get_mut(base_indices.as_slice()).ok_or_else(|| {
+                    NumRs2Error::IndexOutOfBounds(format!(
+                        "Failed to set element at indices {:?}",
+                        base_indices
+                    ))
+                })? = values[i];
             }
         }
 
@@ -284,7 +266,7 @@ where
             a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        Ok(Array::from_vec(data_vec).reshape(&array.shape()))
+        Ok(Array::from_vec_shape(data_vec, &array.shape())?)
     }
 }
 
@@ -384,7 +366,7 @@ where
         }
     }
 
-    Ok(Array::from_vec(result).reshape(&x.shape()))
+    Array::from_vec_shape(result, &x.shape())
 }
 
 /// Compute the median along the specified axis
@@ -435,7 +417,7 @@ where
 
             if keepdims {
                 let shape = vec![1; array.ndim()];
-                Ok(Array::from_vec(vec![median_val]).reshape(&shape))
+                Ok(Array::from_vec_shape(vec![median_val], &shape)?)
             } else {
                 Ok(Array::from_vec(vec![median_val]))
             }
@@ -518,7 +500,7 @@ where
                 result_data[out_idx] = median_val;
             }
 
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }

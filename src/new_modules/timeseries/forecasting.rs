@@ -13,7 +13,7 @@
 
 use crate::error::{NumRs2Error, Result};
 use scirs2_core::ndarray::{s, Array1, Array2, ArrayView1};
-use scirs2_core::random::{thread_rng, Rng};
+use scirs2_core::random::thread_rng;
 
 /// Forecast result with point forecasts and optional intervals.
 #[derive(Debug, Clone)]

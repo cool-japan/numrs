@@ -1,5 +1,6 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
+use serial_test::serial;
 
 // This file implements property-based testing for the random module.
 // Instead of using a full property testing framework, we'll use statistical properties
@@ -43,6 +44,7 @@ fn is_within_bounds(value: f64, expected: f64, tolerance: f64) -> bool {
 }
 
 #[test]
+#[serial]
 fn test_normal_distribution_properties() {
     let mean = 5.0;
     let std_dev = 2.0;
@@ -93,6 +95,7 @@ fn test_normal_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_uniform_distribution_properties() {
     let low = 2.0;
     let high = 7.0;
@@ -154,6 +157,7 @@ fn test_uniform_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_beta_distribution_properties() {
     let alpha = 2.0;
     let beta = 5.0;
@@ -193,6 +197,7 @@ fn test_beta_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_gamma_distribution_properties() {
     let shape = 3.0;
     let scale = 2.0;
@@ -232,6 +237,7 @@ fn test_gamma_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_exponential_distribution_properties() {
     let scale = 2.0;
 
@@ -269,6 +275,7 @@ fn test_exponential_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_binomial_distribution_properties() {
     let n = 20u64;
     let p = 0.3;
@@ -313,6 +320,7 @@ fn test_binomial_distribution_properties() {
 }
 
 #[test]
+#[serial]
 fn test_poisson_distribution_properties() {
     let lambda = 5.0;
 
@@ -354,7 +362,7 @@ fn test_poisson_distribution_properties() {
 }
 
 #[test]
-#[ignore = "Seeding behavior changed during SciRS2 migration - requires seeding implementation fix"]
+#[serial]
 fn test_seed_reproducibility() {
     // Test that using the same seed produces the same sequence
     // While different seeds produce different sequences

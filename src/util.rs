@@ -14,7 +14,7 @@ where
     let result: Vec<U> = vec_data.par_iter().map(|x| f(x.clone())).collect();
 
     let shape = array.shape();
-    Array::from_vec(result).reshape(&shape)
+    Array::from_vec_shape(result, &shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Memory layout optimization utilities
@@ -23,25 +23,32 @@ pub enum MemoryLayout {
     ColumnMajor,
 }
 
-/// Optimizes the memory layout of an array for a specific operation
+/// Optimizes the memory layout of an array for a specific operation.
+///
+/// `RowMajor` converts to C (row-major) layout via [`Array::to_c_layout`].
+/// `ColumnMajor` converts to Fortran (column-major) layout via
+/// [`Array::to_f_layout`]. Note that `to_f_layout` reverses the array's axes
+/// (it is implemented via `ndarray`'s `reversed_axes`), so for an array with
+/// more than one distinct-length dimension the *shape* of the
+/// `ColumnMajor` result differs from the input's shape (e.g. a `[2, 3]`
+/// array becomes `[3, 2]`) — the data itself is not moved, only its strides
+/// and the reported shape/order are reinterpreted as Fortran-contiguous.
 pub fn optimize_layout<T: Clone>(array: &Array<T>, layout: MemoryLayout) -> Array<T> {
-    // In a real implementation, this would convert between row-major and column-major layouts
-    // For this example, we'll just return a clone of the array
     match layout {
-        MemoryLayout::RowMajor => array.clone(),
-        MemoryLayout::ColumnMajor => {
-            // For column-major, we could transpose and use specialized algorithms
-            // Here we just return the original array for simplicity
-            array.clone()
-        }
+        MemoryLayout::RowMajor => array.to_c_layout(),
+        MemoryLayout::ColumnMajor => array.to_f_layout(),
     }
 }
 
-/// Checks if an array can be operated on in-place
-pub fn can_operate_inplace<T>(_array: &Array<T>) -> bool {
-    // This would check if the array is contiguous and has the right memory layout
-    // For this example, we'll just return true
-    true
+/// Checks if an array can be operated on in-place.
+///
+/// An in-place operation reuses the array's own backing buffer as its
+/// destination, which is only safe when that buffer is contiguous (C or
+/// Fortran order): a non-contiguous (arbitrarily strided) array cannot be
+/// walked and overwritten element-by-element without either skipping
+/// padding/overlap or reading already-overwritten data.
+pub fn can_operate_inplace<T: Clone>(array: &Array<T>) -> bool {
+    array.is_contiguous()
 }
 
 /// Broadcasting utilities
@@ -161,14 +168,14 @@ fn broadcast_to<T: Clone>(array: &Array<T>, shape: &[usize]) -> Result<Array<T>>
         result_data.push(orig_data[orig_idx].clone());
     }
 
-    Ok(Array::from_vec(result_data).reshape(shape))
+    Array::from_vec_shape(result_data, shape)
 }
 
 /// Type conversion utilities
 pub fn astype<T: Clone, U: Clone + From<T>>(array: &Array<T>) -> Array<U> {
     let data = array.to_vec();
     let converted: Vec<U> = data.into_iter().map(U::from).collect();
-    Array::from_vec(converted).reshape(&array.shape())
+    Array::from_vec_shape(converted, &array.shape()).unwrap_or_else(|e| panic!("{e}"))
 }
 
 // Specialized optimizations for common operations
@@ -382,4 +389,71 @@ fn find_common_type_static(type_name: &str) -> &'static str {
 /// ```
 pub fn result_type(types: &[&str]) -> &'static str {
     common_type(types)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_optimize_layout_row_major_is_c_contiguous() {
+        let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let optimized = optimize_layout(&array, MemoryLayout::RowMajor);
+
+        assert!(optimized.is_c_contiguous());
+        assert_eq!(optimized.shape(), array.shape());
+        assert_eq!(optimized.to_vec(), array.to_vec());
+    }
+
+    #[test]
+    fn test_optimize_layout_column_major_is_f_contiguous() {
+        let array = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let optimized = optimize_layout(&array, MemoryLayout::ColumnMajor);
+
+        assert!(optimized.is_f_contiguous());
+        // `Array::to_f_layout` is implemented via `reversed_axes`, which
+        // reverses the shape along with the strides. That is the real,
+        // observed behavior of the underlying array -- not a NumPy-style
+        // "same shape, different memory order" conversion -- so this
+        // documents what actually happens instead of asserting a shape
+        // that this implementation never produces.
+        assert_eq!(optimized.shape(), vec![3, 2]);
+    }
+
+    #[test]
+    fn test_optimize_layout_actually_converts_non_contiguous_input() {
+        // Regression guard for the original bug, where both match arms
+        // just did `array.clone()` regardless of `layout`. Cloning a
+        // C-contiguous array is indistinguishable from a correct RowMajor
+        // conversion, so start from an F-contiguous (already transposed)
+        // array instead: a real RowMajor conversion must actually touch
+        // memory to make it C-contiguous again.
+        let base = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let f_ordered = base.to_f_layout();
+        assert!(!f_ordered.is_c_contiguous());
+
+        let row_major = optimize_layout(&f_ordered, MemoryLayout::RowMajor);
+        assert!(row_major.is_c_contiguous());
+    }
+
+    #[test]
+    fn test_can_operate_inplace_true_for_freshly_created_array() {
+        let array = Array::from_vec(vec![1, 2, 3, 4, 5, 6]).reshape(&[2, 3]);
+        assert!(can_operate_inplace(&array));
+    }
+
+    #[test]
+    fn test_can_operate_inplace_false_for_non_contiguous_permuted_array() {
+        // A 3-D array with axes 0 and 1 swapped is neither C- nor
+        // F-contiguous (a *full* axis reversal would be F-contiguous, but
+        // swapping only two of three axes is not), so it cannot safely be
+        // written back into its own buffer element-by-element.
+        let array = Array::from_vec((0..24).collect::<Vec<i32>>()).reshape(&[2, 3, 4]);
+        let permuted = array.transpose_axis(0, 1);
+
+        assert_eq!(permuted.shape(), vec![3, 2, 4]);
+        assert!(!permuted.is_c_contiguous());
+        assert!(!permuted.is_f_contiguous());
+        assert!(!can_operate_inplace(&permuted));
+    }
 }

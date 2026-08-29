@@ -4,10 +4,15 @@
 //! It provides a powerful N-dimensional array object, sophisticated mathematical functions,
 //! and advanced linear algebra, statistical, and random number functionality.
 //!
-//! **Version 0.4.0** - Major release (2026-06-05): Major feature additions including skew/kurtosis,
-//! F-distribution sampling, instance normalization, BFGS optimizer, VECM Johansen fitting,
-//! FEM 2D point evaluation, real eigendecomposition via QR iteration, full Golub-Kahan SVD,
-//! and SciRS2 ecosystem update to v0.5.0.
+//! **Version 0.4.1** - A production-hardening pass: `Array<T>` is now `Arc`-backed copy-on-write
+//! (O(1) `Clone`); a shared `kernels` dispatch layer backs matmul/elementwise/reduction hot paths;
+//! the `distributed` feature's collectives and linear algebra now run over a real TCP transport
+//! instead of returning fabricated results; `lapack` is a default feature; and a large batch of
+//! NumPy-parity additions landed (ufunc `reduce`/`accumulate`/`at`, N-D FFT wrappers, 9
+//! NumPy>=1.22 quantile methods, masked-array completion, polynomial classes, `SeedSequence`/
+//! `Philox`/`SFC64` random generators). See `CHANGELOG.md` for the full, verified list, including
+//! a Known Upstream Issues section for the `scirs2-core`/`scirs2-fft` bugs this release works
+//! around rather than silently inherits.
 //!
 //! ## Quick Start
 //!
@@ -70,7 +75,6 @@
 pub mod algorithms;
 pub mod array;
 pub mod array_ops;
-pub mod array_ops_legacy;
 pub mod arrays;
 #[cfg(feature = "arrow")]
 pub mod arrow;
@@ -100,6 +104,7 @@ pub mod integrate;
 pub mod interop;
 pub mod interpolate;
 pub mod io;
+pub(crate) mod kernels;
 pub mod linalg;
 pub mod linalg_accelerated;
 pub mod linalg_extended;
@@ -142,6 +147,7 @@ pub mod symbolic;
 pub mod testing;
 pub mod traits;
 pub mod types;
+pub mod ufunc_ops;
 pub mod ufuncs;
 pub mod unique;
 pub mod unique_optimized;
@@ -169,8 +175,6 @@ pub mod doctests {}
 pub mod prelude {
     pub use crate::array::Array;
     pub use crate::array_ops::*;
-    // Import specific non-conflicting functions from legacy module
-    pub use crate::array_ops_legacy::rollaxis;
     // String and character operations
     pub use crate::axis_ops::*;
     pub use crate::axis_ops::{apply_along_axis, apply_over_axes, vectorize};
@@ -298,8 +302,11 @@ pub mod prelude {
     pub use crate::mmap::MmapArray;
     pub use crate::random::advanced_distributions;
     pub use crate::random::distributions;
-    pub use crate::random::generator::{default_rng, BitGenerator, Generator, StdBitGenerator};
+    pub use crate::random::generator::{
+        default_rng, BitGenerator, Generator, SeedableBitGenerator, StdBitGenerator,
+    };
     pub use crate::random::{self, RandomState};
+    pub use crate::random::{Philox4x64BitGenerator, SFC64BitGenerator, SeedSequence};
     pub use crate::set_ops::{
         in1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique_axis, unique_with_options,
     };
@@ -330,12 +337,17 @@ pub mod prelude {
         IntegerElement, LinearAlgebra, MatrixDecomposition, NumericElement,
     };
     // Explicit ufunc imports
-    // Note: clip, copysign, std, var already exported from array_ops_legacy
+    // Note: clip, copysign, std, var already exported from crate::math above
     pub use crate::ufuncs::{
         absolute, add, add_scalar, arctan2, cbrt, divide, divide_scalar, dot, exp2, expm1, fma,
         hypot, log10, log1p, log2, maximum, minimum, multiply, multiply_scalar, negative, norm_l1,
         norm_l2, power, power_scalar, reciprocal, subtract, subtract_scalar, BinaryUfunc,
         UnaryUfunc,
+    };
+    // Generic ufunc-method machinery: reduce/accumulate/outer/reduceat/at/where=
+    pub use crate::ufunc_ops::{
+        add_where, divide_where, multiply_where, subtract_where, ufunc_accumulate, ufunc_at,
+        ufunc_outer, ufunc_reduce, ufunc_reduceat, ufunc_where, UfuncOp,
     };
     pub use crate::unique::{unique, UniqueResult};
     pub use crate::unique_optimized::unique_optimized;
@@ -405,9 +417,9 @@ pub mod prelude {
     };
 
     // New modules
+    pub use crate::fft::FFT;
     #[cfg(feature = "lapack")]
     pub use crate::new_modules::eigenvalues::{eig as eig_general, eigh, eigvals, eigvalsh};
-    pub use crate::new_modules::fft::FFT;
     #[cfg(all(feature = "matrix_decomp", feature = "lapack"))]
     pub use crate::new_modules::matrix_decomp::{
         cholesky, cod, condition_number, lu, pivoted_cholesky, qr, rcond, schur, svd,
@@ -487,6 +499,8 @@ pub mod prelude {
         ExprCache,
         ExprId,
         ExprKey,
+        // Owned expression templates: `a.expr() + b.expr() * c.expr()` fuses
+        IntoExpr,
         LazyEval,
         ScalarExpr,
         SharedArrayExpr,
@@ -1019,18 +1033,22 @@ mod tests {
         assert_eq!(splits[1].to_vec(), vec![3.0, 4.0]);
         assert_eq!(splits[2].to_vec(), vec![5.0, 6.0]);
 
-        let _a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
+        let a_2d = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape(&[2, 3]);
         // First, check if the split function is working correctly with multiple indices
         let splits_a =
             split(&a, &[2, 4], 0).expect("test: split with multiple indices should succeed");
         assert_eq!(splits_a.len(), 3);
 
-        // Skip this test temporarily since it's causing issues
-        // This will be fixed in a future implementation
-        /*
         let splits_axis1 = split(&a_2d, &[1], 1).expect("test: split along axis 1 should succeed");
         assert_eq!(splits_axis1.len(), 2);
-        */
+        // a_2d is [[1,2,3],[4,5,6]] with shape [2,3]
+        // Splitting at column index 1 yields:
+        //   splits_axis1[0]: shape [2,1] => [[1],[4]]
+        //   splits_axis1[1]: shape [2,2] => [[2,3],[5,6]]
+        assert_eq!(splits_axis1[0].shape(), vec![2, 1]);
+        assert_eq!(splits_axis1[1].shape(), vec![2, 2]);
+        assert_eq!(splits_axis1[0].to_vec(), vec![1.0, 4.0]);
+        assert_eq!(splits_axis1[1].to_vec(), vec![2.0, 3.0, 5.0, 6.0]);
 
         // Test expand_dims
         let a = Array::<f64>::from_vec(vec![1.0, 2.0, 3.0]);
@@ -1104,7 +1122,7 @@ mod tests {
         // Test histogram
         let data = Array::<f64>::from_vec(vec![1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]);
         let (counts, bins) =
-            histogram(&data, 4, None, None).expect("test: histogram should succeed");
+            histogram(&data, 4, None, None, None).expect("test: histogram should succeed");
         assert_eq!(counts.to_vec(), vec![2.0, 2.0, 2.0, 3.0]);
         assert_eq!(bins.size(), 5);
         assert_relative_eq!(bins.to_vec()[0], 1.0, epsilon = 1e-10);

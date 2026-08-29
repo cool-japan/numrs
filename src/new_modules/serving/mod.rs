@@ -124,7 +124,6 @@
 //! - Olston, C., et al. (2017). TensorFlow-Serving: Flexible, High-Performance ML Serving. *KDD*.
 //! - Moritz, P., et al. (2018). Ray: A Distributed Framework for Emerging AI Applications. *OSDI*.
 
-use crate::array::Array;
 use crate::error::NumRs2Error;
 use std::fmt;
 
@@ -337,7 +336,7 @@ pub fn validate_shape(expected: &[Option<usize>], actual: &[usize]) -> Result<()
         });
     }
 
-    for (i, (exp, act)) in expected.iter().zip(actual.iter()).enumerate() {
+    for (exp, act) in expected.iter().zip(actual.iter()) {
         if let Some(exp_size) = exp {
             if exp_size != act {
                 return Err(ServingError::InvalidShape {

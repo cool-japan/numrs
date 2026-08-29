@@ -81,7 +81,7 @@ where
             dense_data[idx] = value.clone();
         }
 
-        Array::from_vec(dense_data).reshape(&self.shape)
+        Array::from_vec_shape(dense_data, &self.shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Get the number of non-zero elements

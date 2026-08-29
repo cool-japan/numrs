@@ -850,9 +850,10 @@ fn test_environmental_selection_integration() {
     for i in 0..20 {
         let x = i as f64 / 20.0;
         let y = (20 - i) as f64 / 20.0;
+        let vars = [x, y];
         population.push(Individual {
-            variables: vec![x, y],
-            objectives: vec![x, y, x + y],
+            variables: vars.to_vec(),
+            objectives: objectives.iter().map(|f| f(&vars)).collect(),
             rank: 0,
             reference_point_index: None,
             perpendicular_distance: 0.0,

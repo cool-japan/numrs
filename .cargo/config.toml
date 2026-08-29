@@ -1,0 +1,89 @@
+# Platform-specific build configuration
+# NumRS2 uses OxiBLAS (pure Rust BLAS/LAPACK) - no system BLAS dependencies required
+
+# Note: Previous configuration used system OpenBLAS, but this has been removed
+# per COOLJAPAN Pure Rust Policy. All BLAS/LAPACK operations now go through
+# scirs2-linalg which uses OxiBLAS internally.
+
+# Development environment variables
+[env]
+# Pure Rust - no external BLAS required
+
+# ===================================================================
+# PERFORMANCE OPTIMIZATION BUILD FLAGS
+# ===================================================================
+# 2026-08-19: Removed the per-target `-C target-feature=+avx2,+fma` (x86_64)
+# and `+neon` (aarch64) rustflags that used to live here.
+#
+# Why: the crate already does CPU-feature detection at *runtime* (see
+# src/simd_optimize/feature_detect.rs and friends, which call
+# `std::is_x86_feature_detected!("avx2" | "fma" | ...)` and dispatch
+# accordingly) rather than gating any code behind
+# `#[cfg(target_feature = "avx2")]`. Baking `+avx2,+fma` into every local
+# build made the codegen assume AVX2/FMA are always present, which:
+#   1. silently diverges from what `cargo build`/`cargo install` produces for
+#      end users on stock target definitions (they don't get these flags),
+#      making "works here" not mean "works for users" on older x86_64 CPUs; and
+#   2. would abort with SIGILL on any pre-Haswell (pre-2013) x86_64 CPU that
+#      lands on a codegen path the compiler was allowed to widen to AVX2/FMA.
+# `+neon` on aarch64 was removed too, for consistency — NEON is part of the
+# aarch64 baseline (every aarch64-apple-darwin / standard aarch64-unknown-linux-gnu
+# target already has it on by default), so the flag was a no-op restated here.
+#
+# If you need max local throughput for benchmarking on your own machine, use
+# `RUSTFLAGS="-C target-cpu=native" cargo build --release` instead (see the
+# note at the bottom of this file) — that opts a single local build in
+# without changing what ships to users.
+
+# WebAssembly target configuration
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "--cfg", "getrandom_backend=\"wasm_js\"",  # Enable getrandom for WASM (required for v0.3.x)
+]
+
+# ===================================================================
+# macOS (Darwin): Python extension module linking
+# ===================================================================
+# The `python` feature builds pyo3 with its "extension-module" feature, which
+# deliberately suppresses `cargo:rustc-link-lib=python3.x`
+# (pyo3-build-config's is_linking_libpython_for_target() returns false on unix
+# when that feature is on): a Python extension module resolves its `_Py*`
+# symbols from the interpreter that dlopen()s it.
+#
+# ELF linkers accept that -- a .so may carry undefined symbols and bind them at
+# import time. Mach-O's two-level namespace does not: ld requires every
+# undefined symbol to be bound to a specific dylib at link time, and otherwise
+# fails with `Undefined symbols for architecture arm64: "_PyBaseObject_Type"...`.
+# `-undefined dynamic_lookup` is the documented opt-out, and is exactly what
+# maturin passes when building the wheel -- which is why `maturin build` has
+# always worked on macOS while `cargo nextest run --all-features` did not.
+#
+# Why this is here AND in build.rs: build.rs calls
+# pyo3_build_config::add_extension_module_link_args(), which emits
+# `cargo:rustc-cdylib-link-arg=...` -- that reaches the cdylib only. `cargo test`
+# / `cargo nextest run --all-features` also links the unit-test binary, which
+# compiles src/python/mod.rs's #[pymodule] into its own object files and hits the
+# same undefined symbols. rustflags reach every link product, so both are needed.
+#
+# Tradeoffs, deliberately accepted:
+#   - This relaxes undefined-symbol checking for every macOS link in this
+#     workspace, not just the Python extension module, so a genuinely missing
+#     symbol elsewhere would surface at runtime instead of at link time.
+#   - Xcode 15+ ld may print "ld: warning: -undefined dynamic_lookup may not
+#     work with chained fixups". It is benign for extension modules (CPython has
+#     the symbols loaded before it dlopen()s the module); silencing it needs
+#     -Wl,-no_fixup_chains, which changes the binary format for every macOS link
+#     and is not worth it.
+#   - Cargo ignores config rustflags entirely when the RUSTFLAGS environment
+#     variable is set. If the undefined-symbol error ever comes back on macOS,
+#     check `echo $RUSTFLAGS` first.
+[target.'cfg(target_os = "macos")']
+rustflags = [
+    "-C", "link-arg=-undefined",
+    "-C", "link-arg=dynamic_lookup",
+]
+
+# Note: For maximum performance on your specific CPU, you can use:
+# RUSTFLAGS="-C target-cpu=native" cargo build --release
+# However, this produces non-portable binaries. The settings above are
+# portable to most modern x86_64 (2013+) and ARM64 systems.

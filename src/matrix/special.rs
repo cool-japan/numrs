@@ -23,7 +23,7 @@ pub fn hilbert(n: usize) -> Matrix<f64> {
         }
     }
 
-    let array = Array::from_vec(data).reshape(&[n, n]);
+    let array = Array::from_vec_shape(data, &[n, n]).unwrap_or_else(|e| panic!("{e}"));
     Matrix::new(array).expect("hilbert: n x n array is always a valid matrix")
 }
 
@@ -45,14 +45,13 @@ pub fn vandermonde(x: Vec<f64>, n: Option<usize>) -> Matrix<f64> {
 
     let mut data = Vec::with_capacity(rows * cols);
 
-    #[allow(clippy::needless_range_loop)]
     for i in 0..rows {
         for j in 0..cols {
             data.push(x[i].powi(j as i32));
         }
     }
 
-    let array = Array::from_vec(data).reshape(&[rows, cols]);
+    let array = Array::from_vec_shape(data, &[rows, cols]).unwrap_or_else(|e| panic!("{e}"));
     Matrix::new(array).expect("vandermonde: rows x cols array is always a valid matrix")
 }
 
@@ -100,7 +99,7 @@ pub fn toeplitz(c: Vec<f64>, r: Option<Vec<f64>>) -> Result<Matrix<f64>> {
         }
     }
 
-    let array = Array::from_vec(data).reshape(&[rows, cols]);
+    let array = Array::from_vec_shape(data, &[rows, cols])?;
     Matrix::new(array)
 }
 
@@ -128,7 +127,7 @@ pub fn circulant(first_row: Vec<f64>) -> Matrix<f64> {
         }
     }
 
-    let array = Array::from_vec(data).reshape(&[n, n]);
+    let array = Array::from_vec_shape(data, &[n, n]).unwrap_or_else(|e| panic!("{e}"));
     Matrix::new(array).expect("circulant: n x n array is always a valid matrix")
 }
 
@@ -171,7 +170,7 @@ pub fn hankel(c: Vec<f64>, r: Option<Vec<f64>>) -> Result<Matrix<f64>> {
         }
     }
 
-    let array = Array::from_vec(data).reshape(&[rows, cols]);
+    let array = Array::from_vec_shape(data, &[rows, cols])?;
     Matrix::new(array)
 }
 
@@ -216,7 +215,7 @@ pub fn leslie(f: Vec<f64>, s: Vec<f64>) -> Result<Matrix<f64>> {
         }
     }
 
-    let array = Array::from_vec(data).reshape(&[n, n]);
+    let array = Array::from_vec_shape(data, &[n, n])?;
     Matrix::new(array)
 }
 
@@ -264,7 +263,7 @@ pub fn companion(coefficients: Vec<f64>) -> Result<Matrix<f64>> {
         }
     }
 
-    let array = Array::from_vec(data).reshape(&[n, n]);
+    let array = Array::from_vec_shape(data, &[n, n])?;
     Matrix::new(array)
 }
 
@@ -300,7 +299,7 @@ pub fn hadamard(n: usize) -> Result<Matrix<f64>> {
 
     if n == 2 {
         let h2 = vec![1.0, 1.0, 1.0, -1.0];
-        return Ok(Matrix::try_from(Array::from_vec(h2).reshape(&[2, 2]))
+        return Ok(Matrix::try_from(Array::from_vec_shape(h2, &[2, 2])?)
             .expect("hadamard: 2x2 array is always a valid matrix"));
     }
 
@@ -332,6 +331,6 @@ pub fn hadamard(n: usize) -> Result<Matrix<f64>> {
         data.extend_from_slice(row);
     }
 
-    let array = Array::from_vec(data).reshape(&[n, n]);
+    let array = Array::from_vec_shape(data, &[n, n])?;
     Matrix::new(array)
 }

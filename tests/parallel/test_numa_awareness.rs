@@ -47,7 +47,7 @@ fn test_numa_aware_load_distribution() {
     }
 
     let metrics = balancer.current_metrics();
-    assert_eq!(metrics.queue_lengths, vec![0, 2, 4, 6]);
+    assert_eq!(metrics.queue_lengths, [0, 2, 4, 6]);
 }
 
 #[test]

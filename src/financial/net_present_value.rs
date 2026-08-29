@@ -132,7 +132,7 @@ where
         result_vec.push(npv_result);
     }
 
-    Ok(Array::from_vec(result_vec).reshape(&rates.shape()))
+    Array::from_vec_shape(result_vec, &rates.shape())
 }
 
 /// Calculate NPV for multiple cash flow series with the same rate

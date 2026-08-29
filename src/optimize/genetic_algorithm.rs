@@ -31,7 +31,7 @@
 //! ```
 
 use crate::error::{NumRs2Error, Result};
-use crate::optimize::{compute_norm, OptimizeResult};
+use crate::optimize::OptimizeResult;
 use num_traits::Float;
 use scirs2_core::random::{thread_rng, Distribution, Rng, RngExt, Uniform};
 use std::cmp::Ordering;

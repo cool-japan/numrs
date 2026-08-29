@@ -2,6 +2,17 @@
 //!
 //! This file contains benchmarks for various linear algebra operations
 //! to track performance and identify bottlenecks.
+//!
+//! POSSIBLY-STALE (found during W6-F5 lint cleanup, not fixed here): every
+//! `inv`/`det`/`solve`/`svd`/`qr`/`cholesky` benchmark body below has its
+//! actual `bench.iter(...)` call commented out as "requires lapack
+//! feature", and `bench_eigendecomposition` / `bench_lu` / `bench_rank` /
+//! `bench_condition_number` are complete no-ops for the same stated
+//! reason - yet this crate's default features already include `lapack`,
+//! and `solve`/`inv`/`det` at least do exist as public functions today.
+//! Restoring these (confirming each function's current import path/
+//! signature and re-enabling the timing calls) looks like a real,
+//! self-contained follow-up, out of scope for a lint-only pass.
 
 #![allow(deprecated)]
 #![allow(clippy::result_large_err)]
@@ -28,13 +39,13 @@ fn bench_matmul(c: &mut Criterion) {
         });
 
         // Also benchmark SIMD matrix multiplication if available
-        group.bench_with_input(BenchmarkId::new("simd_matmul", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("simd_matmul", size), size, |_b, &size| {
             // Create random matrices of the specified size
             let rng = random::default_rng();
-            let a = rng.random::<f64>(&[size, size]).unwrap();
-            let b = rng.random::<f64>(&[size, size]).unwrap();
+            let _a = rng.random::<f64>(&[size, size]).unwrap();
+            let _b = rng.random::<f64>(&[size, size]).unwrap();
 
-            // b.iter(|| black_box(simd_matmul(&a, &b).unwrap())); // simd_matmul not available
+            // _b.iter(|| black_box(simd_matmul(&_a, &_b).unwrap())); // simd_matmul not available
         });
     }
 
@@ -46,14 +57,14 @@ fn bench_inverse(c: &mut Criterion) {
     let mut group = c.benchmark_group("matrix_inverse");
 
     for size in [10, 50, 100].iter() {
-        group.bench_with_input(BenchmarkId::new("inverse", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("inverse", size), size, |_b, &size| {
             // Create a random positive definite matrix (well-conditioned for inversion)
             let rng = random::default_rng();
             let tmp = rng.random::<f64>(&[size, size]).unwrap();
             let tmp_t = tmp.transpose();
-            let a = tmp.matmul(&tmp_t).unwrap();
+            let _a = tmp.matmul(&tmp_t).unwrap();
 
-            // b.iter(|| black_box(inv(&a).unwrap())); // inv requires lapack feature
+            // _b.iter(|| black_box(inv(&_a).unwrap())); // inv requires lapack feature
         });
     }
 
@@ -65,12 +76,12 @@ fn bench_determinant(c: &mut Criterion) {
     let mut group = c.benchmark_group("determinant");
 
     for size in [10, 50, 100].iter() {
-        group.bench_with_input(BenchmarkId::new("det", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("det", size), size, |_b, &size| {
             // Create a random matrix
             let rng = random::default_rng();
-            let a = rng.random::<f64>(&[size, size]).unwrap();
+            let _a = rng.random::<f64>(&[size, size]).unwrap();
 
-            // b.iter(|| black_box(det(&a).unwrap())); // det requires lapack feature
+            // _b.iter(|| black_box(det(&_a).unwrap())); // det requires lapack feature
         });
     }
 
@@ -82,17 +93,17 @@ fn bench_solve(c: &mut Criterion) {
     let mut group = c.benchmark_group("solve_linear_system");
 
     for size in [10, 50, 100, 200].iter() {
-        group.bench_with_input(BenchmarkId::new("solve", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("solve", size), size, |_b, &size| {
             // Create a random positive definite matrix (well-conditioned)
             let rng = random::default_rng();
             let tmp = rng.random::<f64>(&[size, size]).unwrap();
             let tmp_t = tmp.transpose();
-            let a = tmp.matmul(&tmp_t).unwrap();
+            let _a = tmp.matmul(&tmp_t).unwrap();
 
             // Create a random right-hand side
-            let x = rng.random::<f64>(&[size]).unwrap();
+            let _x = rng.random::<f64>(&[size]).unwrap();
 
-            // b.iter(|| black_box(solve(&a, &x).unwrap())); // solve requires lapack feature
+            // _b.iter(|| black_box(solve(&_a, &_x).unwrap())); // solve requires lapack feature
         });
     }
 
@@ -112,12 +123,12 @@ fn bench_svd(c: &mut Criterion) {
     let mut group = c.benchmark_group("svd");
 
     for size in [10, 50, 100].iter() {
-        group.bench_with_input(BenchmarkId::new("svd", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("svd", size), size, |_b, &size| {
             // Create a random matrix
             let rng = random::default_rng();
-            let a = rng.random::<f64>(&[size, size]).unwrap();
+            let _a = rng.random::<f64>(&[size, size]).unwrap();
 
-            // b.iter(|| black_box(svd(&a).unwrap())); // svd requires lapack feature
+            // _b.iter(|| black_box(svd(&_a).unwrap())); // svd requires lapack feature
         });
     }
 
@@ -129,12 +140,12 @@ fn bench_qr(c: &mut Criterion) {
     let mut group = c.benchmark_group("qr_decomposition");
 
     for size in [10, 50, 100, 200].iter() {
-        group.bench_with_input(BenchmarkId::new("qr", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("qr", size), size, |_b, &size| {
             // Create a random matrix
             let rng = random::default_rng();
-            let a = rng.random::<f64>(&[size, size]).unwrap();
+            let _a = rng.random::<f64>(&[size, size]).unwrap();
 
-            // b.iter(|| black_box(qr(&a).unwrap())); // qr requires lapack feature
+            // _b.iter(|| black_box(qr(&_a).unwrap())); // qr requires lapack feature
         });
     }
 
@@ -146,14 +157,14 @@ fn bench_cholesky(c: &mut Criterion) {
     let mut group = c.benchmark_group("cholesky_decomposition");
 
     for size in [10, 50, 100, 200].iter() {
-        group.bench_with_input(BenchmarkId::new("cholesky", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("cholesky", size), size, |_b, &size| {
             // Create a random positive definite matrix
             let rng = random::default_rng();
             let tmp = rng.random::<f64>(&[size, size]).unwrap();
             let tmp_t = tmp.transpose();
-            let a = tmp.matmul(&tmp_t).unwrap();
+            let _a = tmp.matmul(&tmp_t).unwrap();
 
-            // b.iter(|| black_box(cholesky(&a, "lower").unwrap())); // cholesky requires lapack feature
+            // _b.iter(|| black_box(cholesky(&_a, "lower").unwrap())); // cholesky requires lapack feature
         });
     }
 

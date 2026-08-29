@@ -5,7 +5,10 @@
 
 use crate::array::Array;
 
-use super::core::{NeonEnhancedOps, NEON_F32_LANES, NEON_F64_LANES};
+use super::core::NeonEnhancedOps;
+// See `arithmetic.rs`: only the aarch64 SIMD implementations use these.
+#[cfg(target_arch = "aarch64")]
+use super::core::{NEON_F32_LANES, NEON_F64_LANES};
 
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
@@ -27,8 +30,8 @@ impl NeonEnhancedOps {
         }
 
         (
-            Array::from_vec(sin_result).reshape(&input.shape()),
-            Array::from_vec(cos_result).reshape(&input.shape()),
+            Array::from_vec_shape(sin_result, &input.shape()).unwrap_or_else(|e| panic!("{e}")),
+            Array::from_vec_shape(cos_result, &input.shape()).unwrap_or_else(|e| panic!("{e}")),
         )
     }
 
@@ -153,7 +156,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].sin();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized cosine for f64
@@ -199,7 +202,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].cos();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized tangent for f64
@@ -228,7 +231,7 @@ impl NeonEnhancedOps {
             result[i] = sin_data[i] / cos_data[i];
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized inverse sine (arcsin) for f64
@@ -237,7 +240,7 @@ impl NeonEnhancedOps {
         // Use scalar fallback with SIMD for simple operations
         let data = input.to_vec();
         let result: Vec<f64> = data.iter().map(|&x| x.asin()).collect();
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized inverse cosine (arccos) for f64
@@ -245,7 +248,7 @@ impl NeonEnhancedOps {
     pub fn vectorized_acos_f64(input: &Array<f64>) -> Array<f64> {
         let data = input.to_vec();
         let result: Vec<f64> = data.iter().map(|&x| x.acos()).collect();
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized inverse tangent (arctan) for f64
@@ -253,7 +256,7 @@ impl NeonEnhancedOps {
     pub fn vectorized_atan_f64(input: &Array<f64>) -> Array<f64> {
         let data = input.to_vec();
         let result: Vec<f64> = data.iter().map(|&x| x.atan()).collect();
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized atan2 for f64: atan(y/x) with proper quadrant
@@ -263,7 +266,7 @@ impl NeonEnhancedOps {
         let data_x = x.to_vec();
         let len = data_y.len().min(data_x.len());
         let result: Vec<f64> = (0..len).map(|i| data_y[i].atan2(data_x[i])).collect();
-        Array::from_vec(result).reshape(&y.shape())
+        Array::from_vec_shape(result, &y.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized hyperbolic sine for f64
@@ -305,7 +308,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].sinh();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized hyperbolic cosine for f64
@@ -345,7 +348,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].cosh();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized hyperbolic tangent for f64
@@ -354,7 +357,7 @@ impl NeonEnhancedOps {
         // tanh(x) = sinh(x) / cosh(x)
         let data = input.to_vec();
         let result: Vec<f64> = data.iter().map(|&x| x.tanh()).collect();
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized inverse hyperbolic sine for f64
@@ -362,7 +365,7 @@ impl NeonEnhancedOps {
     pub fn vectorized_asinh_f64(input: &Array<f64>) -> Array<f64> {
         let data = input.to_vec();
         let result: Vec<f64> = data.iter().map(|&x| x.asinh()).collect();
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized inverse hyperbolic cosine for f64
@@ -370,7 +373,7 @@ impl NeonEnhancedOps {
     pub fn vectorized_acosh_f64(input: &Array<f64>) -> Array<f64> {
         let data = input.to_vec();
         let result: Vec<f64> = data.iter().map(|&x| x.acosh()).collect();
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized inverse hyperbolic tangent for f64
@@ -378,7 +381,7 @@ impl NeonEnhancedOps {
     pub fn vectorized_atanh_f64(input: &Array<f64>) -> Array<f64> {
         let data = input.to_vec();
         let result: Vec<f64> = data.iter().map(|&x| x.atanh()).collect();
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 
@@ -421,7 +424,7 @@ impl NeonEnhancedOps {
         let data_x = x.to_vec();
         let len = data_y.len().min(data_x.len());
         let result: Vec<f64> = (0..len).map(|i| data_y[i].atan2(data_x[i])).collect();
-        Array::from_vec(result).reshape(&y.shape())
+        Array::from_vec_shape(result, &y.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     pub fn vectorized_sinh_f64(input: &Array<f64>) -> Array<f64> {

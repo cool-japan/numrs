@@ -1,5 +1,3 @@
-#![allow(clippy::needless_range_loop)]
-
 #[cfg(feature = "lapack")]
 use crate::array::Array;
 #[cfg(feature = "lapack")]
@@ -97,10 +95,11 @@ where
     if max_val > T::from(1e6).unwrap_or_else(|| T::one()) {
         scaling_factor = T::one() / max_val;
 
+        let scaled_arr = a_scaled.array_mut();
         for i in 0..m {
             for j in 0..n {
                 let val = a.get(&[i, j])?;
-                a_scaled.set(&[i, j], val * scaling_factor)?;
+                scaled_arr[[i, j]] = val * scaling_factor;
             }
         }
     }
@@ -131,7 +130,7 @@ where
                 .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
         );
     }
-    let u_converted = Array::from_vec(u_vec).reshape(&[u_f64.nrows(), u_f64.ncols()]);
+    let u_converted = Array::from_vec_shape(u_vec, &[u_f64.nrows(), u_f64.ncols()])?;
 
     // Convert singular values from f64 to T
     let s_f64 = svd_result.s;
@@ -153,13 +152,18 @@ where
                 .ok_or_else(|| NumRs2Error::ComputationError("Conversion failed".to_string()))?,
         );
     }
-    let vt_converted = Array::from_vec(vt_vec).reshape(&[vt_f64.nrows(), vt_f64.ncols()]);
+    let vt_converted = Array::from_vec_shape(vt_vec, &[vt_f64.nrows(), vt_f64.ncols()])?;
+
+    // Bulk-acquire once: rescaling, the tolerance's diagonal read, and the
+    // small-value cleanup below are all direct calls on `s_converted` with no
+    // intervening helper, so one hoisted handle covers the whole span.
+    let s_len = s_converted.size();
+    let s_arr = s_converted.array_mut();
 
     // Rescale singular values if we scaled the matrix
     if scaling_factor != T::one() {
-        for i in 0..s_converted.size() {
-            let s_val = s_converted.get(&[i])?;
-            s_converted.set(&[i], s_val / scaling_factor)?;
+        for i in 0..s_len {
+            s_arr[[i]] = s_arr[[i]] / scaling_factor;
         }
     }
 
@@ -167,12 +171,11 @@ where
     let eps = T::epsilon();
     let tolerance = eps
         * T::from(std::cmp::max(m, n)).expect("matrix dimension should convert to float type")
-        * s_converted.get(&[0])?;
+        * s_arr[[0]];
 
-    for i in 0..s_converted.size() {
-        let s_val = s_converted.get(&[i])?;
-        if s_val < tolerance {
-            s_converted.set(&[i], T::zero())?;
+    for i in 0..s_len {
+        if s_arr[[i]] < tolerance {
+            s_arr[[i]] = T::zero();
         }
     }
 
@@ -208,7 +211,8 @@ where
         + std::ops::AddAssign
         + std::ops::SubAssign
         + std::ops::MulAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     // Check if the matrix is 2D
     let shape = a.shape();
@@ -233,11 +237,18 @@ where
     let mut p = (0..n).collect::<Vec<usize>>(); // Column permutation
     let mut q1 = identity_matrix(m);
 
+    // Bulk-acquire both buffers once for the whole routine below: every
+    // access to `a_copy` and `q1` is a direct `.get()`/`.set()` call (the
+    // Householder math itself runs on plain `Vec<T>`), so nothing here needs
+    // to re-acquire either handle mid-loop.
+    let a_arr = a_copy.array_mut();
+    let q1_arr = q1.array_mut();
+
     // Compute column norms for pivoting
     let mut col_norms = vec![num_traits::Zero::zero(); n];
     for j in 0..n {
         for i in 0..m {
-            let val = a_copy.get(&[i, j])?;
+            let val = a_arr[[i, j]];
             col_norms[j] += val * val;
         }
         col_norms[j] = num_traits::Float::sqrt(col_norms[j]);
@@ -263,9 +274,9 @@ where
 
             // Swap columns in A
             for i in 0..m {
-                let temp = a_copy.get(&[i, k])?;
-                a_copy.set(&[i, k], a_copy.get(&[i, p_col])?)?;
-                a_copy.set(&[i, p_col], temp)?;
+                let temp = a_arr[[i, k]];
+                a_arr[[i, k]] = a_arr[[i, p_col]];
+                a_arr[[i, p_col]] = temp;
             }
         }
 
@@ -279,7 +290,7 @@ where
         // Compute Householder reflection to zero out below the diagonal
         let mut x = Vec::with_capacity(m - k);
         for i in k..m {
-            x.push(a_copy.get(&[i, k])?);
+            x.push(a_arr[[i, k]]);
         }
 
         let x_norm = num_traits::Float::sqrt(x.iter().map(|&val| val * val).sum::<T>());
@@ -306,18 +317,16 @@ where
                 for j in k..n {
                     let mut vta: T = <T as num_traits::Zero>::zero();
                     for i in 0..(m - k) {
-                        vta += v[i] * a_copy.get(&[i + k, j])?;
+                        vta += v[i] * a_arr[[i + k, j]];
                     }
 
                     for i in 0..(m - k) {
-                        let val = a_copy.get(&[i + k, j])?;
-                        a_copy.set(
-                            &[i + k, j],
-                            val - <T as num_traits::NumCast>::from(2.0)
+                        let val = a_arr[[i + k, j]];
+                        a_arr[[i + k, j]] = val
+                            - <T as num_traits::NumCast>::from(2.0)
                                 .expect("2.0 should convert to float type")
                                 * v[i]
-                                * vta,
-                        )?;
+                                * vta;
                     }
                 }
 
@@ -325,20 +334,17 @@ where
                 for i in 0..m {
                     let mut q_row_dot_v: T = <T as num_traits::Zero>::zero();
                     for l in 0..(m - k) {
-                        let q_val = q1.get(&[i, l + k])?;
+                        let q_val = q1_arr[[i, l + k]];
                         q_row_dot_v += q_val * v[l];
                     }
 
                     for j in k..m {
-                        let q_val = q1.get(&[i, j])?;
-                        q1.set(
-                            &[i, j],
-                            q_val
-                                - <T as num_traits::NumCast>::from(2.0)
-                                    .expect("2.0 should convert to float type")
-                                    * q_row_dot_v
-                                    * v[j - k],
-                        )?;
+                        let q_val = q1_arr[[i, j]];
+                        q1_arr[[i, j]] = q_val
+                            - <T as num_traits::NumCast>::from(2.0)
+                                .expect("2.0 should convert to float type")
+                                * q_row_dot_v
+                                * v[j - k];
                     }
                 }
 
@@ -346,7 +352,7 @@ where
                 for j in (k + 1)..n {
                     col_norms[j] = T::zero();
                     for i in (k + 1)..m {
-                        let val = a_copy.get(&[i, j])?;
+                        let val = a_arr[[i, j]];
                         col_norms[j] += val * val;
                     }
                     col_norms[j] = num_traits::Float::sqrt(col_norms[j]);
@@ -358,9 +364,10 @@ where
     // At this point, a_copy contains R1, q1 contains Q1, and p contains the column permutation
     // Now we can extract the upper triangular part of a_copy to get R1
     let mut r1 = Array::zeros(&[min_dim, n]);
+    let r1_arr = r1.array_mut();
     for i in 0..min_dim {
         for j in i..n {
-            r1.set(&[i, j], a_copy.get(&[i, j])?)?;
+            r1_arr[[i, j]] = a_arr[[i, j]];
         }
     }
 
@@ -384,11 +391,14 @@ where
 
     // Create diagonal matrix T from singular values
     let mut t = Array::zeros(&[m, n]);
-    for i in 0..rank {
-        // Zero out tiny singular values for improved stability
-        let s_val = s_vec[i];
-        if s_val > tol_real {
-            t.set(&[i, i], s_val)?;
+    {
+        let t_arr = t.array_mut();
+        for i in 0..rank {
+            // Zero out tiny singular values for improved stability
+            let s_val = s_vec[i];
+            if s_val > tol_real {
+                t_arr[[i, i]] = s_val;
+            }
         }
     }
 
@@ -396,14 +406,17 @@ where
     // Z = P * V (where V is the transpose of Vt)
     let v = vt.transpose();
 
-    // Apply the permutation to get Z
+    // Apply the permutation to get Z (write-only: `vt`/`v` are read-only
+    // inputs). Read the bound once up front rather than per outer iteration.
     let mut z = Array::zeros(&[n, n]);
+    let z_arr = z.array_mut();
+    let vt_cols = vt.shape()[1];
     for j in 0..n {
         for i in 0..n {
             let idx = p[j]; // Get original column index
-            if i < vt.shape()[1] {
+            if i < vt_cols {
                 // Check bounds to avoid index errors
-                z.set(&[idx, i], v.get(&[j, i])?)?;
+                z_arr[[idx, i]] = v.get(&[j, i])?;
             }
         }
     }
@@ -429,7 +442,8 @@ where
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     /// Enhanced SVD implementation using OxiBLAS
     pub fn svd_compute(&self) -> Result<SvdResult<T>> {
@@ -496,6 +510,51 @@ mod tests {
 
         // For a complete test, we would also verify U*S*V^T = A
         // But we'll leave that for a more comprehensive test suite
+        Ok(())
+    }
+
+    #[test]
+    fn test_cod_reconstruction() -> Result<()> {
+        // `cod()` (complete orthogonal decomposition, A = Q*T*Z^T) had no
+        // test coverage anywhere in the crate despite being public
+        // (`Array::cod()`) even though its Householder-QR-with-pivoting
+        // stage was restructured for the W3-A2 COW-tax conversion -- added
+        // here to pin down the one identity the decomposition promises.
+        let a = Array::from_vec(vec![4.0, 0.0, 1.0, 0.0, 5.0, 2.0, 1.0, 2.0, 6.0]).reshape(&[3, 3]);
+
+        let (q, t, z) = cod(&a)?;
+        assert_eq!(q.shape(), vec![3, 3]);
+        assert_eq!(t.shape(), vec![3, 3]);
+        assert_eq!(z.shape(), vec![3, 3]);
+
+        // A ≈ Q * T * Z^T
+        let zt = z.transpose();
+        let qt = q.matmul(&t)?;
+        let recon = qt.matmul(&zt)?;
+
+        for i in 0..3 {
+            for j in 0..3 {
+                let expected = a.get(&[i, j])?;
+                let actual = recon.get(&[i, j])?;
+                assert!(
+                    (expected - actual).abs() < 1e-8,
+                    "COD reconstruction mismatch at ({i},{j}): expected {expected}, got {actual}"
+                );
+            }
+        }
+
+        // Q is orthogonal: Q^T * Q ≈ I.
+        let qtq = q.transpose().matmul(&q)?;
+        for i in 0..3 {
+            for j in 0..3 {
+                let expected = if i == j { 1.0 } else { 0.0 };
+                assert!(
+                    (qtq.get(&[i, j])? - expected).abs() < 1e-8,
+                    "Q should be orthogonal at ({i},{j})"
+                );
+            }
+        }
+
         Ok(())
     }
 

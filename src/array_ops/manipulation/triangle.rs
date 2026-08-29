@@ -235,7 +235,7 @@ pub fn append<T: Clone + Zero>(
             values_shape[ax] = values_axis_size;
 
             // Create values array with proper shape
-            let values_array = Array::from_vec(values.to_vec()).reshape(&values_shape);
+            let values_array = Array::from_vec_shape(values.to_vec(), &values_shape)?;
 
             // Update result shape
             let mut result_shape = shape.clone();
@@ -272,7 +272,7 @@ pub fn append<T: Clone + Zero>(
                 }
             }
 
-            Ok(Array::from_vec(result_data).reshape(&result_shape))
+            Ok(Array::from_vec_shape(result_data, &result_shape)?)
         }
     }
 }

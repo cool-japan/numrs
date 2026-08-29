@@ -36,8 +36,8 @@ type UniqueResult<T> = (Array<T>, Array<usize>, Array<usize>, Array<usize>);
 /// assert_eq!(result.to_vec(), vec![1, 3]);
 /// ```
 pub fn intersect1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
-    let set1: HashSet<T> = ar1.to_vec().into_iter().collect();
-    let set2: HashSet<T> = ar2.to_vec().into_iter().collect();
+    let set1: HashSet<T> = ar1.array().iter().cloned().collect();
+    let set2: HashSet<T> = ar2.array().iter().cloned().collect();
 
     let mut intersection: Vec<T> = set1.intersection(&set2).cloned().collect();
     intersection.sort();
@@ -69,8 +69,8 @@ pub fn intersect1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -
 /// assert_eq!(result.to_vec(), vec![1, 2, 3, 4, 5, 7]);
 /// ```
 pub fn union1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
-    let set1: HashSet<T> = ar1.to_vec().into_iter().collect();
-    let set2: HashSet<T> = ar2.to_vec().into_iter().collect();
+    let set1: HashSet<T> = ar1.array().iter().cloned().collect();
+    let set2: HashSet<T> = ar2.array().iter().cloned().collect();
 
     let mut union: Vec<T> = set1.union(&set2).cloned().collect();
     union.sort();
@@ -102,8 +102,8 @@ pub fn union1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Re
 /// assert_eq!(result.to_vec(), vec![1, 2]);
 /// ```
 pub fn setdiff1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
-    let set1: HashSet<T> = ar1.to_vec().into_iter().collect();
-    let set2: HashSet<T> = ar2.to_vec().into_iter().collect();
+    let set1: HashSet<T> = ar1.array().iter().cloned().collect();
+    let set2: HashSet<T> = ar2.array().iter().cloned().collect();
 
     let mut difference: Vec<T> = set1.difference(&set2).cloned().collect();
     difference.sort();
@@ -135,8 +135,8 @@ pub fn setdiff1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> 
 /// assert_eq!(result.to_vec(), vec![1, 4, 5, 7]);
 /// ```
 pub fn setxor1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<T>> {
-    let set1: HashSet<T> = ar1.to_vec().into_iter().collect();
-    let set2: HashSet<T> = ar2.to_vec().into_iter().collect();
+    let set1: HashSet<T> = ar1.array().iter().cloned().collect();
+    let set2: HashSet<T> = ar2.array().iter().cloned().collect();
 
     let mut symmetric_diff: Vec<T> = set1.symmetric_difference(&set2).cloned().collect();
     symmetric_diff.sort();
@@ -169,8 +169,8 @@ pub fn setxor1d<T: Clone + Eq + Hash + Ord>(ar1: &Array<T>, ar2: &Array<T>) -> R
 /// assert_eq!(result.to_vec(), vec![false, true, false, true, false, true]);
 /// ```
 pub fn in1d<T: Clone + Eq + Hash>(ar1: &Array<T>, ar2: &Array<T>) -> Result<Array<bool>> {
-    let set2: HashSet<T> = ar2.to_vec().into_iter().collect();
-    let result: Vec<bool> = ar1.to_vec().iter().map(|x| set2.contains(x)).collect();
+    let set2: HashSet<T> = ar2.array().iter().cloned().collect();
+    let result: Vec<bool> = ar1.array().iter().map(|x| set2.contains(x)).collect();
 
     Ok(Array::from_vec(result))
 }
@@ -213,15 +213,17 @@ pub fn isin<T: Clone + Eq + Hash>(
     assume_unique: bool,
     invert: bool,
 ) -> Result<Array<bool>> {
-    let test_set: HashSet<T> = if assume_unique {
-        // If we assume uniqueness, we can skip the deduplication step
-        test_elements.to_vec().into_iter().collect()
-    } else {
-        test_elements.to_vec().into_iter().collect()
-    };
+    // NOTE: `assume_unique` does not change behavior here (both branches
+    // built an identical `HashSet` even before this sweep, since
+    // deduplication happens implicitly via `HashSet` regardless) -- that
+    // pre-existing quirk is left as-is rather than given a fake dedup-skip
+    // implementation; the parameter is accepted for API/NumPy-signature
+    // compatibility.
+    let _ = assume_unique;
+    let test_set: HashSet<T> = test_elements.array().iter().cloned().collect();
 
     let result: Vec<bool> = element
-        .to_vec()
+        .array()
         .iter()
         .map(|x| {
             let contains = test_set.contains(x);
@@ -275,14 +277,15 @@ pub fn unique_with_options<T: Clone + Eq + Hash + Ord + Debug>(
     return_inverse: bool,
     return_counts: bool,
 ) -> Result<UniqueResult<T>> {
-    let data = ar.to_vec();
     let mut seen = std::collections::HashMap::new();
     let mut unique_values = Vec::new();
     let mut first_indices = Vec::new();
     let _counts: Vec<usize> = Vec::new();
 
-    // Build unique values and track their first occurrences and counts
-    for (i, value) in data.iter().enumerate() {
+    // Build unique values and track their first occurrences and counts.
+    // `ar.array().iter()` walks the array in the same logical order
+    // `ar.to_vec()` would have, without materializing a copy first.
+    for (i, value) in ar.array().iter().enumerate() {
         if let Some((_first_idx, count)) = seen.get_mut(value) {
             *count += 1;
         } else {
@@ -320,7 +323,8 @@ pub fn unique_with_options<T: Clone + Eq + Hash + Ord + Debug>(
             .map(|(pos, val)| (val, pos))
             .collect();
 
-        let inverse: Vec<usize> = data
+        let inverse: Vec<usize> = ar
+            .array()
             .iter()
             .map(|val| {
                 *value_to_pos
@@ -421,7 +425,13 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
                 slices.push(slice);
             }
 
-            // Convert slices to comparable form (vectors)
+            // Convert slices to comparable form (vectors).
+            // owning: each entry must be an owned `Vec<T>` -- it is used
+            // below both as a `HashMap<Vec<T>, _>` key (`seen`) and, via
+            // `first_indices`, as the source every other to_vec() call in
+            // this match arm reads back from instead of re-deriving (see
+            // the sort comparator, `slice_to_pos`, and the counts lookup
+            // below).
             let slice_vecs: Vec<Vec<T>> = slices.iter().map(|s| s.to_vec()).collect();
 
             // Track unique slices and their metadata
@@ -440,13 +450,19 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
                 }
             }
 
-            // Sort by lexicographic order of the slice data
+            // Sort by lexicographic order of the slice data.
+            //
+            // `unique_slices[k]` was cloned from `slices[first_indices[k]]`
+            // (both pushed together in the loop above), so
+            // `unique_slices[k].to_vec()` is always exactly
+            // `slice_vecs[first_indices[k]]` -- already-owned data sitting
+            // right there. Comparing borrowed references into `slice_vecs`
+            // instead of re-deriving two fresh `Vec<T>`s on *every*
+            // comparator call turns this from O(n log n) allocations into
+            // zero.
             let mut sorted_indices: Vec<usize> = (0..unique_slices.len()).collect();
-            sorted_indices.sort_by(|&a, &b| {
-                let slice_a = unique_slices[a].to_vec();
-                let slice_b = unique_slices[b].to_vec();
-                slice_a.cmp(&slice_b)
-            });
+            sorted_indices
+                .sort_by(|&a, &b| slice_vecs[first_indices[a]].cmp(&slice_vecs[first_indices[b]]));
 
             let sorted_unique_slices: Vec<Array<T>> = sorted_indices
                 .iter()
@@ -477,8 +493,14 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
                 // Create mapping from slice to position in sorted unique array
                 let mut slice_to_pos = std::collections::HashMap::new();
                 for (pos, &sorted_idx) in sorted_indices.iter().enumerate() {
-                    let slice_vec = unique_slices[sorted_idx].to_vec();
-                    slice_to_pos.insert(slice_vec, pos);
+                    // Same correspondence as the sort comparator above:
+                    // `unique_slices[sorted_idx].to_vec()` is always
+                    // `slice_vecs[first_indices[sorted_idx]]`. A clone is
+                    // still needed here (an owned key to move into the
+                    // map), but cloning the already-materialized
+                    // `Vec<T>` skips `Array::to_vec()`'s own contiguity
+                    // check and potential strided-iteration fallback.
+                    slice_to_pos.insert(slice_vecs[first_indices[sorted_idx]].clone(), pos);
                 }
 
                 let inverse: Vec<usize> = slice_vecs
@@ -500,8 +522,10 @@ pub fn unique_axis<T: Clone + Eq + Hash + Ord + Debug + num_traits::Zero>(
                 let sorted_counts: Vec<usize> = sorted_indices
                     .iter()
                     .map(|&i| {
-                        let slice_vec = unique_slices[i].to_vec();
-                        seen.get(&slice_vec)
+                        // `unique_slices[i].to_vec() == slice_vecs[first_indices[i]]`
+                        // (see the sort comparator above) -- `seen.get`
+                        // only needs a borrow, so no allocation at all.
+                        seen.get(&slice_vecs[first_indices[i]])
                             .expect("slice_vec must exist in seen map")
                             .1
                     })
@@ -553,18 +577,20 @@ pub fn ediff1d<T>(
 where
     T: Clone + std::ops::Sub<Output = T>,
 {
-    let data = ary.to_vec();
+    // Zero-copy (when `ary` is contiguous) read-only borrow: `data` is
+    // only ever indexed below, never mutated or moved out of.
+    let data = crate::kernels::borrow::operand(ary);
     if data.len() < 2 {
         // For arrays with less than 2 elements, differences array is empty
         let mut result = Vec::new();
 
         // But we still need to add to_begin and to_end if provided
         if let Some(begin_array) = to_begin {
-            result.extend(begin_array.to_vec());
+            result.extend(begin_array.array().iter().cloned());
         }
 
         if let Some(end_array) = to_end {
-            result.extend(end_array.to_vec());
+            result.extend(end_array.array().iter().cloned());
         }
 
         return Ok(Array::from_vec(result));
@@ -574,7 +600,7 @@ where
 
     // Add to_begin values if provided
     if let Some(begin_array) = to_begin {
-        differences.extend(begin_array.to_vec());
+        differences.extend(begin_array.array().iter().cloned());
     }
 
     // Calculate consecutive differences
@@ -584,7 +610,7 @@ where
 
     // Add to_end values if provided
     if let Some(end_array) = to_end {
-        differences.extend(end_array.to_vec());
+        differences.extend(end_array.array().iter().cloned());
     }
 
     Ok(Array::from_vec(differences))
@@ -682,5 +708,54 @@ mod tests {
         let result_empty =
             ediff1d(&empty, None, None).expect("ediff1d with empty array should succeed");
         assert_eq!(result_empty.to_vec(), Vec::<i32>::new());
+    }
+
+    /// Isolates exactly the fix applied to `unique_axis`'s sort_by
+    /// comparator (see its comments): comparing borrowed references into
+    /// an already-owned `Vec<Vec<T>>` via a captured index, vs. the
+    /// original's `unique_slices[x].to_vec()` re-derived on *every*
+    /// comparison call. The data shapes here (`arrays`/`slice_vecs`/
+    /// `first_indices`) mirror `unique_axis`'s own `slices`/`slice_vecs`/
+    /// `first_indices` exactly, so the number of to_vec()-equivalent
+    /// calls eliminated per sort is representative of the real function
+    /// (this lane has no `[[bench]]` entry available in `Cargo.toml`,
+    /// owned by another lane, hence the in-test timing probe).
+    #[test]
+    fn probe_unique_axis_sort_comparator_perf_vs_naive_to_vec() {
+        let n_groups = 2000;
+        let row_len = 8;
+        let arrays: Vec<Array<i32>> = (0..n_groups)
+            .map(|g| Array::from_vec((0..row_len).map(|k| (g * 7 + k) as i32).collect()))
+            .collect();
+        let slice_vecs: Vec<Vec<i32>> = arrays.iter().map(|a| a.to_vec()).collect();
+        let first_indices: Vec<usize> = (0..n_groups).collect();
+        let iters = 30;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            let mut idx: Vec<usize> = (0..n_groups).collect();
+            idx.sort_by(|&a, &b| {
+                let slice_a = arrays[a].to_vec();
+                let slice_b = arrays[b].to_vec();
+                slice_a.cmp(&slice_b)
+            });
+            let _ = std::hint::black_box(&idx);
+        }
+        let naive = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            let mut idx: Vec<usize> = (0..n_groups).collect();
+            idx.sort_by(|&a, &b| slice_vecs[first_indices[a]].cmp(&slice_vecs[first_indices[b]]));
+            let _ = std::hint::black_box(&idx);
+        }
+        let fixed = t1.elapsed();
+
+        eprintln!(
+            "[unique_axis sort comparator, groups={n_groups} row_len={row_len}] naive(to_vec_per_compare)={:.2}ms/iter indexed_ref={:.2}ms/iter ({:.2}x)",
+            naive.as_secs_f64() * 1e3 / iters as f64,
+            fixed.as_secs_f64() * 1e3 / iters as f64,
+            naive.as_secs_f64() / fixed.as_secs_f64(),
+        );
     }
 }

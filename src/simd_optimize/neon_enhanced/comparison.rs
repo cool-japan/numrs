@@ -5,7 +5,10 @@
 
 use crate::array::Array;
 
-use super::core::{NeonEnhancedOps, NEON_F64_LANES};
+use super::core::NeonEnhancedOps;
+// See `arithmetic.rs`: only the aarch64 SIMD implementations use this.
+#[cfg(target_arch = "aarch64")]
+use super::core::NEON_F64_LANES;
 
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
@@ -36,7 +39,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].abs();
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized sign for f64
@@ -92,7 +95,7 @@ impl NeonEnhancedOps {
             };
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized element-wise maximum for f64
@@ -117,7 +120,7 @@ impl NeonEnhancedOps {
             result[i] = data_a[i].max(data_b[i]);
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized element-wise minimum for f64
@@ -142,7 +145,7 @@ impl NeonEnhancedOps {
             result[i] = data_a[i].min(data_b[i]);
         }
 
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized clamp for f64: clamp values to [min_val, max_val]
@@ -168,7 +171,7 @@ impl NeonEnhancedOps {
             result[i] = data[i].clamp(min_val, max_val);
         }
 
-        Array::from_vec(result).reshape(&input.shape())
+        Array::from_vec_shape(result, &input.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// NEON vectorized copysign for f64: magnitude from a, sign from b
@@ -202,7 +205,7 @@ impl NeonEnhancedOps {
             result[i] = data_mag[i].abs().copysign(data_sign[i]);
         }
 
-        Array::from_vec(result).reshape(&magnitude.shape())
+        Array::from_vec_shape(result, &magnitude.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }
 
@@ -233,7 +236,7 @@ impl NeonEnhancedOps {
         let data_b = b.to_vec();
         let len = data_a.len().min(data_b.len());
         let result: Vec<f64> = (0..len).map(|i| data_a[i].max(data_b[i])).collect();
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     pub fn vectorized_minimum_f64(a: &Array<f64>, b: &Array<f64>) -> Array<f64> {
@@ -241,7 +244,7 @@ impl NeonEnhancedOps {
         let data_b = b.to_vec();
         let len = data_a.len().min(data_b.len());
         let result: Vec<f64> = (0..len).map(|i| data_a[i].min(data_b[i])).collect();
-        Array::from_vec(result).reshape(&a.shape())
+        Array::from_vec_shape(result, &a.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     pub fn vectorized_clamp_f64(input: &Array<f64>, min_val: f64, max_val: f64) -> Array<f64> {
@@ -255,6 +258,6 @@ impl NeonEnhancedOps {
         let result: Vec<f64> = (0..len)
             .map(|i| data_mag[i].abs().copysign(data_sign[i]))
             .collect();
-        Array::from_vec(result).reshape(&magnitude.shape())
+        Array::from_vec_shape(result, &magnitude.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 }

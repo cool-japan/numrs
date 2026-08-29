@@ -190,7 +190,7 @@ fn bench_histograms(c: &mut Criterion) {
             let rng = random::default_rng();
             if let Ok(data) = rng.random::<f64>(&[s]) {
                 b.iter(|| {
-                    if let Ok(result) = histogram(&data, 10, None, None) {
+                    if let Ok(result) = histogram(&data, 10, None, None, None) {
                         black_box(result);
                     }
                 });
@@ -201,7 +201,7 @@ fn bench_histograms(c: &mut Criterion) {
             let rng = random::default_rng();
             if let Ok(data) = rng.random::<f64>(&[s]) {
                 b.iter(|| {
-                    if let Ok(result) = histogram(&data, 50, None, None) {
+                    if let Ok(result) = histogram(&data, 50, None, None, None) {
                         black_box(result);
                     }
                 });
@@ -215,7 +215,7 @@ fn bench_histograms(c: &mut Criterion) {
                 let rng = random::default_rng();
                 if let Ok(data) = rng.random::<f64>(&[s]) {
                     b.iter(|| {
-                        if let Ok(result) = histogram(&data, 100, None, None) {
+                        if let Ok(result) = histogram(&data, 100, None, None, None) {
                             black_box(result);
                         }
                     });
@@ -458,69 +458,69 @@ fn bench_cumulative_statistics(c: &mut Criterion) {
     group.finish();
 }
 
-// TODO: Implement skewness and kurtosis functions before enabling these benchmarks
-// /// Benchmark statistical moments
-// fn bench_statistical_moments(c: &mut Criterion) {
-//     let mut group = c.benchmark_group("statistical_moments");
-//
-//     for size in [100, 1000, 10000, 100000].iter() {
-//         group.bench_with_input(BenchmarkId::new("skewness", size), size, |b, &s| {
-//             let rng = random::default_rng();
-//             if let Ok(data) = rng.random::<f64>(&[s]) {
-//                 b.iter(|| {
-//                     if let Ok(result) = skew(&data, None) {
-//                         black_box(result);
-//                     }
-//                 });
-//             }
-//         });
-//
-//         group.bench_with_input(BenchmarkId::new("kurtosis", size), size, |b, &s| {
-//             let rng = random::default_rng();
-//             if let Ok(data) = rng.random::<f64>(&[s]) {
-//                 b.iter(|| {
-//                     if let Ok(result) = kurtosis(&data, None) {
-//                         black_box(result);
-//                     }
-//                 });
-//             }
-//         });
-//     }
-//
-//     group.finish();
-// }
+/// Benchmark statistical moments
+fn bench_statistical_moments(c: &mut Criterion) {
+    let mut group = c.benchmark_group("statistical_moments");
 
-// TODO: shuffle and choice are in random/legacy, not stats - need to fix imports
-// /// Benchmark random sampling and shuffling
-// fn bench_random_sampling(c: &mut Criterion) {
-//     let mut group = c.benchmark_group("random_sampling");
-//
-//     for size in [100, 1000, 10000].iter() {
-//         group.bench_with_input(BenchmarkId::new("shuffle", size), size, |b, &s| {
-//             let rng = random::default_rng();
-//             if let Ok(data) = rng.random::<f64>(&[s]) {
-//                 b.iter(|| {
-//                     if let Ok(result) = shuffle(&data) {
-//                         black_box(result);
-//                     }
-//                 });
-//             }
-//         });
-//
-//         group.bench_with_input(BenchmarkId::new("choice", size), size, |b, &s| {
-//             let rng = random::default_rng();
-//             if let Ok(data) = rng.random::<f64>(&[s]) {
-//                 b.iter(|| {
-//                     if let Ok(result) = choice(&data, s / 10, None, None) {
-//                         black_box(result);
-//                     }
-//                 });
-//             }
-//         });
-//     }
-//
-//     group.finish();
-// }
+    for size in [100, 1000, 10000, 100000].iter() {
+        group.bench_with_input(BenchmarkId::new("skewness", size), size, |b, &s| {
+            let rng = random::default_rng();
+            if let Ok(data) = rng.random::<f64>(&[s]) {
+                b.iter(|| {
+                    if let Ok(result) = skew(&data, None) {
+                        black_box(result);
+                    }
+                });
+            }
+        });
+
+        group.bench_with_input(BenchmarkId::new("kurtosis", size), size, |b, &s| {
+            let rng = random::default_rng();
+            if let Ok(data) = rng.random::<f64>(&[s]) {
+                b.iter(|| {
+                    if let Ok(result) = kurtosis(&data, None) {
+                        black_box(result);
+                    }
+                });
+            }
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark random sampling and shuffling
+fn bench_random_sampling(c: &mut Criterion) {
+    use numrs2::random::{choice, shuffle};
+    let mut group = c.benchmark_group("random_sampling");
+
+    for size in [100, 1000, 10000].iter() {
+        group.bench_with_input(BenchmarkId::new("shuffle", size), size, |b, &s| {
+            let rng = random::default_rng();
+            if let Ok(data) = rng.random::<f64>(&[s]) {
+                b.iter(|| {
+                    let mut arr = data.clone();
+                    if shuffle(&mut arr).is_ok() {
+                        black_box(arr);
+                    }
+                });
+            }
+        });
+
+        group.bench_with_input(BenchmarkId::new("choice", size), size, |b, &s| {
+            let rng = random::default_rng();
+            if let Ok(data) = rng.random::<f64>(&[s]) {
+                b.iter(|| {
+                    if let Ok(result) = choice(&data, Some(s / 10), None) {
+                        black_box(result);
+                    }
+                });
+            }
+        });
+    }
+
+    group.finish();
+}
 
 /// Benchmark distribution functions (PDF, CDF, PPF)
 fn bench_distribution_functions(c: &mut Criterion) {
@@ -737,8 +737,8 @@ criterion_group!(
     bench_poisson_distribution,
     bench_binomial_distribution,
     bench_cumulative_statistics,
-    // bench_statistical_moments, // TODO: Implement skew/kurtosis first
-    // bench_random_sampling, // TODO: Fix imports for shuffle/choice
+    bench_statistical_moments,
+    bench_random_sampling,
     bench_distribution_functions,
 );
 

@@ -185,30 +185,158 @@ fn bessel_y_scalar<T>(n: i32, x: T) -> T
 where
     T: Float + Debug,
 {
-    // Handle special case
     if x <= T::zero() {
         return T::nan();
     }
 
-    // Use the relationship with J_n(x)
-    // Y_n(x) = (J_n(x) * cos(n*pi) - J_{-n}(x)) / sin(n*pi)
-    let pi = T::from(std::f64::consts::PI).expect("PI should convert to float type");
-    let n_pi = T::from(n).expect("n should convert to float type") * pi;
+    let pi = T::from(std::f64::consts::PI).expect("PI converts to float");
+    let two_over_pi = T::from(2.0_f64 / std::f64::consts::PI).expect("2/pi converts to float");
+    let euler_gamma = T::from(0.577_215_664_901_532_860_606_512_090_082_402_431_042_16_f64)
+        .expect("Euler-Mascheroni converts to float");
 
-    if n % 2 == 0 {
-        // For even n, sin(n*pi) = 0, so use different formula
-        // Use the derivative relationship
-        let j_n = bessel_j_scalar(n, x);
-        let j_n_plus_1 = bessel_j_scalar(n + 1, x);
-
-        return T::from(2.0).expect("2.0 should convert to float type") / pi * j_n.ln()
-            - T::from(2.0).expect("2.0 should convert to float type") * j_n / (pi * x)
-            - j_n_plus_1
-            + j_n / (pi * x);
+    let y0 = bessel_y0_scalar(x, pi, two_over_pi, euler_gamma);
+    if n == 0 {
+        return y0;
     }
 
-    // For odd n
-    (bessel_j_scalar(n, x) * n_pi.cos() - bessel_j_scalar(-n, x)) / n_pi.sin()
+    let y1 = bessel_y1_scalar(x, pi, two_over_pi, euler_gamma);
+    if n == 1 {
+        return y1;
+    }
+
+    if n < 0 {
+        let factor = if -n % 2 == 0 { T::one() } else { -T::one() };
+        return factor * bessel_y_scalar(-n, x);
+    }
+
+    // Upward recurrence: Y_{n+1}(x) = (2n/x)*Y_n(x) - Y_{n-1}(x)
+    // Numerically stable upward for Y (unlike J)
+    let mut y_prev = y0;
+    let mut y_curr = y1;
+
+    for k in 1..n {
+        let k_t = T::from(k).expect("k converts to float");
+        let two = T::from(2.0_f64).expect("2 converts to float");
+        let y_next = (two * k_t / x) * y_curr - y_prev;
+        y_prev = y_curr;
+        y_curr = y_next;
+    }
+
+    y_curr
+}
+
+/// Y_0(x) via DLMF 10.8.1 series for x < 8, asymptotic for x >= 8
+fn bessel_y0_scalar<T>(x: T, pi: T, two_over_pi: T, euler_gamma: T) -> T
+where
+    T: Float + Debug,
+{
+    if x >= T::from(8.0_f64).expect("8 converts to float") {
+        return bessel_y_asymptotic(0, x, pi);
+    }
+
+    let half_x = x / T::from(2.0_f64).expect("2 converts to float");
+    let half_x_sq = half_x * half_x;
+    let ln_half_x = half_x.ln();
+
+    let mut j0_sum = T::one();
+    let mut series_sum = T::zero();
+    let mut term = T::one();
+    let mut h_k = T::zero();
+
+    for k in 1_usize..=50 {
+        let k_t = T::from(k).expect("k converts to float");
+        term = -term * half_x_sq / (k_t * k_t);
+        j0_sum = j0_sum + term;
+        h_k = h_k + T::one() / k_t;
+        // For Y_0: series_sum += -H_k * term  (term already has (-1)^k built in)
+        let contrib = -h_k * term;
+        series_sum = series_sum + contrib;
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
+            break;
+        }
+    }
+
+    two_over_pi * ((ln_half_x + euler_gamma) * j0_sum + series_sum)
+}
+
+/// Y_1(x) via DLMF 10.8.3 series for x < 8, asymptotic for x >= 8
+fn bessel_y1_scalar<T>(x: T, pi: T, two_over_pi: T, euler_gamma: T) -> T
+where
+    T: Float + Debug,
+{
+    if x >= T::from(8.0_f64).expect("8 converts to float") {
+        return bessel_y_asymptotic(1, x, pi);
+    }
+
+    let half_x = x / T::from(2.0_f64).expect("2 converts to float");
+    let half_x_sq = half_x * half_x;
+    let ln_half_x = half_x.ln();
+
+    // J_1(x) = (x/2) * Σ_{k=0}^∞ (-1)^k*(x/2)^{2k}/(k!(k+1)!)
+    let mut j1_inner = T::one();
+    let mut series_sum = T::zero();
+    let mut term = T::one();
+    let mut h_k = T::zero();
+    let mut h_k1 = T::one();
+
+    // k=0 contribution to series:
+    series_sum = series_sum + (h_k + h_k1) * term;
+
+    for k in 1_usize..=50 {
+        let k_t = T::from(k).expect("k converts to float");
+        let k1_t = T::from(k + 1).expect("k+1 converts to float");
+        term = -term * half_x_sq / (k_t * k1_t);
+        j1_inner = j1_inner + term;
+        h_k = h_k1;
+        h_k1 = h_k1 + T::one() / k1_t;
+        let contrib = (h_k + h_k1) * term;
+        series_sum = series_sum + contrib;
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
+            break;
+        }
+    }
+
+    let j1 = half_x * j1_inner;
+    let half = T::from(0.5_f64).expect("0.5 converts to float");
+
+    two_over_pi * ((ln_half_x + euler_gamma) * j1 - T::one() / x - half_x * half * series_sum)
+}
+
+/// Asymptotic expansion of Y_n(x) for large x (x >= 8)
+fn bessel_y_asymptotic<T>(n: i32, x: T, pi: T) -> T
+where
+    T: Float + Debug,
+{
+    let n_t = T::from(n).expect("n converts to float");
+    let mu = T::from(4 * n * n).expect("4n^2 converts to float");
+    let one = T::one();
+    let two = T::from(2.0_f64).expect("2 converts to float");
+    let t = one / (T::from(8.0_f64).expect("8 converts to float") * x);
+
+    // (mu - (2k-1)^2) terms
+    let mu_m1 = mu - one;
+    let mu_m9 = mu - T::from(9.0_f64).expect("9 converts to float");
+    let mu_m25 = mu - T::from(25.0_f64).expect("25 converts to float");
+    let mu_m49 = mu - T::from(49.0_f64).expect("49 converts to float");
+    let mu_m81 = mu - T::from(81.0_f64).expect("81 converts to float");
+
+    // P(x): 1 - (mu-1)(mu-9)/(2!(8x)^2) + (mu-1)(mu-9)(mu-25)(mu-49)/(4!(8x)^4) - ...
+    let p_t2 = -mu_m1 * mu_m9 * t * t / T::from(2.0_f64).expect("2 converts to float");
+    let p_t4 = -p_t2 * mu_m25 * mu_m49 * t * t / T::from(12.0_f64).expect("12 converts to float");
+    let p = one + p_t2 + p_t4;
+
+    // Q(x): (mu-1)/(8x) - (mu-1)(mu-9)(mu-25)/(3!(8x)^3) + ...
+    let q_t1 = mu_m1 * t;
+    let q_t3 = -q_t1 * mu_m9 * mu_m25 * t * t / T::from(6.0_f64).expect("6 converts to float");
+    let q_t5 = -q_t3 * mu_m49 * mu_m81 * t * t / T::from(20.0_f64).expect("20 converts to float");
+    let q = q_t1 + q_t3 + q_t5;
+
+    let phase = x - n_t * pi / two - pi / T::from(4.0_f64).expect("4 converts to float");
+    let amplitude = (two / (pi * x)).sqrt();
+
+    amplitude * (phase.sin() * p - phase.cos() * q)
 }
 
 /// Modified Bessel function of first kind I_n(x) for scalar values
@@ -254,226 +382,167 @@ where
     result
 }
 
-/// Modified Bessel function of second kind K_n(x) for scalar values
-///
-/// This implementation includes enhanced numerical stability for:
-/// 1. Small argument handling (x near 0) using specialized series expansions
-/// 2. Medium argument handling ensuring monotonicity and recurrence relation accuracy
-/// 3. Large argument asymptotic expansions with correction terms for accuracy
-/// 4. Recurrence relation stability for higher orders
-/// 5. Special case handling for integer orders (particularly n=0, n=1, n=2)
-/// 6. Prevention of overflow/underflow in all calculation regions
+/// Modified Bessel function of second kind K_n(x) for scalar values.
+/// Uses DLMF 10.31.1/10.31.2 series for x < 2, asymptotic for x >= 2,
+/// and upward recurrence K_{n+1}(x) = (2n/x)*K_n(x) + K_{n-1}(x).
 fn bessel_k_scalar<T>(n: i32, x: T) -> T
 where
     T: Float + Debug,
 {
-    // Handle special case
     if x <= T::zero() {
         return T::infinity();
     }
-
-    // For negative n, use the relationship K_{-n}(x) = K_n(x)
     if n < 0 {
         return bessel_k_scalar(-n, x);
     }
 
-    let pi = T::from(std::f64::consts::PI).expect("PI should convert to float type");
-    let n_t = T::from(n).expect("n should convert to float type");
+    let euler_gamma = T::from(0.577_215_664_901_532_860_606_512_090_082_402_431_042_16_f64)
+        .expect("Euler-Mascheroni converts to float");
 
-    // Use appropriate computation method based on argument range
-    // Small argument case (x < 1)
-    if x < T::one() {
-        // For small x, the formula in terms of I_n can be numerically unstable
-        // due to cancellation errors. Use series expansion instead.
+    let k0 = bessel_k0_scalar(x, euler_gamma);
+    if n == 0 {
+        return k0;
+    }
 
-        // For n = 0, we have a special formula to avoid numerical issues
-        if n == 0 {
-            // K_0(x) for small x uses logarithmic term and series
-            let gamma = T::from(0.577_215_664_901_533)
-                .expect("Euler constant should convert to float type"); // Euler's constant
-            let mut sum = T::zero();
-            let x_sq_4 = x * x / T::from(4.0).expect("4.0 should convert to float type");
-            let mut term = T::one();
-            let mut fact = T::one();
-            let mut psi = -gamma; // Digamma function value at 1
+    let k1 = bessel_k1_scalar(x, euler_gamma);
+    if n == 1 {
+        return k1;
+    }
 
-            for k in 1..16 {
-                // Usually 15 terms is enough for good precision
-                let k_t = T::from(k).expect("k should convert to float type");
-                fact = fact * k_t; // k!
-                psi = psi + T::one() / k_t; // Digamma function value at k+1
-                term = term * x_sq_4 / (k_t * k_t); // term = (x^2/4)^k / (k!)^2
-                let term_contribution = term * (psi + psi); // Coefficient in the series
-                sum = sum + term_contribution;
+    // Upward recurrence: K_{m+1}(x) = (2m/x)*K_m(x) + K_{m-1}(x)
+    // Upward is stable for K (growing solution)
+    let mut k_prev = k0;
+    let mut k_curr = k1;
 
-                // Check for convergence
-                if term_contribution.abs() < sum.abs() * T::epsilon() {
-                    break;
-                }
-            }
+    for m in 1..n {
+        let m_t = T::from(m).expect("m converts to float");
+        let two = T::from(2.0_f64).expect("2 converts to float");
+        let k_next = (two * m_t / x) * k_curr + k_prev;
+        k_prev = k_curr;
+        k_curr = k_next;
+    }
 
-            -sum - x.ln() * bessel_i_scalar(0, x)
-        }
-        // For n > 0, use the recurrence relation in a way that avoids overflow
-        else {
-            // Start with K_0 and K_1
-            let k0 = bessel_k_scalar(0, x);
+    k_curr
+}
 
-            // For K_1, use special formula for small x
-            // K_1(x) = 1/x + 0.5*x*ln(x/2) + series...
-            let x_inv = T::one() / x;
-            let half_x = x / T::from(2.0).expect("2.0 should convert to float type");
-            let mut k1 = x_inv;
+/// K_0(x) via DLMF 10.31.1 series for x < 8, asymptotic for x >= 8
+fn bessel_k0_scalar<T>(x: T, euler_gamma: T) -> T
+where
+    T: Float + Debug,
+{
+    if x >= T::from(8.0_f64).expect("8 converts to float") {
+        return bessel_k_asymptotic(0, x);
+    }
 
-            if n == 1 {
-                // Simplified direct formula for K_1
-                k1 = x_inv
-                    + half_x
-                        * (x / T::from(2.0).expect("2.0 should convert to float type")).ln()
-                        * bessel_i_scalar(1, x);
-                for k in 1..16 {
-                    let k_t = T::from(k).expect("k should convert to float type");
-                    let term = T::from(0.5).expect("0.5 should convert to float type") * x * x
-                        / T::from(4.0).expect("4.0 should convert to float type")
-                        * T::from(k).expect("k should convert to float type")
-                        / (k_t * k_t * (k_t + T::one()));
-                    k1 = k1 + term;
+    // DLMF 10.31.1: K_0(x) = -(ln(x/2)+γ)*I_0(x) + Σ_{k=0}^∞ H_k*(x²/4)^k/(k!)^2
+    // H_0 = 0, so the k=0 term vanishes; series starts effectively at k=1.
+    let half_x = x / T::from(2.0_f64).expect("2 converts to float");
+    let xsq4 = half_x * half_x;
+    let ln_half_x = half_x.ln();
 
-                    if term.abs() < k1.abs() * T::epsilon() {
-                        break;
-                    }
-                }
-                return k1;
-            }
+    let mut i0_sum = T::one();
+    let mut series_sum = T::zero();
+    let mut term = T::one();
+    let mut h_k = T::zero();
 
-            // Use forward recurrence for n > 1
-            // K_{n+1}(x) = (2n/x)*K_n(x) + K_{n-1}(x)
-            let mut k_prev = k0;
-            let mut k_curr = k1;
-
-            for i in 1..n {
-                let i_t = T::from(i).expect("i should convert to float type");
-                let k_next = (T::from(2.0).expect("2.0 should convert to float type") * i_t / x)
-                    * k_curr
-                    + k_prev;
-                k_prev = k_curr;
-                k_curr = k_next;
-            }
-
-            k_curr
+    for k in 1_usize..=50 {
+        let k_t = T::from(k).expect("k converts to float");
+        term = term * xsq4 / (k_t * k_t);
+        i0_sum = i0_sum + term;
+        h_k = h_k + T::one() / k_t;
+        let contrib = h_k * term;
+        series_sum = series_sum + contrib;
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
+            break;
         }
     }
-    // Medium argument case (1 <= x < 8*n)
-    else if x < T::from(8.0).expect("8.0 should convert to float type") * n_t {
-        // For medium x values, use relation with I_n but with careful computation
-        // to avoid cancellation errors
 
-        // Use the relation involving I_n but compute terms carefully
-        let pi_half = pi / T::from(2.0).expect("2.0 should convert to float type");
+    -(ln_half_x + euler_gamma) * i0_sum + series_sum
+}
 
-        // For n = 0, we can simplify the formula
-        if n == 0 {
-            let i0 = bessel_i_scalar(0, x);
-
-            // Use Wronskian relation: I_0(x)*K_1(x) + I_1(x)*K_0(x) = 1/x
-            // We compute K_0 from K_1 using the asymptotic expansion for K_1
-            let i1 = bessel_i_scalar(1, x);
-
-            // First-order approximation for K_1
-            let k1_approx = num_traits::Float::sqrt(
-                pi / (T::from(2.0).expect("2.0 should convert to float type") * x),
-            ) * (-x).exp();
-
-            // Compute K_0 using the Wronskian
-            return (T::one() / x - i1 * k1_approx) / i0;
-        }
-        // Special handling for n = 1 or n = 2
-        // These cases require careful treatment to ensure monotonicity and recurrence relation consistency
-        else if n == 1 || n == 2 {
-            // For n = 1, we use a specialized asymptotic expansion that ensures monotonic decrease
-            // This addresses a numerical stability issue where K1(2) > K1(1) with the standard formula
-            if n == 1 {
-                // Asymptotic form of K1(x) = sqrt(pi/(2x)) * exp(-x) * (1 + higher terms)
-                let factor = num_traits::Float::sqrt(
-                    pi / (T::from(2.0).expect("2.0 should convert to float type") * x),
-                ) * (-x).exp();
-
-                // Add correction term 3/(8x) for increased accuracy while preserving monotonicity
-                let correction = T::one()
-                    + T::from(3.0).expect("3.0 should convert to float type")
-                        / (T::from(8.0).expect("8.0 should convert to float type") * x);
-                return factor * correction;
-            }
-
-            // For n = 2, we enforce the recurrence relation explicitly
-            // This ensures mathematical consistency with K0 and K1 values
-            // K_2(x) = (2/x)K_1(x) + K_0(x)
-            // Get K0 and K1 values directly from recursive calls
-            let k0 = bessel_k_scalar(0, x);
-            let k1 = bessel_k_scalar(1, x);
-
-            // Apply the recurrence relation exactly
-            // K_{n+1}(x) = (2n/x)*K_n(x) + K_{n-1}(x)
-            let k2 =
-                (T::from(2.0).expect("2.0 should convert to float type") * T::one() / x) * k1 + k0;
-            return k2;
-        }
-
-        // For n > 1, use the relationship with I_n but avoid direct subtraction
-        // to minimize cancellation errors
-        let i_n = bessel_i_scalar(n, x);
-        let i_minus_n = bessel_i_scalar(-n, x);
-
-        let sin_term = (n_t * pi).sin();
-
-        // For n close to a multiple of pi, use alternative form
-        if sin_term.abs() < T::from(1e-10).expect("1e-10 should convert to float type") {
-            // Use L'Hopital's rule for the limit
-            return pi_half * (bessel_i_scalar(-n - 1, x) + bessel_i_scalar(n - 1, x));
-        }
-
-        pi_half * (i_minus_n - i_n) / sin_term
+/// K_1(x) via DLMF 10.31.2 series for x < 8, asymptotic for x >= 8
+fn bessel_k1_scalar<T>(x: T, euler_gamma: T) -> T
+where
+    T: Float + Debug,
+{
+    if x >= T::from(8.0_f64).expect("8 converts to float") {
+        return bessel_k_asymptotic(1, x);
     }
-    // Large argument case (x >= 8*n)
-    else {
-        // For large x, use asymptotic expansion with careful term computation
-        // K_n(x) ~ sqrt(pi/(2x)) * exp(-x) * (1 + (4n^2-1)/(8x) + (4n^2-1)(4n^2-9)/(128x^2) + ...)
-        // This provides excellent accuracy without the numerical instabilities of direct computation
 
-        // Leading factor common to all terms
-        let factor = num_traits::Float::sqrt(
-            pi / (T::from(2.0).expect("2.0 should convert to float type") * x),
-        ) * (-x).exp();
+    // DLMF 10.31.2: K_1(x) = 1/x + (ln(x/2)+γ)*I_1(x)
+    //                          - (x/4) * Σ_{k=0}^∞ (H_k+H_{k+1})*(x²/4)^k/(k!(k+1)!)
+    // I_1(x) = (x/2) * Σ_{k=0}^∞ (x²/4)^k/(k!(k+1)!)
+    let half_x = x / T::from(2.0_f64).expect("2 converts to float");
+    let xsq4 = half_x * half_x;
+    let ln_half_x = half_x.ln();
 
-        // Compute the asymptotic series with multiple terms for higher accuracy
-        let mut sum = T::one();
-        let n_sq = n_t * n_t;
+    let mut i1_inner = T::one();
+    let mut series_sum = T::zero();
+    let mut term = T::one();
+    let mut h_k = T::zero();
+    let mut h_k1 = T::one();
 
-        // First coefficient (4n^2-1) used in all subsequent terms
-        let mut a = T::from(4.0).expect("4.0 should convert to float type") * n_sq - T::one();
-        let mut term = T::one();
+    // k=0 contribution:
+    series_sum = series_sum + (h_k + h_k1) * term;
 
-        // Add terms until convergence or max iterations
-        // Each term is derived from preceding term to avoid overflow in factorial calculations
-        for k in 1..5 {
-            // Usually 4 terms provide excellent accuracy for large x
-            let k_t = T::from(k).expect("k should convert to float type");
-
-            // Compute next term using recurrence relation to avoid overflow
-            term = term * a / (T::from(8.0).expect("8.0 should convert to float type") * k_t * x);
-            sum = sum + term;
-
-            // Update coefficient for next term
-            a = a - T::from(8.0).expect("8.0 should convert to float type") * k_t;
-
-            // Check for convergence - stop when additional terms don't change the result
-            if term.abs() < sum.abs() * T::epsilon() {
-                break;
-            }
+    for k in 1_usize..=50 {
+        let k_t = T::from(k).expect("k converts to float");
+        let k1_t = T::from(k + 1).expect("k+1 converts to float");
+        term = term * xsq4 / (k_t * k1_t);
+        i1_inner = i1_inner + term;
+        h_k = h_k1;
+        h_k1 = h_k1 + T::one() / k1_t;
+        let contrib = (h_k + h_k1) * term;
+        series_sum = series_sum + contrib;
+        if k > 5 && contrib.abs() < T::epsilon() * series_sum.abs() * T::from(1e2_f64).expect("1e2")
+        {
+            break;
         }
-
-        factor * sum
     }
+
+    let i1 = half_x * i1_inner;
+    let half = T::from(0.5_f64).expect("0.5 converts to float");
+
+    // DLMF 10.31.2: K_1(x) = 1/x + (ln(x/2)+γ)*I_1(x) - (x/4)*Σ(H_k+H_{k+1})(x²/4)^k/(k!(k+1)!)
+    T::one() / x + (ln_half_x + euler_gamma) * i1 - half_x * half * series_sum
+}
+
+/// Asymptotic expansion of K_n(x) for x >= 2:
+/// K_n(x) ~ sqrt(π/(2x)) * exp(-x) * Σ_{k=0}^∞ a_k/(8x)^k
+fn bessel_k_asymptotic<T>(n: i32, x: T) -> T
+where
+    T: Float + Debug,
+{
+    let pi = T::from(std::f64::consts::PI).expect("PI converts to float");
+    let mu = T::from(4 * n * n).expect("4n^2 converts to float");
+    let one = T::one();
+    let two = T::from(2.0_f64).expect("2 converts to float");
+    let eight = T::from(8.0_f64).expect("8 converts to float");
+
+    if x * x > T::from(700.0_f64).expect("700 converts to float") {
+        return T::zero();
+    }
+
+    let factor = (pi / (two * x)).sqrt() * (-x).exp();
+    let mut sum = one;
+    let mut term = one;
+
+    for k in 1_usize..=10 {
+        let k_t = T::from(k as f64).expect("k converts to float");
+        let two_k_m1 = T::from((2 * k - 1) as f64).expect("2k-1 converts to float");
+        let num = mu - two_k_m1 * two_k_m1;
+        let denom = k_t * eight * x;
+        term = term * num / denom;
+        let prev_sum = sum;
+        sum = sum + term;
+        // Asymptotic series diverges eventually — stop when terms grow
+        if term.abs() >= prev_sum.abs() || term.abs() < T::epsilon() * sum.abs() {
+            break;
+        }
+    }
+
+    factor * sum
 }
 
 #[cfg(test)]

@@ -9,12 +9,7 @@ use std::arch::is_aarch64_feature_detected;
 /// NEON vectorization constants
 pub const NEON_F32_LANES: usize = 4;
 pub const NEON_F64_LANES: usize = 2;
-#[allow(dead_code)]
 pub const NEON_ALIGNMENT: usize = 16;
-
-/// Vectorization constants for f64 (unrolled)
-#[allow(dead_code)]
-pub const NEON_F64_LANES_UNROLL: usize = NEON_F64_LANES * 4; // Process 8 f64 values at once
 
 /// Advanced NEON operations for ARM processors
 pub struct NeonEnhancedOps;

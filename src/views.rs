@@ -941,7 +941,7 @@ impl<'a, T: Clone> StridedArrayView<'a, T> {
 
     /// Convert to an owned array
     pub fn to_owned(&self) -> Array<T> {
-        Array::from_vec(self.to_vec()).reshape(&self.shape)
+        Array::from_vec_shape(self.to_vec(), &self.shape).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Create a subview with the given slice
@@ -1163,7 +1163,7 @@ impl<'a, T: Clone> WindowView<'a, T> {
                 }
                 pos[i] = 0;
                 if i == 0 {
-                    return Array::from_vec(data).reshape(&shape);
+                    return Array::from_vec_shape(data, &shape).unwrap_or_else(|e| panic!("{e}"));
                 }
             }
         }

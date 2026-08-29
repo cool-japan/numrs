@@ -58,15 +58,12 @@
 //! # }
 //! ```
 
-use super::communication::{
-    AsyncCommunicator, CommunicationError, CompressionStrategy, MessagePriority, TensorMessage,
-};
+use super::communication::CommunicationError;
 use super::coordinator::CoordinatorError;
 use super::process::{Communicator, ProcessError};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{Mutex, RwLock};
@@ -82,6 +79,17 @@ pub enum ModelParallelError {
 
     #[error("Coordinator error: {0}")]
     Coordinator(#[from] CoordinatorError),
+
+    /// A failure from the real [`super::net`] transport layer, surfaced by
+    /// [`PipelineParallel`]'s send/recv methods going through
+    /// [`super::net::endpoint::Endpoint`] directly.
+    #[error("Transport error: {0}")]
+    Net(#[from] super::net::NetError),
+
+    /// A failure from a real [`super::collective`] operation, surfaced by
+    /// [`TensorParallel::gather`].
+    #[error("Collective operation error: {0}")]
+    Collective(#[from] super::collective::CollectiveError),
 
     #[error("Invalid stage assignment: stage {stage} out of {total}")]
     InvalidStage { stage: usize, total: usize },
@@ -210,27 +218,87 @@ impl<T: Clone> Microbatch<T> {
     }
 }
 
-/// Pipeline parallel coordinator
+/// Base wire tag for forward-activation transfers in [`PipelineParallel`];
+/// folds in the *sending* stage's own id and the microbatch id so every
+/// (originating stage, microbatch) pair gets its own tag — this is what lets
+/// [`PipelineParallel::recv_forward`] pull a specific microbatch's
+/// activations regardless of what order other microbatches for the same
+/// stage-pair arrive in, rather than being limited to strict FIFO receipt
+/// (the "irecv-style" point-to-point the task calls for). See
+/// `pipeline_tag` for the exact bit layout, and [`super::optimization`]'s
+/// module docs for the crate-wide convention keeping every tag range in this
+/// file disjoint from collectives (`0x1..0xA`), the latency/bandwidth probes
+/// (`0xD`/`0xE`), and [`super::communication::AsyncCommunicator`]'s
+/// `ASYNC_COMM_TAG` (`0xACC0_...`).
+const TAG_PIPELINE_FORWARD_BASE: u64 = 0xB_0000_0000;
+
+/// As [`TAG_PIPELINE_FORWARD_BASE`], for backward-gradient transfers.
+const TAG_PIPELINE_BACKWARD_BASE: u64 = 0xC_0000_0000;
+
+/// Fold `stage_id` (the *sending* stage's own id — known directly by the
+/// sender, and recoverable by the receiver from its own `prev_stage`/
+/// `next_stage`) and `microbatch_id` into an offset from `base`, giving
+/// every `(base, stage_id, microbatch_id)` combination its own wire tag.
+/// `stage_id` occupies bits 24..31 of the offset (up to 255 stages) and
+/// `microbatch_id` occupies bits 0..23 (up to ~16.7 million microbatches) —
+/// both far beyond any realistic pipeline configuration — so neither can
+/// collide with the other, and the combined offset (always `< 2^32`) never
+/// reaches into the tag range above `base`.
+fn pipeline_tag(base: u64, stage_id: usize, microbatch_id: usize) -> u64 {
+    let stage_part = (stage_id as u64 & 0xFF) << 24;
+    let microbatch_part = microbatch_id as u64 & 0x00FF_FFFF;
+    base + stage_part + microbatch_part
+}
+
+/// Encode an `f32` tensor for the wire, the same way every other tensor
+/// payload in this crate does.
+fn encode_tensor(data: &[f32]) -> Result<Vec<u8>, ModelParallelError> {
+    oxicode::encode_to_vec(&data.to_vec())
+        .map_err(|e| ModelParallelError::PipelineError(format!("failed to encode tensor: {e}")))
+}
+
+/// Inverse of [`encode_tensor`].
+fn decode_tensor(bytes: &[u8]) -> Result<Vec<f32>, ModelParallelError> {
+    let (data, _): (Vec<f32>, usize) = oxicode::decode_from_slice(bytes)
+        .map_err(|e| ModelParallelError::PipelineError(format!("failed to decode tensor: {e}")))?;
+    Ok(data)
+}
+
+/// Pipeline parallel coordinator.
+///
+/// [`Self::send_forward`]/[`Self::recv_forward`]/[`Self::send_backward`]/
+/// [`Self::recv_backward`] are real point-to-point transfers over
+/// `communicator`'s shared [`super::net::endpoint::Endpoint`], each under a
+/// tag computed by `pipeline_tag` that is unique to its
+/// `(direction, originating stage, microbatch_id)` — see that function's
+/// docs. `recv_forward`/`recv_backward` wait on
+/// [`super::net::endpoint::Endpoint::recv_bytes`] for the exact microbatch
+/// requested (an earlier version of this type instead always returned a
+/// fixed 10-element placeholder for anything not already sitting in a local,
+/// never-actually-populated buffer — every call silently fabricated a
+/// result regardless of what, if anything, had really been sent).
 pub struct PipelineParallel {
     /// Communicator
     communicator: Arc<Communicator>,
 
-    /// Async communicator
-    async_comm: AsyncCommunicator,
-
     /// This worker's pipeline stage
     stage: PipelineStage,
+
+    /// Number of ranks assigned to each stage (used to translate a stage id
+    /// into the local rank of that stage's first member — see
+    /// [`Self::rank_for_stage`]).
+    ranks_per_stage: usize,
 
     /// Number of microbatches
     num_microbatches: usize,
 
-    /// Forward activation buffer
-    forward_buffer: Arc<Mutex<HashMap<usize, Vec<f32>>>>,
-
-    /// Backward gradient buffer
-    backward_buffer: Arc<Mutex<HashMap<usize, Vec<f32>>>>,
-
     /// Pipeline schedule
+    // Always `PipelineSchedule::GPipe` today (see `new`) and never read back:
+    // `send_forward`/`recv_forward`/etc. don't branch on it, so both this
+    // field and `PipelineSchedule::OneFOneB` document an intended future
+    // scheduling knob rather than dead leftovers. Real 1F1B interleaving is
+    // a scheduling-behavior change, out of scope for a lint-only pass.
+    #[allow(dead_code)]
     schedule: PipelineSchedule,
 }
 
@@ -240,6 +308,10 @@ enum PipelineSchedule {
     GPipe,
 
     /// PipeDream: interleaved 1F1B (one forward, one backward)
+    // Never constructed: `PipelineParallel::new` always picks `GPipe` (see
+    // the `schedule` field's own comment). Kept named and documented as the
+    // scheduling mode a real 1F1B implementation would select.
+    #[allow(dead_code)]
     OneFOneB,
 }
 
@@ -250,8 +322,6 @@ impl PipelineParallel {
         num_stages: usize,
         num_microbatches: usize,
     ) -> Result<Self, ModelParallelError> {
-        let async_comm = AsyncCommunicator::new(communicator.clone())?;
-
         let rank = communicator.rank();
         let world_size = communicator.size();
 
@@ -275,13 +345,19 @@ impl PipelineParallel {
 
         Ok(Self {
             communicator,
-            async_comm,
             stage,
+            ranks_per_stage,
             num_microbatches,
-            forward_buffer: Arc::new(Mutex::new(HashMap::new())),
-            backward_buffer: Arc::new(Mutex::new(HashMap::new())),
             schedule: PipelineSchedule::GPipe,
         })
+    }
+
+    /// The (local) rank of `stage_id`'s first member — the single
+    /// point-to-point target this type's send/recv methods use to represent
+    /// "the next/previous stage" (consistent with how [`PipelineStage`]
+    /// itself only tracks stage-level, not rank-level, adjacency).
+    fn rank_for_stage(&self, stage_id: usize) -> usize {
+        stage_id * self.ranks_per_stage
     }
 
     /// Send forward activations to next stage
@@ -291,36 +367,42 @@ impl PipelineParallel {
         activations: &[f32],
     ) -> Result<(), ModelParallelError> {
         if let Some(next_stage) = self.stage.next_stage {
-            let next_rank = next_stage * self.communicator.size().div_ceil(self.stage.num_stages);
-
-            let msg = TensorMessage::new(
-                activations.to_vec(),
-                CompressionStrategy::None,
-                MessagePriority::High,
-            )
-            .with_tag(microbatch_id as u32);
-
-            self.async_comm.isend(msg, next_rank).await?;
+            let next_rank_local = self.rank_for_stage(next_stage);
+            let endpoint = self.communicator.require_endpoint()?;
+            let next_rank_global = self.communicator.global_rank(next_rank_local)?;
+            let tag = pipeline_tag(
+                TAG_PIPELINE_FORWARD_BASE,
+                self.stage.stage_id,
+                microbatch_id,
+            );
+            let payload = encode_tensor(activations)?;
+            endpoint
+                .send_owned(
+                    next_rank_global,
+                    self.communicator.context().0,
+                    tag,
+                    payload,
+                    super::net::SendOpts::default(),
+                )
+                .await?;
         }
 
         Ok(())
     }
 
-    /// Receive forward activations from previous stage
+    /// Receive forward activations from previous stage: waits for
+    /// specifically `microbatch_id`'s activations (see `pipeline_tag`),
+    /// not merely the next message to arrive from that stage.
     pub async fn recv_forward(&self, microbatch_id: usize) -> Result<Vec<f32>, ModelParallelError> {
         if let Some(prev_stage) = self.stage.prev_stage {
-            let prev_rank = prev_stage * self.communicator.size().div_ceil(self.stage.num_stages);
-
-            // Check buffer first
-            let mut buffer = self.forward_buffer.lock().await;
-            if let Some(data) = buffer.remove(&microbatch_id) {
-                return Ok(data);
-            }
-            drop(buffer);
-
-            // Would receive from previous stage in real implementation
-            let _ = prev_rank;
-            Ok(vec![0.0; 10]) // Placeholder
+            let prev_rank_local = self.rank_for_stage(prev_stage);
+            let endpoint = self.communicator.require_endpoint()?;
+            let prev_rank_global = self.communicator.global_rank(prev_rank_local)?;
+            let tag = pipeline_tag(TAG_PIPELINE_FORWARD_BASE, prev_stage, microbatch_id);
+            let bytes = endpoint
+                .recv_bytes(prev_rank_global, self.communicator.context().0, tag)
+                .await?;
+            decode_tensor(&bytes)
         } else {
             Err(ModelParallelError::PipelineError(
                 "No previous stage to receive from".to_string(),
@@ -335,39 +417,45 @@ impl PipelineParallel {
         gradients: &[f32],
     ) -> Result<(), ModelParallelError> {
         if let Some(prev_stage) = self.stage.prev_stage {
-            let prev_rank = prev_stage * self.communicator.size().div_ceil(self.stage.num_stages);
-
-            let msg = TensorMessage::new(
-                gradients.to_vec(),
-                CompressionStrategy::None,
-                MessagePriority::High,
-            )
-            .with_tag(microbatch_id as u32);
-
-            self.async_comm.isend(msg, prev_rank).await?;
+            let prev_rank_local = self.rank_for_stage(prev_stage);
+            let endpoint = self.communicator.require_endpoint()?;
+            let prev_rank_global = self.communicator.global_rank(prev_rank_local)?;
+            let tag = pipeline_tag(
+                TAG_PIPELINE_BACKWARD_BASE,
+                self.stage.stage_id,
+                microbatch_id,
+            );
+            let payload = encode_tensor(gradients)?;
+            endpoint
+                .send_owned(
+                    prev_rank_global,
+                    self.communicator.context().0,
+                    tag,
+                    payload,
+                    super::net::SendOpts::default(),
+                )
+                .await?;
         }
 
         Ok(())
     }
 
-    /// Receive backward gradients from next stage
+    /// Receive backward gradients from next stage: waits for specifically
+    /// `microbatch_id`'s gradients (see `pipeline_tag`), not merely the
+    /// next message to arrive from that stage.
     pub async fn recv_backward(
         &self,
         microbatch_id: usize,
     ) -> Result<Vec<f32>, ModelParallelError> {
         if let Some(next_stage) = self.stage.next_stage {
-            let next_rank = next_stage * self.communicator.size().div_ceil(self.stage.num_stages);
-
-            // Check buffer first
-            let mut buffer = self.backward_buffer.lock().await;
-            if let Some(data) = buffer.remove(&microbatch_id) {
-                return Ok(data);
-            }
-            drop(buffer);
-
-            // Would receive from next stage in real implementation
-            let _ = next_rank;
-            Ok(vec![0.0; 10]) // Placeholder
+            let next_rank_local = self.rank_for_stage(next_stage);
+            let endpoint = self.communicator.require_endpoint()?;
+            let next_rank_global = self.communicator.global_rank(next_rank_local)?;
+            let tag = pipeline_tag(TAG_PIPELINE_BACKWARD_BASE, next_stage, microbatch_id);
+            let bytes = endpoint
+                .recv_bytes(next_rank_global, self.communicator.context().0, tag)
+                .await?;
+            decode_tensor(&bytes)
         } else {
             Err(ModelParallelError::PipelineError(
                 "No next stage to receive from".to_string(),
@@ -386,13 +474,15 @@ impl PipelineParallel {
     }
 }
 
-/// Tensor parallel coordinator
+/// Tensor parallel coordinator.
+///
+/// [`Self::gather`] delegates to [`super::collective::allgather`] over the
+/// real transport — an earlier version instead always returned
+/// `local_tensor` unchanged, silently skipping the all-gather rather than
+/// actually reassembling every rank's partition into the full tensor.
 pub struct TensorParallel {
     /// Communicator
     communicator: Arc<Communicator>,
-
-    /// Async communicator
-    async_comm: AsyncCommunicator,
 
     /// Partition strategy
     strategy: PartitionStrategy,
@@ -410,13 +500,11 @@ impl TensorParallel {
         communicator: Arc<Communicator>,
         strategy: PartitionStrategy,
     ) -> Result<Self, ModelParallelError> {
-        let async_comm = AsyncCommunicator::new(communicator.clone())?;
         let tp_size = communicator.size();
         let tp_rank = communicator.rank();
 
         Ok(Self {
             communicator,
-            async_comm,
             strategy,
             tp_size,
             tp_rank,
@@ -494,11 +582,16 @@ impl TensorParallel {
         }
     }
 
-    /// All-gather partitioned tensors
+    /// All-gather this rank's partition together with every other rank's,
+    /// via [`super::collective::allgather`] (real network traffic, not a
+    /// same-rank echo). The concatenation order matches rank order — the
+    /// inverse of [`Self::partition`]'s `ColumnWise`/`RowWise`/`BatchWise`/
+    /// `SequenceWise` split only for the block-contiguous strategies
+    /// (`ColumnWise`'s column-major partitions do not literally concatenate
+    /// back into row-major original order; reassembling that shape is left
+    /// to the caller, same as before this rewrite).
     pub async fn gather(&self, local_tensor: &[f32]) -> Result<Vec<f32>, ModelParallelError> {
-        // Would perform actual all-gather in real implementation
-        // For now, just return local tensor
-        Ok(local_tensor.to_vec())
+        Ok(super::collective::allgather(local_tensor, &self.communicator).await?)
     }
 
     /// Get partition strategy
@@ -723,5 +816,208 @@ mod tests {
     fn test_partition_strategy_equality() {
         assert_eq!(PartitionStrategy::ColumnWise, PartitionStrategy::ColumnWise);
         assert_ne!(PartitionStrategy::ColumnWise, PartitionStrategy::RowWise);
+    }
+
+    // -----------------------------------------------------------------
+    // pipeline_tag
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn pipeline_tag_is_distinct_per_stage_and_microbatch() {
+        let base = TAG_PIPELINE_FORWARD_BASE;
+        // Different stage, same microbatch.
+        assert_ne!(pipeline_tag(base, 0, 5), pipeline_tag(base, 1, 5));
+        // Same stage, different microbatch.
+        assert_ne!(pipeline_tag(base, 2, 0), pipeline_tag(base, 2, 1));
+        // Forward and backward bases never collide for any stage/microbatch.
+        assert_ne!(
+            pipeline_tag(TAG_PIPELINE_FORWARD_BASE, 3, 7),
+            pipeline_tag(TAG_PIPELINE_BACKWARD_BASE, 3, 7)
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // PipelineParallel: real point-to-point forward/backward exchange
+    // over a real 2-rank LocalCluster (p=2, 2 pipeline stages).
+    // -----------------------------------------------------------------
+
+    use crate::distributed::testing::{ClusterNode, LocalCluster};
+    use std::time::Duration;
+
+    fn short_timeout_config() -> super::super::net::EndpointConfig {
+        super::super::net::EndpointConfig {
+            recv_timeout: Duration::from_secs(5),
+            ..super::super::net::EndpointConfig::default()
+        }
+    }
+
+    /// A toy full forward+backward exchange across a real 2-process,
+    /// 2-stage pipeline: rank 0 (stage 0) sends forward activations to rank
+    /// 1 (stage 1), which replies with backward gradients; both directions
+    /// are verified to have delivered the real payload sent, not a
+    /// fabricated placeholder (an earlier version of `recv_forward`/
+    /// `recv_backward` always returned a fixed 10-element zero vector for
+    /// anything not already sitting in a buffer nothing ever populated).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn pipeline_forward_and_backward_round_trip_p2() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(15),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(Arc::new(node.endpoint))?;
+                let pipeline = PipelineParallel::new(Arc::new(comm.clone()), 2, 1)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+
+                if pipeline.stage().is_first() {
+                    // Stage 0: send a real forward activation, then wait for
+                    // stage 1's real backward gradient reply.
+                    let activations = vec![1.0_f32, 2.0, 3.0, 4.0];
+                    pipeline
+                        .send_forward(0, &activations)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    let gradients = pipeline
+                        .recv_backward(0)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok(gradients)
+                } else {
+                    // Stage 1: receive the real forward activation, verify
+                    // it, then send a real backward gradient back.
+                    let received = pipeline
+                        .recv_forward(0)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    assert_eq!(received, vec![1.0, 2.0, 3.0, 4.0]);
+                    let gradients = vec![0.1_f32, 0.2, 0.3, 0.4];
+                    pipeline
+                        .send_backward(0, &gradients)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok(Vec::new())
+                }
+            },
+        )
+        .await
+        .expect("pipeline forward/backward run");
+
+        // Rank 0 (stage 0) is the one that returns the real gradients it
+        // received back from stage 1.
+        assert_eq!(results[0], vec![0.1, 0.2, 0.3, 0.4]);
+    }
+
+    /// `recv_forward` at the first stage (no previous stage) and
+    /// `recv_backward` at the last stage (no next stage) must fail cleanly
+    /// rather than fabricate a placeholder result.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn pipeline_recv_at_pipeline_ends_is_an_explicit_error() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(15),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(Arc::new(node.endpoint))?;
+                let pipeline = PipelineParallel::new(Arc::new(comm.clone()), 2, 1)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+
+                let is_err = if pipeline.stage().is_first() {
+                    pipeline.recv_forward(0).await.is_err()
+                } else {
+                    pipeline.recv_backward(0).await.is_err()
+                };
+                Ok(is_err)
+            },
+        )
+        .await
+        .expect("pipeline end-error run");
+
+        assert!(
+            results.iter().all(|&is_err| is_err),
+            "recv at a pipeline end without a corresponding neighbor stage must error"
+        );
+    }
+
+    /// A microbatch id distinct from the one sent must not be delivered:
+    /// `recv_forward(1)` should not spuriously receive a payload sent under
+    /// `send_forward(0, ...)`. Uses `try_recv`-style reasoning via a short
+    /// per-recv timeout so a wrongly-matched delivery would show up as a
+    /// wrong value rather than an indefinite hang.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn pipeline_forward_is_scoped_to_its_own_microbatch_id() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            2,
+            cfg,
+            Duration::from_secs(15),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(Arc::new(node.endpoint))?;
+                let pipeline = PipelineParallel::new(Arc::new(comm.clone()), 2, 2)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+
+                if pipeline.stage().is_first() {
+                    pipeline
+                        .send_forward(0, &[10.0, 20.0])
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    pipeline
+                        .send_forward(1, &[30.0, 40.0])
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok(Vec::new())
+                } else {
+                    // Deliberately receive microbatch 1 first: this must
+                    // pick up {30, 40}, not microbatch 0's {10, 20}, proving
+                    // the tag genuinely scopes delivery by microbatch id
+                    // rather than plain FIFO order.
+                    let mb1 = pipeline
+                        .recv_forward(1)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    let mb0 = pipeline
+                        .recv_forward(0)
+                        .await
+                        .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                    Ok([mb1, mb0].concat())
+                }
+            },
+        )
+        .await
+        .expect("microbatch scoping run");
+
+        assert_eq!(results[1], vec![30.0, 40.0, 10.0, 20.0]);
+    }
+
+    // -----------------------------------------------------------------
+    // TensorParallel::gather: real all-gather over a real LocalCluster.
+    // -----------------------------------------------------------------
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn tensor_parallel_gather_collects_every_rank_over_a_real_cluster() {
+        let cfg = short_timeout_config();
+        let results = LocalCluster::run_connected_with(
+            3,
+            cfg,
+            Duration::from_secs(15),
+            |node: ClusterNode| async move {
+                let comm = Communicator::from_endpoint(Arc::new(node.endpoint))?;
+                let tp = TensorParallel::new(Arc::new(comm.clone()), PartitionStrategy::BatchWise)
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                let local = vec![(comm.rank() as f32 + 1.0) * 10.0];
+                let gathered = tp
+                    .gather(&local)
+                    .await
+                    .map_err(|e| super::super::net::NetError::Io(e.to_string()))?;
+                Ok(gathered)
+            },
+        )
+        .await
+        .expect("tensor parallel gather run");
+
+        for got in results {
+            assert_eq!(got, vec![10.0, 20.0, 30.0]);
+        }
     }
 }

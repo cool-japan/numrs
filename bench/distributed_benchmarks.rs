@@ -19,7 +19,6 @@ use numrs2::distributed::array::*;
 use numrs2::distributed::collective::*;
 use numrs2::distributed::comm::*;
 use numrs2::distributed::process::*;
-use numrs2::prelude::*;
 use std::hint::black_box;
 
 /// Benchmark distributed array distribution strategies
@@ -116,7 +115,9 @@ fn bench_collective_reductions(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("reduce_op_sum", size), size, |b, &s| {
             let data: Vec<f64> = (0..s).map(|i| i as f64).collect();
             b.iter(|| {
-                let result = ReduceOp::Sum.apply_slice(&data);
+                let result = ReduceOp::Sum
+                    .apply_slice(&data)
+                    .expect("Sum.apply_slice on non-empty data must succeed");
                 black_box(result);
             });
         });
@@ -127,7 +128,9 @@ fn bench_collective_reductions(c: &mut Criterion) {
             |b, &s| {
                 let data: Vec<f64> = (0..s).map(|_| 1.001).collect();
                 b.iter(|| {
-                    let result = ReduceOp::Product.apply_slice(&data);
+                    let result = ReduceOp::Product
+                        .apply_slice(&data)
+                        .expect("Product.apply_slice on non-empty data must succeed");
                     black_box(result);
                 });
             },
@@ -136,7 +139,9 @@ fn bench_collective_reductions(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("reduce_op_max", size), size, |b, &s| {
             let data: Vec<f64> = (0..s).map(|i| i as f64).collect();
             b.iter(|| {
-                let result = ReduceOp::Max.apply_slice(&data);
+                let result = ReduceOp::Max
+                    .apply_slice(&data)
+                    .expect("Max.apply_slice on non-empty data must succeed");
                 black_box(result);
             });
         });
@@ -144,7 +149,9 @@ fn bench_collective_reductions(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("reduce_op_min", size), size, |b, &s| {
             let data: Vec<f64> = (0..s).map(|i| i as f64).collect();
             b.iter(|| {
-                let result = ReduceOp::Min.apply_slice(&data);
+                let result = ReduceOp::Min
+                    .apply_slice(&data)
+                    .expect("Min.apply_slice on non-empty data must succeed");
                 black_box(result);
             });
         });

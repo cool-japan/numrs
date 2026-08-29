@@ -365,6 +365,9 @@ impl ShapeEngine {
             1 => self.rotate_90_once(view, axis1, axis2),
             2 => self.rotate_180(view, axis1, axis2),
             3 => self.rotate_270(view, axis1, axis2),
+            // INVARIANT: unreachable. `k_norm = k.rem_euclid(4)` for an
+            // `i32` `k` is always in `0..4`, so it can only ever be 0, 1, 2,
+            // or 3 -- all of which are matched above.
             _ => unreachable!(),
         }
     }

@@ -140,6 +140,10 @@ pub fn c_concatenate<T: Clone>(arrays: &[&Array<T>]) -> Result<Array<T>> {
 /// let y = Array::from_vec(vec![20, 30]);
 /// let grid_indices = ix_(&[&x, &y]).expect("operation should succeed");
 /// ```
+///
+/// This is the canonical `ix_` implementation (it rejects non-1-D inputs,
+/// matching `numpy.ix_`); [`crate::indexing::ix_`] (a one-line
+/// delegate) forwards here.
 pub fn ix_<T: Clone>(sequences: &[&Array<T>]) -> Result<Vec<Array<T>>> {
     if sequences.is_empty() {
         return Ok(vec![]);
@@ -203,15 +207,17 @@ mod tests {
         let b = Array::from_vec(vec![4, 5, 6]);
         let result = c_concatenate(&[&a, &b]).expect("operation should succeed");
         assert_eq!(result.shape(), vec![3, 2]);
-        // Column-major order: [1, 2, 3, 4, 5, 6] where a and b are stacked as columns
-        assert_eq!(result.to_vec(), vec![1, 2, 3, 4, 5, 6]);
+        // Row-major (C-order) flattening of the (3,2) result: each row is [a_i, b_i],
+        // matching NumPy: np.c_[[1,2,3],[4,5,6]].flatten() == [1,4,2,5,3,6]
+        assert_eq!(result.to_vec(), vec![1, 4, 2, 5, 3, 6]);
 
         // Test 2D arrays
         let a = Array::from_vec(vec![1, 2, 3, 4]).reshape(&[2, 2]);
         let b = Array::from_vec(vec![5, 6, 7, 8]).reshape(&[2, 2]);
         let result = c_concatenate(&[&a, &b]).expect("operation should succeed");
         assert_eq!(result.shape(), vec![2, 4]);
-        assert_eq!(result.to_vec(), vec![1, 3, 2, 4, 5, 7, 6, 8]);
+        // NumPy: np.c_[[[1,2],[3,4]], [[5,6],[7,8]]].flatten() == [1,2,5,6,3,4,7,8]
+        assert_eq!(result.to_vec(), vec![1, 2, 5, 6, 3, 4, 7, 8]);
 
         // Test error on empty input
         let result = c_concatenate::<i32>(&[]);

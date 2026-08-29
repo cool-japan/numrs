@@ -36,7 +36,7 @@
 #![allow(clippy::type_complexity)]
 
 use numrs2::optimize::nsga3::{nsga3, NSGA3Config};
-use numrs2::optimize::test_problems::{TestProblem, DTLZ1, DTLZ2, DTLZ3, DTLZ7};
+use numrs2::optimize::test_problems::{TestProblem, DTLZ2, DTLZ3};
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -601,18 +601,19 @@ fn example4_problem_difficulty() -> Result<(), Box<dyn std::error::Error>> {
     println!("═══════════════════════════════════════════════════════════\n");
 
     println!(
-        "{:<10} {:<30} {:<10} {:<12}",
-        "Problem", "Description", "PF Size", "Time (sec)"
+        "{:<10} {:<30} {:<10} {:<12} {:<10}",
+        "Problem", "Description", "PF Size", "Time (sec)", "Avg Rank"
     );
-    println!("{}", "─".repeat(70));
+    println!("{}", "─".repeat(82));
 
     for result in &results {
         println!(
-            "{:<10} {:<30} {:<10} {:<12.2}",
+            "{:<10} {:<30} {:<10} {:<12.2} {:<10.2}",
             result.name,
             result.description,
             result.pareto_size,
-            result.time.as_secs_f64()
+            result.time.as_secs_f64(),
+            result.avg_rank
         );
     }
 

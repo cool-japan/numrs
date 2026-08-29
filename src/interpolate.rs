@@ -38,7 +38,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, One, Zero};
+use num_traits::Float;
 use std::fmt::Debug;
 
 // ============================================================================

@@ -340,8 +340,8 @@ fn ml_inference_demo() -> numrs2::error::Result<()> {
 
     let mut queue: BatchQueue<f32> = BatchQueue::new(context.clone(), config);
 
-    // Simulate inference requests coming in
-    let batch_size = 4;
+    // Simulate inference requests coming in (batching itself is driven by
+    // `config.max_batch_size` above via the queue's auto-flush)
     let feature_dim = 128;
 
     // Create random input data (simulating inference requests)

@@ -39,7 +39,7 @@ pub trait Expr<T: Clone> {
             data.push(self.eval_at(i));
         }
 
-        Array::from_vec(data).reshape(self.shape())
+        Array::from_vec_shape(data, self.shape()).unwrap_or_else(|e| panic!("{e}"))
     }
 
     /// Check if this expression can be fused with another
@@ -263,11 +263,11 @@ where
 /// Extension trait to add lazy evaluation methods to Array
 pub trait LazyEval<T: Clone> {
     /// Convert array to lazy expression
-    fn lazy(&self) -> ArrayExpr<T>;
+    fn lazy(&self) -> ArrayExpr<'_, T>;
 }
 
 impl<T: Clone> LazyEval<T> for Array<T> {
-    fn lazy(&self) -> ArrayExpr<T> {
+    fn lazy(&self) -> ArrayExpr<'_, T> {
         ArrayExpr::new(self)
     }
 }

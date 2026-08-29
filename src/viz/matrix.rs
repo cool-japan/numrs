@@ -3,14 +3,13 @@
 //! This module provides visualization for matrices including heatmaps,
 //! spy plots for sparse matrices, and eigenvalue visualizations.
 
-use super::*;
+use super::{ColorMap, PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
 use scirs2_core::ndarray::{Array1, Array2};
 use std::path::Path;
 
 // Import types to avoid confusion with plotters types
-use super::ColorMap as VizColorMap;
+use ColorMap as VizColorMap;
 
 /// Matrix plot structure
 pub struct MatrixPlot {
@@ -39,6 +38,8 @@ impl MatrixPlot {
         if rows == 0 || cols == 0 {
             return Err(VizError::InvalidData("Empty matrix".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -118,6 +119,8 @@ impl MatrixPlot {
             return Err(VizError::InvalidData("Empty matrix".to_string()));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -165,6 +168,8 @@ impl MatrixPlot {
         if eigenvalues.is_empty() {
             return Err(VizError::InvalidData("No eigenvalues".to_string()));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -224,7 +229,7 @@ impl MatrixPlot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scirs2_core::ndarray::{Array1, Array2};
+    use scirs2_core::ndarray::Array2;
 
     #[test]
     fn test_matrix_plot_creation() {

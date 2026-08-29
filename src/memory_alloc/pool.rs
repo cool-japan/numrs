@@ -42,7 +42,26 @@ struct MemoryBlock {
     layout: Layout,
 }
 
-// Mark MemoryBlock as Send and Sync
+// SAFETY: `MemoryBlock` holds `ptr: NonNull<u8>` and `layout: Layout`; only
+// `NonNull<u8>` prevents the auto-derived Send/Sync (raw pointers are
+// `!Send`/`!Sync` by default), and `Layout` is already `Send + Sync`.
+//
+// Send: `ptr` addresses a raw, uninterpreted byte allocation obtained from
+// the global allocator (`std::alloc::alloc`), not a generic `T` that could
+// itself carry thread-affine state. `MemoryBlock` is not `Clone`/`Copy` and
+// its `Drop` impl (below) deallocates `ptr` exactly once, so ownership -- and
+// therefore the right to dereference the memory -- transfers atomically with
+// the `MemoryBlock` value itself; there is no path that aliases the pointer.
+// This is required for `PoolAllocator` to be usable across threads at all:
+// its `state: Arc<Mutex<UnsafeCell<PoolState>>>` embeds `Vec<MemoryBlock>`,
+// and `Mutex<U>: Sync` requires `U: Send`.
+//
+// Sync: every read or mutation of a `MemoryBlock` (including the raw
+// `ptr.as_ptr()` dereferences in `MemoryBlock::new`/`Drop::drop`) happens
+// only while `PoolAllocator::state`'s `Mutex` guard is held (see
+// `allocate`/`deallocate`/`reset` below, which all lock before touching the
+// `UnsafeCell`), so concurrent access is externally serialized rather than
+// relying on any interior synchronization of `MemoryBlock` itself.
 unsafe impl Send for MemoryBlock {}
 unsafe impl Sync for MemoryBlock {}
 

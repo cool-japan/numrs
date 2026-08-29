@@ -1,26 +1,24 @@
 //! Tests for load balancing
 
-use numrs2::parallel::{
-    BalancingStrategy, LoadBalancer, LoadBalancingAdvisor, WorkloadMetrics,
-};
+use numrs2::parallel::{BalancingStrategy, LoadBalancer, LoadBalancingAdvisor, WorkloadMetrics};
 use std::time::Duration;
 
 #[test]
 fn test_round_robin_balancing() {
-    let balancer =
-        LoadBalancer::new(BalancingStrategy::RoundRobin, 3).expect("Failed to create load balancer");
+    let balancer = LoadBalancer::new(BalancingStrategy::RoundRobin, 3)
+        .expect("Failed to create load balancer");
 
     let selections: Vec<usize> = (0..6)
         .map(|_| balancer.select_worker().expect("Failed to select worker"))
         .collect();
 
-    assert_eq!(selections, vec![0, 1, 2, 0, 1, 2]);
+    assert_eq!(selections, [0, 1, 2, 0, 1, 2]);
 }
 
 #[test]
 fn test_least_loaded_balancing() {
-    let balancer =
-        LoadBalancer::new(BalancingStrategy::LeastLoaded, 3).expect("Failed to create load balancer");
+    let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 3)
+        .expect("Failed to create load balancer");
 
     // Update worker 1 to be heavily loaded
     balancer
@@ -66,8 +64,8 @@ fn test_adaptive_balancing() {
 
 #[test]
 fn test_strategy_switching() {
-    let balancer =
-        LoadBalancer::new(BalancingStrategy::RoundRobin, 2).expect("Failed to create load balancer");
+    let balancer = LoadBalancer::new(BalancingStrategy::RoundRobin, 2)
+        .expect("Failed to create load balancer");
 
     assert_eq!(balancer.current_strategy(), BalancingStrategy::RoundRobin);
 
@@ -77,8 +75,8 @@ fn test_strategy_switching() {
 
 #[test]
 fn test_workload_metrics() {
-    let balancer =
-        LoadBalancer::new(BalancingStrategy::LeastLoaded, 3).expect("Failed to create load balancer");
+    let balancer = LoadBalancer::new(BalancingStrategy::LeastLoaded, 3)
+        .expect("Failed to create load balancer");
 
     // Update workers
     balancer
@@ -93,8 +91,8 @@ fn test_workload_metrics() {
 
     let metrics = balancer.current_metrics();
     assert_eq!(metrics.active_tasks, 15);
-    assert_eq!(metrics.queue_lengths, vec![5, 3, 7]);
-    assert!(metrics.load_imbalance >= 0.0 && metrics.load_imbalance <= 1.0);
+    assert_eq!(metrics.queue_lengths, [5, 3, 7]);
+    assert!((0.0..=1.0).contains(&metrics.load_imbalance));
 }
 
 #[test]
@@ -147,7 +145,7 @@ fn test_advisor_trend_analysis() {
 
     let analysis = advisor.analyze_trends();
     assert!(analysis.throughput_trend >= 0.0);
-    assert!(analysis.stability_score >= 0.0 && analysis.stability_score <= 1.0);
+    assert!((0.0..=1.0).contains(&analysis.stability_score));
 }
 
 #[test]

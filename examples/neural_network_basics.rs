@@ -18,8 +18,7 @@ use numrs2::nn::normalization::*;
 use numrs2::nn::pooling::*;
 use numrs2::nn::simd_ops::*;
 use numrs2::nn::ReductionMode;
-use scirs2_core::ndarray::{Array1, Array2, Axis};
-use scirs2_core::random::*;
+use scirs2_core::ndarray::{Array1, Array2};
 
 fn main() {
     println!("{}", "=".repeat(70));

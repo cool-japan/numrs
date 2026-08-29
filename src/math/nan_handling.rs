@@ -42,6 +42,7 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
+use crate::kernels::borrow::operand;
 use num_traits::{Float, NumCast, One, Zero};
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -97,6 +98,12 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: `result` is write-only across this whole loop
+        // (exactly one set per `res_idx`, dynamic-rank index so `get_mut`
+        // replaces `Array::set`'s bounds-checked, per-call `Arc::make_mut`
+        // path), so one unshare covers all `result_size` writes.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut sum = T::zero();
             let mut res_indices = vec![0; new_shape.len()];
@@ -128,13 +135,20 @@ where
                 }
             }
 
-            result.set(&res_indices, sum)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = sum;
         }
 
         Ok(result)
     } else {
-        let array_vec = array.to_vec();
-        let sum = array_vec
+        // Zero-copy via `kernels::borrow::operand` in the common contiguous case, instead
+        // of `Array::to_vec`'s unconditional copy.
+        let op = operand(array);
+        let sum = op
             .iter()
             .filter(|x| !x.is_nan())
             .fold(T::zero(), |acc, x| acc + *x);
@@ -195,6 +209,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let counts_arr = counts.array_mut();
+
         for res_idx in 0..result_size {
             let mut count = T::zero();
             let mut res_indices = vec![0; new_shape.len()];
@@ -226,7 +243,12 @@ where
                 }
             }
 
-            counts.set(&res_indices, count)?;
+            *counts_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = count;
         }
 
         // Divide sums by counts
@@ -244,8 +266,10 @@ where
         let mut sum = T::zero();
         let mut count = 0;
 
-        let array_vec = array.to_vec();
-        for value in array_vec.iter() {
+        // Single pass over a zero-copy `operand()` slice (instead of `Array::to_vec`'s
+        // unconditional copy) accumulating both the sum and the non-NaN count together.
+        let op = operand(array);
+        for value in op.iter() {
             if !value.is_nan() {
                 sum = sum + *value;
                 count += 1;
@@ -348,6 +372,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum`/`nanmean` above.
+        let counts_arr = counts.array_mut();
+
         for res_idx in 0..result_size {
             let mut count = T::zero();
             let mut res_indices = vec![0; new_shape.len()];
@@ -377,7 +404,12 @@ where
                 }
             }
 
-            counts.set(&res_indices, count)?;
+            *counts_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = count;
         }
 
         // Sum squared differences along axis
@@ -398,8 +430,11 @@ where
         let mut sum_sq = T::zero();
         let mut count = 0;
 
-        let array_vec = array.to_vec();
-        for value in array_vec.iter() {
+        // Single pass over a zero-copy `operand()` slice (instead of `Array::to_vec`'s
+        // unconditional copy) accumulating both the sum of squared deviations and the
+        // non-NaN count together.
+        let op = operand(array);
+        for value in op.iter() {
             if !value.is_nan() {
                 let diff = *value - mean_val;
                 sum_sq = sum_sq + diff * diff;
@@ -463,6 +498,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut min_val = T::nan();
             let mut res_indices = vec![0; new_shape.len()];
@@ -494,13 +532,18 @@ where
                 }
             }
 
-            result.set(&res_indices, min_val)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = min_val;
         }
 
         Ok(result)
     } else {
-        let array_vec = array.to_vec();
-        let min = array_vec
+        let op = operand(array);
+        let min = op
             .iter()
             .filter(|x| !x.is_nan())
             .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
@@ -556,6 +599,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut max_val = T::nan();
             let mut res_indices = vec![0; new_shape.len()];
@@ -587,13 +633,18 @@ where
                 }
             }
 
-            result.set(&res_indices, max_val)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = max_val;
         }
 
         Ok(result)
     } else {
-        let array_vec = array.to_vec();
-        let max = array_vec
+        let op = operand(array);
+        let max = op
             .iter()
             .filter(|x| !x.is_nan())
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
@@ -658,6 +709,11 @@ where
         let axis_stride = strides[ax];
         let group_size = axis_stride * axis_len;
 
+        // Bulk-acquire once: `result` is write-only here (`array`, the only
+        // read source, is a distinct object), so one unshare covers every
+        // group/offset/axis-position write below.
+        let result_arr = result.array_mut();
+
         // Process each group independently
         for group_start in (0..total_elems).step_by(group_size) {
             for offset in 0..axis_stride {
@@ -679,26 +735,32 @@ where
                     if !value.is_nan() {
                         cumsum = cumsum + value;
                     }
-                    result.set(&indices, cumsum)?;
+                    *result_arr.get_mut(indices.as_slice()).ok_or_else(|| {
+                        NumRs2Error::IndexOutOfBounds(format!(
+                            "Failed to set element at indices {:?}",
+                            indices
+                        ))
+                    })? = cumsum;
                 }
             }
         }
 
         Ok(result)
     } else {
-        // Flatten array and compute cumulative sum
-        let flat = array.to_vec();
-        let mut result = Vec::with_capacity(flat.len());
+        // Flatten array and compute cumulative sum. Zero-copy via `kernels::borrow::operand`
+        // in the common contiguous case, instead of `Array::to_vec`'s unconditional copy.
+        let op = operand(array);
+        let mut result = Vec::with_capacity(op.len());
         let mut cumsum = T::zero();
 
-        for value in flat {
+        for &value in op.iter() {
             if !value.is_nan() {
                 cumsum = cumsum + value;
             }
             result.push(cumsum);
         }
 
-        Ok(Array::from_vec(result).reshape(&array.shape()))
+        Ok(Array::from_vec_shape(result, &array.shape())?)
     }
 }
 
@@ -748,6 +810,9 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: same rationale as `nansum` above.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut prod = T::one();
             let mut res_indices = vec![0; new_shape.len()];
@@ -779,13 +844,18 @@ where
                 }
             }
 
-            result.set(&res_indices, prod)?;
+            *result_arr.get_mut(res_indices.as_slice()).ok_or_else(|| {
+                NumRs2Error::IndexOutOfBounds(format!(
+                    "Failed to set element at indices {:?}",
+                    res_indices
+                ))
+            })? = prod;
         }
 
         Ok(result)
     } else {
-        let array_vec = array.to_vec();
-        let prod = array_vec
+        let op = operand(array);
+        let prod = op
             .iter()
             .filter(|x| !x.is_nan())
             .fold(T::one(), |acc, &x| acc * x);
@@ -902,6 +972,12 @@ where
 
         let result_size: usize = new_shape.iter().product();
 
+        // Bulk-acquire once: `result` is write-only here (every write below
+        // is one `T::nan()` or one freshly computed `quantile`, never a
+        // value read back from `result` itself), so one unshare covers every
+        // `(res_idx, q_idx)` write in both branches below.
+        let result_arr = result.array_mut();
+
         for res_idx in 0..result_size {
             let mut res_indices = vec![0; new_shape.len()];
             let mut temp = res_idx;
@@ -939,7 +1015,14 @@ where
                 for (q_idx, _) in q_vec.iter().enumerate() {
                     let mut result_indices = res_indices.clone();
                     result_indices.push(q_idx);
-                    result.set(&result_indices, T::nan())?;
+                    *result_arr
+                        .get_mut(result_indices.as_slice())
+                        .ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "Failed to set element at indices {:?}",
+                                result_indices
+                            ))
+                        })? = T::nan();
                 }
             } else {
                 values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
@@ -1000,16 +1083,26 @@ where
 
                     let mut result_indices = res_indices.clone();
                     result_indices.push(q_idx);
-                    result.set(&result_indices, quantile)?;
+                    *result_arr
+                        .get_mut(result_indices.as_slice())
+                        .ok_or_else(|| {
+                            NumRs2Error::IndexOutOfBounds(format!(
+                                "Failed to set element at indices {:?}",
+                                result_indices
+                            ))
+                        })? = quantile;
                 }
             }
         }
 
         Ok(result)
     } else {
-        // Flatten array and compute quantiles
-        let array_vec = array.to_vec();
-        let mut values: Vec<T> = array_vec.into_iter().filter(|x| !x.is_nan()).collect();
+        // Flatten array and compute quantiles. `values` still needs its own owned Vec
+        // regardless (the computation below sorts in place), but sourcing the filter from a
+        // zero-copy `operand()` slice instead of `Array::to_vec()` avoids an extra
+        // full-array-sized copy before filtering out the NaNs.
+        let op = operand(array);
+        let mut values: Vec<T> = op.iter().filter(|x| !x.is_nan()).cloned().collect();
 
         if values.is_empty() {
             // All values were NaN

@@ -255,7 +255,7 @@ impl StructuredArray {
             }
 
             // Create a NumRS Array
-            let arr = Array::from_vec(field_data).reshape(&self.shape);
+            let arr = Array::from_vec_shape(field_data, &self.shape)?;
             Ok(arr)
         } else {
             Err(NumRs2Error::ValueError(
@@ -339,6 +339,13 @@ impl StructuredArray {
     }
 
     /// Create a structured array from a set of NumRS Arrays with the same shape
+    ///
+    /// Every array must share `shape`, and the element type `T` must be one
+    /// of the fixed-size primitive types recognized by `dtype_for_type`
+    /// (bool, the sized integers, `f32`/`f64`, or `Complex<f32>`/`Complex<f64>`).
+    /// Each resulting field is given `T`'s inferred [`DType`], and every
+    /// value is copied from its source array into the new structured array
+    /// (no data is dropped or replaced with defaults).
     pub fn from_arrays<T: Clone + Default + 'static>(
         arrays: &HashMap<String, Array<T>>,
         shape: &[usize],
@@ -355,25 +362,24 @@ impl StructuredArray {
             }
         }
 
+        // Infer the field dtype from T itself, instead of assuming f64
+        let field_dtype = dtype_for_type::<T>()?;
+
         // Create fields for the dtype
         let fields = arrays
             .keys()
-            .map(|name| {
-                Field::new(name.clone(), DType::Float64) // Assuming T is f64 for simplicity
-            })
+            .map(|name| Field::new(name.clone(), field_dtype.clone()))
             .collect();
 
         let dtype = DType::Struct(fields);
         let mut result = Self::new(shape, dtype);
 
-        // Fill in the data
+        // Copy each input array's values into the corresponding field slots
         let size = shape.iter().product::<usize>();
         for i in 0..size {
             let index = flat_to_index(i, shape);
-            for (name, _arr) in arrays.iter() {
-                // This is a simplification - we're assuming T can be converted to f64
-                // Placeholder - in real implementation we would get the value
-                let value = T::clone(&T::default());
+            for (name, arr) in arrays.iter() {
+                let value = arr.get_flat(i)?;
                 result.set_field(&index, name, value)?;
             }
         }
@@ -383,25 +389,48 @@ impl StructuredArray {
 }
 
 /// A record array is a structured array where fields can be accessed by name
-#[derive(Debug, Clone)]
-pub struct RecordArray {
+///
+/// Generic over the element type `T` shared by every field. [`RecordArray`]
+/// is a type alias for `RecordArrayT<f64>`, preserving the historical
+/// f64-only name/API for existing call sites.
+#[derive(Clone)]
+pub struct RecordArrayT<T> {
     /// The underlying structured array
     array: StructuredArray,
-    /// Cache of field arrays
-    field_cache: HashMap<String, Array<f64>>, // Simplified to only support f64
+    /// Cache of field arrays, keyed by field name
+    field_cache: HashMap<String, Array<T>>,
 }
 
-impl RecordArray {
+// `#[derive(Debug)]` would add a bare `T: Debug` bound, but `Array<T>`'s own
+// `Debug` impl additionally requires `T: Clone` -- so this is written by
+// hand with the bound the derive macro can't infer.
+impl<T: fmt::Debug + Clone> fmt::Debug for RecordArrayT<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RecordArrayT")
+            .field("array", &self.array)
+            .field("field_cache", &self.field_cache)
+            .finish()
+    }
+}
+
+/// A record array whose fields all hold `f64` values.
+///
+/// This is the historical, source-compatible name for `RecordArrayT<f64>`.
+/// See [`RecordArrayT`] for a version generic over the element type.
+pub type RecordArray = RecordArrayT<f64>;
+
+impl<T: Clone + Default + 'static> RecordArrayT<T> {
     /// Create a new record array with the given shape and fields
     pub fn new(shape: &[usize], fields: Vec<Field>) -> Self {
         let dtype = DType::Struct(fields.clone());
         let array = StructuredArray::new(shape, dtype);
 
-        // Initialize field cache with empty arrays for each field
+        // Initialize field cache with default-filled arrays for each field
+        let size = shape.iter().product::<usize>();
         let mut field_cache = HashMap::new();
         for field in &fields {
-            // Create an array filled with zeros for each field
-            let field_array = Array::zeros(shape);
+            let field_array = Array::from_vec_shape(vec![T::default(); size], shape)
+                .unwrap_or_else(|e| panic!("{e}"));
             field_cache.insert(field.name.clone(), field_array);
         }
 
@@ -409,7 +438,7 @@ impl RecordArray {
     }
 
     /// Create a record array from a set of NumRS Arrays with the same shape
-    pub fn from_arrays(arrays: &HashMap<String, Array<f64>>, shape: &[usize]) -> Result<Self> {
+    pub fn from_arrays(arrays: &HashMap<String, Array<T>>, shape: &[usize]) -> Result<Self> {
         let array = StructuredArray::from_arrays(arrays, shape)?;
         let mut field_cache = HashMap::new();
 
@@ -442,7 +471,7 @@ impl RecordArray {
     }
 
     /// Get a field by name
-    pub fn field(&self, field_name: &str) -> Result<&Array<f64>> {
+    pub fn field(&self, field_name: &str) -> Result<&Array<T>> {
         if self.field_cache.contains_key(field_name) {
             Ok(&self.field_cache[field_name])
         } else {
@@ -454,17 +483,17 @@ impl RecordArray {
     }
 
     /// Get a mutable reference to a field by name
-    pub fn field_mut(&mut self, field_name: &str) -> Result<&mut Array<f64>> {
+    pub fn field_mut(&mut self, field_name: &str) -> Result<&mut Array<T>> {
         self.field_cache
             .get_mut(field_name)
             .ok_or_else(|| NumRs2Error::IndexError(format!("Field '{}' not found", field_name)))
     }
 
     /// Set a field value at the given index
-    pub fn set_field(&mut self, index: &[usize], field_name: &str, value: f64) -> Result<()> {
+    pub fn set_field(&mut self, index: &[usize], field_name: &str, value: T) -> Result<()> {
         // Update the cache if it exists
         if let Some(arr) = self.field_cache.get_mut(field_name) {
-            arr.set(index, value)?;
+            arr.set(index, value.clone())?;
         }
 
         // Update the underlying structured array
@@ -472,7 +501,12 @@ impl RecordArray {
     }
 
     /// Add a new field to the record array
-    pub fn add_field(&mut self, field_name: &str, data: Array<f64>) -> Result<()> {
+    ///
+    /// Works for arrays of any rank: field values are copied via
+    /// [`Array::get_flat`], a rank-generic O(1)-per-element accessor, rather
+    /// than a fixed-arity `[usize; N]` index (which historically topped out
+    /// at 3-D).
+    pub fn add_field(&mut self, field_name: &str, data: Array<T>) -> Result<()> {
         // Check if the field already exists
         if self.field_cache.contains_key(field_name) {
             return Err(NumRs2Error::ValueError(format!(
@@ -490,62 +524,33 @@ impl RecordArray {
             )));
         }
 
+        // Infer the new field's dtype from T *before* mutating any state, so
+        // an unsupported T leaves the record array untouched instead of
+        // caching a field that `self.array`'s dtype doesn't know about.
+        let field_dtype = dtype_for_type::<T>()?;
+
         // Add the field to the cache
-        self.field_cache
-            .insert(field_name.to_string(), data.clone());
+        self.field_cache.insert(field_name.to_string(), data);
 
         // Create new fields list with the added field
         let mut new_fields = Vec::new();
         if let DType::Struct(ref fields) = &self.array.dtype {
             new_fields.extend(fields.clone());
         }
-        new_fields.push(Field::new(field_name, DType::Float64));
+        new_fields.push(Field::new(field_name, field_dtype));
 
-        // Create a new structured array with the updated fields
+        // Create a new structured array with the updated fields and copy
+        // every cached field (including the one just added) into it
         let new_dtype = DType::Struct(new_fields);
         let mut new_array = StructuredArray::new(self.array.shape(), new_dtype);
 
-        // Copy existing data to the new array
-        for existing_field_name in self.field_cache.keys() {
-            if existing_field_name != field_name {
-                let size = self.array.size();
-                for i in 0..size {
-                    let index = flat_to_index(i, self.array.shape());
-                    // Get value from cache instead of structured array to avoid issues
-                    if let Some(field_array) = self.field_cache.get(existing_field_name) {
-                        // Use dynamic indexing for multi-dimensional arrays
-                        let value = match index.len() {
-                            1 => field_array.array()[[index[0]]],
-                            2 => field_array.array()[[index[0], index[1]]],
-                            3 => field_array.array()[[index[0], index[1], index[2]]],
-                            _ => {
-                                return Err(NumRs2Error::NotImplemented(
-                                    "More than 3 dimensions not supported in add_field".to_string(),
-                                ))
-                            }
-                        };
-                        new_array.set_field(&index, existing_field_name, value)?;
-                    }
-                }
-            }
-        }
-
-        // Add the new field data
         let size = self.array.size();
-        for i in 0..size {
-            let index = flat_to_index(i, self.array.shape());
-            // Use dynamic indexing for multi-dimensional arrays
-            let value = match index.len() {
-                1 => data.array()[[index[0]]],
-                2 => data.array()[[index[0], index[1]]],
-                3 => data.array()[[index[0], index[1], index[2]]],
-                _ => {
-                    return Err(NumRs2Error::NotImplemented(
-                        "More than 3 dimensions not supported in add_field".to_string(),
-                    ))
-                }
-            };
-            new_array.set_field(&index, field_name, value)?;
+        for (existing_field_name, field_array) in self.field_cache.iter() {
+            for i in 0..size {
+                let index = flat_to_index(i, self.array.shape());
+                let value = field_array.get_flat(i)?;
+                new_array.set_field(&index, existing_field_name, value)?;
+            }
         }
 
         // Replace the array
@@ -555,19 +560,39 @@ impl RecordArray {
     }
 
     /// Remove a field from the record array
-    pub fn remove_field(&mut self, field_name: &str) -> Result<Array<f64>> {
+    ///
+    /// Rebuilds the underlying byte-buffer layout (rank-generic, any ndim)
+    /// from the remaining cached fields so the structured array's `dtype`
+    /// and its data buffer stay consistent after removal.
+    pub fn remove_field(&mut self, field_name: &str) -> Result<Array<T>> {
         // Remove the field from the cache
-        let arr = self
+        let removed = self
             .field_cache
             .remove(field_name)
             .ok_or_else(|| NumRs2Error::IndexError(format!("Field '{}' not found", field_name)))?;
 
-        // Update the dtype of the structured array
-        if let DType::Struct(ref mut fields) = &mut self.array.dtype {
-            fields.retain(|f| f.name != field_name);
+        // Build the reduced field list, preserving declaration order
+        let mut new_fields = Vec::new();
+        if let DType::Struct(ref fields) = &self.array.dtype {
+            new_fields.extend(fields.iter().filter(|f| f.name != field_name).cloned());
         }
 
-        Ok(arr)
+        // Rebuild the underlying structured array's data buffer to match
+        let new_dtype = DType::Struct(new_fields);
+        let mut new_array = StructuredArray::new(self.array.shape(), new_dtype);
+
+        let size = self.array.size();
+        for (name, field_array) in self.field_cache.iter() {
+            for i in 0..size {
+                let index = flat_to_index(i, self.array.shape());
+                let value = field_array.get_flat(i)?;
+                new_array.set_field(&index, name, value)?;
+            }
+        }
+
+        self.array = new_array;
+
+        Ok(removed)
     }
 
     /// List all field names
@@ -586,7 +611,7 @@ impl fmt::Display for StructuredArray {
     }
 }
 
-impl fmt::Display for RecordArray {
+impl<T: Clone + Default + 'static> fmt::Display for RecordArrayT<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -964,6 +989,54 @@ fn value_to_bytes<T: Clone + 'static>(value: &T, dtype: &DType) -> Result<Vec<u8
         DType::Struct(_) => Err(NumRs2Error::ValueError(
             "Cannot convert single value to struct".to_string(),
         )),
+    }
+}
+
+/// Infers the fixed-size [`DType`] corresponding to a concrete Rust type `T`.
+///
+/// This recognizes exactly the set of types [`bytes_to_value`] and
+/// [`value_to_bytes`] know how to convert: `bool`, the signed/unsigned
+/// integers, `f32`/`f64`, and `Complex<f32>`/`Complex<f64>`. `String` and
+/// `Struct` dtypes cannot be inferred generically (a `String` field also
+/// needs a maximum byte length, and structs need their own field list), so
+/// callers that need those must build a [`Field`] list by hand instead of
+/// relying on inference.
+fn dtype_for_type<T: 'static>() -> Result<DType> {
+    use std::any::TypeId;
+
+    let type_id = TypeId::of::<T>();
+    if type_id == TypeId::of::<bool>() {
+        Ok(DType::Bool)
+    } else if type_id == TypeId::of::<i8>() {
+        Ok(DType::Int8)
+    } else if type_id == TypeId::of::<i16>() {
+        Ok(DType::Int16)
+    } else if type_id == TypeId::of::<i32>() {
+        Ok(DType::Int32)
+    } else if type_id == TypeId::of::<i64>() {
+        Ok(DType::Int64)
+    } else if type_id == TypeId::of::<u8>() {
+        Ok(DType::UInt8)
+    } else if type_id == TypeId::of::<u16>() {
+        Ok(DType::UInt16)
+    } else if type_id == TypeId::of::<u32>() {
+        Ok(DType::UInt32)
+    } else if type_id == TypeId::of::<u64>() {
+        Ok(DType::UInt64)
+    } else if type_id == TypeId::of::<f32>() {
+        Ok(DType::Float32)
+    } else if type_id == TypeId::of::<f64>() {
+        Ok(DType::Float64)
+    } else if type_id == TypeId::of::<Complex<f32>>() {
+        Ok(DType::Complex32)
+    } else if type_id == TypeId::of::<Complex<f64>>() {
+        Ok(DType::Complex64)
+    } else {
+        Err(NumRs2Error::TypeCastError(format!(
+            "cannot infer a structured-array field DType for type `{}`; \
+             construct `Field`s explicitly for non-primitive element types",
+            std::any::type_name::<T>()
+        )))
     }
 }
 

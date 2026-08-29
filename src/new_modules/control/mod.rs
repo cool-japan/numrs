@@ -92,8 +92,7 @@
 //! # }
 //! ```
 
-use scirs2_core::ndarray::{Array1, Array2};
-use scirs2_core::num_complex::Complex64;
+use scirs2_core::ndarray::Array1;
 use std::fmt;
 
 // Submodules
@@ -104,7 +103,9 @@ pub mod transfer_function;
 
 // Re-exports
 pub use pid::{PIDController, TuningMethod};
-pub use stability::{BodePlotData, NyquistPlotData, RouthHurwitz, StabilityMargins};
+pub use stability::{
+    solve_lyapunov, BodePlotData, NyquistPlotData, RouthHurwitz, StabilityMargins,
+};
 pub use state_space::StateSpace;
 pub use transfer_function::TransferFunction;
 

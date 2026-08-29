@@ -462,6 +462,13 @@ fn extend_signal(signal: &[f64], filter_len: usize, mode: ExtensionMode) -> Vec<
 }
 
 /// Downsample signal by factor of 2 (keep even indices)
+///
+/// `dwt_1d`/`idwt_1d` below don't call this (or `upsample_2`/`convolve`
+/// beneath it): they fuse convolution with decimation/insertion into a
+/// single strided loop for efficiency rather than materializing the full
+/// convolution before discarding half of it. These three stay as the
+/// simpler, separately-tested textbook primitives (see this file's own
+/// tests), not dead in the sense of unverified.
 #[allow(dead_code)]
 fn downsample_2(signal: &[f64]) -> Vec<f64> {
     signal.iter().step_by(2).copied().collect()

@@ -120,7 +120,7 @@ pub fn packbits(
                 }
             }
 
-            Ok(Array::from_vec(packed_data).reshape(&new_shape))
+            Ok(Array::from_vec_shape(packed_data, &new_shape)?)
         }
         None => {
             // Pack flattened array
@@ -263,7 +263,7 @@ pub fn unpackbits(
                 }
             }
 
-            Ok(Array::from_vec(unpacked_data).reshape(&new_shape))
+            Ok(Array::from_vec_shape(unpacked_data, &new_shape)?)
         }
         None => {
             // Unpack flattened array
@@ -405,7 +405,7 @@ pub fn unravel_index(
     // Convert coordinate vectors to Arrays
     let mut result = Vec::with_capacity(n_dims);
     for coord_vec in coordinates {
-        result.push(Array::from_vec(coord_vec).reshape(&indices.shape()));
+        result.push(Array::from_vec_shape(coord_vec, &indices.shape())?);
     }
 
     Ok(result)
@@ -534,6 +534,12 @@ pub fn ravel_multi_index(
                 }
                 "wrap" => coord % dims[dim],
                 "clip" => coord.min(dims[dim].saturating_sub(1)),
+                // INVARIANT: unreachable. `mode_str` is validated at the
+                // top of `ravel_multi_index` (`mode_str != "raise" &&
+                // mode_str != "wrap" && mode_str != "clip"` returns `Err`
+                // before this loop runs) and is never reassigned, so by the
+                // time this `match` executes it can only be one of those
+                // three strings.
                 _ => unreachable!(),
             };
 
@@ -543,5 +549,5 @@ pub fn ravel_multi_index(
         flat_indices.push(flat_idx);
     }
 
-    Ok(Array::from_vec(flat_indices).reshape(&result_shape))
+    Array::from_vec_shape(flat_indices, &result_shape)
 }

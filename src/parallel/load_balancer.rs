@@ -33,7 +33,11 @@ pub struct WorkloadMetrics {
     pub active_tasks: u64,
     /// Total throughput (tasks/second)
     pub total_throughput: f64,
-    /// Average response time
+    /// Average response time, computed from real per-worker task-completion
+    /// timings recorded via [`LoadBalancer::record_task_completion`] (a
+    /// weighted average of `total_execution_time / tasks_completed` across
+    /// all workers). Reads as `Duration::ZERO` until at least one task
+    /// completion has been recorded.
     pub avg_response_time: Duration,
     /// CPU utilization per worker
     pub cpu_utilization: Vec<f64>,
@@ -45,7 +49,15 @@ pub struct WorkloadMetrics {
     pub load_imbalance: f64,
     /// Number of work steals in the last interval
     pub work_steals: u64,
-    /// Cache miss rate estimate
+    /// Cache miss rate estimate.
+    ///
+    /// This is a **static heuristic, not a measurement**: pure-Rust code has
+    /// no portable way to read hardware cache-miss counters (that requires
+    /// OS-specific unsafe APIs, e.g. Linux `perf_event_open`), so
+    /// [`LoadBalancer::current_metrics`] fills this with a fixed constant
+    /// (see `LoadBalancer::ESTIMATED_CACHE_MISS_RATE`) rather than
+    /// observed data. Treat it as a rough default, not real telemetry, and
+    /// do not rely on it for precise cache analysis.
     pub cache_miss_rate: f64,
 }
 
@@ -103,13 +115,19 @@ impl WorkloadMetrics {
 /// Worker state for load balancing
 #[derive(Debug)]
 struct WorkerState {
+    // Set at construction but never read back: workers are already
+    // addressed by their position in `LoadBalancer::workers`, so nothing
+    // needs this identifier today. Kept for diagnostics/logging.
     #[allow(dead_code)]
     id: usize,
     queue_length: usize,
     cpu_utilization: f64,
     memory_usage: f64,
     tasks_completed: u64,
-    #[allow(dead_code)]
+    // Was previously write-only (initialized to `Duration::ZERO`, never
+    // incremented); `LoadBalancer::record_task_completion` now updates this
+    // and `WorkerState::throughput`/`LoadBalancer::current_metrics` read it,
+    // so it is genuinely live and no longer needs `#[allow(dead_code)]`.
     total_execution_time: Duration,
     last_update: Instant,
     capacity_weight: f64,
@@ -144,6 +162,8 @@ impl WorkerState {
         }
     }
 
+    // No caller: `throughput()` feeds into reported metrics but this
+    // derived "throughput per unit CPU" figure isn't surfaced anywhere yet.
     #[allow(dead_code)]
     fn efficiency(&self) -> f64 {
         if self.cpu_utilization == 0.0 {
@@ -167,9 +187,14 @@ impl WorkerState {
 pub struct LoadBalancer {
     strategy: RwLock<BalancingStrategy>,
     workers: Arc<RwLock<Vec<WorkerState>>>,
+    // Initialized empty and never pushed to: nothing snapshots
+    // `current_metrics()` into it. `LoadBalancingAdvisor` keeps its own,
+    // separately-populated history instead of consuming this one.
     #[allow(dead_code)]
     metrics_history: Mutex<VecDeque<WorkloadMetrics>>,
     next_worker: Mutex<usize>, // For round-robin
+    // Only read by `should_rebalance`, which nothing calls (see its own
+    // comment) — auto-rebalancing is implemented but never triggered.
     #[allow(dead_code)]
     rebalance_threshold: f64,
     adaptation_window: Duration,
@@ -177,6 +202,17 @@ pub struct LoadBalancer {
 }
 
 impl LoadBalancer {
+    /// Static estimate used for [`WorkloadMetrics::cache_miss_rate`] until a
+    /// real per-worker cache-miss signal is wired in.
+    ///
+    /// Pure-Rust builds have no portable access to hardware performance
+    /// counters (reading them requires OS-specific unsafe APIs, e.g. Linux
+    /// `perf_event_open`), so this module cannot honestly *measure* cache
+    /// misses. This named constant makes that limitation explicit -- and
+    /// keeps the value in one documented place -- instead of presenting a
+    /// bare literal that looks like it was measured.
+    const ESTIMATED_CACHE_MISS_RATE: f64 = 0.05;
+
     /// Create a new load balancer
     pub fn new(strategy: BalancingStrategy, num_workers: usize) -> Result<Self> {
         let mut workers = Vec::new();
@@ -248,6 +284,29 @@ impl LoadBalancer {
         Ok(())
     }
 
+    /// Record that a task finished executing on the given worker.
+    ///
+    /// This feeds `WorkerState::tasks_completed` and
+    /// `total_execution_time`, which [`LoadBalancer::current_metrics`] uses
+    /// to compute a real, measured `avg_response_time` (and which
+    /// `WorkerState::throughput` also relies on) instead of a fixed
+    /// placeholder. Callers driving worker tasks should call this once per
+    /// completed task with its actual execution duration.
+    pub fn record_task_completion(&self, worker_id: usize, duration: Duration) -> Result<()> {
+        let mut workers = self.workers.write().expect("lock should not be poisoned");
+
+        if let Some(worker) = workers.get_mut(worker_id) {
+            worker.tasks_completed += 1;
+            worker.total_execution_time += duration;
+            Ok(())
+        } else {
+            Err(NumRs2Error::IndexError(format!(
+                "Invalid worker ID: {}",
+                worker_id
+            )))
+        }
+    }
+
     /// Get current workload metrics
     pub fn current_metrics(&self) -> WorkloadMetrics {
         let workers = self.workers.read().expect("lock should not be poisoned");
@@ -272,16 +331,35 @@ impl LoadBalancer {
 
         let load_imbalance = self.calculate_load_imbalance(&workers);
 
+        // Real average response time: a weighted average of
+        // `total_execution_time / tasks_completed` across all workers, from
+        // timings recorded via `record_task_completion`. Zero until at
+        // least one completion has been recorded, rather than a fabricated
+        // fixed duration.
+        let (total_completed, total_exec_time) = workers
+            .iter()
+            .fold((0u64, Duration::ZERO), |(count, time), w| {
+                (count + w.tasks_completed, time + w.total_execution_time)
+            });
+        let avg_response_time = if total_completed > 0 {
+            Duration::from_secs_f64(total_exec_time.as_secs_f64() / total_completed as f64)
+        } else {
+            Duration::ZERO
+        };
+
         WorkloadMetrics {
             active_tasks,
             total_throughput,
-            avg_response_time: Duration::from_millis(100), // Placeholder
+            avg_response_time,
             cpu_utilization,
             memory_usage,
             queue_lengths,
             load_imbalance,
-            work_steals: 0,        // Updated elsewhere
-            cache_miss_rate: 0.05, // Placeholder
+            work_steals: 0, // Updated elsewhere
+            // Static estimate, not a measurement -- see
+            // `ESTIMATED_CACHE_MISS_RATE` and the `cache_miss_rate` field
+            // doc for why this module cannot honestly measure this.
+            cache_miss_rate: Self::ESTIMATED_CACHE_MISS_RATE,
         }
     }
 
@@ -408,6 +486,11 @@ impl LoadBalancer {
         Ok(worker_id)
     }
 
+    // Nothing calls `should_rebalance`/`rebalance_workload` — automatic
+    // rebalancing based on `calculate_load_imbalance` (used, and kept
+    // active) is implemented but never triggered on a schedule or from
+    // `submit`/`current_metrics`. Wiring in a rebalance trigger is a
+    // scheduling-behavior change, out of scope for a lint-only pass.
     #[allow(dead_code)]
     fn should_rebalance(&self) -> Result<bool> {
         let workers = self.workers.read().expect("lock should not be poisoned");
@@ -431,6 +514,8 @@ impl LoadBalancer {
         }
     }
 
+    // See `should_rebalance`: only reachable from there, which nothing
+    // calls.
     #[allow(dead_code)]
     fn rebalance_workload(&self) -> Result<()> {
         // This would trigger work migration between workers
@@ -484,6 +569,10 @@ impl LoadBalancer {
 /// Load balancing recommendation system
 pub struct LoadBalancingAdvisor {
     metrics_history: VecDeque<WorkloadMetrics>,
+    // Set at construction but never read: the analysis methods below window
+    // `metrics_history` by a fixed entry count (e.g. `.take(10)`) rather
+    // than by elapsed time. Kept for a time-based windowing policy this
+    // field implies but that isn't wired in.
     #[allow(dead_code)]
     analysis_window: Duration,
 }

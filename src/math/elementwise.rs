@@ -9,7 +9,7 @@
 
 use crate::array::Array;
 use crate::error::Result;
-use num_traits::{Float, NumCast, One, Zero};
+use num_traits::{Float, NumCast};
 use scirs2_core::ndarray::Array1;
 use scirs2_core::simd_ops::SimdUnifiedOps;
 
@@ -42,7 +42,7 @@ pub(crate) fn from_nd_array<T: Clone + std::fmt::Debug + NumCast>(
     shape: &[usize],
 ) -> Array<T> {
     let data: Vec<T> = nd.into_iter().collect();
-    Array::from_vec(data).reshape(shape)
+    Array::from_vec_shape(data, shape).unwrap_or_else(|e| panic!("{e}"))
 }
 
 // Basic element-wise math operations
@@ -60,7 +60,13 @@ pub trait ElementWiseMath<T> {
     fn pow(&self, n: T) -> Array<T>;
 
     // Log-domain functions
+    /// # Panics
+    /// Panics if `self` and `other` cannot be broadcast together. Use
+    /// [`ElementWiseMath::safe_logaddexp`] for a non-panicking version.
     fn logaddexp(&self, other: &Array<T>) -> Array<T>;
+    /// # Panics
+    /// Panics if `self` and `other` cannot be broadcast together. Use
+    /// [`ElementWiseMath::safe_logaddexp2`] for a non-panicking version.
     fn logaddexp2(&self, other: &Array<T>) -> Array<T>;
 
     // Trigonometric functions
@@ -70,7 +76,13 @@ pub trait ElementWiseMath<T> {
     fn asin(&self) -> Array<T>;
     fn acos(&self) -> Array<T>;
     fn atan(&self) -> Array<T>;
+    /// # Panics
+    /// Panics if `self` and `other` cannot be broadcast together. Use
+    /// [`ElementWiseMath::safe_atan2`] for a non-panicking version.
     fn atan2(&self, other: &Array<T>) -> Array<T>;
+    /// # Panics
+    /// Panics if `self` and `other` cannot be broadcast together. Use
+    /// [`ElementWiseMath::safe_hypot`] for a non-panicking version.
     fn hypot(&self, other: &Array<T>) -> Array<T>;
     fn degrees(&self) -> Array<T>;
     fn radians(&self) -> Array<T>;

@@ -1064,10 +1064,10 @@ mod tests {
         let arr = Array1::from_vec(data);
 
         let cusum = Cusum::new(0.0, 5.0, 0.5);
-        let (fwd_high, fwd_low) = cusum
+        let (fwd_high, _fwd_low) = cusum
             .forward_cusum(&arr.view())
             .expect("forward CUSUM should succeed");
-        let (bwd_high, bwd_low) = cusum
+        let (bwd_high, _bwd_low) = cusum
             .backward_cusum(&arr.view())
             .expect("backward CUSUM should succeed");
 

@@ -37,7 +37,6 @@
 
 use crate::error::{NumRs2Error, Result};
 use crate::gpu::array::GpuArray;
-use crate::gpu::context::GpuContextRef;
 use bytemuck::{Pod, Zeroable};
 
 /// Parameters for matrix multiplication
@@ -200,7 +199,7 @@ pub fn matmul<T: Pod + Zeroable + 'static>(
     let shader_module = if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
         context.matmul_f32_shader()
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-        context.matmul_f64_shader()
+        context.matmul_f64_shader()?
     } else {
         return Err(NumRs2Error::TypeCastError(
             "Matrix multiplication only supports f32 and f64 types".to_string(),
@@ -320,12 +319,31 @@ pub fn norm_l2<T: Pod + Zeroable + num_traits::Float + 'static>(a: &GpuArray<T>)
 
 /// Computes the L1 norm (Manhattan norm) of a vector on GPU
 ///
-/// For GPU implementation, this requires an absolute value operation followed by sum.
-/// Currently returns a placeholder error as it requires additional shader support.
-pub fn norm_l1<T: Pod + Zeroable + 'static>(_a: &GpuArray<T>) -> Result<T> {
-    Err(NumRs2Error::NotImplemented(
-        "L1 norm on GPU requires additional shader support".to_string(),
-    ))
+/// The absolute value is folded into the first pass of the workgroup
+/// tree-reduction, and the per-workgroup partials are reduced by further
+/// passes of the same kernel, so the sum never leaves the GPU until a single
+/// scalar remains.
+///
+/// # Arguments
+///
+/// * `a` - Input vector
+///
+/// # Returns
+///
+/// `sum(|a_i|)` as a scalar
+///
+/// # Errors
+///
+/// Returns an error if the array is not 1D, if it is empty, or if the element
+/// type is neither f32 nor f64.
+pub fn norm_l1<T: Pod + Zeroable + 'static>(a: &GpuArray<T>) -> Result<T> {
+    if a.shape().len() != 1 {
+        return Err(NumRs2Error::DimensionMismatch(
+            "Norm requires a 1D array".to_string(),
+        ));
+    }
+
+    crate::gpu::reduce::reduce_to_scalar(a, crate::gpu::reduce::ReductionOp::Sum, true)
 }
 
 /// Matrix-vector multiplication (y = A * x)

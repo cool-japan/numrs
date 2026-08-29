@@ -465,8 +465,6 @@ impl From<std::io::Error> for IOError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[allow(unused_imports)]
-    use std::path::Path;
 
     #[test]
     fn test_file_operation_severity() {

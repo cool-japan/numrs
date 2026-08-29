@@ -113,7 +113,7 @@ pub fn roll<T: Clone + Send + Sync>(
                     })
                     .collect();
 
-                Ok(Array::from_vec(result_vec).reshape(&shape))
+                Ok(Array::from_vec_shape(result_vec, &shape)?)
             } else {
                 // Sequential roll for small arrays - optimized with pre-computed indices
                 let first_elem = array
@@ -400,7 +400,8 @@ pub fn fliplr<T: Clone>(array: &Array<T>) -> Result<Array<T>> {
 /// // Rotate once by 90 degrees (counterclockwise)
 /// let rotated = rot90(&a, 1, None).expect("operation should succeed");
 /// assert_eq!(rotated.shape(), vec![3, 2]);
-/// assert_eq!(rotated.to_vec(), vec![5, 6, 3, 4, 1, 2]);
+/// // NumPy: np.rot90([[1,2,3],[4,5,6]], 1).flatten() == [3,6,2,5,1,4]
+/// assert_eq!(rotated.to_vec(), vec![3, 6, 2, 5, 1, 4]);
 ///
 /// // Rotate twice by 90 degrees (180 degrees)
 /// let rotated = rot90(&a, 2, None).expect("operation should succeed");

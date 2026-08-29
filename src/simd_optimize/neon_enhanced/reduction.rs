@@ -4,9 +4,14 @@
 //! norm, and dot product functions for ARM NEON.
 
 use crate::array::Array;
-use crate::error::{NumRs2Error, Result};
+use crate::error::Result;
+// See `matmul.rs`: only the aarch64 SIMD implementation raises this.
+#[cfg(target_arch = "aarch64")]
+use crate::error::NumRs2Error;
 
-use super::core::{NeonEnhancedOps, NEON_F32_LANES, NEON_F64_LANES};
+use super::core::NeonEnhancedOps;
+#[cfg(target_arch = "aarch64")]
+use super::core::{NEON_F32_LANES, NEON_F64_LANES};
 
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
@@ -116,23 +121,20 @@ impl NeonEnhancedOps {
 impl NeonEnhancedOps {
     /// NEON vectorized sum reduction for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_sum_f64(input: &Array<f64>) -> f64 {
         let data = input.to_vec();
         let len = data.len();
         let simd_len = len & !(NEON_F64_LANES - 1);
 
-        let mut sum = 0.0f64;
-
-        unsafe {
+        let mut sum = unsafe {
             let mut vacc = vdupq_n_f64(0.0);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
                 let v = vld1q_f64(data.as_ptr().add(i));
                 vacc = vaddq_f64(vacc, v);
             }
             // Horizontal add: sum both lanes
-            sum = vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1);
-        }
+            vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1)
+        };
 
         for i in simd_len..len {
             sum += data[i];
@@ -143,23 +145,20 @@ impl NeonEnhancedOps {
 
     /// NEON vectorized product reduction for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_prod_f64(input: &Array<f64>) -> f64 {
         let data = input.to_vec();
         let len = data.len();
         let simd_len = len & !(NEON_F64_LANES - 1);
 
-        let mut prod = 1.0f64;
-
-        unsafe {
+        let mut prod = unsafe {
             let mut vacc = vdupq_n_f64(1.0);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
                 let v = vld1q_f64(data.as_ptr().add(i));
                 vacc = vmulq_f64(vacc, v);
             }
             // Horizontal multiply: multiply both lanes
-            prod = vgetq_lane_f64(vacc, 0) * vgetq_lane_f64(vacc, 1);
-        }
+            vgetq_lane_f64(vacc, 0) * vgetq_lane_f64(vacc, 1)
+        };
 
         for i in simd_len..len {
             prod *= data[i];
@@ -170,7 +169,6 @@ impl NeonEnhancedOps {
 
     /// NEON vectorized max reduction for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_max_f64(input: &Array<f64>) -> f64 {
         let data = input.to_vec();
         if data.is_empty() {
@@ -180,9 +178,7 @@ impl NeonEnhancedOps {
         let len = data.len();
         let simd_len = len & !(NEON_F64_LANES - 1);
 
-        let mut max_val = f64::NEG_INFINITY;
-
-        unsafe {
+        let mut max_val = unsafe {
             let mut vmax = vdupq_n_f64(f64::NEG_INFINITY);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
                 let v = vld1q_f64(data.as_ptr().add(i));
@@ -191,8 +187,8 @@ impl NeonEnhancedOps {
             // Horizontal max
             let lane0 = vgetq_lane_f64(vmax, 0);
             let lane1 = vgetq_lane_f64(vmax, 1);
-            max_val = lane0.max(lane1);
-        }
+            lane0.max(lane1)
+        };
 
         for i in simd_len..len {
             max_val = max_val.max(data[i]);
@@ -203,7 +199,6 @@ impl NeonEnhancedOps {
 
     /// NEON vectorized min reduction for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_min_f64(input: &Array<f64>) -> f64 {
         let data = input.to_vec();
         if data.is_empty() {
@@ -213,9 +208,7 @@ impl NeonEnhancedOps {
         let len = data.len();
         let simd_len = len & !(NEON_F64_LANES - 1);
 
-        let mut min_val = f64::INFINITY;
-
-        unsafe {
+        let mut min_val = unsafe {
             let mut vmin = vdupq_n_f64(f64::INFINITY);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
                 let v = vld1q_f64(data.as_ptr().add(i));
@@ -224,8 +217,8 @@ impl NeonEnhancedOps {
             // Horizontal min
             let lane0 = vgetq_lane_f64(vmin, 0);
             let lane1 = vgetq_lane_f64(vmin, 1);
-            min_val = lane0.min(lane1);
-        }
+            lane0.min(lane1)
+        };
 
         for i in simd_len..len {
             min_val = min_val.min(data[i]);
@@ -246,16 +239,13 @@ impl NeonEnhancedOps {
 
     /// NEON vectorized dot product for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_dot_f64(a: &Array<f64>, b: &Array<f64>) -> f64 {
         let data_a = a.to_vec();
         let data_b = b.to_vec();
         let len = data_a.len().min(data_b.len());
         let simd_len = len & !(NEON_F64_LANES - 1);
 
-        let mut sum = 0.0f64;
-
-        unsafe {
+        let mut sum = unsafe {
             let mut vacc = vdupq_n_f64(0.0);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
                 let va = vld1q_f64(data_a.as_ptr().add(i));
@@ -264,8 +254,8 @@ impl NeonEnhancedOps {
                 vacc = vfmaq_f64(vacc, va, vb);
             }
             // Horizontal add
-            sum = vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1);
-        }
+            vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1)
+        };
 
         for i in simd_len..len {
             sum += data_a[i] * data_b[i];
@@ -276,15 +266,12 @@ impl NeonEnhancedOps {
 
     /// NEON vectorized L2 norm for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_norm_l2_f64(input: &Array<f64>) -> f64 {
         let data = input.to_vec();
         let len = data.len();
         let simd_len = len & !(NEON_F64_LANES - 1);
 
-        let mut sum_sq = 0.0f64;
-
-        unsafe {
+        let mut sum_sq = unsafe {
             let mut vacc = vdupq_n_f64(0.0);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
                 let v = vld1q_f64(data.as_ptr().add(i));
@@ -292,8 +279,8 @@ impl NeonEnhancedOps {
                 vacc = vfmaq_f64(vacc, v, v);
             }
             // Horizontal add
-            sum_sq = vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1);
-        }
+            vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1)
+        };
 
         for i in simd_len..len {
             sum_sq += data[i] * data[i];
@@ -304,15 +291,12 @@ impl NeonEnhancedOps {
 
     /// NEON vectorized L1 norm for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_norm_l1_f64(input: &Array<f64>) -> f64 {
         let data = input.to_vec();
         let len = data.len();
         let simd_len = len & !(NEON_F64_LANES - 1);
 
-        let mut sum_abs = 0.0f64;
-
-        unsafe {
+        let mut sum_abs = unsafe {
             let mut vacc = vdupq_n_f64(0.0);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
                 let v = vld1q_f64(data.as_ptr().add(i));
@@ -320,8 +304,8 @@ impl NeonEnhancedOps {
                 vacc = vaddq_f64(vacc, vabs);
             }
             // Horizontal add
-            sum_abs = vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1);
-        }
+            vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1)
+        };
 
         for i in simd_len..len {
             sum_abs += data[i].abs();
@@ -332,7 +316,6 @@ impl NeonEnhancedOps {
 
     /// NEON vectorized variance for f64
     #[cfg(target_arch = "aarch64")]
-    #[allow(unused_assignments)]
     pub fn vectorized_variance_f64(input: &Array<f64>) -> f64 {
         let mean = Self::vectorized_mean_f64(input);
         let data = input.to_vec();
@@ -342,9 +325,8 @@ impl NeonEnhancedOps {
         }
 
         let simd_len = len & !(NEON_F64_LANES - 1);
-        let mut sum_sq_diff = 0.0f64;
 
-        unsafe {
+        let mut sum_sq_diff = unsafe {
             let vmean = vdupq_n_f64(mean);
             let mut vacc = vdupq_n_f64(0.0);
             for i in (0..simd_len).step_by(NEON_F64_LANES) {
@@ -353,8 +335,8 @@ impl NeonEnhancedOps {
                 // FMA: acc + diff * diff
                 vacc = vfmaq_f64(vacc, diff, diff);
             }
-            sum_sq_diff = vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1);
-        }
+            vgetq_lane_f64(vacc, 0) + vgetq_lane_f64(vacc, 1)
+        };
 
         for i in simd_len..len {
             let diff = data[i] - mean;

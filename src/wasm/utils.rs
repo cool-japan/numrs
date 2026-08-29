@@ -235,6 +235,19 @@ pub(crate) fn error_to_js(error: NumRs2Error) -> JsValue {
     JsValue::from_str(&format!("NumRS2 Error: {}", error))
 }
 
+/// Allow the `?` operator to convert a [`NumRs2Error`] directly into a
+/// [`JsValue`] exception.
+///
+/// This is what lets `wasm_bindgen`-exported functions returning
+/// `Result<T, JsValue>` propagate errors from core NumRS2 APIs (which
+/// return `Result<T, NumRs2Error>`) with a plain `?` instead of an explicit
+/// `.map_err(...)` at every call site.
+impl From<NumRs2Error> for JsValue {
+    fn from(error: NumRs2Error) -> Self {
+        error_to_js(error)
+    }
+}
+
 /// Performance timer for benchmarking
 ///
 /// Simple performance timer using the Performance API.
@@ -297,7 +310,7 @@ impl PerfTimer {
 ///
 /// This is automatically used when the wasm feature is enabled
 /// to provide a maintained pure-Rust allocator optimized for WebAssembly.
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 #[global_allocator]
 static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
 

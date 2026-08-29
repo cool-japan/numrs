@@ -137,41 +137,6 @@ pub fn convolve2d(
     Ok(result)
 }
 
-/// Generates a 1D Gaussian kernel.
-///
-/// # Arguments
-/// * `size` - Kernel size (must be odd)
-/// * `sigma` - Standard deviation of the Gaussian
-///
-/// # Returns
-/// A normalized 1D Gaussian kernel as a vector
-fn gaussian_kernel_1d(size: usize, sigma: f64) -> Result<Vec<f64>, NumRs2Error> {
-    if size.is_multiple_of(2) || size == 0 {
-        return Err(CvError::InvalidKernelSize(size).into());
-    }
-    if sigma <= 0.0 {
-        return Err(CvError::InvalidParameter("Sigma must be positive".to_string()).into());
-    }
-
-    let half = (size / 2) as isize;
-    let two_sigma_sq = 2.0 * sigma * sigma;
-    let mut kernel = Vec::with_capacity(size);
-    let mut total = 0.0;
-
-    for i in -half..=half {
-        let val = (-(i * i) as f64 / two_sigma_sq).exp();
-        kernel.push(val);
-        total += val;
-    }
-
-    // Normalize
-    for v in &mut kernel {
-        *v /= total;
-    }
-
-    Ok(kernel)
-}
-
 /// Generates a 2D Gaussian kernel.
 ///
 /// # Arguments
@@ -206,7 +171,7 @@ fn gaussian_kernel_2d(size: usize, sigma: f64) -> Result<Array<f64>, NumRs2Error
         *v /= total;
     }
 
-    Ok(Array::from_vec(data).reshape(&[size, size]))
+    Array::from_vec_shape(data, &[size, size])
 }
 
 /// Applies Gaussian blur to a grayscale image.
@@ -249,7 +214,7 @@ pub fn gaussian_blur(img: &Image, kernel_size: usize, sigma: f64) -> Result<Imag
 /// A new image containing the horizontal gradient
 pub fn sobel_x(img: &Image) -> Result<Image, NumRs2Error> {
     let kernel_data = vec![-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
-    let kernel = Array::from_vec(kernel_data).reshape(&[3, 3]);
+    let kernel = Array::from_vec_shape(kernel_data, &[3, 3])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 
@@ -272,7 +237,7 @@ pub fn sobel_x(img: &Image) -> Result<Image, NumRs2Error> {
 /// A new image containing the vertical gradient
 pub fn sobel_y(img: &Image) -> Result<Image, NumRs2Error> {
     let kernel_data = vec![-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
-    let kernel = Array::from_vec(kernel_data).reshape(&[3, 3]);
+    let kernel = Array::from_vec_shape(kernel_data, &[3, 3])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 
@@ -296,7 +261,7 @@ pub fn sobel_y(img: &Image) -> Result<Image, NumRs2Error> {
 /// A new image containing the Laplacian response
 pub fn laplacian_filter(img: &Image) -> Result<Image, NumRs2Error> {
     let kernel_data = vec![0.0, 1.0, 0.0, 1.0, -4.0, 1.0, 0.0, 1.0, 0.0];
-    let kernel = Array::from_vec(kernel_data).reshape(&[3, 3]);
+    let kernel = Array::from_vec_shape(kernel_data, &[3, 3])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 
@@ -321,7 +286,7 @@ pub fn box_blur(img: &Image, kernel_size: usize) -> Result<Image, NumRs2Error> {
 
     let n = (kernel_size * kernel_size) as f64;
     let data = vec![1.0 / n; kernel_size * kernel_size];
-    let kernel = Array::from_vec(data).reshape(&[kernel_size, kernel_size]);
+    let kernel = Array::from_vec_shape(data, &[kernel_size, kernel_size])?;
     convolve2d(img, &kernel, BorderMode::Reflect)
 }
 
@@ -937,8 +902,11 @@ mod tests {
 
     #[test]
     fn test_gaussian_kernel_normalization() {
-        let k = gaussian_kernel_1d(5, 1.0).expect("test: kernel generation should succeed");
-        let sum: f64 = k.iter().sum();
+        // Covers `gaussian_kernel_2d` directly (the kernel `gaussian_blur`
+        // actually calls); an unused `gaussian_kernel_1d` sibling with the
+        // same normalization logic used to be tested here instead of it.
+        let k = gaussian_kernel_2d(5, 1.0).expect("test: kernel generation should succeed");
+        let sum: f64 = k.to_vec().iter().sum();
         assert!(
             (sum - 1.0).abs() < 1e-10,
             "Gaussian kernel should sum to 1.0: got {}",

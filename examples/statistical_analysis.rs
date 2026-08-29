@@ -11,8 +11,6 @@
 
 use numrs2::prelude::*;
 use numrs2::random::default_rng;
-use numrs2::stats::*;
-use std::f64::consts::PI;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("=== NumRS2 Statistical Analysis Examples ===\n");
@@ -71,7 +69,7 @@ fn example1_distribution_fitting() -> std::result::Result<(), Box<dyn std::error
     println!("  Sample size: {}", sample_size);
 
     // Calculate goodness of fit using chi-square
-    let (hist, bin_edges) = histogram(&data, 20, None, None)?;
+    let (hist, _bin_edges) = histogram(&data, 20, None, None, None)?;
     println!("  Histogram bins: {}", hist.size());
     println!("  Data range: [{:.2}, {:.2}]\n", data.min(), data.max());
 

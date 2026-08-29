@@ -6,6 +6,8 @@
 use std::str::FromStr;
 use std::time::SystemTime;
 
+use chrono::{DateTime as ChronoDateTime, Local, Utc};
+
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 
@@ -74,48 +76,128 @@ pub fn timedelta64(value: i64, unit: &str) -> Result<TimeDelta64> {
 
 /// Convert datetime64 to string representation
 ///
-/// Similar to np.datetime_as_string(), converts a DateTime64 to its string representation
+/// Similar to np.datetime_as_string(), converts a DateTime64 to its string
+/// representation.
 ///
 /// # Arguments
-/// * `dt` - DateTime64 value to convert
-/// * `unit` - Optional unit for output format
-/// * `timezone` - Optional timezone for formatting (UTC default)
+/// * `dt` - DateTime64 value to convert. If `dt.is_nat()`, the result is
+///   always the literal string `"NaT"`, regardless of `unit`/`timezone`
+///   (matching `np.datetime_as_string(np.datetime64('NaT'))`).
+/// * `unit` - Optional unit for output format (defaults to `dt`'s own unit)
+/// * `timezone` - Timezone mode, matching NumPy's `timezone` argument:
+///   - `None` or `Some("naive")` (case-insensitive): no timezone suffix.
+///     This is the crate's pre-existing formatting, unchanged.
+///   - `Some("UTC")`: append a `Z` suffix (NumPy's UTC marker).
+///   - `Some("local")`: shift the displayed instant by this machine's local
+///     UTC offset (via `chrono::Local`, looked up for `dt`'s own instant so
+///     DST is handled correctly) and append a `+HHMM`/`-HHMM` suffix.
+///   - Any other value is a `ValueError`.
+///
+/// # NumPy deviations
+/// * For `timezone = "local"`, real NumPy raises for a Day-or-coarser unit
+///   (there is no time-of-day to shift). This crate instead always shifts
+///   the underlying instant by the local offset before re-deriving the
+///   requested unit's components, which can change the displayed calendar
+///   date near a timezone boundary rather than erroring.
+/// * The `Z` / `+HHMM`/`-HHMM` suffix is appended uniformly for every unit
+///   this function supports (including `Y`/`M`), rather than replicating
+///   NumPy's own per-unit formatting rules exactly.
 ///
 /// # Examples
 /// ```
 /// use numrs2::types::datetime::{datetime64, datetime_as_string};
 ///
 /// let dt = datetime64("2023-01-01", Some("D")).expect("should parse datetime64");
-/// let s = datetime_as_string(&dt, None, None).expect("should convert to string");
+/// let naive = datetime_as_string(&dt, None, None).expect("should convert to string");
+/// let utc = datetime_as_string(&dt, None, Some("UTC")).expect("should format as UTC");
+/// assert_eq!(naive, "2023-01-01");
+/// assert_eq!(utc, "2023-01-01Z");
 /// ```
 pub fn datetime_as_string(
     dt: &DateTime64,
     unit: Option<&str>,
-    _timezone: Option<&str>,
+    timezone: Option<&str>,
 ) -> Result<String> {
+    if dt.is_nat() {
+        return Ok("NaT".to_string());
+    }
+
     let target_unit = if let Some(u) = unit {
         parse_unit_string(u)?
     } else {
         dt.unit()
     };
 
-    let converted_dt = dt.to_unit(target_unit);
+    let tz_mode = timezone.unwrap_or("naive").to_lowercase();
 
-    match target_unit {
-        DateTimeUnit::Year => Ok(format!("{:04}", 1970 + converted_dt.value())),
+    match tz_mode.as_str() {
+        "naive" => {
+            let converted_dt = dt.to_unit(target_unit);
+            format_naive_string(converted_dt, target_unit)
+        }
+        "utc" => {
+            let converted_dt = dt.to_unit(target_unit);
+            let core = format_naive_string(converted_dt, target_unit)?;
+            if core.ends_with('Z') {
+                Ok(core)
+            } else {
+                Ok(format!("{}Z", core))
+            }
+        }
+        "local" => {
+            let offset_seconds = local_utc_offset_seconds(dt)?;
+
+            // Shift at nanosecond precision (the finest unit) so no
+            // sub-second precision is lost before re-deriving `target_unit`.
+            let dt_ns = dt.to_unit(DateTimeUnit::Nanosecond);
+            let shifted_ns = DateTime64::new(
+                dt_ns.value() + offset_seconds as i64 * 1_000_000_000,
+                DateTimeUnit::Nanosecond,
+            );
+            let converted_dt = shifted_ns.to_unit(target_unit);
+            let core = format_naive_string(converted_dt, target_unit)?;
+            // format_naive_string hardcodes a trailing `Z` for sub-second
+            // units; strip it before appending the numeric local offset.
+            let stripped = core.strip_suffix('Z').unwrap_or(&core);
+
+            let sign = if offset_seconds >= 0 { '+' } else { '-' };
+            let abs_secs = offset_seconds.unsigned_abs();
+            let offset_hours = abs_secs / 3600;
+            let offset_minutes = (abs_secs % 3600) / 60;
+            Ok(format!(
+                "{stripped}{sign}{offset_hours:02}{offset_minutes:02}"
+            ))
+        }
+        other => Err(NumRs2Error::ValueError(format!(
+            "Unknown timezone mode '{}' for datetime_as_string: expected 'naive', 'UTC', or 'local'",
+            other
+        ))),
+    }
+}
+
+/// Core NumPy-style ISO-8601 formatting with no timezone-suffix logic of its
+/// own. `dt` must already be converted to `unit`. This is byte-for-byte the
+/// pre-existing (pre-timezone-support) formatting, including its existing
+/// quirk of hardcoding a trailing `Z` for sub-second units even though it
+/// takes no timezone parameter -- callers needing a timezone-aware string
+/// should go through [`datetime_as_string`] instead, which layers
+/// naive/UTC/local handling on top of this.
+fn format_naive_string(dt: DateTime64, unit: DateTimeUnit) -> Result<String> {
+    match unit {
+        DateTimeUnit::Year => Ok(format!("{:04}", 1970 + dt.value())),
         DateTimeUnit::Month => {
-            let years = converted_dt.value() / 12;
-            let months = converted_dt.value() % 12;
+            let years = dt.value() / 12;
+            let months = dt.value() % 12;
             Ok(format!("{:04}-{:02}", 1970 + years, months + 1))
         }
         DateTimeUnit::Day => {
             // Convert days since epoch to date
-            let days = converted_dt.value();
+            let days = dt.value();
             let (year, month, day) = days_to_date(days);
             Ok(format!("{:04}-{:02}-{:02}", year, month, day))
         }
         DateTimeUnit::Second => {
-            let secs = converted_dt.value();
+            let secs = dt.value();
             let days = secs / 86400;
             let remaining_secs = secs % 86400;
             let hours = remaining_secs / 3600;
@@ -129,7 +211,7 @@ pub fn datetime_as_string(
             ))
         }
         DateTimeUnit::Millisecond => {
-            let millis = converted_dt.value();
+            let millis = dt.value();
             let secs = millis / 1000;
             let subsec_millis = millis % 1000;
             let days = secs / 86400;
@@ -145,7 +227,7 @@ pub fn datetime_as_string(
             ))
         }
         DateTimeUnit::Microsecond => {
-            let micros = converted_dt.value();
+            let micros = dt.value();
             let secs = micros / 1_000_000;
             let subsec_micros = micros % 1_000_000;
             let days = secs / 86400;
@@ -161,7 +243,7 @@ pub fn datetime_as_string(
             ))
         }
         DateTimeUnit::Nanosecond => {
-            let nanos = converted_dt.value();
+            let nanos = dt.value();
             let secs = nanos / 1_000_000_000;
             let subsec_nanos = nanos % 1_000_000_000;
             let days = secs / 86400;
@@ -177,11 +259,26 @@ pub fn datetime_as_string(
             ))
         }
         _ => {
-            // For other units, convert to day and format
-            let as_days = converted_dt.to_unit(DateTimeUnit::Day);
-            datetime_as_string(&as_days, Some("D"), None)
+            // For other units (Week, Hour, Minute), convert to day and format.
+            let as_days = dt.to_unit(DateTimeUnit::Day);
+            format_naive_string(as_days, DateTimeUnit::Day)
         }
     }
+}
+
+/// This machine's local UTC offset (in seconds) for the instant `dt`
+/// represents, via `chrono::Local` (looked up for that specific instant, so
+/// DST transitions are handled the same way `chrono` handles them).
+fn local_utc_offset_seconds(dt: &DateTime64) -> Result<i32> {
+    let secs = dt.to_unit(DateTimeUnit::Second).value();
+    let utc_dt: ChronoDateTime<Utc> = ChronoDateTime::from_timestamp(secs, 0).ok_or_else(|| {
+        NumRs2Error::ValueError(format!(
+            "Timestamp {} seconds since epoch is out of range for timezone conversion",
+            secs
+        ))
+    })?;
+    let local_dt = utc_dt.with_timezone(&Local);
+    Ok(local_dt.offset().local_minus_utc())
 }
 
 /// Get unit and count information from datetime64 dtype
@@ -359,7 +456,7 @@ pub mod array_ops {
 
         let string_vec = strings?;
         let shape = dts.shape();
-        Ok(Array::from_vec(string_vec).reshape(&shape))
+        Array::from_vec_shape(string_vec, &shape)
     }
 
     /// Check if datetime64 values are business days
@@ -369,14 +466,22 @@ pub mod array_ops {
 
         let result_vec = results?;
         let shape = dts.shape();
-        Ok(Array::from_vec(result_vec).reshape(&shape))
+        Array::from_vec_shape(result_vec, &shape)
     }
 
-    /// Apply business day offset to datetime64 array
+    /// Apply business day offset to a datetime64 array, element-wise.
+    ///
+    /// `roll` is NumPy's roll convention (`"raise"` when `None`; see
+    /// [`business_days::Roll`] for the full list) applied to each element
+    /// before its offset -- see [`business_days::busday_offset`] for the
+    /// exact per-element algorithm. This array-level entry point does not
+    /// accept a `holidays` list (only the fixed Saturday/Sunday weekend is
+    /// applied); use [`business_days::busday_offset`] directly for
+    /// holiday-aware rolling of a single date.
     pub fn busday_offset_array(
         dts: &Array<DateTime64>,
         offsets: &Array<i32>,
-        _roll: Option<&str>,
+        roll: Option<&str>,
     ) -> Result<Array<DateTime64>> {
         if dts.len() != offsets.len() {
             return Err(NumRs2Error::ValueError(
@@ -389,12 +494,45 @@ pub mod array_ops {
         let results: Result<Vec<_>> = dt_data
             .iter()
             .zip(offset_data.iter())
-            .map(|(dt, &offset)| business_days::busday_offset(dt, offset as i64))
+            .map(|(dt, &offset)| business_days::busday_offset(dt, offset as i64, roll, None))
             .collect();
 
         let result_vec = results?;
         let shape = dts.shape();
-        Ok(Array::from_vec(result_vec).reshape(&shape))
+        Array::from_vec_shape(result_vec, &shape)
+    }
+
+    /// Count business days between corresponding elements of two datetime64
+    /// arrays, element-wise.
+    ///
+    /// Mirrors NumPy's `busday_count(begindates, enddates)`: each result
+    /// element counts business days in the half-open interval
+    /// `[begin, end)` (see [`business_days::busday_count`]), negative when
+    /// `end < begin`. Does not accept a `holidays` list at the array level
+    /// (only the fixed Saturday/Sunday weekend applies); use
+    /// [`business_days::busday_count`] directly for holiday-aware counting
+    /// of a single pair of dates.
+    pub fn busday_count_array(
+        begin_dts: &Array<DateTime64>,
+        end_dts: &Array<DateTime64>,
+    ) -> Result<Array<i64>> {
+        if begin_dts.len() != end_dts.len() {
+            return Err(NumRs2Error::ValueError(
+                "Arrays must have same length".to_string(),
+            ));
+        }
+
+        let begin_data = begin_dts.to_vec();
+        let end_data = end_dts.to_vec();
+        let results: Result<Vec<i64>> = begin_data
+            .iter()
+            .zip(end_data.iter())
+            .map(|(begin, end)| business_days::busday_count(begin, end, None))
+            .collect();
+
+        let result_vec = results?;
+        let shape = begin_dts.shape();
+        Array::from_vec_shape(result_vec, &shape)
     }
 }
 
@@ -429,6 +567,68 @@ mod tests {
         let dt = datetime64("2023-01-01", Some("D")).expect("should parse datetime64");
         let s = datetime_as_string(&dt, None, None).expect("should convert to string");
         assert!(s.contains("2023"));
+    }
+
+    #[test]
+    fn test_datetime_as_string_naive_matches_current_behavior() {
+        // timezone=None and timezone=Some("naive") must both match the
+        // crate's pre-existing (pre-timezone-support) formatting exactly:
+        // no suffix for Day/Second, but the pre-existing trailing `Z` quirk
+        // preserved for sub-second units.
+        let day = datetime64("2023-01-01", Some("D")).expect("should parse day");
+        assert_eq!(
+            datetime_as_string(&day, None, None).expect("naive via None"),
+            "2023-01-01"
+        );
+        assert_eq!(
+            datetime_as_string(&day, None, Some("naive")).expect("naive via Some"),
+            "2023-01-01"
+        );
+
+        let secs = datetime64("2023-01-01T12:30:45", Some("s")).expect("should parse seconds");
+        assert_eq!(
+            datetime_as_string(&secs, None, None).expect("naive seconds"),
+            "2023-01-01T12:30:45"
+        );
+    }
+
+    #[test]
+    fn test_datetime_as_string_utc_appends_z() {
+        let day = datetime64("2023-01-01", Some("D")).expect("should parse day");
+        assert_eq!(
+            datetime_as_string(&day, None, Some("UTC")).expect("utc day"),
+            "2023-01-01Z"
+        );
+        // Case-insensitive.
+        assert_eq!(
+            datetime_as_string(&day, None, Some("utc")).expect("utc lowercase"),
+            "2023-01-01Z"
+        );
+
+        let secs = datetime64("2023-01-01T12:30:45", Some("s")).expect("should parse seconds");
+        assert_eq!(
+            datetime_as_string(&secs, None, Some("UTC")).expect("utc seconds"),
+            "2023-01-01T12:30:45Z"
+        );
+    }
+
+    #[test]
+    fn test_datetime_as_string_unknown_timezone_errors() {
+        let dt = datetime64("2023-01-01", Some("D")).expect("should parse datetime64");
+        assert!(datetime_as_string(&dt, None, Some("Mars/Olympus_Mons")).is_err());
+    }
+
+    #[test]
+    fn test_datetime_as_string_nat() {
+        let nat = DateTime64::nat(DateTimeUnit::Day);
+        assert_eq!(
+            datetime_as_string(&nat, None, None).expect("NaT should format"),
+            "NaT"
+        );
+        assert_eq!(
+            datetime_as_string(&nat, None, Some("UTC")).expect("NaT should format under UTC too"),
+            "NaT"
+        );
     }
 
     #[test]

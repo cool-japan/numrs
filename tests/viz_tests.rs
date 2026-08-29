@@ -311,8 +311,6 @@ fn test_benchmark_comparison() {
 
 #[test]
 fn test_export_formats() {
-    let temp_dir = setup_test_dir();
-
     assert_eq!(
         ExportFormat::from_extension(&PathBuf::from("test.png")).expect("PNG"),
         ExportFormat::Png

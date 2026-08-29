@@ -792,6 +792,27 @@ fn optimize_acquisition(
 ///
 /// Phase 1: Evaluates `n_initial` points via LHS. Phase 2: Iteratively fits GP,
 /// optimizes acquisition function, evaluates objective at suggested point.
+///
+/// # Errors
+///
+/// Besides the up-front `config.bounds` validation, this function
+/// propagates (does not swallow) failures from the GP fitting machinery,
+/// since continuing past one would otherwise hand back a
+/// [`BayesOptResult`] whose `model` is stale or was never actually fitted:
+///
+/// - Every per-iteration [`GaussianProcess::fit`] call (required before
+///   that iteration's acquisition step) and the final re-fit after the
+///   loop (so `result.model` matches the returned `result.x_history`/
+///   `result.f_history`) return `Err` on a non-positive-definite
+///   covariance matrix — e.g. an invalid (negative) `noise_variance`, or
+///   otherwise numerically degenerate training data.
+/// - When `config.optimize_hyperparams` is enabled (the default), each
+///   [`GaussianProcess::optimize_hyperparameters`] call at the configured
+///   `hp_optimize_interval` can itself fail if a randomly-drawn restart
+///   hyperparameter combination produces a degenerate covariance; such a
+///   failure aborts the run rather than risking a corrupted GP (mutated
+///   kernel, stale cached Cholesky factor) silently feeding the next
+///   iteration's predictions.
 pub fn bayesian_optimize<F>(objective: F, config: BayesOptConfig) -> Result<BayesOptResult>
 where
     F: Fn(&[f64]) -> f64,
@@ -846,12 +867,23 @@ where
         // Fit GP model to all data collected so far
         gp.fit(&x_history, &f_history)?;
 
-        // Optionally optimize GP hyperparameters
+        // Optionally optimize GP hyperparameters.
+        //
+        // Policy: propagate failures instead of swallowing them. A failure
+        // here (e.g. a numerically degenerate trial hyperparameter
+        // combination) can leave `gp`'s kernel and its cached Cholesky
+        // factor/alpha mutually inconsistent (`optimize_hyperparameters`
+        // mutates `gp.kernel` before re-fitting; if that re-fit fails, the
+        // kernel no longer matches the stale `cholesky_l`/`alpha` from the
+        // prior successful fit). Continuing on such a discarded error would
+        // let `predict`/the acquisition step silently use a corrupted GP
+        // instead of surfacing the problem, so we bail out via `?` rather
+        // than risk that.
         if config.optimize_hyperparams
             && config.hp_optimize_interval > 0
             && iteration % config.hp_optimize_interval == 0
         {
-            let _ = gp.optimize_hyperparameters(&x_history, &f_history, config.n_hp_restarts);
+            gp.optimize_hyperparameters(&x_history, &f_history, config.n_hp_restarts)?;
         }
 
         // Find the next point by maximizing the acquisition function
@@ -877,8 +909,19 @@ where
         }
     }
 
-    // Final fit for the returned model
-    let _ = gp.fit(&x_history, &f_history);
+    // Final fit for the returned model.
+    //
+    // Policy: propagate failures instead of swallowing them. This fit is
+    // what makes `result.model` consistent with the full, final
+    // `x_history`/`f_history` we are about to return (the last
+    // per-iteration fit above only saw the history as of the *start* of
+    // the final iteration). Discarding an error here used to mean a
+    // failure left `gp` in a stale/inconsistent state (kernel-vs-cached-
+    // Cholesky mismatch, or never fitted at all when `n_iterations == 0`)
+    // while `bayesian_optimize` still returned `Ok(..)` — silently handing
+    // the caller a model whose `predict()` produces nonsense instead of an
+    // error. Surface it instead.
+    gp.fit(&x_history, &f_history)?;
 
     let n_evaluations = x_history.len();
     let success = f_best < initial_best;
@@ -1526,6 +1569,97 @@ mod tests {
             "Higher xi should reduce EI at the same point: low_xi={}, high_xi={}",
             ei_low_xi,
             ei_high_xi
+        );
+    }
+
+    // ========================================================================
+    // Regression tests: discarded `Result`s from `gp.fit(...)` /
+    // `gp.optimize_hyperparameters(...)` inside `bayesian_optimize` used to
+    // be thrown away with `let _ = ...`, so a failure there silently left
+    // the GP in a stale/inconsistent state instead of surfacing an error.
+    // ========================================================================
+
+    /// A negative `noise_variance` makes `noise = noise_variance / y_std^2`
+    /// negative enough that `K[i][i] + noise + jitter` goes non-positive, so
+    /// the covariance matrix built from otherwise perfectly valid, distinct
+    /// training points is not positive definite and Cholesky must fail.
+    /// This is the "degenerate covariance" failure mode `fit()` is supposed
+    /// to reject rather than silently accept.
+    #[test]
+    fn test_gp_fit_returns_err_on_degenerate_negative_noise_covariance() {
+        let mut gp = GaussianProcess::new(KernelType::SquaredExponential, -10.0);
+        let x_train = vec![vec![0.0], vec![1.0], vec![2.0]];
+        let y_train = vec![1.0, 2.0, 3.0];
+
+        let err = gp.fit(&x_train, &y_train).expect_err(
+            "fit() must surface an error for a degenerate (non-PD) covariance, not silently succeed",
+        );
+        assert!(
+            matches!(err, NumRs2Error::NumericalError(_)),
+            "expected NumericalError for a non-positive-definite covariance matrix, got {:?}",
+            err
+        );
+    }
+
+    /// Same degenerate-covariance construction as above, but exercised
+    /// through `optimize_hyperparameters` (the call `bayesian_optimize`
+    /// makes at each `hp_optimize_interval` step) rather than `fit`
+    /// directly. `n_restarts = 1` keeps this deterministic: restart 0 always
+    /// reuses the kernel's *current* hyperparameters (no RNG sampling is
+    /// involved unless `n_restarts > 1`), so the failure does not depend on
+    /// `thread_rng()`.
+    #[test]
+    fn test_gp_optimize_hyperparameters_returns_err_on_degenerate_negative_noise_covariance() {
+        let mut gp = GaussianProcess::new(KernelType::SquaredExponential, -10.0);
+        let x_train = vec![vec![0.0], vec![1.0], vec![2.0]];
+        let y_train = vec![1.0, 2.0, 3.0];
+
+        let result = gp.optimize_hyperparameters(&x_train, &y_train, 1);
+        assert!(
+            result.is_err(),
+            "optimize_hyperparameters() must surface the underlying fit failure instead of \
+             silently succeeding: got {:?}",
+            result
+        );
+    }
+
+    /// Regression test for the `let _ = gp.fit(&x_history, &f_history);`
+    /// discard that used to sit after the optimization loop returned. With
+    /// `n_iterations = 0` the loop body (which contains the *already*
+    /// correctly-propagated per-iteration `gp.fit(...)?`) never runs, so the
+    /// only `fit` call exercised end-to-end is the final one — this isolates
+    /// the exact line that used to swallow its error.
+    ///
+    /// Before the fix, this silently returned `Ok(BayesOptResult { model, .. })`
+    /// with `model` left in an inconsistent, never-actually-fitted state:
+    /// `fit()` updates `x_train`/`y_mean`/`y_std`/`y_train` *before*
+    /// attempting the Cholesky decomposition, so a failure there leaves
+    /// `cholesky_l`/`alpha` at their `GaussianProcess::new()` (empty)
+    /// values while the rest of the state has already moved on. A later
+    /// `predict()` call on such a model does not even error (its `x_train
+    /// .is_empty()` guard passes, since `x_train` was updated): it silently
+    /// returns `mu == y_mean` for every query point via a zero-length
+    /// `zip` against the empty `alpha`. After the fix, the caller gets an
+    /// `Err` instead of that silently-wrong model.
+    #[test]
+    fn test_bayesian_optimize_surfaces_final_fit_error_instead_of_returning_broken_model() {
+        let objective = |x: &[f64]| -> f64 { x[0] * x[0] };
+        let config = BayesOptConfig {
+            bounds: vec![(0.0, 1.0)],
+            n_initial: 5,
+            n_iterations: 0,
+            noise_variance: -10.0,
+            optimize_hyperparams: false,
+            ..Default::default()
+        };
+
+        let err = bayesian_optimize(objective, config).expect_err(
+            "bayesian_optimize must surface the final-fit error instead of returning a broken model",
+        );
+        assert!(
+            matches!(err, NumRs2Error::NumericalError(_)),
+            "expected NumericalError from the degenerate final fit, got {:?}",
+            err
         );
     }
 }

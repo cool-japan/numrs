@@ -222,7 +222,7 @@ pub fn from_polar<T: Float>(
         })
         .collect();
 
-    Ok(Array::from_vec(result).reshape(&magnitude.shape()))
+    Array::from_vec_shape(result, &magnitude.shape())
 }
 
 /// Check if values are complex (have non-zero imaginary part)

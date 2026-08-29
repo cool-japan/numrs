@@ -91,7 +91,7 @@ pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// Fallback for non-x86_64 systems
@@ -113,7 +113,7 @@ pub fn avx2_optimized_add_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
         .zip(b_data.iter())
         .map(|(a, b)| a + b)
         .collect();
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// AVX2-optimized array addition for f64
@@ -146,7 +146,7 @@ pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// AVX2-optimized array multiplication for f32
@@ -179,7 +179,7 @@ pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// AVX2-optimized array multiplication for f64
@@ -212,15 +212,20 @@ pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
         }
     }
 
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// AVX2-optimized square root for f32
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
+///
+/// # Errors
+///
+/// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+/// to the input shape.
 #[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(target_arch = "x86_64")]
-pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
+pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Result<Array<f32>> {
     let a_data = a.to_vec();
     let mut result_data = vec![0.0f32; a_data.len()];
 
@@ -237,15 +242,20 @@ pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
         }
     }
 
-    Array::from_vec(result_data).reshape(&a.shape())
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// AVX2-optimized square root for f64
 ///
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
+///
+/// # Errors
+///
+/// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+/// to the input shape.
 #[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(target_arch = "x86_64")]
-pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
+pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Result<Array<f64>> {
     let a_data = a.to_vec();
     let mut result_data = vec![0.0f64; a_data.len()];
 
@@ -262,7 +272,7 @@ pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
         }
     }
 
-    Array::from_vec(result_data).reshape(&a.shape())
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// AVX2-optimized sum for f32
@@ -314,7 +324,7 @@ pub fn avx2_optimized_add_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
         .zip(b_data.iter())
         .map(|(a, b)| a + b)
         .collect();
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_mul` instead.
@@ -334,7 +344,7 @@ pub fn avx2_optimized_mul_f32(a: &Array<f32>, b: &Array<f32>) -> Result<Array<f3
         .zip(b_data.iter())
         .map(|(a, b)| a * b)
         .collect();
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_mul` instead.
@@ -354,25 +364,35 @@ pub fn avx2_optimized_mul_f64(a: &Array<f64>, b: &Array<f64>) -> Result<Array<f6
         .zip(b_data.iter())
         .map(|(a, b)| a * b)
         .collect();
-    Ok(Array::from_vec(result_data).reshape(&a.shape()))
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
+///
+/// # Errors
+///
+/// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+/// to the input shape.
 #[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(not(target_arch = "x86_64"))]
-pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Array<f32> {
+pub fn avx2_optimized_sqrt_f32(a: &Array<f32>) -> Result<Array<f32>> {
     let a_data = a.to_vec();
     let result_data: Vec<f32> = a_data.iter().map(|x| x.sqrt()).collect();
-    Array::from_vec(result_data).reshape(&a.shape())
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt` instead.
+///
+/// # Errors
+///
+/// Returns `NumRs2Error::ShapeMismatch` if the result cannot be reshaped
+/// to the input shape.
 #[deprecated(note = "Use scirs2_core::simd_ops::SimdUnifiedOps::simd_sqrt instead")]
 #[cfg(not(target_arch = "x86_64"))]
-pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Array<f64> {
+pub fn avx2_optimized_sqrt_f64(a: &Array<f64>) -> Result<Array<f64>> {
     let a_data = a.to_vec();
     let result_data: Vec<f64> = a_data.iter().map(|x| x.sqrt()).collect();
-    Array::from_vec(result_data).reshape(&a.shape())
+    Array::from_vec_shape(result_data, &a.shape())
 }
 
 /// **DEPRECATED**: Use `scirs2_core::simd_ops::SimdUnifiedOps::simd_sum` instead.

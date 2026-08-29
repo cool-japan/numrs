@@ -47,10 +47,9 @@
 //! NMI_min = I(X;Y) / min(H(X), H(Y))
 //! ```
 
-use super::entropy::{conditional_entropy, joint_entropy, shannon_entropy, LogBase};
-use super::{validate_distribution, InfoTheoryError, InfoTheoryResult};
+use super::entropy::{joint_entropy, shannon_entropy, LogBase};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{Array1, Array2, Array3, ArrayView2, Axis};
+use scirs2_core::ndarray::{Array1, Array2, Array3, Axis};
 
 /// Normalization type for normalized mutual information
 #[derive(Debug, Clone, Copy, PartialEq)]

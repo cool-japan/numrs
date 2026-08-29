@@ -189,12 +189,10 @@ fn example2_window_functions() -> std::result::Result<(), Box<dyn std::error::Er
     println!("2.2 Spectral Leakage Reduction");
 
     // Without window
-    let fft_no_window = FFT::fft(&signal_array)?;
     let power_no_window = FFT::power_spectrum(&signal_array)?;
 
     // With Hann window
     let windowed = FFT::apply_window(&signal_array, "hann")?;
-    let fft_with_window = FFT::fft(&windowed)?;
     let power_with_window = FFT::power_spectrum(&windowed)?;
 
     println!("  No window:");
@@ -676,7 +674,9 @@ fn example6_signal_generation() -> std::result::Result<(), Box<dyn std::error::E
 
     for i in 0..n {
         let t = i as f64 / sample_rate;
-        let freq_t = f_start + (f_end - f_start) * t / duration;
+        // Linear chirp: instantaneous frequency f(t) = f_start + (f_end -
+        // f_start) * t / duration; `phase` below is its closed-form time
+        // integral 2*pi*∫f(t)dt, so f(t) itself need not be computed here.
         let phase = 2.0 * PI * (f_start * t + 0.5 * (f_end - f_start) * t * t / duration);
         chirp.push(phase.sin());
     }

@@ -23,18 +23,6 @@ fn bench_nsga2_zdt1_population(c: &mut Criterion) {
         let problem = ZDT1::new(30);
         let bounds = problem.bounds();
 
-        // Create objective functions from the problem
-        let objectives: Vec<Box<dyn Fn(&[f64]) -> f64>> = vec![
-            Box::new(|x: &[f64]| {
-                let problem = ZDT1::new(30);
-                problem.evaluate(x)[0]
-            }),
-            Box::new(|x: &[f64]| {
-                let problem = ZDT1::new(30);
-                problem.evaluate(x)[1]
-            }),
-        ];
-
         group.bench_with_input(
             BenchmarkId::new("pop_size", pop_size),
             pop_size,
@@ -150,12 +138,6 @@ fn bench_nsga3_dtlz2_objectives(c: &mut Criterion) {
     group.sample_size(10);
 
     for n_objectives in [3, 5, 8].iter() {
-        // Calculate appropriate number of variables: n_objectives + k - 1
-        let n_variables = n_objectives + 9; // k = 10 for DTLZ2
-
-        let problem = DTLZ2::new(*n_objectives, n_variables);
-        let bounds: Vec<(f64, f64)> = problem.bounds();
-
         group.bench_with_input(
             BenchmarkId::new("objectives", n_objectives),
             n_objectives,

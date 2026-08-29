@@ -11,7 +11,6 @@ extern crate criterion;
 use criterion::{BenchmarkId, Criterion};
 
 use numrs2::prelude::*;
-use scirs2_core::Complex64;
 use std::f64::consts::PI;
 use std::hint::black_box;
 

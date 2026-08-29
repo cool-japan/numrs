@@ -39,9 +39,8 @@
 //! where L is likelihood, k is parameters, n is sample size.
 
 use super::entropy::{shannon_entropy, LogBase};
-use super::{validate_distribution, InfoTheoryError, InfoTheoryResult};
 use crate::error::NumRs2Error;
-use scirs2_core::ndarray::{Array1, ArrayView1};
+use scirs2_core::ndarray::Array1;
 
 /// Estimate entropy rate of a discrete-time sequence
 ///

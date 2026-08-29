@@ -31,7 +31,7 @@
 
 use numrs2::optimize::nsga2::{nsga2, NSGA2Config, QualityMetricsConfig};
 use numrs2::optimize::nsga3::{nsga3, NSGA3Config};
-use numrs2::optimize::test_problems::{TestProblem, DTLZ1, DTLZ2, DTLZ3, DTLZ7, ZDT1, ZDT2, ZDT3};
+use numrs2::optimize::test_problems::{TestProblem, DTLZ1, DTLZ2, ZDT1, ZDT2, ZDT3};
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -604,19 +604,24 @@ fn example4_algorithm_comparison() -> Result<(), Box<dyn std::error::Error>> {
     println!("═══════════════════════════════════════════════════════════\n");
 
     println!(
-        "{:<12} {:<12} {:<10} {:<12} {:<12}",
-        "Problem", "Algorithm", "Obj", "PF Size", "Time (sec)"
+        "{:<12} {:<12} {:<10} {:<12} {:<12} {:<10}",
+        "Problem", "Algorithm", "Obj", "PF Size", "Time (sec)", "IGD"
     );
-    println!("{}", "─".repeat(65));
+    println!("{}", "─".repeat(75));
 
     for result in &results {
+        let igd_display = result
+            .igd
+            .map(|v| format!("{:.4}", v))
+            .unwrap_or_else(|| "N/A".to_string());
         println!(
-            "{:<12} {:<12} {:<10} {:<12} {:<12.2}",
+            "{:<12} {:<12} {:<10} {:<12} {:<12.2} {:<10}",
             result.problem,
             result.algorithm,
             result.objectives,
             result.pareto_size,
-            result.time.as_secs_f64()
+            result.time.as_secs_f64(),
+            igd_display
         );
     }
 

@@ -5,10 +5,9 @@
 
 use super::{Result, ServingError};
 use crate::array::Array;
-use crate::error::NumRs2Error;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Model trait for inference
 pub trait Model: Send + Sync {
@@ -332,8 +331,6 @@ impl InferenceEngine {
 
     /// Perform synchronous inference
     pub fn infer(&self, input: &Array<f64>) -> Result<Array<f64>> {
-        let start = Instant::now();
-
         // Check cache if enabled
         if let Some(ref cache) = self.cache {
             let key = self.compute_cache_key(input)?;

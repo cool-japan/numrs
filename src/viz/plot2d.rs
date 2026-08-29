@@ -20,10 +20,10 @@
 //! # }
 //! ```
 
-use super::*;
+use super::{LineStyle, LineWidth, MarkerStyle, PlotBackend, PlotConfig, VizError, VizResult};
+use plotters::coord::Shift;
 use plotters::prelude::*;
-use plotters::style::Color;
-use scirs2_core::ndarray::{Array1, ArrayView1};
+use scirs2_core::ndarray::Array1;
 use std::path::Path;
 
 // Re-import to avoid name collision with plotters::prelude::Color
@@ -300,13 +300,12 @@ impl Plot2D {
     }
 
     /// Render the plot to a drawing area
-    fn render_plot<DB: DrawingBackend>(
-        &self,
-        root: DrawingArea<DB, plotters::coord::Shift>,
-    ) -> VizResult<()>
+    fn render_plot<DB: DrawingBackend>(&self, root: DrawingArea<DB, Shift>) -> VizResult<()>
     where
         DB::ErrorType: 'static,
     {
+        super::ensure_fonts_registered();
+
         root.fill(&WHITE)
             .map_err(|e| VizError::RenderError(format!("Failed to fill background: {:?}", e)))?;
 

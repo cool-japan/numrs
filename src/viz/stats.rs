@@ -3,10 +3,9 @@
 //! This module provides statistical visualization capabilities including
 //! histograms, box plots, violin plots, scatter matrices, and correlation heatmaps.
 
-use super::*;
+use super::{PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
-use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::ndarray::Array1;
 use std::path::Path;
 
 // Helper functions using scirs2_stats public API
@@ -86,6 +85,8 @@ impl StatPlot {
         let bins = self.compute_bins(data, strategy)?;
         let (counts, edges) = compute_histogram_with_edges(data, bins)?;
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -132,6 +133,8 @@ impl StatPlot {
     /// Create a box plot
     pub fn boxplot(&self, data: &Array1<f64>, path: &Path) -> VizResult<()> {
         let stats = compute_box_stats(data)?;
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -218,6 +221,8 @@ impl StatPlot {
                 normal_quantile(p)
             })
             .collect();
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();

@@ -178,9 +178,21 @@ pub fn neon_dot_f32(_a: &[f32], _b: &[f32]) -> Result<f32> {
     ))
 }
 
+// NOTE: this fallback intentionally returns `Result<f32>` while the
+// `target_arch = "aarch64"` version above returns a bare `f32`. The two
+// are mutually exclusive `cfg` branches of the same item name, never
+// compiled together, so this is not a signature mismatch in the usual
+// sense -- but it does mean callers cannot be written to work
+// unconditionally on both architectures (same as the pre-existing
+// panic!, which made non-aarch64 callers unusable rather than merely
+// architecture-specific). The sole caller in `optimized_ops.rs` is
+// itself `#[cfg(target_arch = "aarch64")]`-gated, so it only ever binds
+// to the aarch64 definition and is unaffected by this branch.
 #[cfg(not(target_arch = "aarch64"))]
-pub fn neon_sum_f32(_data: &[f32]) -> f32 {
-    panic!("NEON is only available on ARM64 architectures")
+pub fn neon_sum_f32(_data: &[f32]) -> Result<f32> {
+    Err(crate::error::NumRs2Error::FeatureNotEnabled(
+        "NEON is only available on ARM64 architectures".to_string(),
+    ))
 }
 
 #[cfg(not(target_arch = "aarch64"))]
@@ -230,6 +242,22 @@ mod tests {
                 "NEON should not be available on non-ARM architectures"
             );
         }
+    }
+
+    /// On non-ARM64, every stub in this module must fail gracefully
+    /// (`Err`/`None`/`false`) rather than panic. `neon_sum_f32` used to be
+    /// the sole exception (`panic!`); this pins it to the same
+    /// non-panicking pattern as its siblings `neon_add_f32`,
+    /// `neon_mul_f32`, `neon_dot_f32`, `neon_exp_f32`, `neon_sqrt_f32`.
+    #[test]
+    #[cfg(not(target_arch = "aarch64"))]
+    fn test_neon_sum_f32_fails_gracefully_on_non_arm() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result = neon_sum_f32(&data);
+        assert!(
+            result.is_err(),
+            "neon_sum_f32 must return Err on non-ARM64, not panic or fabricate a value"
+        );
     }
 
     #[test]

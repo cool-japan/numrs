@@ -1,13 +1,14 @@
 //! Tests for GPU memory management
 
-use numrs2::array::Array;
 use numrs2::gpu::memory::{GpuMemoryPool, PoolConfig, TransferOptimizer, TransferStrategy};
-use numrs2::gpu::new_context;
+use numrs2::gpu::new_context_async;
 use std::time::Duration;
 
 #[tokio::test]
 async fn test_memory_pool_creation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let pool = GpuMemoryPool::new(context);
 
     let stats = pool.statistics().expect("Failed to get pool statistics");
@@ -18,7 +19,9 @@ async fn test_memory_pool_creation() {
 
 #[tokio::test]
 async fn test_memory_pool_allocation() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut pool = GpuMemoryPool::new(context.clone());
 
     // Allocate a buffer
@@ -35,7 +38,9 @@ async fn test_memory_pool_allocation() {
 
 #[tokio::test]
 async fn test_memory_pool_reuse() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut pool = GpuMemoryPool::new(context.clone());
 
     // Allocate and drop a buffer
@@ -63,7 +68,9 @@ async fn test_memory_pool_reuse() {
 
 #[tokio::test]
 async fn test_memory_pool_garbage_collection() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let config = PoolConfig {
         max_pool_size: 100,
         buffer_expiration: Duration::from_millis(100),
@@ -72,12 +79,19 @@ async fn test_memory_pool_garbage_collection() {
     };
     let mut pool = GpuMemoryPool::with_config(context.clone(), config);
 
-    // Allocate and return several buffers
+    // Allocate several buffers, keeping every handle alive at once so the
+    // pool cannot recycle one iteration's buffer into the next (it would,
+    // since `allocate` prefers a pooled buffer over creating a new one --
+    // see `test_memory_pool_reuse` for that behavior in isolation), then
+    // return them all together.
+    let mut buffers = Vec::with_capacity(10);
     for _ in 0..10 {
-        let _buffer = pool
-            .allocate(1024, wgpu::BufferUsages::STORAGE)
-            .expect("Failed to allocate buffer");
+        buffers.push(
+            pool.allocate(1024, wgpu::BufferUsages::STORAGE)
+                .expect("Failed to allocate buffer"),
+        );
     }
+    drop(buffers);
 
     let stats = pool.statistics().expect("Failed to get pool statistics");
     assert_eq!(stats.total_buffers, 10);
@@ -96,15 +110,24 @@ async fn test_memory_pool_garbage_collection() {
 
 #[tokio::test]
 async fn test_memory_pool_clear() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut pool = GpuMemoryPool::new(context.clone());
 
-    // Allocate and return several buffers
+    // Allocate several buffers, keeping every handle alive at once so the
+    // pool cannot recycle one iteration's buffer into the next (it would,
+    // since `allocate` prefers a pooled buffer over creating a new one --
+    // see `test_memory_pool_reuse` for that behavior in isolation), then
+    // return them all together.
+    let mut buffers = Vec::with_capacity(5);
     for _ in 0..5 {
-        let _buffer = pool
-            .allocate(2048, wgpu::BufferUsages::STORAGE)
-            .expect("Failed to allocate buffer");
+        buffers.push(
+            pool.allocate(2048, wgpu::BufferUsages::STORAGE)
+                .expect("Failed to allocate buffer"),
+        );
     }
+    drop(buffers);
 
     let stats = pool.statistics().expect("Failed to get pool statistics");
     assert_eq!(stats.total_buffers, 5);
@@ -119,7 +142,9 @@ async fn test_memory_pool_clear() {
 
 #[tokio::test]
 async fn test_transfer_optimizer_immediate() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut optimizer = TransferOptimizer::new(context.clone(), TransferStrategy::Immediate);
 
     assert_eq!(optimizer.strategy(), TransferStrategy::Immediate);
@@ -139,7 +164,9 @@ async fn test_transfer_optimizer_immediate() {
 
 #[tokio::test]
 async fn test_transfer_optimizer_batched() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut optimizer = TransferOptimizer::new(context.clone(), TransferStrategy::Batched);
 
     assert_eq!(optimizer.strategy(), TransferStrategy::Batched);
@@ -160,7 +187,9 @@ async fn test_transfer_optimizer_batched() {
 
 #[tokio::test]
 async fn test_transfer_strategy_change() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut optimizer = TransferOptimizer::new(context.clone(), TransferStrategy::Immediate);
 
     assert_eq!(optimizer.strategy(), TransferStrategy::Immediate);
@@ -183,7 +212,9 @@ async fn test_is_large_transfer() {
 
 #[tokio::test]
 async fn test_pool_statistics() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut pool = GpuMemoryPool::new(context.clone());
 
     // Allocate buffers of different sizes
@@ -208,7 +239,9 @@ async fn test_pool_statistics() {
 
 #[tokio::test]
 async fn test_transfer_with_offset() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut optimizer = TransferOptimizer::new(context.clone(), TransferStrategy::Immediate);
 
     let data = vec![1.0f32, 2.0, 3.0, 4.0];
@@ -225,13 +258,19 @@ async fn test_transfer_with_offset() {
 
     // Write to second half
     optimizer
-        .queue_transfer_with_offset(&data, &buffer, (data.len() * std::mem::size_of::<f32>()) as u64)
+        .queue_transfer_with_offset(
+            &data,
+            &buffer,
+            (data.len() * std::mem::size_of::<f32>()) as u64,
+        )
         .expect("Failed to queue transfer with offset");
 }
 
 #[tokio::test]
 async fn test_async_transfer_queue() {
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut optimizer = TransferOptimizer::new(context.clone(), TransferStrategy::Async);
 
     let data = vec![1.0f32, 2.0, 3.0, 4.0];
@@ -269,7 +308,9 @@ async fn test_async_transfer_queue() {
 async fn test_double_buffer_creation() {
     use numrs2::gpu::memory::DoubleBuffer;
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let double_buffer = DoubleBuffer::new(context, 1024, wgpu::BufferUsages::STORAGE);
 
     assert_eq!(double_buffer.size(), 1024);
@@ -279,7 +320,9 @@ async fn test_double_buffer_creation() {
 async fn test_double_buffer_swap() {
     use numrs2::gpu::memory::DoubleBuffer;
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut double_buffer = DoubleBuffer::new(context, 1024, wgpu::BufferUsages::STORAGE);
 
     let first_current = double_buffer.current() as *const _;
@@ -300,7 +343,9 @@ async fn test_double_buffer_swap() {
 async fn test_double_buffer_write() {
     use numrs2::gpu::memory::DoubleBuffer;
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let double_buffer = DoubleBuffer::new(
         context,
         16,
@@ -316,7 +361,9 @@ async fn test_double_buffer_write() {
 async fn test_buffer_alias_manager() {
     use numrs2::gpu::memory::BufferAliasManager;
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut manager = BufferAliasManager::new(context);
 
     // Allocate buffers
@@ -333,16 +380,23 @@ async fn test_buffer_alias_manager() {
 async fn test_buffer_alias_reuse() {
     use numrs2::gpu::memory::BufferAliasManager;
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut manager = BufferAliasManager::new(context);
 
-    // Create buffer
-    let buffer1 = manager
+    // Create buffer. `get_or_create_buffer` returns an owned `wgpu::Buffer`
+    // (not a reference/handle we could compare by pointer), so -- as the
+    // comment below has always said -- there is no easy identity check
+    // available here; both are bound as `_`-prefixed to document that they
+    // are intentionally unused beyond driving `manager`'s alias bookkeeping,
+    // which the `stats` assertions below do check.
+    let _buffer1 = manager
         .get_or_create_buffer(1024, wgpu::BufferUsages::STORAGE)
         .expect("Failed to create buffer");
 
     // Request same size and usage - should get aliased buffer
-    let buffer2 = manager
+    let _buffer2 = manager
         .get_or_create_buffer(1024, wgpu::BufferUsages::STORAGE)
         .expect("Failed to get buffer");
 
@@ -357,7 +411,9 @@ async fn test_buffer_alias_reuse() {
 async fn test_buffer_alias_release() {
     use numrs2::gpu::memory::BufferAliasManager;
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut manager = BufferAliasManager::new(context);
 
     // Create and release buffer
@@ -383,7 +439,9 @@ async fn test_buffer_alias_release() {
 async fn test_buffer_alias_clear() {
     use numrs2::gpu::memory::BufferAliasManager;
 
-    let context = new_context().expect("Failed to create GPU context");
+    let context = new_context_async()
+        .await
+        .expect("Failed to create GPU context");
     let mut manager = BufferAliasManager::new(context);
 
     // Create multiple buffers

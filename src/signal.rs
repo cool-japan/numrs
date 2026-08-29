@@ -344,7 +344,7 @@ where
         result
     };
 
-    Ok(Array::from_vec(result).reshape(&[output_rows, output_cols]))
+    Array::from_vec_shape(result, &[output_rows, output_cols])
 }
 
 /// Compute the 2D cross-correlation of two arrays
@@ -401,7 +401,7 @@ where
         }
     }
 
-    let flipped_template = Array::from_vec(flipped_data).reshape(&[rows, cols]);
+    let flipped_template = Array::from_vec_shape(flipped_data, &[rows, cols])?;
 
     // Correlation is convolution with flipped template
     convolve2d(input, &flipped_template, mode)
@@ -481,7 +481,7 @@ where
                 result.push(data[i] + cumulative_correction);
             }
 
-            Ok(Array::from_vec(result).reshape(&phase.shape()))
+            Ok(Array::from_vec_shape(result, &phase.shape())?)
         }
         Some(ax) => {
             let shape = phase.shape();
@@ -577,7 +577,7 @@ where
                 }
             }
 
-            Ok(Array::from_vec(result_data).reshape(&shape))
+            Ok(Array::from_vec_shape(result_data, &shape)?)
         }
     }
 }

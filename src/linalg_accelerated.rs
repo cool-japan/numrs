@@ -25,11 +25,8 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use crate::interop::ndarray_compat::{from_ndarray, to_ndarray};
 use num_traits::{Float, NumAssign, NumCast};
-use scirs2_core::ndarray::{
-    Array1, Array2, ArrayView1, ArrayView2, Ix1, Ix2, IxDyn, ScalarOperand,
-};
+use scirs2_core::ndarray::{Array1, Array2, ScalarOperand};
 use std::fmt::Debug;
 use std::iter::Sum;
 
@@ -86,7 +83,7 @@ where
     let nrows = arr.nrows();
     let ncols = arr.ncols();
     let data: Vec<T> = arr.into_iter().collect();
-    Ok(Array::from_vec(data).reshape(&[nrows, ncols]))
+    Array::from_vec_shape(data, &[nrows, ncols])
 }
 
 /// Convert ndarray Array1 back to NumRS2 Array
@@ -432,7 +429,7 @@ where
 
     Ok((
         Array::from_vec(eigenvalues_vec),
-        Array::from_vec(eigenvectors_data).reshape(&[ev_shape[0], ev_shape[1]]),
+        Array::from_vec_shape(eigenvectors_data, &[ev_shape[0], ev_shape[1]])?,
     ))
 }
 
@@ -615,40 +612,81 @@ where
 pub struct AcceleratedBlas;
 
 impl AcceleratedBlas {
-    /// Matrix-matrix multiplication: C = α*A*B + β*C
+    /// Matrix-matrix multiplication: C = α*op(A)*op(B) + β*C
+    ///
+    /// where `op(X) = Xᵀ` when the corresponding `trans_*` flag is `true`,
+    /// and `op(X) = X` otherwise (standard BLAS GEMM convention). When
+    /// `trans_a` is set, `a` is expected to be stored as the (k × m)
+    /// matrix whose transpose is the (m × k) operand actually used in the
+    /// product (and symmetrically for `trans_b`/`b`).
+    ///
+    /// The transpose itself is applied as an `ndarray` view (`.t()`,
+    /// swapped shape/strides over the same buffer) rather than by
+    /// materializing a second, transposed matrix; note that `a`/`b`/`c`
+    /// are still each copied once from NumRS2's `Array<T>` into an
+    /// `ndarray` `Array2<T>` beforehand, as `matmul`/`gemm` above already do.
     pub fn gemm<T>(
         a: &Array<T>,
         b: &Array<T>,
         c: &mut Array<T>,
         alpha: T,
         beta: T,
-        _trans_a: bool,
-        _trans_b: bool,
+        trans_a: bool,
+        trans_b: bool,
     ) -> Result<()>
     where
         T: Float + NumAssign + Clone + Debug + NumCast + 'static,
     {
-        // Note: Current scirs2-linalg API doesn't support transpose flags directly
-        // For transposed operations, the caller should transpose the arrays first
-        let result = gemm(alpha, a, b, beta, c)?;
-        *c = result;
+        let a_nd = to_array2(a)?;
+        let b_nd = to_array2(b)?;
+        let c_nd = to_array2(c)?;
+
+        let a_view = if trans_a { a_nd.t() } else { a_nd.view() };
+        let b_view = if trans_b { b_nd.t() } else { b_nd.view() };
+
+        let result =
+            scirs2_linalg::blas_accelerated::gemm(alpha, &a_view, &b_view, beta, &c_nd.view())
+                .map_err(linalg_to_numrs2_error)?;
+
+        *c = from_array2(result)?;
         Ok(())
     }
 
-    /// Matrix-vector multiplication: y = α*A*x + β*y
+    /// Matrix-vector multiplication: y = α*op(A)*x + β*y
+    ///
+    /// where `op(A) = Aᵀ` when `trans` is `true`, and `op(A) = A`
+    /// otherwise (standard BLAS GEMV convention). When `trans` is set,
+    /// `a` is expected to be stored as the (n × m) matrix whose transpose
+    /// is the (m × n) operand actually used in the product.
+    ///
+    /// The transpose itself is applied as an `ndarray` view (`.t()`,
+    /// swapped shape/strides over the same buffer) rather than by
+    /// materializing a second, transposed matrix; note that `a`/`x`/`y`
+    /// are still each copied once from NumRS2's `Array<T>` into an
+    /// `ndarray` `Array2<T>`/`Array1<T>` beforehand, as `gemv` above
+    /// already does.
     pub fn gemv<T>(
         a: &Array<T>,
         x: &Array<T>,
         y: &mut Array<T>,
         alpha: T,
         beta: T,
-        _trans: bool,
+        trans: bool,
     ) -> Result<()>
     where
         T: Float + NumAssign + Clone + Debug + NumCast + 'static,
     {
-        let result = gemv(alpha, a, x, beta, y)?;
-        *y = result;
+        let a_nd = to_array2(a)?;
+        let x_nd = to_array1(x)?;
+        let y_nd = to_array1(y)?;
+
+        let a_view = if trans { a_nd.t() } else { a_nd.view() };
+
+        let result =
+            scirs2_linalg::blas_accelerated::gemv(alpha, &a_view, &x_nd.view(), beta, &y_nd.view())
+                .map_err(linalg_to_numrs2_error)?;
+
+        *y = from_array1(result)?;
         Ok(())
     }
 

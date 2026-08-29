@@ -579,11 +579,10 @@ impl<'a, T> ArrayView<'a, T> {
         self.strides == expected_strides
     }
 
-    // Iterator functionality temporarily disabled due to lifetime complexity
-    // /// Get an iterator over all elements in the view
-    // pub fn iter(&self) -> ArrayViewIterator<T> {
-    //     ArrayViewIterator::new(self)
-    // }
+    /// Get an iterator over all elements in the view in C-order (row-major)
+    pub fn iter(&self) -> ArrayViewIterator<'a, T> {
+        ArrayViewIterator::new(self)
+    }
 }
 
 impl<T: Clone> ArrayView<'_, T> {
@@ -618,63 +617,46 @@ impl<T: Clone> ArrayView<'_, T> {
     }
 }
 
-/// Iterator for ArrayView
-pub struct ArrayViewIterator<T> {
+/// Iterator over elements of an `ArrayView` in C-order (row-major).
+///
+/// The lifetime `'a` ties this iterator to the underlying slice, ensuring
+/// the references remain valid for as long as the iterator is alive.
+pub struct ArrayViewIterator<'a, T> {
+    data: &'a [T],
     shape: Shape,
     strides: Vec<usize>,
-    data: *const T,
     offset: usize,
     current_indices: Vec<usize>,
     finished: bool,
 }
 
-impl<T> ArrayViewIterator<T> {
-    #[allow(dead_code)]
-    fn new(view: &ArrayView<'_, T>) -> Self {
+impl<'a, T> ArrayViewIterator<'a, T> {
+    fn new(view: &ArrayView<'a, T>) -> Self {
         let current_indices = vec![0; view.shape.ndim()];
         let finished = view.shape.size() == 0;
         Self {
+            data: view.data,
             shape: view.shape.clone(),
             strides: view.strides.clone(),
-            data: view.data.as_ptr(),
             offset: view.offset,
             current_indices,
             finished,
         }
     }
 
-    #[allow(dead_code)]
-    fn get_current_element(&self) -> Option<&T> {
-        if self.finished {
-            return None;
-        }
-
+    /// Compute the flat data index for the current multi-dimensional indices.
+    fn current_flat_index(&self) -> usize {
         let mut flat_index = self.offset;
         for (&idx, &stride) in self.current_indices.iter().zip(self.strides.iter()) {
             flat_index += idx * stride;
         }
-
-        unsafe { Some(&*self.data.add(flat_index)) }
+        flat_index
     }
-}
 
-impl<T> Iterator for ArrayViewIterator<T> {
-    type Item = *const T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
-            return None;
-        }
-
-        // Get current element pointer
-        let mut flat_index = self.offset;
-        for (&idx, &stride) in self.current_indices.iter().zip(self.strides.iter()) {
-            flat_index += idx * stride;
-        }
-        let element_ptr = unsafe { self.data.add(flat_index) };
-
-        // Advance indices
-        let mut carry = 1;
+    /// Advance the multi-dimensional index counter by one step in C-order.
+    /// Returns `true` when the iteration has been exhausted after this advance.
+    fn advance_indices(&mut self) -> bool {
+        let mut carry = 1usize;
         for i in (0..self.current_indices.len()).rev() {
             self.current_indices[i] += carry;
             if self.current_indices[i] < self.shape.dims[i] {
@@ -685,12 +667,26 @@ impl<T> Iterator for ArrayViewIterator<T> {
                 carry = 1;
             }
         }
+        carry == 1
+    }
+}
 
-        if carry == 1 {
+impl<'a, T> Iterator for ArrayViewIterator<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            return None;
+        }
+
+        let flat_index = self.current_flat_index();
+
+        // Advance indices before returning, marking finished if we wrap around.
+        if self.advance_indices() {
             self.finished = true;
         }
 
-        Some(element_ptr)
+        self.data.get(flat_index)
     }
 }
 
@@ -966,23 +962,50 @@ mod tests {
         let shape = Shape::from_2d(2, 2);
         let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
 
-        // Test that we can access elements manually
-        assert_eq!(
-            view.get(&[0, 0]).expect("test: operation should succeed"),
-            &1
-        );
-        assert_eq!(
-            view.get(&[0, 1]).expect("test: operation should succeed"),
-            &2
-        );
-        assert_eq!(
-            view.get(&[1, 0]).expect("test: operation should succeed"),
-            &3
-        );
-        assert_eq!(
-            view.get(&[1, 1]).expect("test: operation should succeed"),
-            &4
-        );
+        // Verify iter() returns elements in C-order (row-major): 1, 2, 3, 4
+        let elements: Vec<&i32> = view.iter().collect();
+        assert_eq!(elements, vec![&1, &2, &3, &4]);
+    }
+
+    #[test]
+    fn test_array_view_iter_1d() {
+        let data = vec![10, 20, 30, 40, 50];
+        let shape = Shape::from_1d(5);
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
+
+        let elements: Vec<i32> = view.iter().copied().collect();
+        assert_eq!(elements, vec![10, 20, 30, 40, 50]);
+    }
+
+    #[test]
+    fn test_array_view_iter_empty() {
+        let data: Vec<i32> = vec![];
+        let shape = Shape::new(vec![0]);
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
+
+        let elements: Vec<&i32> = view.iter().collect();
+        assert!(elements.is_empty());
+    }
+
+    #[test]
+    fn test_array_view_iter_3d() {
+        // 2x2x3 array filled with 0..12
+        let data: Vec<i32> = (0..12).collect();
+        let shape = Shape::new(vec![2, 2, 3]);
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
+
+        let elements: Vec<i32> = view.iter().copied().collect();
+        assert_eq!(elements, (0..12).collect::<Vec<i32>>());
+    }
+
+    #[test]
+    fn test_array_view_iter_sum() {
+        let data: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let shape = Shape::from_2d(2, 3);
+        let view = ArrayView::from_data(&data, shape).expect("test: operation should succeed");
+
+        let sum: f64 = view.iter().copied().sum();
+        assert!((sum - 21.0).abs() < 1e-12);
     }
 
     #[test]

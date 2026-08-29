@@ -94,14 +94,22 @@ where
         // Create a new banded matrix with default values
         let mut banded = Self::new(rows, cols, sub_diagonals, super_diagonals);
 
-        // Fill the banded matrix with values from the array
+        // Fill the banded matrix with values from the array. Bulk-acquire
+        // `banded.data` once and inline `set()`'s band-index arithmetic
+        // (duplicated from `BandedMatrix::set` below -- keep the two in sync
+        // if that formula ever changes) so the whole O(rows * band_width)
+        // pass pays `Arc::make_mut`'s unshare check once instead of once per
+        // in-band element.
+        let out = banded.data.array_mut();
         for i in 0..rows {
             for j in 0..cols {
                 // Only consider elements within the band
                 let diagonal = j as isize - i as isize;
                 if diagonal >= -(sub_diagonals as isize) && diagonal <= super_diagonals as isize {
                     let value = array.get(&[i, j])?;
-                    banded.set(i, j, value.clone())?;
+                    let band_row = (sub_diagonals as isize + diagonal) as usize;
+                    let band_col = if diagonal < 0 { j } else { i };
+                    out[[band_row, band_col]] = value;
                 }
             }
         }
@@ -223,15 +231,17 @@ where
     pub fn to_array(&self) -> Array<T> {
         let mut array = Array::full(&[self.rows, self.cols], T::default());
 
+        // `array` is write-only here (every read is `self.get`, a different
+        // structure), so one bulk unshare covers the whole pass instead of
+        // `Array::set`'s per-element `Arc::make_mut` check.
+        let out = array.array_mut();
         for i in 0..self.rows {
             for j in 0..self.cols {
                 if self.is_in_band(i, j) {
                     let value = self
                         .get(i, j)
                         .expect("to_array: index within band should be valid");
-                    array
-                        .set(&[i, j], value)
-                        .expect("to_array: index within array bounds should be valid");
+                    out[[i, j]] = value;
                 }
             }
         }
@@ -295,7 +305,6 @@ where
             let j_start = i.saturating_sub(self.sub_diagonals);
             let j_end = std::cmp::min(i + self.super_diagonals + 1, self.cols);
 
-            #[allow(clippy::needless_range_loop)]
             for j in j_start..j_end {
                 let a_ij = self
                     .get(i, j)
@@ -348,5 +357,65 @@ where
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `BandedMatrix<T>` had no test coverage anywhere in the crate despite
+    // being public, even though `from_array()` and `to_array()` were
+    // restructured for the W3-A2 COW-tax conversion -- added here to pin
+    // down their round-trip behavior.
+
+    #[test]
+    fn test_from_array_round_trips_through_to_array() {
+        // Tridiagonal 4x4: one sub-diagonal, one super-diagonal.
+        let data = vec![
+            1.0, 2.0, 0.0, 0.0, //
+            3.0, 4.0, 5.0, 0.0, //
+            0.0, 6.0, 7.0, 8.0, //
+            0.0, 0.0, 9.0, 10.0,
+        ];
+        let a = Array::from_vec(data).reshape(&[4, 4]);
+
+        let banded = BandedMatrix::from_array(&a, 1, 1).expect("tridiagonal input should fit");
+        assert_eq!(banded.nrows(), 4);
+        assert_eq!(banded.ncols(), 4);
+
+        // Every element `from_array` copied in (i.e. every in-band position)
+        // must read back exactly, both via `get()` and via `to_array()`.
+        let round_tripped = banded.to_array();
+        for i in 0..4 {
+            for j in 0..4 {
+                let expected = a.get(&[i, j]).expect("in-bounds get");
+                assert_eq!(
+                    banded.get(i, j).expect("in-bounds get"),
+                    expected,
+                    "BandedMatrix::get mismatch at ({i},{j})"
+                );
+                assert_eq!(
+                    round_tripped.get(&[i, j]).expect("in-bounds get"),
+                    expected,
+                    "to_array mismatch at ({i},{j})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_array_ignores_out_of_band_entries() {
+        // A dense matrix with a nonzero far corner that a 0-bandwidth
+        // (diagonal-only) banded matrix must drop.
+        let a = Array::from_vec(vec![1.0, 99.0, 99.0, 2.0]).reshape(&[2, 2]);
+        let banded = BandedMatrix::from_array(&a, 0, 0).expect("diagonal-only should fit");
+
+        assert_eq!(banded.get(0, 0).expect("in-bounds get"), 1.0);
+        assert_eq!(banded.get(1, 1).expect("in-bounds get"), 2.0);
+        // Off-diagonal entries are outside the band, so they read back as the
+        // type's default rather than the dropped input value.
+        assert_eq!(banded.get(0, 1).expect("in-bounds get"), 0.0);
+        assert_eq!(banded.get(1, 0).expect("in-bounds get"), 0.0);
     }
 }

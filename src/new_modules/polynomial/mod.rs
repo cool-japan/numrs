@@ -10,6 +10,7 @@
 //! - Utility functions (Vandermonde matrices, companion matrices, etc.)
 
 pub mod arithmetic;
+pub mod classes;
 pub mod core;
 pub mod fitting;
 pub mod interpolation;
@@ -19,6 +20,14 @@ pub mod utils;
 
 // Re-export core types
 pub use core::Polynomial;
+
+// Re-export the NumPy `numpy.polynomial` class family (Chebyshev, Legendre,
+// Hermite, HermiteE, Laguerre). The power-basis class in that same family,
+// `classes::Polynomial`, is deliberately NOT re-exported under the bare name
+// `Polynomial` here -- it would collide with the `core::Polynomial` type
+// above (this module's pre-existing `numpy.poly1d`-style API); reach it via
+// `classes::Polynomial` instead.
+pub use classes::{Basis, Chebyshev, Hermite, HermiteE, Laguerre, Legendre};
 
 // Re-export arithmetic functions
 pub use arithmetic::{polyadd, polydiv, polymul, polysub};

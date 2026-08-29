@@ -41,10 +41,12 @@ use num_traits::Float;
 /// assert_eq!(xx.shape(), vec![4, 3]); // Note: transposed for 'xy' indexing
 /// assert_eq!(yy.shape(), vec![4, 3]);
 /// ```
-pub fn meshgrid<T>(xi: &[&Array<T>], indexing: &str, sparse: bool) -> Result<Vec<Array<T>>>
-where
-    T: Clone + num_traits::Zero + num_traits::One,
-{
+///
+/// This is the canonical `meshgrid` implementation (the only one that
+/// supports `sparse` output); `crate::math::creation::meshgrid` (a
+/// one-line delegate that always passes `sparse: false`, matching its own
+/// signature which has no `sparse` parameter) forwards here.
+pub fn meshgrid<T: Clone>(xi: &[&Array<T>], indexing: &str, sparse: bool) -> Result<Vec<Array<T>>> {
     if xi.is_empty() {
         return Ok(vec![]);
     }
@@ -99,14 +101,19 @@ where
             grids.push(grid);
         }
     } else {
-        // Create full grids
+        // Create full grids. Built as a flat `Vec` in row-major (C) order
+        // -- the same order `Array::from_vec_shape` expects -- rather than
+        // an `Array::zeros` filled one element at a time via `array_mut()`;
+        // this drops the `Zero` bound the old `zeros` placeholder needed
+        // (this function otherwise never needs an additive identity) and
+        // avoids one COW-unshare-then-`get_mut` round trip per element.
         for (axis_idx, &arr) in xi.iter().enumerate() {
-            let mut grid = Array::zeros(&shape);
             let arr_data = arr.to_vec();
 
             // Fill the grid by repeating values along appropriate dimensions
             let total_elements: usize = shape.iter().product();
             let mut indices = vec![0; ndim];
+            let mut grid_data = Vec::with_capacity(total_elements);
 
             for linear_idx in 0..total_elements {
                 // Convert linear index to multi-dimensional indices
@@ -130,10 +137,10 @@ where
                     indices[axis_idx]
                 };
 
-                grid.set(&indices, arr_data[src_idx].clone())?;
+                grid_data.push(arr_data[src_idx].clone());
             }
 
-            grids.push(grid);
+            grids.push(Array::from_vec_shape(grid_data, &shape)?);
         }
     }
 

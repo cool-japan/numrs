@@ -38,7 +38,7 @@ use crate::gpu::array::GpuArray;
 use crate::gpu::context::GpuContextRef;
 use crate::gpu::linalg;
 use scirs2_core::ndarray::Array2;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Configuration for benchmarks
 #[derive(Debug, Clone)]
@@ -159,8 +159,8 @@ impl BenchmarkRunner {
         let a_data: Vec<f32> = (0..m * k).map(|_| dist.sample(&mut rng)).collect();
         let b_data: Vec<f32> = (0..k * n).map(|_| dist.sample(&mut rng)).collect();
 
-        let a_cpu = Array::from_vec(a_data.clone()).reshape(&[m, k]);
-        let b_cpu = Array::from_vec(b_data.clone()).reshape(&[k, n]);
+        let a_cpu = Array::from_vec_shape(a_data.clone(), &[m, k])?;
+        let b_cpu = Array::from_vec_shape(b_data.clone(), &[k, n])?;
 
         // Measure transfer to GPU
         let transfer_to_start = Instant::now();
@@ -255,8 +255,8 @@ impl BenchmarkRunner {
         let a_data: Vec<f32> = (0..size).map(|_| dist.sample(&mut rng)).collect();
         let b_data: Vec<f32> = (0..size).map(|_| dist.sample(&mut rng)).collect();
 
-        let a_cpu = Array::from_vec(a_data.clone()).reshape(&[size]);
-        let b_cpu = Array::from_vec(b_data.clone()).reshape(&[size]);
+        let a_cpu = Array::from_vec_shape(a_data.clone(), &[size])?;
+        let b_cpu = Array::from_vec_shape(b_data.clone(), &[size])?;
 
         // Measure transfer to GPU
         let transfer_to_start = Instant::now();
@@ -336,7 +336,7 @@ impl BenchmarkRunner {
         let size = size_bytes / std::mem::size_of::<f32>();
         let data: Vec<f32> = (0..size).map(|_| dist.sample(&mut rng)).collect();
 
-        let cpu_array = Array::from_vec(data).reshape(&[size]);
+        let cpu_array = Array::from_vec_shape(data, &[size])?;
 
         // Measure CPU to GPU transfer
         let to_gpu_start = Instant::now();

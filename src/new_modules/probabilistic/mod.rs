@@ -141,7 +141,6 @@
 //! - Blei, D. M., Kucukelbir, A., & McAuliffe, J. D. (2017). Variational Inference: A Review for Statisticians.
 //! - Bishop, C. M. (2006). *Pattern Recognition and Machine Learning*. Springer.
 
-use crate::array::Array;
 use crate::error::NumRs2Error;
 use std::fmt;
 

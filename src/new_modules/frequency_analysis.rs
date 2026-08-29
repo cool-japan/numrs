@@ -473,33 +473,44 @@ impl FrequencyAnalyzer {
             ));
         }
 
-        // Generate DPSS (Discrete Prolate Spheroidal Sequences) tapers
-        let tapers = Self::generate_dpss_tapers(n, bandwidth, n_tapers)?;
+        // Generate DPSS (Discrete Prolate Spheroidal Sequences) tapers together
+        // with their concentration eigenvalues lambda_m.
+        let (tapers, eigenvalues) = Self::generate_dpss_tapers(n, bandwidth, n_tapers)?;
 
         let mut psd_accumulator = vec![T::zero(); n / 2 + 1];
+        // Weight each eigenspectrum by its concentration eigenvalue (the
+        // standard eigenvalue-weighted multitaper estimate). Tapers with higher
+        // spectral concentration contribute more to the final estimate.
+        let mut weight_sum = T::zero();
 
-        for taper in &tapers {
+        for (taper, &lambda) in tapers.iter().zip(eigenvalues.iter()) {
             // Apply taper to signal
             let mut tapered_signal = Vec::with_capacity(n);
             for (i, &sig_val) in signal_data.iter().enumerate() {
                 tapered_signal.push(sig_val * taper[i]);
             }
 
-            // Compute periodogram for this taper
+            // Compute periodogram for this taper (the m-th eigenspectrum)
             let tapered_array = Array::from_vec(tapered_signal);
             let periodogram = Self::periodogram(&tapered_array, None, PSDScaling::Density)?;
             let periodogram_data = periodogram.psd.to_vec();
 
-            // Accumulate
+            // Accumulate the eigenvalue-weighted eigenspectra
             for (i, &psd_val) in periodogram_data.iter().enumerate() {
-                psd_accumulator[i] = psd_accumulator[i] + psd_val;
+                psd_accumulator[i] = psd_accumulator[i] + lambda * psd_val;
             }
+            weight_sum = weight_sum + lambda;
         }
 
-        // Average over tapers
-        let n_tapers_f = <T as NumCast>::from(n_tapers as f64).unwrap_or(T::one());
+        // Normalize by the total weight (falls back to uniform averaging if the
+        // eigenvalues are degenerate/non-positive for any reason).
+        let normalizer = if weight_sum > T::zero() {
+            weight_sum
+        } else {
+            <T as NumCast>::from(n_tapers as f64).unwrap_or(T::one())
+        };
         for psd_val in &mut psd_accumulator {
-            *psd_val = *psd_val / n_tapers_f;
+            *psd_val = *psd_val / normalizer;
         }
 
         let freqs = FFT::rfftfreq(n, T::one())?;
@@ -507,58 +518,314 @@ impl FrequencyAnalyzer {
         Ok(MultitaperResult {
             frequencies: freqs,
             psd: Array::from_vec(psd_accumulator),
-            eigenvalues: Array::from_vec(vec![T::one(); n_tapers]), // Simplified
+            eigenvalues: Array::from_vec(eigenvalues),
         })
     }
 
-    /// Generate DPSS tapers (simplified implementation)
-    fn generate_dpss_tapers<T>(n: usize, bandwidth: T, n_tapers: usize) -> Result<Vec<Vec<T>>>
+    /// Generate DPSS (Discrete Prolate Spheroidal Sequences / Slepian) tapers.
+    ///
+    /// The DPSS tapers `v_0, v_1, ..., v_{K-1}` of length `N` for the
+    /// time-half-bandwidth product `NW` (with half-bandwidth `W = bandwidth`,
+    /// expressed as a fraction of the sampling frequency) are the eigenvectors,
+    /// ordered by *descending* eigenvalue, of the symmetric tridiagonal matrix
+    /// `T` defined by Slepian (1978):
+    ///
+    /// ```text
+    ///   diagonal:     d_k = ((N - 1 - 2k) / 2)^2 * cos(2*pi*W),   k = 0..N-1
+    ///   off-diagonal: e_k = (k * (N - k)) / 2,                    k = 1..N-1
+    /// ```
+    ///
+    /// The eigenvectors of `T` are exactly the DPSS (they coincide with the
+    /// eigenvectors of the sinc concentration kernel), but `T` is far better
+    /// conditioned. We solve the eigenproblem with a symmetric tridiagonal
+    /// QL algorithm with implicit shifts (`tql2`, EISPACK), which returns all
+    /// eigenpairs simultaneously with high accuracy. The tapers are then sorted
+    /// so that the most concentrated sequence comes first, normalized to unit
+    /// energy, and given the standard sign convention.
+    ///
+    /// This function returns the tapers together with their associated
+    /// concentration eigenvalues `lambda_m` (the energy fraction of taper `m`
+    /// inside the band `[-W, W]`), computed from the sinc kernel.
+    fn generate_dpss_tapers<T>(
+        n: usize,
+        bandwidth: T,
+        n_tapers: usize,
+    ) -> Result<(Vec<Vec<T>>, Vec<T>)>
     where
         T: Float + Clone + Debug + Into<f64> + From<f64>,
     {
-        let mut tapers = Vec::with_capacity(n_tapers);
-        let nw = bandwidth.into() * n as f64 / 2.0;
+        if n == 0 {
+            return Err(NumRs2Error::InvalidOperation(
+                "DPSS length n must be positive".to_string(),
+            ));
+        }
+        if n_tapers > n {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Number of tapers ({}) cannot exceed signal length ({})",
+                n_tapers, n
+            )));
+        }
 
-        // Simplified DPSS generation (in practice, this would use eigenvalue decomposition)
-        for k in 0..n_tapers {
-            let mut taper = Vec::with_capacity(n);
+        // Half-bandwidth W as a fraction of the sampling frequency.
+        let w_frac = bandwidth.into();
+        if w_frac <= 0.0 || w_frac >= 0.5 {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "DPSS bandwidth (W) must lie in (0, 0.5), got {}",
+                w_frac
+            )));
+        }
 
-            for i in 0..n {
-                let t = (i as f64 - (n as f64 - 1.0) / 2.0) / (n as f64 / 2.0);
-                let w = nw / (n as f64 / 2.0);
+        // Trivial single-sample case: the only taper is the constant 1.
+        if n == 1 {
+            let tapers = vec![vec![<T as NumCast>::from(1.0).unwrap_or(T::one())]];
+            let eigenvalues = vec![<T as NumCast>::from(2.0 * w_frac).unwrap_or(T::zero())];
+            return Ok((tapers, eigenvalues));
+        }
 
-                // Simplified taper (not true DPSS)
-                let val = if t.abs() < w {
-                    let arg = PI * t / w;
-                    if arg.abs() < 1e-10 {
-                        1.0
-                    } else {
-                        arg.sin() / arg
-                    }
-                } else {
-                    0.0
-                };
+        // Build the symmetric tridiagonal matrix T (Slepian formulation).
+        let cos_factor = (2.0 * PI * w_frac).cos();
+        let mut diag = vec![0.0_f64; n];
+        // Sub-diagonal of length n-1 (e[i] couples row i and row i+1).
+        let mut sub = vec![0.0_f64; n];
 
-                taper.push(<T as NumCast>::from(val * (k as f64 + 1.0).cos()).unwrap_or(T::zero()));
+        for k in 0..n {
+            let centered = (n as f64 - 1.0 - 2.0 * k as f64) / 2.0;
+            diag[k] = centered * centered * cos_factor;
+        }
+        // Off-diagonal e_k = k*(N-k)/2 for k = 1..N-1; store it as the
+        // sub-diagonal entry coupling rows (k-1) and k, i.e. sub[k].
+        for k in 1..n {
+            sub[k] = (k as f64) * (n as f64 - k as f64) / 2.0;
+        }
+
+        // Solve the symmetric tridiagonal eigenproblem: eigenvalues in `eigvals`
+        // (ascending), eigenvectors as columns of `z` (n x n).
+        let (eigvals, z) = Self::symmetric_tridiagonal_eig(&diag, &sub)?;
+
+        // Order eigenpairs by DESCENDING eigenvalue of T: the most concentrated
+        // DPSS correspond to the largest eigenvalues of T.
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| {
+            eigvals[b]
+                .partial_cmp(&eigvals[a])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let mut tapers: Vec<Vec<T>> = Vec::with_capacity(n_tapers);
+        for (taper_index, &col) in order.iter().take(n_tapers).enumerate() {
+            // Extract eigenvector (column `col` of z).
+            let mut taper_f = vec![0.0_f64; n];
+            for row in 0..n {
+                taper_f[row] = z[row * n + col];
             }
 
-            // Normalize
-            let norm: f64 = taper
-                .iter()
-                .map(|&x| x.into())
-                .map(|x: f64| x * x)
-                .sum::<f64>()
-                .sqrt();
+            // Normalize to unit energy.
+            let norm = taper_f.iter().map(|&x| x * x).sum::<f64>().sqrt();
             if norm > 0.0 {
-                for taper_val in &mut taper {
-                    *taper_val = *taper_val / <T as NumCast>::from(norm).unwrap_or(T::one());
+                for value in &mut taper_f {
+                    *value /= norm;
                 }
             }
 
+            // Sign convention (Percival & Walden, after the SciPy convention):
+            // even-order tapers have a positive sum; odd-order tapers have a
+            // positive initial slope (first half-sum dominates).
+            if taper_index % 2 == 0 {
+                let sum: f64 = taper_f.iter().sum();
+                if sum < 0.0 {
+                    for value in &mut taper_f {
+                        *value = -*value;
+                    }
+                }
+            } else {
+                // Odd-order taper: enforce a positive initial slope by checking
+                // the first-moment (skewness) about the series centre.
+                let skew: f64 = (0..n)
+                    .map(|i| (i as f64 - (n as f64 - 1.0) / 2.0) * taper_f[i])
+                    .sum();
+                if skew < 0.0 {
+                    for value in &mut taper_f {
+                        *value = -*value;
+                    }
+                }
+            }
+
+            let taper: Vec<T> = taper_f
+                .iter()
+                .map(|&x| <T as NumCast>::from(x).unwrap_or(T::zero()))
+                .collect();
             tapers.push(taper);
         }
 
-        Ok(tapers)
+        // Compute the true concentration eigenvalues lambda_m by applying the
+        // sinc concentration kernel S, where S_{ij} = sin(2*pi*W*(i-j)) /
+        // (pi*(i-j)) and S_{ii} = 2W, to each taper: lambda_m = v_m^T S v_m.
+        let mut eigenvalues: Vec<T> = Vec::with_capacity(tapers.len());
+        for taper in &tapers {
+            let taper_f: Vec<f64> = taper.iter().map(|&x| x.into()).collect();
+            let mut lambda = 0.0_f64;
+            for i in 0..n {
+                // Diagonal contribution.
+                lambda += taper_f[i] * (2.0 * w_frac) * taper_f[i];
+                // Off-diagonal (symmetric) contributions.
+                for j in (i + 1)..n {
+                    let diff = (i as f64) - (j as f64);
+                    let kernel = (2.0 * PI * w_frac * diff).sin() / (PI * diff);
+                    lambda += 2.0 * taper_f[i] * kernel * taper_f[j];
+                }
+            }
+            eigenvalues.push(<T as NumCast>::from(lambda).unwrap_or(T::zero()));
+        }
+
+        Ok((tapers, eigenvalues))
+    }
+
+    /// Symmetric tridiagonal eigensolver using the QL algorithm with implicit
+    /// shifts (`tql2`, adapted from EISPACK / Numerical Recipes).
+    ///
+    /// # Arguments
+    ///
+    /// * `diagonal` - the `n` diagonal elements `d_0..d_{n-1}`.
+    /// * `subdiagonal` - the sub-diagonal elements stored so that
+    ///   `subdiagonal[k]` (for `k = 1..n-1`) couples rows `k-1` and `k`;
+    ///   `subdiagonal[0]` is ignored.
+    ///
+    /// # Returns
+    ///
+    /// `(eigenvalues, eigenvectors)` where `eigenvalues` is sorted ascending and
+    /// `eigenvectors` is an `n x n` matrix stored row-major; column `j` holds the
+    /// eigenvector for `eigenvalues[j]`.
+    fn symmetric_tridiagonal_eig(
+        diagonal: &[f64],
+        subdiagonal: &[f64],
+    ) -> Result<(Vec<f64>, Vec<f64>)> {
+        let n = diagonal.len();
+
+        // d holds the eigenvalues (initially the diagonal); e holds the
+        // sub-diagonal shifted so that e[i] couples rows i and i+1, with
+        // e[n-1] = 0 as the algorithm expects.
+        let mut d = diagonal.to_vec();
+        let mut e = vec![0.0_f64; n];
+        if n > 1 {
+            e[..n - 1].copy_from_slice(&subdiagonal[1..n]);
+        }
+
+        // z is initialised to the identity (we accumulate the full eigenvectors).
+        let mut z = vec![0.0_f64; n * n];
+        for i in 0..n {
+            z[i * n + i] = 1.0;
+        }
+
+        if n == 1 {
+            return Ok((d, z));
+        }
+
+        // Maximum sweeps per eigenvalue before declaring non-convergence.
+        let max_iter = 50;
+
+        for l in 0..n {
+            let mut iter = 0usize;
+            loop {
+                // Look for a single small sub-diagonal element e[m] to split off
+                // a converged eigenvalue at position l.
+                let mut m = l;
+                while m < n - 1 {
+                    let dd = d[m].abs() + d[m + 1].abs();
+                    if (e[m].abs() + dd) == dd {
+                        break;
+                    }
+                    m += 1;
+                }
+
+                if m == l {
+                    // e[l] is negligible: d[l] is an eigenvalue; move on.
+                    break;
+                }
+
+                if iter >= max_iter {
+                    return Err(NumRs2Error::InvalidOperation(
+                        "DPSS tridiagonal QL iteration failed to converge".to_string(),
+                    ));
+                }
+                iter += 1;
+
+                // Form the implicit Wilkinson shift (eigenvalue of trailing 2x2).
+                let mut g = (d[l + 1] - d[l]) / (2.0 * e[l]);
+                let mut r = g.hypot(1.0);
+                // g = d[m] - shift, with the shift chosen for stability.
+                let signed_r = if g >= 0.0 { r.abs() } else { -r.abs() };
+                g = d[m] - d[l] + e[l] / (g + signed_r);
+
+                let mut s = 1.0_f64;
+                let mut c = 1.0_f64;
+                let mut p = 0.0_f64;
+                // Tracks whether an underflow recovery occurred (restart sweep).
+                let mut underflow = false;
+
+                // Givens plane rotations, chasing the bulge from m-1 down to l.
+                let mut i = m as isize - 1;
+                while i >= l as isize {
+                    let idx = i as usize;
+                    let mut f = s * e[idx];
+                    let b = c * e[idx];
+                    r = f.hypot(g);
+                    e[idx + 1] = r;
+
+                    if r == 0.0 {
+                        // Underflow: recover and restart this sweep (NR tqli).
+                        d[idx + 1] -= p;
+                        e[m] = 0.0;
+                        underflow = true;
+                        break;
+                    }
+
+                    s = f / r;
+                    c = g / r;
+                    g = d[idx + 1] - p;
+                    r = (d[idx] - g) * s + 2.0 * c * b;
+                    p = s * r;
+                    d[idx + 1] = g + p;
+                    g = c * r - b;
+
+                    // Accumulate this rotation into the eigenvector matrix.
+                    for k in 0..n {
+                        f = z[k * n + idx + 1];
+                        z[k * n + idx + 1] = s * z[k * n + idx] + c * f;
+                        z[k * n + idx] = c * z[k * n + idx] - s * f;
+                    }
+
+                    i -= 1;
+                }
+
+                if underflow {
+                    // Restart the search/iteration for this l.
+                    continue;
+                }
+
+                d[l] -= p;
+                e[l] = g;
+                e[m] = 0.0;
+            }
+        }
+
+        // Sort eigenpairs ascending by eigenvalue (selection sort, swapping the
+        // corresponding eigenvector columns) for a deterministic ordering.
+        for ii in 0..n {
+            let mut min_idx = ii;
+            for jj in (ii + 1)..n {
+                if d[jj] < d[min_idx] {
+                    min_idx = jj;
+                }
+            }
+            if min_idx != ii {
+                d.swap(ii, min_idx);
+                for row in 0..n {
+                    z.swap(row * n + ii, row * n + min_idx);
+                }
+            }
+        }
+
+        Ok((d, z))
     }
 
     /// Generate window function

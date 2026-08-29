@@ -1,5 +1,6 @@
 use numrs2::array::Array;
 use numrs2::random::{self, set_seed};
+use serial_test::serial;
 
 // This file contains reference tests comparing NumRS2 random distributions
 // with known expected values. This helps ensure the implementation is correct.
@@ -11,6 +12,7 @@ fn is_within_range(value: f64, expected: f64, tolerance: f64) -> bool {
 
 /// Test the normal distribution statistical properties
 #[test]
+#[serial]
 fn test_normal_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -52,6 +54,7 @@ fn test_normal_reference_values() {
 
 /// Test the beta distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_beta_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -97,6 +100,7 @@ fn test_beta_reference_values() {
 
 /// Test uniform distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_uniform_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -138,6 +142,7 @@ fn test_uniform_reference_values() {
 
 /// Test the gamma distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_gamma_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -180,6 +185,7 @@ fn test_gamma_reference_values() {
 
 /// Test random integers properties instead of exact values
 #[test]
+#[serial]
 fn test_integers_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -223,6 +229,7 @@ fn test_integers_reference_values() {
 
 /// Test binomial distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_binomial_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -265,6 +272,7 @@ fn test_binomial_reference_values() {
 
 /// Test Poisson distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_poisson_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -307,6 +315,7 @@ fn test_poisson_reference_values() {
 
 /// Test multivariate normal distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_multivariate_normal_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -362,6 +371,7 @@ fn test_multivariate_normal_reference_values() {
 
 /// Test the exponential distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_exponential_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -403,6 +413,7 @@ fn test_exponential_reference_values() {
 
 /// Test the lognormal distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_lognormal_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);
@@ -445,6 +456,7 @@ fn test_lognormal_reference_values() {
 
 /// Test the Weibull distribution properties instead of exact values
 #[test]
+#[serial]
 fn test_weibull_reference_values() {
     // Set a fixed seed for reproducibility
     set_seed(42);

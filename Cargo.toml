@@ -1,6 +1,6 @@
 [package]
 name = "numrs2"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["COOLJAPAN OU (Team KitaSan)"]
 description = "A Rust implementation inspired by NumPy for numerical computing (NumRS2)"
@@ -11,36 +11,38 @@ documentation = "https://docs.rs/numrs2"
 readme = "README.md"
 keywords = ["numpy", "numerical", "array", "linear-algebra", "mathematics"]
 categories = ["science"]
+exclude = ["*.bak", "**/*.bak", "output.csv", "output.txt", ".DS_Store", "**/.DS_Store"]
 
 [lib]
 name = "numrs2"
-# Note: For Python extension, use maturin to build. cdylib is not needed in Cargo.toml
-# as maturin handles this automatically. Only rlib is needed for Rust library usage.
+crate-type = ["cdylib", "rlib"]
+# cdylib: required so maturin/pyo3 can build the Python extension module.
+# rlib: keeps normal Rust usage (binaries, other crates depending on numrs2) working.
 
 [lints]
 workspace = true
 
 [features]
-default = ["matrix_decomp", "scirs"]
+default = ["matrix_decomp", "scirs", "lapack"]
 matrix_decomp = []
 validation = []
 unstable = []
 fast = []  # Minimal feature set for fast compilation during development
 scirs = []  # MANDATORY: Always enabled by default per SCIRS2 POLICY - DO NOT DISABLE
 # SciRS2 integration is mandatory - this feature exists only for backward compatibility
-gpu = ["dep:wgpu", "dep:bytemuck", "dep:futures-intrusive", "dep:tokio"]
+gpu = ["dep:wgpu", "dep:bytemuck", "dep:tokio"]
 lapack = []  # Enable LAPACK-dependent linear algebra operations (through scirs2-linalg which uses OxiBLAS)
-python = ["dep:pyo3", "dep:scirs2-numpy"]  # Python bindings via PyO3
-arrow = ["dep:arrow", "dep:arrow-array", "dep:arrow-buffer", "dep:arrow-cast", "dep:arrow-schema"]  # Apache Arrow integration
+python = ["dep:pyo3", "dep:scirs2-numpy", "dep:pyo3-build-config"]  # Python bindings via PyO3
+arrow = ["dep:arrow", "dep:arrow-array", "dep:arrow-schema"]  # Apache Arrow integration
 parquet = ["dep:parquet"]  # Apache Parquet format support (pure Rust)
 netcdf = ["dep:netcdf3"]  # NetCDF-3 format support (pure Rust)
-matlab = ["dep:matfile"]  # MATLAB .mat file I/O (pure Rust)
+matlab = []  # MATLAB .mat file I/O — self-contained simplified format, no external crate (see src/io/matlab.rs)
 messagepack = ["dep:rmp-serde"]  # MessagePack serialization (pure Rust)
 bson = ["dep:bson"]  # BSON format support (pure Rust)
 io-all = ["arrow", "parquet", "netcdf", "matlab", "messagepack", "bson"]  # Enable all I/O formats
-wasm = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:dlmalloc"]  # WebAssembly support
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook", "dep:dlmalloc"]  # WebAssembly support
 distributed = ["dep:tokio", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread", "tokio/macros", "tokio/time", "dep:oxiarc-lz4"]  # Distributed computing support (Pure Rust, no MPI)
-visualization = ["dep:plotters", "dep:plotters-backend", "dep:plotters-svg", "dep:resvg", "dep:usvg", "dep:tiny-skia", "dep:rgb"]  # Advanced visualization tools (pure Rust)
+visualization = ["dep:plotters", "dep:oxifont-bundled"]  # Advanced visualization tools (pure Rust)
 ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without external dependencies
 
 [dependencies]
@@ -49,36 +51,35 @@ ci-safe = ["matrix_decomp", "validation"]  # Safe features for CI without extern
 # ===================================================================
 # ALL external functionality (ndarray, rand, rayon, BLAS) goes through scirs2-core
 # Using crates.io versions for stable 0.3.0 release
-scirs2-core = { version = "0.5.0", features = ["random", "array", "simd", "parallel", "linalg"] }
-scirs2-stats = { version = "0.5.0" }
-scirs2-linalg = { version = "0.5.0" }
-scirs2-ndimage = { version = "0.5.0" }
-scirs2-spatial = { version = "0.5.0", features = ["parallel"] }
-scirs2-special = { version = "0.5.0" }
-scirs2-fft = { version = "0.5.0" }
+scirs2-core = { workspace = true, features = ["random", "array", "simd", "parallel", "linalg"] }
+scirs2-stats = { workspace = true }
+scirs2-linalg = { workspace = true }
+scirs2-ndimage = { workspace = true }
+scirs2-spatial = { workspace = true, features = ["parallel"] }
+scirs2-special = { workspace = true }
+scirs2-fft = { workspace = true }
 
 # ===================================================================
 # ALLOWED DEPENDENCIES (Non-conflicting)
 # ===================================================================
 num-traits = "0.2.19"  # Numeric traits for generic math (compatible with SciRS2)
-paste = "1.0.15"       # For macro development
 thiserror = "2.0.18"   # Error handling
 lazy_static = "1.5.0"  # For static initialization patterns
 
 # Serialization/IO support
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 csv = "1.4.0"
-oxicode = { version = "0.2.4", features = ["serde"] }
+oxicode = { version = "0.2.6", features = ["serde"] }
 byteorder = "1.5.0"    # For NPY format byte order handling
-oxiarc-archive = { version = "0.3.2" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
-oxiarc-lz4 = { version = "0.3.2", optional = true }   # Pure Rust LZ4 for distributed network transfer (COOLJAPAN Policy)
+oxiarc-archive = { version = "0.4.1" }  # Pure Rust ZIP/archive support (COOLJAPAN Policy)
+oxiarc-lz4 = { version = "0.4.1", optional = true }   # Pure Rust LZ4 for distributed network transfer (COOLJAPAN Policy)
 # NPZ format support with pure Rust compression (DEFLATE via OxiARC)
 serde-pickle = "1.2.0" # Python pickle format support
-memmap2 = "0.9.10"      # Memory-mapped file I/O
+memmap2 = "0.9.11"      # Memory-mapped file I/O
 num_cpus = "1.17.0"
-regex = "1.12.3"
-chrono = { version = "0.4.44", default-features = false, features = ["std", "clock"] }  # Date and time for model metadata
+regex = "1.12.4"
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }  # Date and time for model metadata
 
 # Note: BLAS/LAPACK operations go through scirs2-linalg (which uses OxiBLAS internally)
 # No direct BLAS/LAPACK dependencies needed - pure Rust via SciRS2 ecosystem
@@ -99,45 +100,42 @@ chrono = { version = "0.4.44", default-features = false, features = ["std", "clo
 # ❌ ndarray-linalg = "*"      # FORBIDDEN - Use oxiblas-ndarray (pure Rust)
 
 # Optional GPU acceleration dependencies
-wgpu = { version = "29.0.1", optional = true }
+wgpu = { version = "30.0.0", optional = true }
 bytemuck = { version = "1.25.0", features = ["derive"], optional = true }
-futures-intrusive = { version = "0.5.0", optional = true }
-tokio = { version = "1.52.1", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
+tokio = { version = "1.52.3", features = ["sync", "rt", "net", "io-util", "rt-multi-thread", "macros"], optional = true }
 
 # Optional Python bindings dependencies
-pyo3 = { version = "0.28.3", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 scirs2-numpy = { workspace = true, optional = true }
 
 # Optional Apache Arrow dependencies (via SciRS2 workspace)
 arrow = { workspace = true, optional = true }
 arrow-array = { workspace = true, optional = true }
-arrow-buffer = { workspace = true, optional = true }
-arrow-cast = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 
 # Optional I/O format dependencies (Pure Rust - COOLJAPAN Policy)
 parquet = { workspace = true, optional = true, default-features = false, features = ["arrow", "snap", "brotli", "flate2-zlib-rs", "lz4", "base64", "simdutf8"] }  # Apache Parquet, no zstd-sys (C) — COOLJAPAN Pure Rust Policy
-netcdf3 = { version = "0.6.0", optional = true }  # NetCDF-3 (pure Rust)
-matfile = { version = "0.5.0", optional = true, features = ["ndarray"] }  # MATLAB .mat files (pure Rust)
+netcdf3 = { version = "0.6.1", optional = true }  # NetCDF-3 (pure Rust)
 rmp-serde = { version = "1.3.1", optional = true }  # MessagePack (pure Rust)
 bson = { version = "3.1.0", optional = true, features = ["serde"] }  # BSON (pure Rust)
 
 # Optional WebAssembly dependencies (Pure Rust - COOLJAPAN Policy)
-wasm-bindgen = { version = "0.2.118", optional = true, features = ["serde-serialize"] }  # WebAssembly bindings
-wasm-bindgen-futures = { version = "0.4.68", optional = true }  # Async/await support for WASM
-js-sys = { version = "0.3.95", optional = true }  # JavaScript standard library bindings
-web-sys = { version = "0.3.95", optional = true, features = ["console", "Window", "Performance"] }  # Web API bindings
+wasm-bindgen = { version = "0.2.126", optional = true, features = ["serde-serialize"] }  # WebAssembly bindings
+js-sys = { version = "0.3.103", optional = true }  # JavaScript standard library bindings
+web-sys = { version = "0.3.103", optional = true, features = ["console", "Window", "Performance"] }  # Web API bindings
 console_error_panic_hook = { version = "0.1.7", optional = true }  # Better panic messages in WASM
 dlmalloc = { version = "0.2", features = ["global"], optional = true }  # Maintained pure-Rust allocator for WASM
 
 # Optional Visualization dependencies (Pure Rust - COOLJAPAN Policy)
-plotters = { version = "0.3.7", optional = true }  # High-performance plotting library
-plotters-backend = { version = "0.3.7", optional = true }  # Plotters backend API
-plotters-svg = { version = "0.3.7", optional = true }  # SVG backend for plotters
-resvg = { version = "0.47.0", optional = true }  # SVG rendering library
-usvg = { version = "0.47.0", optional = true }  # SVG simplification library
-tiny-skia = { version = "0.12.0", optional = true }  # Tiny Skia subset for rendering
-rgb = { version = "0.8.53", optional = true }  # RGB color types
+# plotters: default-features off, cherry-picked pure-Rust feature set only.
+# Notably EXCLUDES plotters' default "ttf" feature (font-kit -> freetype-sys /
+# yeslogic-fontconfig-sys C/FFI font discovery). Text rendering instead goes
+# through plotters' pure-Rust "ab_glyph" font backend, which requires a font to
+# be registered explicitly (see oxifont-bundled below and src/viz/mod.rs).
+# "bitmap_encoder" is required (not optional): without it, BitMapBackend's
+# present() is a silent no-op and PNG files are never written to disk.
+plotters = { version = "0.3.7", optional = true, default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "all_series", "all_elements", "ab_glyph"] }  # High-performance plotting library (pure Rust font backend)
+oxifont-bundled = { version = "0.2.2", optional = true, default-features = false, features = ["bundled-noto"] }  # Pure-Rust bundled Noto Sans (SIL OFL-1.1), COOLJAPAN oxifont ecosystem — supplies the "sans-serif" face plotters' ab_glyph backend needs (see src/viz/mod.rs::ensure_fonts_registered)
 
 # Note: polars dependency has been removed to improve build speed
 
@@ -154,24 +152,54 @@ getrandom_02 = { package = "getrandom", version = "0.2", default-features = fals
 # uuid also needs WASM support enabled
 uuid = { version = "1.23", features = ["js"] }  # Enable JS random for WASM
 
+[build-dependencies]
+# Optional: activated only by the `python` feature (see [features] above), so a
+# default build has no build-dependency at all. Used by build.rs to emit the
+# macOS `-undefined dynamic_lookup` cdylib link argument that pyo3's
+# "extension-module" feature requires. Keep this version in lockstep with the
+# `pyo3` dependency above.
+pyo3-build-config = { version = "0.29", optional = true }
+
 [dev-dependencies]
 criterion = "0.8.2"  # Benchmarking library
 approx = "0.5.1"     # Approximate floating-point comparisons for tests
 tempfile = "3.27.0"   # Temporary files for testing I/O functionality
 proptest = "1.11.0"   # Property-based testing for mathematical invariants
-serial_test = "3.4.0"  # For tests that require serial execution (global state)
-wasm-bindgen-test = "0.3.68"  # Testing framework for WebAssembly
+serial_test = "4.0.1"  # For tests that require serial execution (global state)
+wasm-bindgen-test = "0.3.76"  # Testing framework for WebAssembly
 # For performance benchmarks in bench.rs
-serde_json = "1.0.149"  # For loading NumPy benchmark results
-tokio = { version = "1.52.1", features = ["rt", "macros"] }  # For GPU tests
+serde_json = "1.0.150"  # For loading NumPy benchmark results
+tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread", "macros", "time"] }  # For GPU tests and the distributed::testing::LocalCluster harness
 
 [workspace.lints.rust]
-unused_variables = "allow"
-unused_imports = "allow"
-mismatched_lifetime_syntaxes = "allow"
-dead_code = "allow"
-unpredictable_function_pointer_comparisons = "allow"
-unknown_lints = "allow"
+# --- W6-PREP (2026-08-25): blanket allow-list removed, lints flipped to truth ---
+# All six lints formerly allowed workspace-wide here (unused_variables,
+# unused_imports, mismatched_lifetime_syntaxes, dead_code,
+# unpredictable_function_pointer_comparisons, unknown_lints) were introduced
+# verbatim in the 0.1.0-beta.1 scaffolding commit (7aba46d) with no written
+# rationale, and have masked real warnings ever since. None had a written
+# justification, so per policy none are kept:
+#   - unused_variables / unused_imports / dead_code / mismatched_lifetime_syntaxes:
+#     removed as directed; the resulting fallout is inventoried for the fix
+#     wave (scratchpad w6_lint_inventory.txt) rather than fixed here.
+#   - unpredictable_function_pointer_comparisons: removed too -- a repo-wide
+#     grep (src/, tests/, bench/, benches/, examples/) found zero `as fn(...)`
+#     pointer casts and no PartialEq derive on the one fn-pointer-holding
+#     struct in the tree (FusedScalarBroadcast::fma_fn in
+#     src/expr/fusion.rs), so this allow was suppressing nothing real.
+#   - unknown_lints: removed too -- its only plausible purpose was as the
+#     standard companion to `mismatched_lifetime_syntaxes` (so toolchains
+#     that don't recognize that lint name wouldn't warn about the allow
+#     attribute naming it). With that entry gone, blanket-suppressing
+#     "unknown lint" crate-wide has no remaining justification and is itself
+#     a mask -- e.g. a typo'd lint name in a local #[allow(...)] would go
+#     silently unreported.
+# This table intentionally has zero active entries below. It must stay
+# present (even empty) because `[lints] workspace = true` in [package]
+# requires a `[workspace.lints]` table to resolve against. Going forward,
+# an entry may only be reintroduced here alongside a comment stating the
+# concrete, current reason it is needed -- an unjustified blanket allow is
+# exactly what this section exists to prevent.
 
 # ===================================================================
 # PERFORMANCE OPTIMIZATION PROFILES
@@ -183,7 +211,37 @@ lto = "fat"                # Full Link-Time Optimization for cross-crate inlinin
 codegen-units = 1          # Single codegen unit for better optimization (slower compile)
 strip = true               # Strip symbols from binary (smaller size, no debug info)
 panic = "abort"            # Abort on panic (smaller binary, faster code)
-overflow-checks = false    # Disable overflow checks in release (use with caution)
+# --- W6-B decision (2026-08-25): keep overflow-checks OFF in release, documented not flipped ---
+# numrs2 is a numerics library whose hot paths are tight indexing/reduction/
+# BLAS-adjacent loops over large arrays; overflow-checked arithmetic on every
+# element of every such loop would regress exactly the workloads this crate
+# exists to make fast, for a bug class (usize/isize arithmetic overflow) that
+# is already caught two other ways in this codebase:
+#   1. Indexing *through the ndarray API layer* (Index/IndexMut, `.get()`,
+#      slicing, etc.) is bounds-checked regardless of this flag, on every
+#      profile including release -- that check does not depend on
+#      overflow-checks being on. This does not cover every index-adjacent
+#      computation in the crate: lower-level paths (the kernels/ dispatch
+#      layer, stride_tricks.rs, memory_alloc/, mmap/, and any
+#      `get_unchecked`-style fast path) compute strides/offsets themselves
+#      before reaching that checked layer, and their correctness has to
+#      come from the code itself -- overflow-checks would not have covered
+#      them in release either way, since this flag is off there regardless.
+#   2. [profile.dev] and [profile.test] below both explicitly set
+#      overflow-checks = true, so plain `cargo build` / `cargo test` (the
+#      default, non-release paths developers and CI run day to day) still
+#      catch real arithmetic-overflow bugs during normal development.
+# The tradeoff is opt-in: [profile.bench] (below) inherits this release
+# profile and does not override overflow-checks, so it is off there too --
+# deliberately, since bench exists to measure real release performance.
+# Likewise, `cargo test --release` compiles against this [profile.release]
+# directly (verified empirically: opt-level 3, debug-assertions off,
+# overflow-checks off, identical to a plain `cargo build --release`) rather
+# than against [profile.test] -- so opting into --release for either
+# benchmarking or a faster test run trades away overflow coverage by design.
+# The default `cargo test` / `cargo nextest run` (no --release) is where
+# that coverage actually lives, and it is not weakened by this setting.
+overflow-checks = false    # Disable overflow checks in release (use with caution) -- see rationale above
 debug = false              # No debug information in release builds
 
 # Benchmark profile with debug info for profiling
@@ -191,18 +249,21 @@ debug = false              # No debug information in release builds
 inherits = "release"
 debug = true               # Keep debug info for flamegraph/profiling tools
 strip = false              # Keep symbols for profiling
+# overflow-checks: not set here -> inherited from [profile.release] above
+# (false). Intentional, not an oversight: bench measures real release-mode
+# performance, so it must match release's checks-off behavior exactly.
 
 # Development profile optimized for compilation speed
 [profile.dev]
 opt-level = 0              # No optimization for fast compilation
 debug = true               # Full debug information
-overflow-checks = true     # Enable overflow checks in debug
+overflow-checks = true     # Enable overflow checks in debug -- explicit (W6-B verified, not defaulted); this is where overflow coverage lives day to day
 
 # Test profile with optimizations for faster test execution
 [profile.test]
 opt-level = 2              # Some optimization for faster tests
 debug = true               # Keep debug info for debugging test failures
-overflow-checks = true     # Keep safety checks in tests
+overflow-checks = true     # Keep safety checks in tests -- explicit (W6-B verified, not defaulted); default `cargo test`/`cargo nextest run` use this profile, so overflow coverage holds in CI
 
 [[bench]]
 name = "numpy_comparison"
@@ -328,32 +389,159 @@ name = "complex_benchmark"
 path = "benches/complex_benchmark.rs"
 harness = false
 
+[[bench]]
+name = "allocation_hotpath_benchmark"
+path = "bench/allocation_hotpath_benchmark.rs"
+harness = false
+
 # ===================================================================
-# PATCH: Use local oxiarc workspace (crates.io version missing progress/cancel modules)
+# kernels/ dispatch foundation benchmarks (Wave 2 Phase 0) -- stubs for
+# now; the lanes migrating hot paths onto src/kernels/ fill these in.
 # ===================================================================
+
+[[bench]]
+name = "matmul_dispatch_benchmark"
+path = "bench/matmul_dispatch_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "elementwise_dispatch_benchmark"
+path = "bench/elementwise_dispatch_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "reduction_dispatch_benchmark"
+path = "bench/reduction_dispatch_benchmark.rs"
+harness = false
+
+# ===================================================================
+# Arc-backed copy-on-write storage (Wave 3): keeps the write-side cost
+# of the O(1) Clone honest. Also runnable as
+# `COW_AB_REPORT=1 cargo bench --bench cow_mutation_guard` for a
+# min-over-alternating-A/B report instead of criterion means.
+# ===================================================================
+
+[[bench]]
+name = "cow_mutation_guard"
+path = "bench/cow_mutation_guard.rs"
+harness = false
+
+# ===================================================================
+# Owned expression templates (Wave 3): does
+# `(a.expr() + b.expr() * c.expr()).eval()` actually beat the eager
+# `&a + &(&b * &c)`? Also runnable as
+# `EXPR_AB_REPORT=1 cargo bench --bench expr_fused_benchmark` for a
+# min-over-alternating-A/B report instead of criterion means.
+# ===================================================================
+
+[[bench]]
+name = "expr_fused_benchmark"
+path = "bench/expr_fused_benchmark.rs"
+harness = false
+
+[[example]]
+name = "visualization"
+required-features = ["visualization"]
+
+# ===================================================================
+# FEATURE-GATED EXAMPLES
+# ===================================================================
+# Examples whose content is only meaningful (or, for some, only compiles
+# usefully) under a non-default feature. required-features makes cargo skip
+# these cleanly under default features instead of running a "feature not
+# enabled" stub / exiting non-zero.
+[[example]]
+name = "gpu_acceleration"
+required-features = ["gpu"]
+
+[[example]]
+name = "gpu_batching"
+required-features = ["gpu"]
+
+[[example]]
+name = "gpu_benchmark"
+required-features = ["gpu"]
+
+[[example]]
+name = "gpu_example"
+required-features = ["gpu"]
+
+[[example]]
+name = "arrow_example"
+required-features = ["arrow"]
+
+[[example]]
+name = "distributed_basics"
+required-features = ["distributed"]
+
+[[example]]
+name = "distributed_computing"
+required-features = ["distributed"]
+
+# ===================================================================
+# FEATURE-GATED INTEGRATION TESTS
+# ===================================================================
+# tests/gpu_integration.rs wires the previously-orphaned tests/gpu/{test_gpu_ops,
+# test_gpu_linalg,test_gpu_memory}.rs (never `mod`-included by any harness, so
+# never compiled) into an actual cargo test target. `required-features` makes
+# cargo skip building it entirely under default features, rather than compiling
+# a stub that immediately hits `numrs2::gpu` symbols that don't exist without
+# the `gpu` feature.
+[[test]]
+name = "gpu_integration"
+required-features = ["gpu"]
+
+# tests/io_integration.rs wires the previously-orphaned tests/io/{test_bson,
+# test_matlab,test_messagepack,test_netcdf}.rs (never `mod`-included by any
+# harness, so never compiled since 0.2.0) into an actual cargo test target.
+# required-features lists the four format features directly (rather than the
+# broader `io-all`, which also drags in `arrow`/`parquet`) so `cargo nextest
+# run --features bson,matlab,messagepack,netcdf` builds exactly this target;
+# `--features io-all` is a superset and also satisfies it.
+[[test]]
+name = "io_integration"
+required-features = ["bson", "matlab", "messagepack", "netcdf"]
+
+# tests/parallel_integration.rs wires the previously-orphaned tests/parallel/
+# (mod.rs + 12 test files, never `mod`-included by any harness, so never
+# compiled since 0.2.0) into an actual cargo test target. numrs2::parallel is
+# always compiled (not feature-gated), so this target needs no
+# required-features -- it builds and runs under default features like any
+# other tests/*.rs integration test.
+[[test]]
+name = "parallel_integration"
+
 [patch.crates-io]
+# Pure-Rust replacement for alloca (criterion dep) — no C/VLA, no linker errors on aarch64-apple-darwin
+# NOTE (2026-08-19 manifest audit): re-verified this is still required. criterion
+# 0.8.2's own published Cargo.toml has
+# `[target."cfg(any(windows, unix))".dependencies.alloca] version = "0.4"`,
+# and `cargo tree -i alloca --all-features` on this workspace resolves
+# alloca -> criterion 0.8.2 -> numrs2 (dev-dependency) right now. Do not remove
+# this patch (or patches/alloca/) while criterion 0.8.2 is pinned in
+# [dev-dependencies] — doing so reintroduces the real C-backed `alloca` crate
+# on every windows/unix target, including this machine (aarch64-apple-darwin).
+alloca = { path = "patches/alloca" }
 
 # ===================================================================
 # WORKSPACE CONFIGURATION (SCIRS2 POLICY)
 # ===================================================================
 # Using crates.io releases for stable SciRS2 dependencies
 [workspace.dependencies]
-scirs2-core = { version = "0.5.0" }
-scirs2-stats = { version = "0.5.0" }
-scirs2-linalg = { version = "0.5.0" }
-scirs2-ndimage = { version = "0.5.0" }
-scirs2-spatial = { version = "0.5.0" }
-scirs2-special = { version = "0.5.0" }
-scirs2-fft = { version = "0.5.0" }
-scirs2-numpy = { version = "0.5.0" }
+scirs2-core = { version = "0.6.5" }
+scirs2-stats = { version = "0.6.5" }
+scirs2-linalg = { version = "0.6.5" }
+scirs2-ndimage = { version = "0.6.5" }
+scirs2-spatial = { version = "0.6.5" }
+scirs2-special = { version = "0.6.5" }
+scirs2-fft = { version = "0.6.5" }
+scirs2-numpy = { version = "0.6.5" }
 
 # Apache Arrow ecosystem (from SciRS2 workspace)
-arrow = "58.1.0"
-arrow-array = "58.1.0"
-arrow-buffer = "58.1.0"
-arrow-cast = "58.1.0"
-arrow-schema = "58.1.0"
-parquet = { version = "58.1.0", default-features = false }  # Apache Parquet, no zstd-sys (C) — COOLJAPAN Pure Rust Policy
+arrow = "59.0.0"
+arrow-array = "59.0.0"
+arrow-schema = "59.0.0"
+parquet = { version = "59.0.0", default-features = false }  # Apache Parquet, no zstd-sys (C) — COOLJAPAN Pure Rust Policy
 
 
 # ===================================================================

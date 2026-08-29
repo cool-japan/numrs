@@ -21,8 +21,6 @@ use numrs2::gpu::memory::{
 };
 #[cfg(feature = "gpu")]
 use numrs2::gpu::{new_context, GpuArray};
-#[cfg(feature = "gpu")]
-use scirs2_core::random::*;
 
 #[cfg(feature = "gpu")]
 fn main() -> numrs2::error::Result<()> {

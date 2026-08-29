@@ -49,9 +49,8 @@
 //! - All linear algebra uses `scirs2_linalg`
 //! - All RNG operations use `scirs2_core::random`
 
-use crate::array::Array;
 use crate::new_modules::probabilistic::{validate_probability, ProbabilisticError, Result};
-use scirs2_core::random::{thread_rng, Rng, RngExt};
+use scirs2_core::random::{Rng, RngExt};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -197,26 +196,65 @@ impl BayesianNetwork {
         false
     }
 
-    /// Sample from the network (ancestral sampling)
-    pub fn sample<R: Rng>(&self, rng: &mut R) -> Result<Vec<usize>> {
-        if !self.is_dag() {
+    /// Compute topological order using Kahn's algorithm (BFS-based).
+    ///
+    /// Returns `Err` if the graph contains a cycle. Parenthood edges run from
+    /// parent → child, so in-degree of a node equals the number of its parents.
+    fn topological_order(&self) -> Result<Vec<usize>> {
+        let n = self.nodes.len();
+
+        // Build children list: children[p] = list of nodes that have p as a parent.
+        let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let mut in_degree: Vec<usize> = vec![0; n];
+        for (i, node) in self.nodes.iter().enumerate() {
+            in_degree[i] = node.parents.len();
+            for &p in &node.parents {
+                children[p].push(i);
+            }
+        }
+
+        // Queue all root nodes (no parents).
+        let mut queue: std::collections::VecDeque<usize> = in_degree
+            .iter()
+            .enumerate()
+            .filter(|(_, &d)| d == 0)
+            .map(|(i, _)| i)
+            .collect();
+
+        let mut order = Vec::with_capacity(n);
+        while let Some(node) = queue.pop_front() {
+            order.push(node);
+            for &child in &children[node] {
+                in_degree[child] -= 1;
+                if in_degree[child] == 0 {
+                    queue.push_back(child);
+                }
+            }
+        }
+
+        if order.len() != n {
             return Err(ProbabilisticError::GraphicalModelError {
                 model_type: "Bayesian Network".to_string(),
                 message: "Network contains cycles".to_string(),
             });
         }
 
+        Ok(order)
+    }
+
+    /// Sample from the network (ancestral sampling in topological order).
+    pub fn sample<R: Rng>(&self, rng: &mut R) -> Result<Vec<usize>> {
         let n = self.nodes.len();
-        let mut samples = vec![0; n];
+        // topological_order() returns Err if the graph has a cycle, replacing
+        // the old is_dag() check and the broken "assume ordered" assumption.
+        let order = self.topological_order()?;
 
-        // Topological ordering (simplified - assumes nodes are already ordered)
-        for i in 0..n {
+        let mut samples = vec![0usize; n];
+
+        for i in order {
             let node = &self.nodes[i];
-
-            // Get parent states
             let parent_states: Vec<usize> = node.parents.iter().map(|&p| samples[p]).collect();
 
-            // Sample from conditional distribution
             let probs = node
                 .cpt
                 .get(&parent_states)
@@ -227,11 +265,10 @@ impl BayesianNetwork {
                     ),
                 })?;
 
-            // Categorical sampling
+            // Categorical sampling via inverse CDF.
             let u: f64 = rng.random();
             let mut cumsum = 0.0;
             let mut state = 0;
-
             for (s, &p) in probs.iter().enumerate() {
                 cumsum += p;
                 if u <= cumsum {
@@ -758,6 +795,7 @@ fn matvec_mult(a: &[Vec<f64>], x: &[f64]) -> Result<Vec<f64>> {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+    use scirs2_core::random::thread_rng;
 
     #[test]
     fn test_bayesian_node() {

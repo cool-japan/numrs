@@ -77,6 +77,12 @@ fn rastrigin(x: &[f64]) -> f64 {
 }
 
 /// Gradient of Rastrigin function
+///
+/// Mirrors `sphere_grad` above; unlike `sphere`, `rastrigin` is currently
+/// only benchmarked through gradient-free methods (genetic_algorithm), so
+/// this gradient has no caller yet. Kept for a future gradient-based
+/// (bfgs/lbfgs/conjugate-gradient) Rastrigin benchmark group.
+#[allow(dead_code)]
 fn rastrigin_grad(x: &[f64]) -> Vec<f64> {
     x.iter()
         .map(|&xi| 2.0 * xi + 20.0 * PI * (2.0 * PI * xi).sin())
@@ -95,6 +101,12 @@ fn ackley(x: &[f64]) -> f64 {
 }
 
 /// Gradient of Ackley function
+///
+/// Mirrors `sphere_grad` above; unlike `sphere`, `ackley` is currently only
+/// benchmarked through gradient-free methods (particle_swarm), so this
+/// gradient has no caller yet. Kept for a future gradient-based
+/// (bfgs/lbfgs/conjugate-gradient) Ackley benchmark group.
+#[allow(dead_code)]
 fn ackley_grad(x: &[f64]) -> Vec<f64> {
     let n = x.len() as f64;
     let sum_sq: f64 = x.iter().map(|&xi| xi * xi).sum();

@@ -33,7 +33,7 @@
 //! - No unwrap() usage; proper error handling throughout
 
 use crate::error::{NumRs2Error, Result};
-use scirs2_core::ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
+use scirs2_core::ndarray::{s, Array1, Array2, ArrayView1, ArrayView2};
 
 // =============================================================================
 // Data Structures
@@ -268,7 +268,7 @@ fn adf_test_residuals(
     }
 
     // OLS
-    let (beta, resid, se) = ols_regression(&y_vec.view(), &x_mat.view())?;
+    let (beta, _resid, se) = ols_regression(&y_vec.view(), &x_mat.view())?;
 
     let gamma = beta[0];
     let se_gamma = se[0];
@@ -1316,7 +1316,7 @@ pub fn reduced_rank_regression(
 mod tests {
     use super::*;
     use scirs2_core::ndarray::{Array1, Array2};
-    use scirs2_core::random::{Rng, SeedableRng, StdRng};
+    use scirs2_core::random::{SeedableRng, StdRng};
 
     /// Generate a cointegrated pair: y1 = beta * y2 + stationary_error
     fn generate_cointegrated_pair(n: usize, beta: f64, seed: u64) -> Array2<f64> {

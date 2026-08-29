@@ -547,12 +547,12 @@ mod tests {
         let mut graph = Graph::new(false);
         let n0 = graph.add_node();
         let n1 = graph.add_node();
-        let n2 = graph.add_node();
+        let _n2 = graph.add_node();
 
         graph
             .add_edge(n0, n1, 1.0)
             .expect("test: valid edge addition");
-        // n2 is disconnected
+        // _n2 is disconnected
 
         let result = prim(&graph, None);
         assert!(result.is_err());
@@ -572,12 +572,12 @@ mod tests {
         let mut graph = Graph::new(false);
         let n0 = graph.add_node();
         let n1 = graph.add_node();
-        let n2 = graph.add_node();
+        let _n2 = graph.add_node();
 
         graph
             .add_edge(n0, n1, 1.0)
             .expect("test: valid edge addition");
-        // n2 is disconnected
+        // _n2 is disconnected
 
         let result = boruvka(&graph);
         assert!(result.is_err());

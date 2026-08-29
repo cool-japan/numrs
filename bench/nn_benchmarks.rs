@@ -307,7 +307,7 @@ fn bench_loss_functions(c: &mut Criterion) {
         let y_pred_2d = Array2::from_shape_vec(
             (batch_size, num_classes),
             (0..batch_size * num_classes)
-                .map(|i| 1.0 / num_classes as f64)
+                .map(|_i| 1.0 / num_classes as f64)
                 .collect(),
         )
         .unwrap_or_else(|_| Array2::zeros((batch_size, num_classes)));

@@ -44,7 +44,7 @@
 use crate::array::Array;
 use crate::distance::*;
 use crate::error::{NumRs2Error, Result};
-use num_traits::{Float, One, Zero};
+use num_traits::Float;
 use scirs2_core::random::*;
 use std::fmt::Debug;
 
@@ -168,13 +168,18 @@ where
             let mut new_centroids = Array::zeros(&[self.k, n_features]);
             let mut counts = vec![0usize; self.k];
 
+            // Bulk-acquire once for both the accumulation and averaging
+            // passes below: `new_centroids` is read and written throughout
+            // via direct calls only, so a single hoisted handle covers both
+            // loops of this k-means iteration.
+            let centroids_arr = new_centroids.array_mut();
+
             for i in 0..n_samples {
                 let label = labels[i];
                 counts[label] += 1;
                 let point = Self::get_row(x, i)?;
                 for j in 0..n_features {
-                    let current = new_centroids.get(&[label, j])?;
-                    new_centroids.set(&[label, j], current + point.get(&[j])?)?;
+                    centroids_arr[[label, j]] = centroids_arr[[label, j]] + point.get(&[j])?;
                 }
             }
 
@@ -184,8 +189,7 @@ where
                     let count_t =
                         T::from(counts[k]).expect("Failed to convert cluster count to type T");
                     for j in 0..n_features {
-                        let sum = new_centroids.get(&[k, j])?;
-                        new_centroids.set(&[k, j], sum / count_t)?;
+                        centroids_arr[[k, j]] = centroids_arr[[k, j]] / count_t;
                     }
                 }
             }
@@ -294,11 +298,13 @@ where
         }
 
         let mut centroids = Array::zeros(&[k, n_features]);
+        // Write-only (every read is from the untouched input `x`), so one
+        // bulk unshare covers the whole pass.
+        let out = centroids.array_mut();
         for i in 0..k {
             let idx = indices[i];
             for j in 0..n_features {
-                let val = x.get(&[idx, j])?;
-                centroids.set(&[i, j], val)?;
+                out[[i, j]] = x.get(&[idx, j])?;
             }
         }
 
@@ -314,9 +320,11 @@ where
 
         // Choose first centroid randomly
         let first_idx = rng.gen_range(0..n_samples);
-        for j in 0..n_features {
-            let val = x.get(&[first_idx, j])?;
-            centroids.set(&[0, j], val)?;
+        {
+            let out = centroids.array_mut();
+            for j in 0..n_features {
+                out[[0, j]] = x.get(&[first_idx, j])?;
+            }
         }
 
         // Choose remaining centroids using k-means++ algorithm
@@ -359,10 +367,16 @@ where
                 }
             }
 
-            // Set the chosen point as the new centroid
+            // Set the chosen point as the new centroid. Hoisted only around
+            // this write-back (not the whole `for i in 1..k` loop): the
+            // distance computation above reads `centroids` through the
+            // `Self::get_row(&centroids, ..)` helper, which needs `&Array<T>`
+            // and so cannot run while a `&mut` handle from this scope is
+            // alive. This still collapses the write from `n_features`
+            // `Arc::make_mut` calls down to one per new centroid.
+            let out = centroids.array_mut();
             for j in 0..n_features {
-                let val = x.get(&[chosen_idx, j])?;
-                centroids.set(&[i, j], val)?;
+                out[[i, j]] = x.get(&[chosen_idx, j])?;
             }
         }
 
@@ -436,6 +450,24 @@ pub struct Dendrogram<T> {
 ///
 /// let dendro = hierarchical(&data, LinkageMethod::Average).expect("hierarchical should succeed");
 /// ```
+// KNOWN DEFECT (pre-existing, not introduced by this lint-fix pass): `method`
+// is accepted but never consulted, so all four `LinkageMethod` variants
+// currently produce identical output - no Lance-Williams-style distance
+// update is performed for a merged cluster. Compounding this,
+// `find_min_distance` below only considers pairs of *original* points
+// (`if i < n && j < n`), so once a merge occurs, distances from the new
+// cluster to anything else are never computed; on the final merge(s) this
+// falls through to the function's `T::infinity()`-initialized default,
+// recording a bogus distance in the linkage matrix. `test_hierarchical_clustering`
+// / `test_fcluster` do not catch this because they only assert
+// `linkage.len()` / cluster-count for a 4-point, two-well-separated-pairs
+// dataset where the forced merge order happens to coincide with the
+// correct one. Fixing this properly (generalizing the distance lookup to
+// merged clusters, plus real per-method Lance-Williams updates) is a
+// distinct algorithm change with its own reference-value tests, out of
+// scope for this lint-only pass - flagged for a follow-up task rather than
+// silently renamed away.
+#[allow(unused_variables)]
 pub fn hierarchical<T>(x: &Array<T>, method: LinkageMethod) -> Result<Dendrogram<T>>
 where
     T: Float + Debug,

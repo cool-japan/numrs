@@ -14,9 +14,4 @@ mod tests {
     fn test_ndarray_conversions() {
         // Tests moved to the ndarray_compat module
     }
-
-    #[test]
-    fn test_nalgebra_conversions() {
-        // Tests moved to the nalgebra_compat module
-    }
 }

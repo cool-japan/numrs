@@ -11,7 +11,6 @@
 
 use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
-use scirs2_core::ndarray::IxDyn;
 
 /// Generate index arrays for fancy indexing
 ///
@@ -43,25 +42,16 @@ use scirs2_core::ndarray::IxDyn;
 /// let data = Array::from_vec(vec![0, 1, 2, 3, 4, 5, 6, 7, 8]).reshape(&[3, 3]);
 /// // Would select elements at positions (0,3), (0,4), (0,5), (1,3), (1,4), (1,5), etc.
 /// ```
+///
+/// Delegates to the canonical [`crate::array_ops::creation::concat::ix_`],
+/// which additionally rejects non-1-D inputs (this copy silently accepted
+/// them: since every output shape entry besides the array's own axis is
+/// fixed at 1, `reshape` never actually needed the input to be 1-D to
+/// succeed, so a multi-dimensional sequence was reshaped without error
+/// instead of being rejected the way `numpy.ix_` rejects it); see that
+/// function's docs for full NumPy-compatible semantics.
 pub fn ix_<T: Clone>(arrays: &[&Array<T>]) -> Result<Vec<Array<T>>> {
-    if arrays.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let n = arrays.len();
-    let mut result = Vec::with_capacity(n);
-
-    for (i, array) in arrays.iter().enumerate() {
-        // Create a shape with 1s for all dimensions except the i-th
-        let mut shape = vec![1; n];
-        shape[i] = array.size();
-
-        // Create a reshaped copy of the array
-        let reshaped = array.reshape(&shape);
-        result.push(reshaped);
-    }
-
-    Ok(result)
+    crate::array_ops::creation::concat::ix_(arrays)
 }
 
 /// Set array values using indices
@@ -139,6 +129,18 @@ pub fn put<T: Clone + ToString>(
         NumRs2Error::InvalidOperation("values array should be contiguous".to_string())
     })?;
 
+    // `shape` is invariant across the loop (only its *elements* are
+    // mutated), so read it once here rather than once per index -- both to
+    // avoid `array.shape()`'s per-call `Vec` allocation and because it must
+    // be read before `array_mut()` takes an exclusive borrow below.
+    let shape = array.shape();
+    let ndim = shape.len();
+
+    // Bulk-acquire once: every write below is a direct `get_mut` on a
+    // distinct index, so one unshare covers all `n_indices` writes instead
+    // of one per `Array::set` call.
+    let array_arr = array.array_mut();
+
     // Process each index
     for i in 0..n_indices {
         // Get the index value
@@ -182,9 +184,6 @@ pub fn put<T: Clone + ToString>(
         };
 
         // Compute the multi-dimensional index
-        let shape = array.shape();
-        let ndim = shape.len();
-
         let mut multi_idx = Vec::with_capacity(ndim);
         let mut temp = idx;
 
@@ -202,7 +201,12 @@ pub fn put<T: Clone + ToString>(
         let value = values_slice[i % n_values].clone();
 
         // Set the value
-        array.set(&multi_idx, value)?;
+        *array_arr.get_mut(multi_idx.as_slice()).ok_or_else(|| {
+            NumRs2Error::IndexOutOfBounds(format!(
+                "Failed to set element at indices {:?}",
+                multi_idx
+            ))
+        })? = value;
     }
 
     Ok(())
@@ -237,87 +241,36 @@ pub fn put<T: Clone + ToString>(
 /// putmask(&mut a, &mask, &values).expect("putmask should succeed with valid inputs");
 /// assert_eq!(a.to_vec(), vec![1, 20, 3, 40, 5]);
 /// ```
-pub fn putmask<T: Clone + ToString, U: Clone + ToString>(
+///
+/// Adapts the generic, stringify-based `mask` (validated to contain only
+/// `"true"`/`"false"` values) into an `Array<bool>` and delegates to the
+/// canonical [`crate::array_ops::advanced_indexing::putmask`]; see that
+/// function's docs for full NumPy-compatible semantics, including erroring
+/// on an empty `values` unconditionally (this copy previously only errored
+/// when the mask actually had a `true` entry to fill, silently succeeding
+/// as a no-op otherwise -- NumPy's own `np.putmask` errors on empty
+/// `values` regardless of whether `mask` has any `True` entries).
+pub fn putmask<T: Clone, U: Clone + ToString>(
     array: &mut Array<T>,
     mask: &Array<U>,
     values: &Array<T>,
 ) -> Result<()> {
-    // Check shapes
-    if array.shape() != mask.shape() {
-        return Err(NumRs2Error::ShapeMismatch {
-            expected: array.shape(),
-            actual: mask.shape(),
-        });
-    }
-
-    let mask_slice = mask.array().as_slice().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("mask array should be contiguous".to_string())
-    })?;
-
-    // Check if mask contains boolean values
-    for i in 0..mask.size() {
-        let val_str = mask_slice[i].to_string();
-        if val_str != "true" && val_str != "false" {
-            return Err(NumRs2Error::InvalidOperation(
-                "Mask must contain boolean values".to_string(),
-            ));
-        }
-    }
-
-    // Count true values in mask to check against values size
-    let true_count = mask
-        .to_vec()
-        .iter()
-        .filter(|x| x.to_string() == "true")
-        .count();
-
-    let n_values = values.size();
-
-    if n_values == 0 && true_count > 0 {
-        return Err(NumRs2Error::InvalidOperation(
-            "No values provided to fill masked elements".to_string(),
-        ));
-    }
-
-    let values_slice = values.array().as_slice().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("values array should be contiguous".to_string())
-    })?;
-
-    // Process each element
-    let mut value_idx = 0;
-
-    for i in 0..array.size() {
-        let mask_val = mask_slice[i].to_string() == "true";
-
-        if mask_val {
-            // Calculate the multi-dimensional index
-            let shape = array.shape();
-            let ndim = shape.len();
-
-            let mut multi_idx = Vec::with_capacity(ndim);
-            let mut temp = i;
-
-            for j in (0..ndim).rev() {
-                if j == 0 {
-                    multi_idx.insert(0, temp);
-                } else {
-                    let prod: usize = shape[1..=j].iter().product();
-                    multi_idx.insert(0, temp / prod);
-                    temp %= prod;
-                }
+    let mask_vec = mask.to_vec();
+    let mut bool_vec = Vec::with_capacity(mask_vec.len());
+    for val in &mask_vec {
+        match val.to_string().as_str() {
+            "true" => bool_vec.push(true),
+            "false" => bool_vec.push(false),
+            _ => {
+                return Err(NumRs2Error::InvalidOperation(
+                    "Mask must contain boolean values".to_string(),
+                ))
             }
-
-            // Get the value to put (cycling if necessary)
-            let value = values_slice[value_idx % n_values].clone();
-
-            // Set the value
-            array.set(&multi_idx, value)?;
-
-            value_idx += 1;
         }
     }
+    let bool_mask = Array::<bool>::from_vec_shape(bool_vec, &mask.shape())?;
 
-    Ok(())
+    crate::array_ops::advanced_indexing::putmask(array, &bool_mask, values)
 }
 
 /// Take elements from array along axis using indices
@@ -501,7 +454,7 @@ pub fn take<T: Clone + ToString + num_traits::Zero>(
             }
 
             // Reshape to the correct output shape
-            Ok(Array::from_vec(result_data).reshape(&out_shape))
+            Ok(Array::from_vec_shape(result_data, &out_shape)?)
         }
     }
 }
@@ -530,75 +483,18 @@ pub fn take<T: Clone + ToString + num_traits::Zero>(
 /// assert_eq!(result.shape(), vec![2, 2]);
 /// assert_eq!(result.to_vec(), vec![30, 10, 50, 50]);
 /// ```
-pub fn take_along_axis<T: Clone + ToString>(
+///
+/// Delegates to the canonical
+/// [`crate::array_ops::advanced_indexing::take_along_axis`], which
+/// additionally broadcasts `array` and `indices` against each other on
+/// dimensions other than `axis` (this copy required an exact match there);
+/// see that function's docs for full NumPy-compatible semantics.
+pub fn take_along_axis<T: Clone + num_traits::Zero>(
     array: &Array<T>,
     indices: &Array<usize>,
     axis: usize,
 ) -> Result<Array<T>> {
-    if axis >= array.ndim() {
-        return Err(NumRs2Error::DimensionMismatch(format!(
-            "Axis {} is out of bounds for array with {} dimensions",
-            axis,
-            array.ndim()
-        )));
-    }
-
-    let indices_slice = indices.array().as_slice().ok_or_else(|| {
-        NumRs2Error::InvalidOperation("indices array should be contiguous".to_string())
-    })?;
-
-    let array_shape = array.shape();
-    let indices_shape = indices.shape();
-    let axis_size = array_shape[axis];
-
-    // Check shape compatibility (all dimensions except axis must match)
-    for (i, (&a_dim, &i_dim)) in array_shape.iter().zip(indices_shape.iter()).enumerate() {
-        if i != axis && a_dim != i_dim {
-            return Err(NumRs2Error::ShapeMismatch {
-                expected: array_shape.clone(),
-                actual: indices_shape.clone(),
-            });
-        }
-    }
-
-    let result_shape = indices_shape.clone();
-    let mut result_data = Vec::with_capacity(indices.size());
-
-    for (flat_idx, &idx_value) in indices_slice.iter().enumerate() {
-        // Validate index
-        if idx_value >= axis_size {
-            return Err(NumRs2Error::IndexOutOfBounds(format!(
-                "Index {} is out of bounds for axis with size {}",
-                idx_value, axis_size
-            )));
-        }
-
-        // Convert flat index to multi-dimensional index
-        let mut multi_idx = Vec::with_capacity(indices_shape.len());
-        let mut temp = flat_idx;
-
-        for &dim in indices_shape.iter().rev() {
-            multi_idx.insert(0, temp % dim);
-            temp /= dim;
-        }
-
-        // Modify the index at the specified axis
-        multi_idx[axis] = idx_value;
-
-        // Get the value from the array
-        let value = array
-            .array()
-            .get(IxDyn(&multi_idx))
-            .ok_or_else(|| {
-                NumRs2Error::IndexOutOfBounds(
-                    "multi_idx should be valid as index was validated".to_string(),
-                )
-            })?
-            .clone();
-        result_data.push(value);
-    }
-
-    Ok(Array::from_vec(result_data).reshape(&result_shape))
+    crate::array_ops::advanced_indexing::take_along_axis(array, indices, axis)
 }
 
 /// Put values into array by matching 1D indices along axis
@@ -669,6 +565,11 @@ pub fn put_along_axis<T: Clone + ToString>(
 
     let values_data = values.to_vec();
 
+    // Bulk-acquire once: every write below is a direct `get_mut` on a
+    // distinct index, so one unshare covers every `indices_slice` element
+    // instead of one per `Array::set` call.
+    let array_arr = array.array_mut();
+
     for (flat_idx, &idx_value) in indices_slice.iter().enumerate() {
         // Validate index
         if idx_value >= axis_size {
@@ -691,7 +592,12 @@ pub fn put_along_axis<T: Clone + ToString>(
         multi_idx[axis] = idx_value;
 
         // Set the value in the array
-        array.set(&multi_idx, values_data[flat_idx].clone())?;
+        *array_arr.get_mut(multi_idx.as_slice()).ok_or_else(|| {
+            NumRs2Error::IndexOutOfBounds(format!(
+                "Failed to set element at indices {:?}",
+                multi_idx
+            ))
+        })? = values_data[flat_idx].clone();
     }
 
     Ok(())

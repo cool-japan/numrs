@@ -5,8 +5,10 @@ This directory contains modules for integrating NumRS2 with other Rust numerical
 ## Current Integrations
 
 - `ndarray_compat.rs`: Integration with ndarray
-- `nalgebra_compat.rs`: Integration with nalgebra
 - `scirs_compat.rs`: Integration with SciRS2 (in progress)
+
+Note: nalgebra integration was removed — nalgebra is forbidden per SCIRS2 POLICY
+(BLAS access goes through scirs2-core instead).
 
 ## SciRS2 Integration Status
 

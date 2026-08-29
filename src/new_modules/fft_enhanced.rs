@@ -406,7 +406,7 @@ impl FFTEnhanced {
         }
 
         // Reshape to (num_freqs, n) and return
-        Ok(Array::from_vec(st_result).reshape(&[num_freqs, n]))
+        Array::from_vec_shape(st_result, &[num_freqs, n])
     }
 
     /// Optimized FFT for real-valued inputs (Hermitian optimized FFT)
@@ -818,8 +818,6 @@ fn ten_log10<T: Float>(x: T) -> T {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    #[allow(unused_imports)]
-    use scirs2_core::Complex64;
 
     #[test]
     fn test_fft_any_size_power_of_two() {

@@ -15,7 +15,6 @@ use numrs2::memory_optimize::access_patterns::{
     cache_aware_binary_op, cache_aware_copy, cache_aware_transform, detect_layout, Block,
     BlockedIterator, OptimizationHints, StrideOptimizer, Tile2D, TiledIterator2D,
 };
-use numrs2::prelude::*;
 use numrs2::shared_array::SharedArray;
 
 fn main() {

@@ -33,7 +33,7 @@
 //! # }
 //! ```
 
-use crate::error::{MemoryError, NumRs2Error, OperationContext, Result};
+use crate::error::{MemoryError, NumRs2Error, Result};
 use crate::gpu::context::GpuContextRef;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -375,8 +375,16 @@ struct PendingTransfer {
 
 /// Asynchronous transfer operation
 struct AsyncTransfer {
+    // `id`, `size` and `submitted` are recorded on every submission but
+    // never read back today: `pending_transfers`/`wait_for_completion`/
+    // `clear_completed` only ever inspect `completed`. They document the
+    // bookkeeping a future per-transfer introspection or timeout API would
+    // need; adding that API is out of scope for a lint-only pass.
+    #[allow(dead_code)]
     id: u64,
+    #[allow(dead_code)]
     size: u64,
+    #[allow(dead_code)]
     submitted: std::time::Instant,
     completed: bool,
 }
@@ -590,6 +598,11 @@ impl DoubleBuffer {
         self.size
     }
 
+    /// Gets the buffer usage flags
+    pub fn usage(&self) -> wgpu::BufferUsages {
+        self.usage
+    }
+
     /// Writes data to the current buffer
     pub fn write_current<T: bytemuck::Pod>(&self, data: &[T]) {
         self.context
@@ -616,8 +629,6 @@ pub struct BufferAliasManager {
 
 struct BufferAlias {
     buffer: wgpu::Buffer,
-    offset: u64,
-    size: u64,
     usage: wgpu::BufferUsages,
     ref_count: usize,
 }
@@ -662,8 +673,6 @@ impl BufferAliasManager {
         // Add to aliases
         let alias = BufferAlias {
             buffer: buffer.clone(),
-            offset: 0,
-            size,
             usage,
             ref_count: 1,
         };

@@ -6,7 +6,6 @@
 //! - `ClipExpr` - Value clamping
 //! - `BroadcastScalarExpr` - Broadcasting scalar values
 
-use crate::array::Array;
 use crate::error::{NumRs2Error, Result};
 use std::marker::PhantomData;
 
@@ -220,6 +219,7 @@ impl<T: Clone> Expr<T> for BroadcastScalarExpr<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::array::Array;
     use crate::expr::core::ArrayExpr;
     use approx::assert_relative_eq;
 

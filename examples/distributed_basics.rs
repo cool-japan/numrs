@@ -1,120 +1,149 @@
 //! Basic Distributed Computing Example for NumRS2
 //!
-//! This example demonstrates the fundamental concepts of distributed computing
-//! in NumRS2, including process initialization, distributed arrays, and collective
-//! operations.
+//! Demonstrates the fundamental building blocks of distributed computing in
+//! NumRS2: process/communicator setup, a block-distributed
+//! [`DistributedArray`], global/local index conversion, ghost-cell boundary
+//! exchange with rank neighbors, and barriers.
 //!
-//! # Running the Example
+//! # Running
 //!
-//! To run this example with multiple processes, set environment variables:
+//! ```bash
+//! cargo run --example distributed_basics --features distributed
+//! ```
 //!
-//! Terminal 1 (Process 0 - Master):
+//! That single command runs 4 ranks in *one* process over
+//! [`LocalCluster`] — real loopback TCP, framing and all, just without the
+//! multi-terminal dance a real cluster needs. For an actual multi-host run,
+//! use [`numrs2::distributed::process::init`] instead, which reads its
+//! configuration from `NUMRS2_RANK`/`NUMRS2_SIZE`/`NUMRS2_MASTER_ADDR` (see
+//! that function's docs for the full contract):
+//!
+//! Terminal 1 (rank 0 of 2, runs the rendezvous master):
 //! ```bash
 //! NUMRS2_RANK=0 NUMRS2_SIZE=2 NUMRS2_MASTER_ADDR=127.0.0.1:5000 cargo run --example distributed_basics --features distributed
 //! ```
 //!
-//! Terminal 2 (Process 1):
+//! Terminal 2 (rank 1 of 2):
 //! ```bash
 //! NUMRS2_RANK=1 NUMRS2_SIZE=2 NUMRS2_MASTER_ADDR=127.0.0.1:5000 cargo run --example distributed_basics --features distributed
 //! ```
 
 #[cfg(feature = "distributed")]
+use numrs2::distributed::net::NetError;
+#[cfg(feature = "distributed")]
 use numrs2::distributed::prelude::*;
+#[cfg(feature = "distributed")]
+use std::sync::Arc;
+
+#[cfg(feature = "distributed")]
+const WORLD_SIZE: u32 = 4;
 
 #[cfg(feature = "distributed")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("NumRS2 Distributed Computing - Basic Example");
     println!("============================================\n");
+    println!(
+        "Running {WORLD_SIZE} ranks in one process via LocalCluster (real loopback TCP\n\
+         transport, no multi-terminal launch needed — see this file's header for a real\n\
+         multi-host run).\n"
+    );
 
-    // Initialize distributed environment
-    println!("Initializing distributed environment...");
-    let world = init().await?;
+    // Every rank's log lines are collected and printed after the run
+    // completes (rather than printed live from concurrent tasks), so
+    // output from four ranks racing each other doesn't interleave mid-line.
+    let per_rank_logs = LocalCluster::run_connected(WORLD_SIZE, |node: ClusterNode| async move {
+        run_rank(node)
+            .await
+            .map_err(|e| NetError::Io(e.to_string()))
+    })
+    .await?;
+
+    for log in per_rank_logs {
+        for line in log {
+            println!("{line}");
+        }
+    }
+
+    println!("\nExample completed successfully.");
+    Ok(())
+}
+
+/// One rank's share of the demo, run inside [`LocalCluster::run_connected`].
+#[cfg(feature = "distributed")]
+async fn run_rank(node: ClusterNode) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut log = Vec::new();
+    let world = Communicator::from_endpoint(Arc::new(node.endpoint))?;
 
     let rank = world.rank();
     let size = world.size();
+    log.push(format!(
+        "[rank {rank}] initialized ({rank} of {size}); hostname={}, addr={}, root={}",
+        world.process_info().hostname,
+        world.process_info().addr,
+        world.is_root()
+    ));
 
-    println!("✓ Process {} of {} initialized successfully", rank, size);
-    println!("  Hostname: {}", world.process_info().hostname);
-    println!("  Address: {}\n", world.process_info().addr);
-
-    // Demonstrate process information
-    println!("Process Information:");
-    println!("  Rank: {}", rank);
-    println!("  Size: {}", size);
-    println!("  Is root: {}\n", world.is_root());
-
-    // Create local data
-    println!("Creating local data...");
-    let local_data: Vec<f64> = (0..10).map(|i| (rank * 10 + i) as f64).collect();
-    println!("  Local data (rank {}): {:?}\n", rank, &local_data[..5]);
-
-    // Demonstrate distributed array
-    println!("Creating distributed array...");
-    let global_size = size * 10;
-    let dist_array = DistributedArray::from_local(
-        local_data.clone(),
-        DistributionStrategy::Block,
-        global_size,
-        &world,
-    )?;
-
-    println!("✓ Distributed array created");
-    println!("  Global size: {}", dist_array.global_size());
-    println!(
-        "  Local size (rank {}): {}\n",
-        rank,
+    // Create a distributed array: each rank contributes an equal block.
+    let local_len = 10;
+    let local_data: Vec<f64> = (0..local_len)
+        .map(|i| (rank * local_len + i) as f64)
+        .collect();
+    let global_size = size * local_len;
+    let mut dist_array =
+        DistributedArray::from_local(local_data, DistributionStrategy::Block, global_size, &world)?;
+    log.push(format!(
+        "[rank {rank}] distributed array: global_size={}, local_size={}",
+        dist_array.global_size(),
         dist_array.local_size()
-    );
+    ));
 
-    // Demonstrate index conversion
-    if rank == 0 {
-        println!("Index Conversion Examples:");
-        let global_idx = GlobalIndex::new(15);
-        println!("  Global index 15:");
-
-        match dist_array.global_to_local(&global_idx)? {
-            Some(local_idx) => {
-                println!("    → Local index: {} (on this process)", local_idx.index());
-            }
-            None => {
-                println!("    → Not owned by this process");
-            }
+    // Global <-> local index conversion. The midpoint is in range for any
+    // world size, unlike a hardcoded index that only happens to fit one.
+    if world.is_root() {
+        let probe = global_size / 2;
+        match dist_array.global_to_local(&GlobalIndex::new(probe))? {
+            Some(local_idx) => log.push(format!(
+                "[rank {rank}] global index {probe} -> local index {} (owned here)",
+                local_idx.index()
+            )),
+            None => log.push(format!(
+                "[rank {rank}] global index {probe} -> owned by another rank"
+            )),
         }
-
-        let local_idx = LocalIndex::new(5);
-        let global = dist_array.local_to_global(&local_idx)?;
-        println!("  Local index 5 → Global index: {}\n", global.index());
+        let global_back = dist_array.local_to_global(&LocalIndex::new(0))?;
+        log.push(format!(
+            "[rank {rank}] local index 0 -> global index {}",
+            global_back.index()
+        ));
     }
 
-    // Barrier synchronization
-    println!("Synchronizing at barrier...");
-    barrier(&world).await?;
-    println!("✓ All processes reached barrier\n");
-
-    // Demonstrate process group information
-    if world.is_root() {
-        println!("Process Group Information:");
-        println!("  Total processes: {}", world.group().size());
-        println!("  Ranks: {:?}\n", world.group().ranks);
-    }
-
-    // Another barrier before finalization
     barrier(&world).await?;
 
-    // Finalize distributed environment
+    // Ghost-cell boundary exchange: a real point-to-point transfer with the
+    // immediate rank neighbors (see `DistributedArray::sync_ghost_cells`).
+    // Rank 0 has no left neighbor and the last rank has no right neighbor,
+    // so those ends stay empty — everyone else sees real neighbor data.
+    dist_array.init_ghost_cells(2);
+    dist_array.sync_ghost_cells().await?;
+    if let Some(ghosts) = dist_array.ghost_cells() {
+        log.push(format!(
+            "[rank {rank}] ghost cells: left={:?}, right={:?}",
+            ghosts.left(),
+            ghosts.right()
+        ));
+    }
+
+    barrier(&world).await?;
     if world.is_root() {
-        println!("\nFinalizing distributed environment...");
+        log.push(format!(
+            "[rank {rank}] process group: size={}, ranks={:?}",
+            world.group().size(),
+            world.group().ranks
+        ));
     }
 
-    finalize(world).await?;
-
-    if rank == 0 {
-        println!("✓ Distributed environment finalized successfully");
-        println!("\nExample completed successfully! 🎉");
-    }
-
-    Ok(())
+    Ok(log)
 }
 
 #[cfg(not(feature = "distributed"))]

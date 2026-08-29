@@ -12,13 +12,9 @@
 //! All functions support both feature-gated (with `matrix_decomp`) and non-feature-gated versions
 //! to maintain compatibility across different build configurations.
 
-#[allow(unused_imports)] // Used conditionally based on features
 use crate::array::Array;
-#[allow(unused_imports)] // Used conditionally based on features
 use crate::error::{NumRs2Error, Result};
-#[allow(unused_imports)] // Used conditionally based on features
 use num_traits::Float;
-#[allow(unused_imports)] // Used conditionally based on features
 use std::fmt::Debug;
 
 /// Compute the rank of a matrix
@@ -116,7 +112,8 @@ pub fn qr<
         + std::ops::MulAssign
         + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -144,17 +141,22 @@ pub fn qr<
 /// use numrs2::linalg::decomposition::qr;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let (q, r) = qr(&a).expect("qr should succeed");
+/// // This fallback delegates to `a.qr()`: it succeeds when `lapack` is
+/// // enabled (even without `matrix_decomp`) and otherwise honestly
+/// // reports that the decomposition is unavailable.
+/// let _ = qr(&a);
 /// ```
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn qr<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>)> {
@@ -192,7 +194,8 @@ pub fn cholesky<
         + std::ops::AddAssign
         + std::ops::MulAssign
         + std::ops::DivAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -221,17 +224,22 @@ pub fn cholesky<
 ///
 /// // Create a positive definite matrix
 /// let a = Array::from_vec(vec![4.0, 2.0, 2.0, 5.0]).reshape(&[2, 2]);
-/// let l = cholesky(&a).expect("cholesky should succeed");
+/// // This fallback delegates to `a.cholesky()`: it succeeds when `lapack`
+/// // is enabled (even without `matrix_decomp`) and otherwise honestly
+/// // reports that the decomposition is unavailable.
+/// let _ = cholesky(&a);
 /// ```
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn cholesky<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<Array<T>> {
@@ -342,7 +350,7 @@ pub fn eig<
 
     // Convert to Array objects
     let sorted_eigenvalues = Array::from_vec(sorted_evals);
-    let sorted_eigenvectors = Array::from_vec(sorted_evecs).reshape(&evec_shape);
+    let sorted_eigenvectors = Array::from_vec_shape(sorted_evecs, &evec_shape)?;
 
     Ok((sorted_eigenvalues, sorted_eigenvectors))
 }
@@ -370,17 +378,21 @@ pub fn eig<
 /// use numrs2::linalg::decomposition::eig;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 2.0, 1.0]).reshape(&[2, 2]);
-/// let (eigenvals, eigenvecs) = eig(&a, None).expect("eig should succeed");
+/// // Without both `matrix_decomp` and `lapack` enabled, this fallback
+/// // honestly reports that eigendecomposition is unavailable.
+/// assert!(eig(&a, None).is_err());
 /// ```
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn eig<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     sort: Option<&str>,
@@ -449,7 +461,7 @@ pub fn eig<
 
     // Convert to Array objects
     let sorted_eigenvalues = Array::from_vec(sorted_evals);
-    let sorted_eigenvectors = Array::from_vec(sorted_evecs).reshape(&evec_shape);
+    let sorted_eigenvectors = Array::from_vec_shape(sorted_evecs, &evec_shape)?;
 
     Ok((sorted_eigenvalues, sorted_eigenvectors))
 }
@@ -490,11 +502,12 @@ pub fn svd<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>
     let n = vt.shape()[0];
     let k = s_vec.len();
     let mut s = Array::zeros(&[m, n]);
+    let s_arr = s.array_mut();
     for i in 0..k.min(m).min(n) {
         let val = s_vec.get(&[i])?;
         // Convert Real to T using NumCast which works for f32/f64
         if let Some(t_val) = num_traits::NumCast::from(val) {
-            s.set(&[i, i], t_val)?;
+            s_arr[[i, i]] = t_val;
         }
     }
 
@@ -525,17 +538,22 @@ pub fn svd<T: Float + Clone + Debug>(a: &Array<T>) -> Result<(Array<T>, Array<T>
 /// use numrs2::linalg::decomposition::svd;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let (u, s, vt) = svd(&a).expect("svd should succeed");
+/// // This fallback delegates to `a.svd()`: it succeeds when `lapack` is
+/// // enabled (even without `matrix_decomp`) and otherwise honestly
+/// // reports that the decomposition is unavailable.
+/// let _ = svd(&a);
 /// ```
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn svd<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
 ) -> Result<(Array<T>, Array<T>, Array<T>)> {
@@ -565,18 +583,22 @@ pub fn svd<
 /// use numrs2::linalg::decomposition::matrix_rank;
 ///
 /// let a = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
-/// let rank = matrix_rank(&a, None).expect("matrix_rank should succeed");
-/// assert_eq!(rank, 2);
+/// // This fallback computes rank via `svd`: it succeeds when `lapack` is
+/// // enabled (even without `matrix_decomp`) and otherwise honestly
+/// // reports that the computation is unavailable.
+/// let _ = matrix_rank(&a, None);
 /// ```
-#[cfg(not(feature = "matrix_decomp"))]
+#[cfg(not(all(feature = "matrix_decomp", feature = "lapack")))]
 pub fn matrix_rank<
     T: Float
         + Clone
         + Debug
         + std::ops::AddAssign
         + std::ops::MulAssign
+        + std::ops::DivAssign
         + std::ops::SubAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 >(
     a: &Array<T>,
     tol: Option<T>,

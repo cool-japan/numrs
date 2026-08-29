@@ -1,4 +1,3 @@
-#![allow(clippy::needless_range_loop)]
 #![cfg(feature = "lapack")]
 
 use crate::array::Array;
@@ -27,7 +26,8 @@ where
         + std::ops::AddAssign
         + std::ops::MulAssign
         + std::ops::DivAssign
-        + std::fmt::Display,
+        + std::fmt::Display
+        + 'static,
 {
     // Check if the matrix is square
     let shape = a.shape();
@@ -44,28 +44,34 @@ where
     // Check for any significant asymmetry, which might indicate a problem
     let mut max_asymmetry = <T as num_traits::Zero>::zero();
 
-    for i in 0..n {
-        for j in (i + 1)..n {
-            let a_ij = a.get(&[i, j])?;
-            let a_ji = a.get(&[j, i])?;
-            let diff = num_traits::Float::abs(a_ij - a_ji);
+    {
+        // Bulk-acquire once: every write below targets a distinct (i, j)/(j, i)
+        // pair read from the untouched input `a`, so `symmetric_a` is write-only
+        // here and a single unshare covers the whole O(n^2) pass.
+        let sym_arr = symmetric_a.array_mut();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let a_ij = a.get(&[i, j])?;
+                let a_ji = a.get(&[j, i])?;
+                let diff = num_traits::Float::abs(a_ij - a_ji);
 
-            if diff > max_asymmetry {
-                max_asymmetry = diff;
+                if diff > max_asymmetry {
+                    max_asymmetry = diff;
+                }
+
+                // Enforce symmetry by weighted averaging with bias toward the diagonal
+                // This helps preserve positive-definiteness better than simple averaging
+                let alpha = T::from(0.6).expect("0.6 should convert to float type"); // Bias weight toward diagonal
+                let weight_diag = if num_traits::Float::abs(a_ij) > num_traits::Float::abs(a_ji) {
+                    alpha
+                } else {
+                    T::one() - alpha
+                };
+
+                let weighted_avg = a_ij * weight_diag + a_ji * (T::one() - weight_diag);
+                sym_arr[[i, j]] = weighted_avg;
+                sym_arr[[j, i]] = weighted_avg;
             }
-
-            // Enforce symmetry by weighted averaging with bias toward the diagonal
-            // This helps preserve positive-definiteness better than simple averaging
-            let alpha = T::from(0.6).expect("0.6 should convert to float type"); // Bias weight toward diagonal
-            let weight_diag = if num_traits::Float::abs(a_ij) > num_traits::Float::abs(a_ji) {
-                alpha
-            } else {
-                T::one() - alpha
-            };
-
-            let weighted_avg = a_ij * weight_diag + a_ji * (T::one() - weight_diag);
-            symmetric_a.set(&[i, j], weighted_avg)?;
-            symmetric_a.set(&[j, i], weighted_avg)?;
         }
     }
 
@@ -130,11 +136,14 @@ where
             }
         }
 
-        // Apply scaling: D*A*D where D is a diagonal scaling matrix
+        // Apply scaling: D*A*D where D is a diagonal scaling matrix.
+        // Every element is overwritten from `symmetric_a`, so `scaled_a` is
+        // write-only here despite starting life as a clone of `symmetric_a`.
+        let scaled_arr = scaled_a.array_mut();
         for i in 0..n {
             for j in 0..n {
                 let val = symmetric_a.get(&[i, j])?;
-                scaled_a.set(&[i, j], val * scaling_factors[i] * scaling_factors[j])?;
+                scaled_arr[[i, j]] = val * scaling_factors[i] * scaling_factors[j];
             }
         }
     } else {
@@ -240,10 +249,16 @@ where
             // Try progressive perturbation strategies until success or give up
             for attempt in 0..5 {
                 // Limit attempts to avoid infinite loop
-                // Add perturbation to diagonal
-                for i in 0..n {
-                    let diag_val = scaled_a.get(&[i, i])?;
-                    perturbed_a.set(&[i, i], diag_val + perturbation)?;
+                // Add perturbation to diagonal. `perturbed_a` was just
+                // re-cloned from `scaled_a` above (or freshly cloned before
+                // the loop), so it is write-only here: one unshare per
+                // attempt instead of one per diagonal element.
+                {
+                    let pert_arr = perturbed_a.array_mut();
+                    for i in 0..n {
+                        let diag_val = scaled_a.get(&[i, i])?;
+                        pert_arr[[i, i]] = diag_val + perturbation;
+                    }
                 }
 
                 // Try Cholesky with current perturbation
@@ -289,11 +304,11 @@ where
 
                             // Unscale L: L_original = D^-1 * L_scaled
                             if needs_scaling {
+                                let out = l_array.array_mut();
                                 for i in 0..n {
                                     for j in 0..i + 1 {
                                         // Only lower triangular part has non-zeros
-                                        let val = l_array.get(&[i, j])?;
-                                        l_array.set(&[i, j], val / scaling_factors[i])?;
+                                        out[[i, j]] /= scaling_factors[i];
                                     }
                                 }
                             }
@@ -323,11 +338,11 @@ where
 
                 // Unscale L: L_original = D^-1 * L_scaled
                 if needs_scaling {
+                    let out = l_array.array_mut();
                     for i in 0..n {
                         for j in 0..i + 1 {
                             // Only lower triangular part has non-zeros
-                            let val = l_array.get(&[i, j])?;
-                            l_array.set(&[i, j], val / scaling_factors[i])?;
+                            out[[i, j]] /= scaling_factors[i];
                         }
                     }
                 }
@@ -347,11 +362,11 @@ where
 
     // Step 5: Unscale the result if scaling was applied
     if needs_scaling {
+        let out = l_array.array_mut();
         for i in 0..n {
             for j in 0..i + 1 {
                 // Only lower triangular part has non-zeros
-                let val = l_array.get(&[i, j])?;
-                l_array.set(&[i, j], val / scaling_factors[i])?;
+                out[[i, j]] /= scaling_factors[i];
             }
         }
     }
@@ -363,12 +378,15 @@ where
         * T::from(n).unwrap_or(<T as num_traits::One>::one())
         * T::from(1e-2).unwrap_or(<T as num_traits::One>::one());
 
-    for i in 0..n {
-        for j in 0..i + 1 {
-            // Only lower triangular part has non-zeros
-            let val = l_array.get(&[i, j])?;
-            if num_traits::Float::abs(val) < zero_tol {
-                l_array.set(&[i, j], <T as num_traits::Zero>::zero())?;
+    {
+        let out = l_array.array_mut();
+        for i in 0..n {
+            for j in 0..i + 1 {
+                // Only lower triangular part has non-zeros
+                let val = out[[i, j]];
+                if num_traits::Float::abs(val) < zero_tol {
+                    out[[i, j]] = <T as num_traits::Zero>::zero();
+                }
             }
         }
     }
@@ -398,11 +416,12 @@ where
             // Perform one step of iterative refinement
             // Compute the residual R = A - L*L^T
             let mut residual = a.clone();
+            let residual_arr = residual.array_mut();
             for i in 0..n {
                 for j in 0..n {
                     let product_val = product.get(&[i, j])?;
-                    let a_val = residual.get(&[i, j])?;
-                    residual.set(&[i, j], a_val - product_val)?;
+                    let a_val = residual_arr[[i, j]];
+                    residual_arr[[i, j]] = a_val - product_val;
                 }
             }
 
@@ -446,13 +465,16 @@ where
     let mut symmetric_a = a.clone();
     let n = shape[0];
 
-    for i in 0..n {
-        for j in (i + 1)..n {
-            let a_ij = a.get(&[i, j])?;
-            let a_ji = a.get(&[j, i])?;
-            let avg = (a_ij + a_ji) * T::from(0.5).expect("0.5 should convert to float type");
-            symmetric_a.set(&[i, j], avg)?;
-            symmetric_a.set(&[j, i], avg)?;
+    {
+        let sym_arr = symmetric_a.array_mut();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let a_ij = a.get(&[i, j])?;
+                let a_ji = a.get(&[j, i])?;
+                let avg = (a_ij + a_ji) * T::from(0.5).expect("0.5 should convert to float type");
+                sym_arr[[i, j]] = avg;
+                sym_arr[[j, i]] = avg;
+            }
         }
     }
 
@@ -461,6 +483,12 @@ where
 
     // Create working copy which will become the L matrix
     let mut l = Array::zeros(&[n, n]);
+
+    // Bulk-acquire once for the whole factorization: every iteration both
+    // reads previously-written columns of `l` and writes the next one, with
+    // no intervening helper calls, so a single hoisted handle for the entire
+    // k-loop (and the final zero-out pass) is sound.
+    let l_arr = l.array_mut();
 
     // Pivoted Cholesky factorization
     for k in 0..n {
@@ -475,7 +503,7 @@ where
             let mut diag_val = symmetric_a.get(&[original_idx, original_idx])?;
 
             for j in 0..k {
-                let l_ij = l.get(&[i, j])?;
+                let l_ij = l_arr[[i, j]];
                 diag_val -= l_ij * l_ij;
             }
 
@@ -500,7 +528,7 @@ where
 
         // Compute k-th diagonal element of L
         let l_kk = num_traits::Float::sqrt(max_diag_val);
-        l.set(&[k, k], l_kk)?;
+        l_arr[[k, k]] = l_kk;
 
         // Compute off-diagonal elements for k-th column of L
         for i in (k + 1)..n {
@@ -512,20 +540,20 @@ where
 
             // Subtract the effect of previous columns
             for j in 0..k {
-                let l_ij = l.get(&[i, j])?;
-                let l_kj = l.get(&[k, j])?;
+                let l_ij = l_arr[[i, j]];
+                let l_kj = l_arr[[k, j]];
                 l_ik -= l_ij * l_kj;
             }
 
             // Store in L
-            l.set(&[i, k], l_ik / l_kk)?;
+            l_arr[[i, k]] = l_ik / l_kk;
         }
     }
 
     // Ensure the lower triangular form (zero out the upper part)
     for i in 0..n {
         for j in (i + 1)..n {
-            l.set(&[i, j], <T as num_traits::Zero>::zero())?;
+            l_arr[[i, j]] = <T as num_traits::Zero>::zero();
         }
     }
 
@@ -539,4 +567,174 @@ where
     }
 
     Ok((l, p_array))
+}
+
+// ---------------------------------------------------------------------------
+// W3-A2 perf verification: pre-COW-conversion twin of `pivoted_cholesky()`
+// (100% hand-rolled -- no external LAPACK call -- so the whole routine's cost
+// sits in the loop touched by the conversion). Byte-for-byte copy of the
+// function before the `Array::set` -> bulk-`array_mut()` change, kept only to
+// measure the difference; not part of the public surface.
+#[cfg(test)]
+fn pivoted_cholesky_precow<T>(a: &Array<T>) -> Result<(Array<T>, Array<usize>)>
+where
+    T: Float
+        + Clone
+        + Debug
+        + std::ops::AddAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::SubAssign
+        + std::fmt::Display,
+{
+    let shape = a.shape();
+    if shape.len() != 2 || shape[0] != shape[1] {
+        return Err(NumRs2Error::DimensionMismatch(
+            "Pivoted Cholesky decomposition requires a square matrix".to_string(),
+        ));
+    }
+
+    let mut symmetric_a = a.clone();
+    let n = shape[0];
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let a_ij = a.get(&[i, j])?;
+            let a_ji = a.get(&[j, i])?;
+            let avg = (a_ij + a_ji) * T::from(0.5).expect("0.5 should convert to float type");
+            symmetric_a.set(&[i, j], avg)?;
+            symmetric_a.set(&[j, i], avg)?;
+        }
+    }
+
+    let mut p = (0..n).collect::<Vec<usize>>();
+    let mut l = Array::zeros(&[n, n]);
+
+    for k in 0..n {
+        let mut max_diag_val = <T as num_traits::Zero>::zero();
+        let mut max_diag_idx = k;
+
+        for i in k..n {
+            let original_idx = p[i];
+            let mut diag_val = symmetric_a.get(&[original_idx, original_idx])?;
+
+            for j in 0..k {
+                let l_ij = l.get(&[i, j])?;
+                diag_val -= l_ij * l_ij;
+            }
+
+            if diag_val > max_diag_val {
+                max_diag_val = diag_val;
+                max_diag_idx = i;
+            }
+        }
+
+        if max_diag_idx != k {
+            p.swap(k, max_diag_idx);
+        }
+
+        if max_diag_val <= <T as num_traits::Zero>::zero() {
+            return Err(NumRs2Error::InvalidOperation(format!(
+                "Matrix is not positive definite. Encountered non-positive pivot: {}",
+                max_diag_val
+            )));
+        }
+
+        let l_kk = num_traits::Float::sqrt(max_diag_val);
+        l.set(&[k, k], l_kk)?;
+
+        for i in (k + 1)..n {
+            let orig_i = p[i];
+            let orig_k = p[k];
+            let mut l_ik = symmetric_a.get(&[orig_i, orig_k])?;
+
+            for j in 0..k {
+                let l_ij = l.get(&[i, j])?;
+                let l_kj = l.get(&[k, j])?;
+                l_ik -= l_ij * l_kj;
+            }
+
+            l.set(&[i, k], l_ik / l_kk)?;
+        }
+    }
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            l.set(&[i, j], <T as num_traits::Zero>::zero())?;
+        }
+    }
+
+    let p_array = Array::from_vec(p);
+
+    Ok((l, p_array))
+}
+
+#[cfg(test)]
+mod perf_verification {
+    use super::*;
+    use std::time::Instant;
+
+    /// Deterministic diagonally-dominant symmetric (hence SPD) matrix -- no
+    /// randomness dependency, and well-conditioned enough that pivoting never
+    /// needs to reorder, keeping both loops doing identical work.
+    fn make_spd_matrix(n: usize) -> Array<f64> {
+        let mut data = Vec::with_capacity(n * n);
+        for i in 0..n {
+            for j in 0..n {
+                let base = 1.0 / (1.0 + (i as f64 - j as f64).abs());
+                let diag_boost = if i == j { 2.0 * n as f64 } else { 0.0 };
+                data.push(base + diag_boost);
+            }
+        }
+        Array::from_vec_shape(data, &[n, n]).expect("matrix construction should succeed")
+    }
+
+    /// Min-of-N, alternating A/B timing (see `lu::perf_verification` for the
+    /// rationale on interleaving under shared-machine load).
+    #[test]
+    #[ignore = "wall-clock perf assertion — run with --run-ignored, load-sensitive"]
+    fn bench_pivoted_cholesky_cow_vs_precow() {
+        // See `lu::perf_verification` (matrix_decomp::lu module) for why
+        // debug builds use a much smaller size than release.
+        let sizes: &[usize] = if cfg!(debug_assertions) {
+            &[16, 32]
+        } else {
+            &[128, 256]
+        };
+        const SAMPLES: usize = 7;
+
+        for &n in sizes {
+            let a = make_spd_matrix(n);
+
+            let mut precow_times = Vec::with_capacity(SAMPLES);
+            let mut cow_times = Vec::with_capacity(SAMPLES);
+
+            for _ in 0..SAMPLES {
+                let start = Instant::now();
+                let _ = pivoted_cholesky_precow(&a).expect("precow should succeed");
+                precow_times.push(start.elapsed());
+
+                let start = Instant::now();
+                let _ = pivoted_cholesky(&a).expect("cow should succeed");
+                cow_times.push(start.elapsed());
+            }
+
+            let min_precow = precow_times.into_iter().min().expect("sample");
+            let min_cow = cow_times.into_iter().min().expect("sample");
+            let speedup = min_precow.as_secs_f64() / min_cow.as_secs_f64();
+
+            eprintln!(
+                "[bench_pivoted_cholesky_cow_vs_precow] n={n}: precow(min-of-{SAMPLES})={min_precow:?} \
+                 cow(min-of-{SAMPLES})={min_cow:?} speedup={speedup:.3}x"
+            );
+
+            // See `lu::perf_verification` (matrix_decomp::lu module) for why
+            // this threshold is lax under an unoptimized `test`-profile build.
+            let min_speedup = if cfg!(debug_assertions) { 0.3 } else { 0.8 };
+            assert!(
+                speedup > min_speedup,
+                "n={n}: converted pivoted_cholesky() unexpectedly slower (speedup={speedup:.3}x)"
+            );
+        }
+    }
 }

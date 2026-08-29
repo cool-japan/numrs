@@ -76,9 +76,13 @@ pub fn ascontiguousarray<T>(a: &Array<T>) -> Result<Array<T>>
 where
     T: Clone,
 {
-    // In our implementation, arrays are already stored in C-contiguous order
-    // So we just need to ensure the data is contiguous (which it is for our arrays)
-    Ok(a.clone())
+    // `Array::to_c_layout` already returns `self.clone()` when `a` is
+    // already C-contiguous (no extra copy), and materializes a genuinely
+    // C-contiguous copy otherwise (e.g. for an array produced by
+    // `to_f_layout`/`reversed_axes`/a permuted-axes view). Returning
+    // `a.clone()` unconditionally, as before, silently preserved a
+    // non-standard layout instead of honoring this function's contract.
+    Ok(a.to_c_layout())
 }
 
 /// Return an array laid out in Fortran order (column-major) in memory
@@ -218,9 +222,12 @@ where
 /// let arr = Array::from_vec(vec![1.0, 2.0, 3.0, 4.0]).reshape(&[2, 2]);
 /// assert!(iscontiguous(&arr));  // Default arrays are C-contiguous
 /// ```
-pub fn iscontiguous<T>(_a: &Array<T>) -> bool {
-    // In our implementation, arrays are stored in C-contiguous order by default
-    true
+pub fn iscontiguous<T: Clone>(a: &Array<T>) -> bool {
+    // Arrays are C-contiguous by default, but non-standard layouts do
+    // exist (e.g. `Array::to_f_layout`, `reversed_axes`, permuted-axes
+    // views) -- hardcoding `true` was silently wrong for those. Delegate
+    // to ndarray's own layout check, which accounts for arbitrary strides.
+    a.array().is_standard_layout()
 }
 
 /// Check if two arrays may share memory
@@ -244,13 +251,66 @@ pub fn iscontiguous<T>(_a: &Array<T>) -> bool {
 /// assert!(!may_share_memory(&a, &b));  // Different arrays don't share memory
 ///
 /// let c = a.clone();
-/// assert!(!may_share_memory(&a, &c));  // Cloned arrays have separate memory
+/// // A clone is an O(1) copy-on-write handle, but it can never observe a
+/// // write made through `a` (the buffer unshares first), so it does not
+/// // count as sharing memory.
+/// assert!(!may_share_memory(&a, &c));
 /// ```
-pub fn may_share_memory<T>(_a: &Array<T>, _b: &Array<T>) -> bool {
-    // In our current implementation, arrays own their data and don't share memory
-    // Views would share memory, but we don't have views implemented yet
-    // For now, always return false
-    false
+pub fn may_share_memory<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
+    observably_aliases(a, b)
+}
+
+/// Returns true iff a write through `a` could be observed through `b`.
+///
+/// This is the question NumPy's `may_share_memory`/`shares_memory` are
+/// actually asked -- *can mutating one of these arrays corrupt the other?* --
+/// and it is deliberately **not** the same as "do these two arrays' bytes
+/// currently live at the same address".
+///
+/// `Array`'s storage is `Arc`-backed copy-on-write, so `Array::clone` is an
+/// O(1) reference-count bump and two handles routinely point at one buffer.
+/// That physical sharing is never a channel between them: every mutating path
+/// goes through `Array::nd_mut`, whose `Arc::make_mut` unshares the buffer
+/// before the first write, so the writer silently gets its own copy and every
+/// other handle keeps seeing the original. Two *distinct* `Array` handles
+/// therefore never alias observably, no matter what their buffer addresses
+/// say. Answering with a raw address comparison alone would report every
+/// clone as aliased and invert the guarantee callers depend on.
+///
+/// The physical-overlap test is still applied on top of the identity check
+/// (see [`ptr_ranges_overlap`]): it is what makes a zero-length array report
+/// `false` even against itself -- matching NumPy -- and it is the half that
+/// becomes load-bearing if borrowed/view-backed `Array` storage is ever added,
+/// where two distinct handles *can* genuinely alias.
+fn observably_aliases<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
+    if !std::ptr::eq(a, b) {
+        return false;
+    }
+    ptr_ranges_overlap(a, b)
+}
+
+/// Returns true iff the memory ranges `[a.as_ptr(), a.as_ptr() + a.len())`
+/// and `[b.as_ptr(), b.as_ptr() + b.len())` overlap.
+///
+/// Zero-length arrays never overlap with anything (they occupy no bytes,
+/// regardless of what address an empty slice happens to report). For two
+/// non-empty ranges, overlap uses the standard half-open-interval test
+/// `a_start < b_end && b_start < a_end`; a strict `<` (never `<=`) is
+/// required for two adjacent-but-disjoint ranges to correctly compare as
+/// non-overlapping.
+fn ptr_ranges_overlap<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
+    let a_len = a.array().len();
+    let b_len = b.array().len();
+    if a_len == 0 || b_len == 0 {
+        return false;
+    }
+
+    let a_start = a.array().as_ptr() as usize;
+    let a_end = a_start + a_len * std::mem::size_of::<T>();
+    let b_start = b.array().as_ptr() as usize;
+    let b_end = b_start + b_len * std::mem::size_of::<T>();
+
+    a_start < b_end && b_start < a_end
 }
 
 /// Check if two arrays share memory
@@ -273,10 +333,18 @@ pub fn may_share_memory<T>(_a: &Array<T>, _b: &Array<T>) -> bool {
 /// let b = Array::from_vec(vec![4.0, 5.0, 6.0]);
 /// assert!(!shares_memory(&a, &b));  // Different arrays don't share memory
 /// ```
-pub fn shares_memory<T>(_a: &Array<T>, _b: &Array<T>) -> bool {
-    // Similar to may_share_memory, but this is a definitive check
-    // In our current implementation, arrays never share memory
-    false
+pub fn shares_memory<T: Clone>(a: &Array<T>, b: &Array<T>) -> bool {
+    // NumPy distinguishes `may_share_memory` (a fast, conservative check
+    // that is allowed to over-report on complex strided views) from
+    // `shares_memory` (the exact, exhaustive check). `Array` has no such
+    // ambiguity to approximate: its storage is either uniquely owned or
+    // copy-on-write shared, and copy-on-write sharing dissolves on the
+    // first write, so the aliasing answer is exact either way (see
+    // `observably_aliases`). Both therefore delegate to the same precise
+    // check. Kept as separate functions (rather than one calling the other
+    // in a way that hides it) so the exact-vs-may distinction is easy to
+    // reintroduce once borrowed/view-backed storage exists.
+    observably_aliases(a, b)
 }
 
 #[cfg(test)]

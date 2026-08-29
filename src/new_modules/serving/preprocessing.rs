@@ -4,7 +4,6 @@
 
 use super::{Result, ServingError};
 use crate::array::Array;
-use std::collections::HashMap;
 
 /// Preprocessing stage trait
 pub trait PreprocessingStage: Send + Sync {
@@ -74,7 +73,7 @@ impl PreprocessingStage for InputValidator {
             });
         }
 
-        for (i, (expected, actual)) in self.expected_shape.iter().zip(shape.iter()).enumerate() {
+        for (expected, actual) in self.expected_shape.iter().zip(shape.iter()) {
             if let Some(exp_size) = expected {
                 if exp_size != actual {
                     return Err(ServingError::InvalidShape {
@@ -224,7 +223,7 @@ impl PreprocessingStage for Normalizer {
                     .collect();
 
                 let shape = input.shape().to_vec();
-                Ok(Array::from_vec(normalized).reshape(&shape))
+                Ok(Array::from_vec_shape(normalized, &shape)?)
             }
 
             NormalizationType::ZScore { mean, std } => {
@@ -327,7 +326,7 @@ impl PreprocessingStage for FeatureExtractor {
             }
 
             let new_shape = vec![batch_size, self.feature_indices.len()];
-            return Ok(Array::from_vec(extracted).reshape(&new_shape));
+            return Ok(Array::from_vec_shape(extracted, &new_shape)?);
         }
 
         Err(ServingError::PreprocessingError {
@@ -344,6 +343,11 @@ impl PreprocessingStage for FeatureExtractor {
 /// Preprocessing pipeline
 pub struct PreprocessingPipeline {
     stages: Vec<Box<dyn PreprocessingStage>>,
+    /// Caching was never implemented: no setter exists to turn this on, and
+    /// `apply()` below runs every stage unconditionally with no cache store
+    /// or lookup. Kept rather than deleted since it documents the shape a
+    /// real caching feature would need to fill in.
+    #[allow(dead_code)]
     cache_enabled: bool,
 }
 

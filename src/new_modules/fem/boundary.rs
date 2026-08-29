@@ -358,11 +358,29 @@ fn apply_dirichlet_penalty(
     Ok((k_mod, load.to_vec()))
 }
 
-/// Applies natural boundary conditions (zero-flux)
+/// Applies homogeneous natural boundary conditions (zero flux/traction).
 ///
-/// Natural boundary conditions are automatically satisfied by the FEM
-/// formulation and don't require explicit modification. This function
-/// is provided for completeness and documentation.
+/// This is intentionally a no-op, and that is the mathematically correct
+/// behavior for this function's contract -- it takes only the assembled
+/// `GlobalSystem`, with no per-node flux values, which is exactly the
+/// homogeneous (zero-flux / insulated / traction-free) case. In the weak
+/// (variational) form used throughout this module, a Neumann/natural
+/// boundary term appears as a boundary integral `∫ g·v ds` added to the
+/// load vector; when the prescribed flux `g` is zero that integral
+/// vanishes identically, so nothing needs to be assembled or modified --
+/// the natural boundary condition is satisfied automatically by leaving
+/// the corresponding boundary DOFs alone. This function exists for
+/// completeness/documentation of that fact, not as a stub.
+///
+/// # Non-zero natural (Neumann) boundary conditions
+///
+/// For a *non-zero* prescribed flux/traction, use [`NeumannBc`] /
+/// [`BoundaryConditionSet::add_neumann`] (or the elasticity-specific
+/// [`BoundaryConditionSet::add_point_force`]) together with
+/// [`apply_boundary_conditions`], which adds each Neumann contribution
+/// directly to the load vector (see `apply_boundary_conditions`'s
+/// `neumann_loads` handling). That is a fully general implementation,
+/// independent of this function.
 pub fn apply_natural_bc(_system: &GlobalSystem) -> FemResult<()> {
     // Natural BCs are automatically satisfied - no modification needed
     Ok(())

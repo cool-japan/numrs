@@ -3,9 +3,8 @@
 //! This module provides 3D visualization including surface plots,
 //! contour plots, and 3D scatter plots.
 
-use super::*;
+use super::{PlotConfig, VizError, VizResult};
 use plotters::prelude::*;
-use plotters::style::Color;
 use scirs2_core::ndarray::{Array1, Array2};
 use std::path::Path;
 
@@ -40,6 +39,8 @@ impl Plot3D {
                 z.ncols()
             )));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -124,6 +125,8 @@ impl Plot3D {
                 z.ncols()
             )));
         }
+
+        super::ensure_fonts_registered();
 
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
@@ -218,6 +221,8 @@ impl Plot3D {
             )));
         }
 
+        super::ensure_fonts_registered();
+
         let root =
             BitMapBackend::new(path, (self.config.width, self.config.height)).into_drawing_area();
 
@@ -269,7 +274,7 @@ impl Plot3D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scirs2_core::ndarray::{Array1, Array2};
+    use scirs2_core::ndarray::Array1;
 
     #[test]
     fn test_plot3d_creation() {

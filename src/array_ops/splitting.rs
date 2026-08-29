@@ -62,12 +62,6 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
 
     let mut start_idx = 0;
     for &end_idx in split_indices.iter() {
-        let mut sub_shape = shape.clone();
-        sub_shape[axis] = end_idx - start_idx;
-
-        let mut indices = vec![0; shape.len()];
-        indices[axis] = start_idx;
-
         let view = array.array().slice_axis(
             Axis(axis),
             scirs2_core::ndarray::Slice::from(start_idx..end_idx),
@@ -79,9 +73,6 @@ pub fn split<T: Clone>(array: &Array<T>, indices: &[usize], axis: usize) -> Resu
 
     // Add the last section
     if start_idx < axis_len {
-        let mut sub_shape = shape.clone();
-        sub_shape[axis] = axis_len - start_idx;
-
         let view = array.array().slice_axis(
             Axis(axis),
             scirs2_core::ndarray::Slice::from(start_idx..axis_len),

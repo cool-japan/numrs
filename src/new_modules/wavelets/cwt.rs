@@ -194,10 +194,27 @@ impl ContinuousWavelet for PaulWavelet {
         let denominator = (PI * Self::factorial(2 * self.order)).sqrt();
         let norm = numerator / denominator / scale.sqrt();
 
-        // Compute wavelet value in time domain
-        let denominator = (1.0 - (0.0, 1.0).0 * t_scaled).powi(self.order as i32 + 1);
-
-        // For simplicity, use approximation
+        // Compute wavelet value in time domain.
+        //
+        // NOTE: an abandoned first attempt at this lived here as
+        // `(1.0 - (0.0, 1.0).0 * t_scaled).powi(...)` -- `(0.0, 1.0).0` is
+        // just the tuple's first field (`0.0`), not the imaginary unit, so
+        // that expression always evaluated to exactly `1.0` regardless of
+        // `t_scaled`/`self.order` and was never used below. Removed as dead
+        // code; the real computation is the polar-form approach beneath.
+        //
+        // Un-investigated while removing the above (out of scope for this
+        // pass, flagged for the wavelets owner): the sign of `phase`. Target
+        // is `1/(1 - i*t_scaled)^(m+1)`; by this reviewer's derivation
+        // `1 - i*t_scaled` has argument `-atan(t_scaled)`, so its `(m+1)`
+        // power has argument `-(m+1)*atan(t_scaled)`, making the
+        // *reciprocal*'s argument `+(m+1)*atan(t_scaled)` -- the opposite
+        // sign from the `phase` below. Numeric check at `t_scaled=1, m=0`:
+        // `1/(1-i) = 0.5+0.5i`, but this function's `real`/`imag` below
+        // evaluate to `0.5`/`-0.5` (imaginary part negated). Neither of this
+        // struct's two tests (`test_paul_wavelet_creation`,
+        // `test_paul_invalid_order`) calls `.psi()`, so nothing currently
+        // exercises this value either way.
         let complex_denom = (1.0 + t_scaled * t_scaled).powf((self.order as f64 + 1.0) / 2.0);
         let phase = -(self.order as f64 + 1.0) * t_scaled.atan();
 
@@ -347,7 +364,7 @@ pub fn cwt(
 
     // Compute CWT for each scale
     for (scale_idx, &scale) in scales.iter().enumerate() {
-        for (time_idx, &t) in times.iter().enumerate() {
+        for time_idx in 0..times.len() {
             let mut sum_real = 0.0;
             let mut sum_imag = 0.0;
 

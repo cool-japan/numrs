@@ -222,7 +222,7 @@ where
         for &idx in &unique_indices {
             unique_data.extend_from_slice(&subarray_hashes[idx]);
         }
-        Array::from_vec(unique_data).reshape(&output_shape)
+        Array::from_vec_shape(unique_data, &output_shape)?
     } else {
         // Empty result
         Array::zeros(&output_shape)
