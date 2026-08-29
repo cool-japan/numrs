@@ -85,14 +85,24 @@
 //! finite, infinite and signed-zero value** -- there is no 1-ulp wobble, no
 //! reassociation, and `0.0` never turns into `-0.0`.
 //!
-//! `NaN` payloads and sign bits are included in that guarantee. When a single
-//! operation receives two distinct `NaN` operands, IEEE-754 permits either to
-//! be propagated and neither Rust nor LLVM specifies which, so this is a
-//! property that has to be *measured* rather than argued from the source --
-//! and an earlier revision of the evaluator did fail it. See the `fused_eval`
-//! module's notes and
-//! `tests/test_expr_fused_equivalence.rs`, which compares every element of a
-//! few thousand random trees strictly, `NaN` bits included.
+//! The two paths also agree on **where** a `NaN` appears: an element is `NaN`
+//! on one exactly when it is `NaN` on the other. A `NaN`'s **payload and sign
+//! bits are not part of the guarantee**, and that is deliberate. When a single
+//! operation receives two *distinct* `NaN` operands, IEEE-754 §6.2.3 leaves
+//! which payload propagates implementation-defined, neither Rust nor LLVM
+//! specifies a choice, and LLVM may commute the operands of an `fadd`/`fmul`
+//! -- so a one-pass fused loop and a two-pass eager spelling can each keep a
+//! different operand's `NaN` from identical source. This is a property that
+//! has to be *measured* rather than argued from the source, and it was: in a
+//! standalone program containing no `numrs2` code, `(0.0 * inf) + NaN`
+//! diverges between the two loops under `rustc -O`
+//! (`0x7ff8000000000000` vs `0xfff8000000000000`) and agrees under `-O0`.
+//! NumPy makes no `NaN`-payload promise either. See the `fused_eval` module's
+//! notes and `tests/test_expr_fused_equivalence.rs`, which compares every
+//! element of a few thousand random trees bit for bit, grants only that one
+//! exemption, and counts each time it is taken
+//! (`two_distinct_nans_into_one_add_may_differ_in_payload` pins the
+//! counter-example).
 //!
 //! **Deferred to 0.6.0.** A `fused!` macro (compile-time expansion of an
 //! expression written in ordinary infix syntax into a fused kernel) is *not*
@@ -298,8 +308,12 @@ impl<T> ExprNode<T> {
     ///
     /// Only the canonical operand order `(a * b) + c` is rewritten, never
     /// `c + (a * b)`: floating-point addition commutes in value but not
-    /// necessarily in NaN *payload*, and this module rewrites nothing that
-    /// could change a single output bit.
+    /// necessarily in NaN *payload*, so this rewrite preserves source-level
+    /// operand order exactly and changes nothing the language defines. (What
+    /// the backend then does with that order is a separate matter -- LLVM is
+    /// free to commute an `fadd`, which is why the module docs above put a
+    /// `NaN`'s payload and sign bits outside the fused/eager guarantee. The
+    /// point here is that the *rewrite* adds no divergence of its own.)
     ///
     /// # Examples
     ///

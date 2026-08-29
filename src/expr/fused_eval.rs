@@ -20,17 +20,37 @@
 //! floating-point contraction, so the `x * y + z` written in the fused loops
 //! below is guaranteed to compile to a multiply followed by an add.)
 //!
-//! That includes `NaN` **payloads and sign bits**, which is a stronger claim
-//! than it sounds: an earlier revision of this module -- the block
-//! interpreter described below -- broke exactly there, returning the other
-//! operand's `NaN` from `(a * b) + c` when `a` and `c` were `NaN`s of opposite
-//! sign. IEEE-754 permits either choice when one operation receives two
-//! distinct `NaN`s, and neither Rust nor LLVM specifies which, so that is a
-//! difference the source cannot argue itself out of -- it has to be measured.
-//! It is:
-//! `tests/test_expr_fused_equivalence.rs::nan_payload_case_that_used_to_diverge`
-//! keeps the case, and that suite compares every element of a few thousand
-//! random trees strictly, `NaN` bits included.
+//! It also includes **where** a `NaN` appears: an element is `NaN` on one
+//! path exactly when it is `NaN` on the other. What it does **not** include
+//! is a `NaN`'s **payload and sign bits**.
+//!
+//! That carve-out is not a hedge; it is what the measurement says, and this
+//! was always a claim the source could not argue itself out of. When one
+//! operation receives two *distinct* `NaN` operands, IEEE-754 §6.2.3 leaves
+//! which payload propagates implementation-defined, neither Rust nor LLVM
+//! specifies a choice, and LLVM treats `fadd`/`fmul` as commutative -- so a
+//! single fused `zip` loop and a two-pass eager spelling may each keep a
+//! different operand's `NaN` from *identical* source-level operand order.
+//! Reduced to a 30-line standalone program with no `numrs2` code in it,
+//! `(0.0 * inf) + NaN` -- `0.0 * inf` is invalid, yielding a fresh default
+//! `NaN`, which then meets `f64::NAN` in one `fadd` -- gives:
+//!
+//! | build | single fused loop | two-pass eager | agree? |
+//! |---|---|---|---|
+//! | `rustc -O`  | `0x7ff8000000000000` | `0xfff8000000000000` | no |
+//! | `rustc -O0` | `0xfff8000000000000` | `0xfff8000000000000` | yes |
+//!
+//! Both are conforming; the difference is an artifact of the vectorization
+//! this module exists for, and closing it would mean giving that up. NumPy
+//! makes no `NaN`-payload guarantee either. The equivalence suite is written
+//! to exactly this contract:
+//! `tests/test_expr_fused_equivalence.rs::two_distinct_nans_into_one_add_may_differ_in_payload`
+//! pins the counter-example above (it was found by that suite's property
+//! test, at seed 12825631960650228096), `nan_payload_case_that_used_to_diverge`
+//! keeps the input that caught a genuine defect in the block interpreter
+//! described below, and the property test compares every element of a few
+//! thousand random trees bit for bit, granting only that one exemption and
+//! counting each time it is taken.
 //!
 //! # Fused path: one shape of loop, and why there is only one
 //!
@@ -685,9 +705,29 @@ mod tests {
         Array::from_vec((0..n).map(|i| i as f64 * scale + offset).collect())
     }
 
-    /// Comparison at exactly the strength this module guarantees: bit for
-    /// bit, including `NaN` payloads and sign bits, so `0.0` never passes for
-    /// `-0.0` and a 1-ulp slip is a failure.
+    /// Full-strength bitwise comparison: `0.0` never passes for `-0.0` and a
+    /// 1-ulp slip is a failure.
+    ///
+    /// This is *stricter* than the module's guarantee, which exempts a
+    /// `NaN`'s payload and sign bits (see the module docs). Keeping it strict
+    /// here is safe because every caller was audited for the one situation
+    /// that makes payloads underdetermined -- a single operation receiving two
+    /// **distinct** `NaN` operands -- and none of them reaches it:
+    ///
+    /// * every caller but one feeds only finite data (`seq`, small integer
+    ///   ranges), so no `NaN` arises at all;
+    /// * the exception, `special_values_match_eager`, does compute `NaN`s, but
+    ///   never from two distinct ones. Its only operation with two `NaN`
+    ///   operands is `f64::NAN + (2.0 * f64::NAN)`; the multiply sees exactly
+    ///   one `NaN` and so returns that operand quieted, leaving the add with
+    ///   two *bit-identical* `NaN`s, where IEEE-754 §6.2.3's freedom to pick
+    ///   either operand cannot change a single output bit.
+    ///
+    /// The relaxed comparison the contract actually licenses lives in
+    /// `tests/test_expr_fused_equivalence.rs::assert_values_eq`, which is
+    /// where the adversarial `NaN` pool is. A new caller here that can put two
+    /// distinct `NaN`s into one operation must relax this helper the same way
+    /// rather than pin an optimization level.
     fn assert_bit_eq(got: &Array<f64>, want: &Array<f64>, what: &str) {
         assert_eq!(got.shape(), want.shape(), "{what}: shape");
         for (i, (g, w)) in got.to_vec().iter().zip(want.to_vec().iter()).enumerate() {

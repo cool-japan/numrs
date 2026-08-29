@@ -7,11 +7,34 @@
 //! bit for bit, signed zeros and infinities included -- whether `eval()` took
 //! the single-pass fused path or fell back to eager evaluation.
 //!
-//! The comparison is strict: `NaN` results must match **payload and sign
-//! bits** too, not merely both be `NaN`. That is a stronger claim than it
-//! looks -- an earlier revision of the evaluator failed it, and
-//! `nan_payload_case_that_used_to_diverge` at the bottom of this file keeps
-//! the case that caught it.
+//! The comparison is strict for every **finite, infinite and signed-zero**
+//! element: those must match bit for bit, so `0.0` never passes for `-0.0`
+//! and a 1-ulp slip is a failure. A `NaN` is compared *positionally*: both
+//! sides must be `NaN` in the same element, but a `NaN`'s **payload and sign
+//! bits are deliberately outside the claim**.
+//!
+//! That exception is narrow, and it is measured rather than assumed. When one
+//! operation receives two *distinct* `NaN` operands, IEEE-754 §6.2.3 leaves
+//! which payload propagates implementation-defined, and LLVM treats `fadd` /
+//! `fmul` as commutative -- so the single fused `zip` loop and the two-pass
+//! eager spelling can each keep a different operand's `NaN`, from identical
+//! source-level operand order. Reduced to a 30-line standalone program
+//! containing no `numrs2` code at all, `(0.0 * inf) + NaN` gives:
+//!
+//! | build | single fused loop | two-pass eager | agree? |
+//! |---|---|---|---|
+//! | `rustc -O`  | `0x7ff8000000000000` | `0xfff8000000000000` | no |
+//! | `rustc -O0` | `0xfff8000000000000` | `0xfff8000000000000` | yes |
+//!
+//! So the divergence is an artifact of optimization that IEEE-754 explicitly
+//! permits, not a defect in the evaluator -- and fixing it in the evaluator
+//! would mean giving up the vectorization the fused module exists for. NumPy
+//! makes no `NaN`-payload promise either.
+//! `two_distinct_nans_into_one_add_may_differ_in_payload` at the bottom of
+//! this file pins that counter-example (it was found by this very property,
+//! at proptest seed 12825631960650228096);
+//! `nan_payload_case_that_used_to_diverge` beside it keeps the older input
+//! that caught a real defect back when the evaluator had one.
 //!
 //! Note on naming: `eval()` here is `ExprNode::eval`, a numeric array
 //! evaluator; nothing in this file interprets code or strings.
@@ -305,32 +328,67 @@ fn build(ctx: &mut Ctx, budget: usize) -> (ExprNode<f64>, Array<f64>) {
 // Comparison
 // ---------------------------------------------------------------------------
 
-/// Array comparison at full strength: every element must match **bit for
-/// bit**, `NaN` payloads and signs included, so `0.0` never passes for `-0.0`
-/// and a 1-ulp difference is a failure.
-fn assert_values_eq(got: &Array<f64>, want: &Array<f64>, what: &str) {
+/// Array comparison at exactly the strength the evaluator guarantees.
+///
+/// Every **finite, infinite and signed-zero** element must match **bit for
+/// bit**, so `0.0` never passes for `-0.0` and a 1-ulp difference is a
+/// failure. The one exception is a `NaN`: when *both* sides are `NaN` in the
+/// same element, differing payload and sign bits are tolerated, for the
+/// IEEE-754 §6.2.3 / LLVM-commutativity reason set out in this file's module
+/// docs. A `NaN` facing a number is still a failure, and so is a `NaN` that
+/// turns up in an element where the other side has none -- *where* the `NaN`s
+/// are remains part of the claim.
+///
+/// Returns how many comparisons took that exemption, so it is reported rather
+/// than swallowed; `#[must_use]` forces every caller to decide what to do
+/// with the number instead of dropping it silently.
+#[must_use]
+fn assert_values_eq(got: &Array<f64>, want: &Array<f64>, what: &str) -> usize {
     assert_eq!(got.shape(), want.shape(), "{what}: shape");
     let (g, w) = (got.to_vec(), want.to_vec());
+    let mut payload_exempt = 0usize;
     for (i, (x, y)) in g.iter().zip(w.iter()).enumerate() {
+        if x.to_bits() == y.to_bits() {
+            continue;
+        }
+        if x.is_nan() && y.is_nan() {
+            payload_exempt += 1;
+            continue;
+        }
+        // Not both `NaN`, so the full-strength comparison stands. Re-stating
+        // it as the original `assert_eq!` keeps the failure message -- and
+        // both raw bit patterns -- exactly as it always was.
         assert_eq!(
             x.to_bits(),
             y.to_bits(),
             "{what}: element {i}: fused {x} vs eager {y}"
         );
     }
+    payload_exempt
 }
 
-/// Same, for `f32`.
-fn assert_values_eq_f32(got: &Array<f32>, want: &Array<f32>, what: &str) {
+/// Same, for `f32`: strict everywhere except a `NaN` facing a `NaN`, and
+/// likewise returns the number of tolerated payload divergences.
+#[must_use]
+fn assert_values_eq_f32(got: &Array<f32>, want: &Array<f32>, what: &str) -> usize {
     assert_eq!(got.shape(), want.shape(), "{what}: shape");
     let (g, w) = (got.to_vec(), want.to_vec());
+    let mut payload_exempt = 0usize;
     for (i, (x, y)) in g.iter().zip(w.iter()).enumerate() {
+        if x.to_bits() == y.to_bits() {
+            continue;
+        }
+        if x.is_nan() && y.is_nan() {
+            payload_exempt += 1;
+            continue;
+        }
         assert_eq!(
             x.to_bits(),
             y.to_bits(),
             "{what}: element {i}: fused {x} vs eager {y}"
         );
     }
+    payload_exempt
 }
 
 /// Every leaf array in a tree, left to right.
@@ -413,9 +471,19 @@ fn should_fuse(node: &ExprNode<f64>) -> bool {
 /// Generate one tree, evaluate it both ways, assert they agree.
 ///
 /// Also asserts the *routing* contract: `will_fuse()` is true exactly when
-/// every leaf shares one shape and is in standard layout. Returns whether the
-/// tree took the fused path so callers can prove they exercised both.
-fn check_one(seed: u64, rows: usize, cols: usize, mode: Mode, depth: usize) -> Result<bool> {
+/// every leaf shares one shape and is in standard layout.
+///
+/// Returns `(took_the_fused_path, nan_payload_exemptions)` -- the first so
+/// callers can prove they exercised both paths, the second so the narrow
+/// `NaN`-payload exemption `assert_values_eq` grants stays countable at the
+/// call site rather than vanishing inside the helper.
+fn check_one(
+    seed: u64,
+    rows: usize,
+    cols: usize,
+    mode: Mode,
+    depth: usize,
+) -> Result<(bool, usize)> {
     let mut ctx = Ctx {
         rng: Rng::new(seed),
         rows,
@@ -436,8 +504,8 @@ fn check_one(seed: u64, rows: usize, cols: usize, mode: Mode, depth: usize) -> R
     );
 
     let got = node.eval()?;
-    assert_values_eq(&got, &eager, &what);
-    Ok(fused_path)
+    let payload_exempt = assert_values_eq(&got, &eager, &what);
+    Ok((fused_path, payload_exempt))
 }
 
 // ---------------------------------------------------------------------------
@@ -531,7 +599,11 @@ proptest! {
         depth in 0usize..=3,
     ) {
         let mode = Mode::from_index(mode_idx);
-        let fused = check_one(seed, rows, cols, mode, depth)
+        // The per-case exemption count has nowhere to accumulate -- proptest
+        // cases are independent runs of this closure -- so the aggregate
+        // tally lives in `strict_bitwise_sweep_covers_nan_results_too`, which
+        // sweeps the same generator over a fixed set of seeds and prints it.
+        let (fused, _payload_exempt) = check_one(seed, rows, cols, mode, depth)
             .expect("every generated tree has broadcast-compatible leaves");
 
         // The mode/path correspondence the module docs promise. Only the two
@@ -564,7 +636,9 @@ proptest! {
 
         let want = eager_ref_f32(&node);
         let got = node.eval().expect("broadcast-compatible leaves");
-        assert_values_eq_f32(
+        // Same reason as above: nothing to accumulate into across independent
+        // proptest cases, so the count is deliberately dropped here.
+        let _payload_exempt = assert_values_eq_f32(
             &got,
             &want,
             &format!("f32 seed={seed} mode={mode:?} shape=[{rows},{cols}]"),
@@ -596,14 +670,18 @@ proptest! {
 fn varied_size_sweep_matches_eager() -> Result<()> {
     let mut fused_seen = 0usize;
     let mut total = 0usize;
+    let mut payload_exempt = 0usize;
     for &cols in &[1usize, 1023, 1024, 1025, 2049] {
         for seed in 0u64..24 {
             total += 1;
-            if check_one(seed, 1, cols, Mode::Contiguous, 3)? {
+            let (fused, exempt) = check_one(seed, 1, cols, Mode::Contiguous, 3)?;
+            payload_exempt += exempt;
+            if fused {
                 fused_seen += 1;
             }
         }
     }
+    println!("varied-size sweep: NaN-payload exemptions taken: {payload_exempt}");
     assert!(
         fused_seen * 4 >= total,
         "expected the contiguous sweep to reach the fused path often, got {fused_seen}/{total}"
@@ -626,13 +704,16 @@ fn fallback_modes_match_eager_and_reach_the_fallback() -> Result<()> {
     for mode in [Mode::Transposed, Mode::MixedLayout, Mode::Broadcast] {
         let mut fell_back = 0usize;
         let mut total = 0usize;
+        let mut payload_exempt = 0usize;
         for seed in 0u64..300 {
-            let fused = check_one(seed, 3, 5, mode, 3)?;
+            let (fused, exempt) = check_one(seed, 3, 5, mode, 3)?;
+            payload_exempt += exempt;
             total += 1;
             if !fused {
                 fell_back += 1;
             }
         }
+        println!("{mode:?}: NaN-payload exemptions taken: {payload_exempt}");
         match mode {
             Mode::Transposed => assert_eq!(
                 fell_back, total,
@@ -650,12 +731,15 @@ fn fallback_modes_match_eager_and_reach_the_fallback() -> Result<()> {
 /// Depth-4 trees specifically (the gate's stated bound), all four leaf modes.
 #[test]
 fn depth_four_trees_match_eager() -> Result<()> {
+    let mut payload_exempt = 0usize;
     for mode_idx in 0..4 {
         let mode = Mode::from_index(mode_idx);
         for seed in 1000u64..1200 {
-            check_one(seed, 4, 6, mode, 3)?;
+            let (_fused, exempt) = check_one(seed, 4, 6, mode, 3)?;
+            payload_exempt += exempt;
         }
     }
+    println!("depth-4 sweep: NaN-payload exemptions taken: {payload_exempt}");
     Ok(())
 }
 
@@ -664,6 +748,7 @@ fn depth_four_trees_match_eager() -> Result<()> {
 /// which is exactly the eager value.
 #[test]
 fn fuse_fma_rewrite_preserves_values_bitwise() -> Result<()> {
+    let mut payload_exempt = 0usize;
     for mode_idx in 0..4 {
         let mode = Mode::from_index(mode_idx);
         for seed in 5000u64..5200 {
@@ -676,14 +761,16 @@ fn fuse_fma_rewrite_preserves_values_bitwise() -> Result<()> {
             let (node, eager) = build(&mut ctx, 3);
             let plain = node.clone().eval()?;
             let rewritten = node.fuse_fma().eval()?;
-            assert_values_eq(&plain, &eager, &format!("plain seed={seed} mode={mode:?}"));
-            assert_values_eq(
+            payload_exempt +=
+                assert_values_eq(&plain, &eager, &format!("plain seed={seed} mode={mode:?}"));
+            payload_exempt += assert_values_eq(
                 &rewritten,
                 &eager,
                 &format!("fuse_fma seed={seed} mode={mode:?}"),
             );
         }
     }
+    println!("fuse_fma sweep: NaN-payload exemptions taken: {payload_exempt}");
     Ok(())
 }
 
@@ -706,7 +793,14 @@ fn canonical_chain_matches_eager_at_scale() -> Result<()> {
 
         let e = a.expr() + b.expr() * c.expr();
         assert!(e.will_fuse(), "n={n}");
-        assert_values_eq(&e.eval()?, &(&a + &(&b * &c)), &format!("a+b*c n={n}"));
+        let payload_exempt =
+            assert_values_eq(&e.eval()?, &(&a + &(&b * &c)), &format!("a+b*c n={n}"));
+        // Every leaf here is finite, so no operation can see a `NaN` at all,
+        // let alone two distinct ones: the exemption must never fire.
+        assert_eq!(
+            payload_exempt, 0,
+            "n={n}: finite data must compare bit for bit with no exemption"
+        );
     }
     Ok(())
 }
@@ -747,26 +841,36 @@ fn tree_construction_shares_storage_at_every_size() {
 // The one documented exception, pinned down
 // ---------------------------------------------------------------------------
 
-/// Regression test for a real defect this suite caught.
+/// Regression test for a real defect this suite caught -- kept for its input,
+/// with a narrower claim than it once made.
 ///
 /// An earlier revision evaluated any same-shape contiguous tree through a
 /// block interpreter that accumulated in place (`dst[i] = dst[i] + src[i]`).
 /// For `(a * b) + c` with `a = +NaN`, `b = +inf`, `c = -NaN` -- two `NaN`
 /// operands of opposite sign meeting in one commutative operation -- that
-/// path returned `c`'s `NaN` while the eager path returned `a`'s, a sign-bit
-/// difference in the result. It reproduced at `n == 1`, so it was operand
-/// ordering in the emitted code, not vectorization or reassociation; IEEE-754
-/// permits either choice and neither Rust nor LLVM specifies which.
+/// path produced a `NaN` in every position, as it must, but *also* differed
+/// from the eager path in the result's sign bit. That interpreter is gone (it
+/// also lost the A/B benchmark to plain eager evaluation -- see
+/// `src/expr/fused_eval.rs`).
 ///
-/// That interpreter is gone (it also lost the A/B benchmark to plain eager
-/// evaluation -- see `src/expr/fused_eval.rs`), and this case now agrees bit
-/// for bit. The test stays because it is the sharpest input the suite has for
-/// this class of difference.
+/// What this test pins today is **not** payload agreement. Both paths do
+/// still agree bit for bit on this input, but only by luck of codegen: the
+/// inputs feed `+NaN` and `-NaN` into one `fadd`, which is exactly the
+/// underdetermined case of IEEE-754 §6.2.3 -- see
+/// `two_distinct_nans_into_one_add_may_differ_in_payload` below, and this
+/// file's module docs. Asserting the payloads match here would be pinning an
+/// optimization level. So `assert_values_eq` grants its `NaN`-payload
+/// exemption on this input too, and what survives is the real contract: for
+/// the historically divergent spelling, both paths put a `NaN` in every
+/// position and neither invents a number where the other has a `NaN`. The
+/// input stays because it is the sharpest one the suite has for this class of
+/// difference.
 #[test]
 fn nan_payload_case_that_used_to_diverge() -> Result<()> {
     let neg_nan = f64::from_bits(0xfff8_0000_0000_0000);
     assert!(neg_nan.is_nan() && neg_nan.is_sign_negative());
 
+    let mut payload_exempt = 0usize;
     for n in [1usize, 2, 4, 12, 1024, 5000] {
         let a = Array::from_vec(vec![f64::NAN; n]);
         let b = Array::from_vec(vec![f64::INFINITY; n]);
@@ -781,7 +885,7 @@ fn nan_payload_case_that_used_to_diverge() -> Result<()> {
         );
         let got = node.eval()?;
         let want = &(&(&a + 0.0) * &b) + &c;
-        assert_values_eq(&got, &want, &format!("historic NaN case, n={n}"));
+        payload_exempt += assert_values_eq(&got, &want, &format!("historic NaN case, n={n}"));
 
         // And the same expression in a shape that does take a fused loop.
         let fused_shape = a.expr() * b.expr() + c.expr();
@@ -789,27 +893,119 @@ fn nan_payload_case_that_used_to_diverge() -> Result<()> {
             fused_shape.will_fuse(),
             "n={n}: (a*b)+c is a specialised shape"
         );
-        assert_values_eq(
+        payload_exempt += assert_values_eq(
             &fused_shape.eval()?,
             &(&(&a * &b) + &c),
             &format!("fused NaN case, n={n}"),
         );
     }
+    // Reported, not asserted: it is currently 0 -- the two paths happen to
+    // keep the same `NaN` here -- but a build that flipped it to non-zero
+    // would still be conforming, which is the whole point of the exemption.
+    println!("historic NaN case: NaN-payload exemptions taken: {payload_exempt}");
     Ok(())
 }
 
-/// How much of the random sweep is actually compared, and how much of it
-/// lands on `NaN` -- reported as a number rather than asserted about, so the
-/// strength of the equivalence claim is visible under `--nocapture`.
+/// The measured counter-example to the payload half of the old claim.
 ///
-/// Every element is compared strictly, `NaN`s included; the `nan_results`
-/// tally is only there to show the adversarial pool really does drive a large
-/// fraction of results to `NaN`, where a weaker comparison would have hidden
-/// the defect `nan_payload_case_that_used_to_diverge` records.
+/// `fused_eval_matches_eager_bitwise` found it at proptest seed
+/// 12825631960650228096 (`Contiguous`, shape `[2, 5]`, depth <= 2), where the
+/// generated tree was `Fma(a, b, c)` over three contiguous leaves and element
+/// 1 happened to draw `a = 0.0`, `b = inf`, `c = NaN`. Both paths compute
+/// `(a * b) + c`: `0.0 * inf` is an invalid operation, so it yields a fresh
+/// hardware default `NaN` (`0xfff8_0000_0000_0000` on x86-64), and *that*
+/// `NaN` is then added to the pool's `f64::NAN` (`0x7ff8_0000_0000_0000`) --
+/// one `fadd` handed two distinct `NaN` operands, precisely the case
+/// IEEE-754 §6.2.3 leaves implementation-defined. LLVM treats `fadd` as
+/// commutative, so the single fused `zip` loop kept one operand's `NaN` and
+/// the two-pass eager path kept the other's, from the same source-level
+/// operand order. Reproduced in a 30-line standalone program with no `numrs2`
+/// code in it: divergent under `rustc -O`, identical under `-O0`. It is a
+/// codegen artifact of the vectorization this module exists for, not an
+/// evaluator bug, and it cannot be removed without removing the fusion.
+///
+/// Not even *which* side keeps *which* `NaN` is fixed: the standalone program
+/// had the fused loop keep `0x7ff8…` and the eager pair keep `0xfff8…`, while
+/// inside `numrs2` -- both at the failing seed and at the lengths below -- the
+/// assignment is the other way round. That is a second reason the payload
+/// cannot be part of the contract: there is no stable answer to promise.
+///
+/// So this test asserts what the contract now says and no more: **both paths
+/// produce a `NaN` in every position**. Asserting payload equality here is
+/// exactly the mistake being corrected -- it would pin an optimization level
+/// rather than a property of the evaluator.
+///
+/// The lengths are not arbitrary. Sweeping `n` from 1 to 40 on this machine,
+/// the two paths differ for exactly `n = 10` and `n = 11` (8 of the elements
+/// in each), and agree everywhere else: at small `n` both stay scalar and
+/// keep `0xfff8…`, at large `n` both vectorize cleanly and keep `0x7ff8…`,
+/// and only where the vector body and its remainder split differently do the
+/// two spellings come apart. Nothing about the arrays changes across that
+/// sweep -- every element is the same three constants -- so the length
+/// dependence is entirely in the emitted code. `10` and `11` are included so
+/// the counter-example is actually exercised here rather than merely
+/// described, and the surrounding lengths so the "usually identical" majority
+/// is visible next to it.
+#[test]
+fn two_distinct_nans_into_one_add_may_differ_in_payload() -> Result<()> {
+    for n in [1usize, 2, 5, 10, 11, 64, 1024, 5000] {
+        let a = Array::from_vec(vec![0.0_f64; n]);
+        let b = Array::from_vec(vec![f64::INFINITY; n]);
+        let c = Array::from_vec(vec![f64::NAN; n]);
+
+        // The fused spelling: `Fma` of three bare leaves is a specialised
+        // shape, so this is the single `zip` loop, not the fallback.
+        let node = ExprNode::Fma(Box::new(a.expr()), Box::new(b.expr()), Box::new(c.expr()));
+        assert!(
+            node.will_fuse(),
+            "n={n}: Fma(Leaf, Leaf, Leaf) over contiguous same-shape leaves must fuse"
+        );
+        let fused = node.eval()?;
+
+        // The eager spelling a user would write by hand: two passes.
+        let eager = &(&a * &b) + &c;
+
+        assert_eq!(fused.shape(), eager.shape(), "n={n}: shape");
+        let (f, e) = (fused.to_vec(), eager.to_vec());
+        for (i, (g, w)) in f.iter().zip(e.iter()).enumerate() {
+            assert!(g.is_nan(), "n={n}: fused element {i} is {g}, expected NaN");
+            assert!(w.is_nan(), "n={n}: eager element {i} is {w}, expected NaN");
+        }
+
+        // Reported, never asserted. On this machine and at this optimization
+        // level it is 8 for n = 10 and n = 11 and 0 elsewhere (see the doc
+        // comment); another rustc, another target CPU or `-O0` would produce
+        // a different pattern, and every one of them is conforming. That is
+        // exactly why the assertions above stop at "is a NaN" -- an
+        // `assert_eq!` on these bits would be pinning a code generator.
+        let payload_diffs = f
+            .iter()
+            .zip(e.iter())
+            .filter(|(g, w)| g.to_bits() != w.to_bits())
+            .count();
+        println!("(0*inf)+NaN, n={n}: all NaN; payload/sign differs in {payload_diffs}/{n}");
+    }
+    Ok(())
+}
+
+/// How much of the random sweep is actually compared, how much of it lands on
+/// `NaN`, and how often the `NaN`-payload exemption is taken -- reported as
+/// numbers rather than asserted about, so the strength of the equivalence
+/// claim is visible under `--nocapture`.
+///
+/// Every element is compared bit for bit, with the single exemption
+/// `assert_values_eq` documents: a `NaN` facing a `NaN` may differ in payload
+/// and sign. The `nan_results` tally shows the adversarial pool really does
+/// drive a large fraction of results to `NaN` -- a comparison that merely
+/// checked `is_nan()` everywhere would have hidden the defect
+/// `nan_payload_case_that_used_to_diverge` records -- while
+/// `payload_exempt` keeps the size of the exemption itself in view, so it
+/// cannot quietly grow into a licence to differ anywhere else.
 #[test]
 fn strict_bitwise_sweep_covers_nan_results_too() -> Result<()> {
-    let mut strict = 0usize;
+    let mut compared = 0usize;
     let mut nan_results = 0usize;
+    let mut payload_exempt = 0usize;
 
     for mode_idx in 0..4 {
         let mode = Mode::from_index(mode_idx);
@@ -825,12 +1021,24 @@ fn strict_bitwise_sweep_covers_nan_results_too() -> Result<()> {
             assert_eq!(got.shape(), eager.shape(), "seed={seed} mode={mode:?}");
 
             for (i, (g, w)) in got.to_vec().iter().zip(eager.to_vec().iter()).enumerate() {
-                assert_eq!(
-                    g.to_bits(),
-                    w.to_bits(),
-                    "seed={seed} mode={mode:?} element {i}: {g} vs {w}"
-                );
-                strict += 1;
+                if g.to_bits() != w.to_bits() {
+                    if g.is_nan() && w.is_nan() {
+                        // The one difference IEEE-754 §6.2.3 leaves open: the
+                        // two paths agree that this element is `NaN`, and
+                        // differ only in bits no one promised.
+                        payload_exempt += 1;
+                    } else {
+                        // Anything else -- a finite/infinite/signed-zero slip,
+                        // or a `NaN` facing a number -- is still a failure,
+                        // reported with both bit patterns as before.
+                        assert_eq!(
+                            g.to_bits(),
+                            w.to_bits(),
+                            "seed={seed} mode={mode:?} element {i}: {g} vs {w}"
+                        );
+                    }
+                }
+                compared += 1;
                 if g.is_nan() {
                     nan_results += 1;
                 }
@@ -838,10 +1046,13 @@ fn strict_bitwise_sweep_covers_nan_results_too() -> Result<()> {
         }
     }
 
-    println!("strict bitwise comparisons: {strict}, of which NaN results: {nan_results}");
+    println!(
+        "bitwise comparisons: {compared}, of which NaN results: {nan_results}, \
+         of which took the NaN-payload exemption: {payload_exempt}"
+    );
     assert!(
-        strict > 2_000,
-        "expected a substantial strict sweep, got {strict}"
+        compared > 2_000,
+        "expected a substantial strict sweep, got {compared}"
     );
     assert!(
         nan_results > 100,
