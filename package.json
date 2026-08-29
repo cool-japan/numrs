@@ -1,6 +1,6 @@
 {
   "name": "numrs2-wasm-build",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Dev-only build tooling for NumRS2's WebAssembly bindings. NOT the published package: scripts/build-wasm.sh runs wasm-pack with --scope cooljapan, which generates the real, publishable pkg/package.json (name \"@cooljapan/numrs2\") from Cargo.toml at build time.",
   "license": "Apache-2.0",

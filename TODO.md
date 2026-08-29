@@ -7,12 +7,16 @@ content is either superseded by CHANGELOG.md or no longer true against the worki
 
 ## Current Focus
 
-The `0.4.1` branch is a production-hardening pass: `Array<T>` is now `Arc`-backed copy-on-write, a
-shared `kernels` dispatch layer backs matmul/elementwise/reduction hot paths, the `distributed`
-feature runs real collectives and linear algebra over a TCP transport instead of returning
-fabricated results, and a large batch of NumPy-parity APIs landed. See CHANGELOG.md's `[0.4.1]`
-section for the full, verified list, including a **Known Upstream Issues** subsection for the
-`scirs2-core`/`scirs2-fft` bugs this release works around.
+`0.4.1` shipped (2026-08-29) as a production-hardening pass: `Array<T>` is now `Arc`-backed
+copy-on-write, a shared `kernels` dispatch layer backs matmul/elementwise/reduction hot paths, the
+`distributed` feature runs real collectives and linear algebra over a TCP transport instead of
+returning fabricated results, and a large batch of NumPy-parity APIs landed. See CHANGELOG.md's
+`[0.4.1]` section for the full, verified list, including a **Known Upstream Issues** subsection for
+the `scirs2-core`/`scirs2-fft` bugs that release works around.
+
+The `0.4.2` branch is newly opened (cut from the `0.4.1` release tag) with no code changes yet —
+its scope is not decided. The items below carried forward unchanged from `0.4.1` are still open;
+new `0.4.2` work will be added here as it lands.
 
 ## Known Deferred Items
 
