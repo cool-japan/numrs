@@ -44,10 +44,6 @@ Items below are open in the current tree as of this writing. Each was checked ag
   series summation is used for `|z| < 1` and the `z == 1` case reduces to `zeta`; for `|z| > 1`
   the function returns `NaN` (`// Complex extension needed`) rather than an analytic
   continuation. See `src/new_modules/special/hypergeometric.rs`.
-- **`tests/nn/test_simd_ops.rs::test_simd_matmul_f64`** — still `#[ignore]`d pending an upstream
-  `scirs2-core` SIMD f64 matmul fix. The in-file comment cites `scirs2-core-0.1.5`; the crate is
-  now on `scirs2-core` 0.6.5, so that version reference is stale, but the underlying issue has not
-  been independently re-verified as fixed, and the test remains ignored either way.
 
 ### Intentional NumPy deviations (design decisions, not bugs)
 

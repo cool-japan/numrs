@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - 2026-08-26
+## [0.4.1] - 2026-08-29
 
 This release is a production-hardening pass across the whole crate: a shared compute-dispatch
 layer, copy-on-write arrays, a real (not fabricated) distributed transport, a large batch of
@@ -27,6 +27,12 @@ rather than restated as fact.
   instead of materializing every intermediate. Honest about scope: eager syntax (`&a + &b`) does
   not fuse on its own — fusion only happens through the explicit `.expr()...eval()` builder. A
   compile-time `fused!` macro is deferred to 0.6.0 (see `src/expr/owned.rs`'s module doc).
+  Fused and eager evaluation are guaranteed bit-for-bit equal for every finite, infinite and
+  signed-zero element, and to agree on *where* a `NaN` appears — but not on a `NaN`'s payload/sign
+  bits when a single operation combines two distinct `NaN`s (measured, not assumed: a 30-line
+  reduction of `(0.0 * inf) + NaN` disagrees between the one-pass fused loop and the two-pass
+  eager spelling under `rustc -O`; see `two_distinct_nans_into_one_add_may_differ_in_payload` in
+  `tests/test_expr_fused_equivalence.rs`).
 
 **NumPy-parity additions**
 - ufunc machinery (`src/ufunc_ops.rs`): `reduce`, `accumulate`, `outer`, `reduceat`, and `.at()`
@@ -197,6 +203,35 @@ rather than restated as fact.
 - `src/array/core.rs`, `src/views.rs`, and `src/arrays/*.rs` contain no `unsafe` blocks at all;
   the raw-pointer type-punning that remains in the crate is confined to `kernels::cast`,
   `io::npy_npz`, and `types::structured` (all three audited as above).
+
+**SIMD dispatch**
+- AVX2/AVX-512-dispatched math functions in `src/simd_optimize/` (`EnhancedSimdOps::vectorized_*`
+  in `avx2_enhanced/{arithmetic,comparison,exponential,trigonometric,special}.rs`, plus
+  `simd_optimize::mod`'s `avx2_optimized_sqrt_f32`/`_f64` and
+  `UnifiedSimdDispatcher::optimized_exp_f32`/`optimized::exp_f32`) now return `Result<Array<T>>`
+  instead of a bare `Array<T>` — 53 signature lines changed, spanning both the
+  `#[cfg(target_arch = "x86_64")]` SIMD kernels and their `#[cfg(not(target_arch = "x86_64"))]`
+  scalar-fallback counterparts. **Breaking** for direct callers. Two real defects this closes:
+  the `x86_64` binary ops (e.g. `vectorized_add_arrays_f64`) silently truncated a shape mismatch
+  to `min(len_a, len_b)` instead of erroring — now an explicit `NumRs2Error::ShapeMismatch` —
+  invisible to local development because this crate's usual dev machine is aarch64 (Apple
+  Silicon), where the `x86_64` kernels never type-check at all; and, unrelated to that blind
+  spot, the *non*-x86_64 fallback build of `avx2_optimized_sqrt_f32`/`_f64` panicked on a reshape
+  failure via `.unwrap_or_else(|e| panic!("{e}"))` — now propagates `Result` cleanly, per the
+  crate's no-`unwrap()` policy.
+
+**Build (macOS, `python` feature)**
+- `cargo build --features python` and `cargo nextest run --all-features` failed to link on
+  macOS (`Undefined symbols for architecture arm64: "_PyBaseObject_Type"...`): pyo3's
+  `extension-module` feature deliberately omits linking against libpython (resolved instead by
+  the interpreter that `dlopen()`s the module at import time), which ELF linkers tolerate but
+  Mach-O's two-level namespace rejects without `-undefined dynamic_lookup`. Fixed by a new
+  `build.rs` that calls `pyo3_build_config::add_extension_module_link_args()` (reaches the
+  cdylib target only) plus matching `[target.'cfg(target_os = "macos")']` rustflags in
+  `.cargo/config.toml` (reaches the unit-test/nextest binary that the build script's
+  `cargo:rustc-cdylib-link-arg` does not). `maturin build` was unaffected — it already passes
+  this flag itself, which is why the wheel always built while a plain
+  `cargo build --features python` did not.
 
 **Distributed**
 - Collective operations (`broadcast`/`reduce`/`allreduce`/`gather`/`allgather`/`scatter`/
