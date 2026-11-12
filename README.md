@@ -526,7 +526,7 @@ For significant changes, please open an issue to discuss your ideas first.
 
 ## Sponsorship
 
-NumRS2 is developed and maintained by **COOLJAPAN OU (Team Kitasan)**.
+NumRS2 is developed and maintained by **COOLJAPAN OU (Team KitaSan)**.
 
 If you find NumRS2 useful, please consider sponsoring the project to support continued development of the Pure Rust ecosystem.
 

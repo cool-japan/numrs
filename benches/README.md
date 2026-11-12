@@ -434,4 +434,4 @@ valgrind --leak-check=full cargo bench --bench memory_optimization_benchmark
 
 ## License
 
-Apache-2.0 - Copyright (c) COOLJAPAN OU (Team Kitasan)
+Apache-2.0 - Copyright (c) COOLJAPAN OU (Team KitaSan)
